@@ -54,7 +54,7 @@ dependencies = [
     "tenacity>=8.3.0",
     "python-dotenv>=1.2.2",
     "requests>=2.33.0",
-    "pydoll-python>=2.19.0",
+    "pydoll-python==2.27.0",
     # Not imported here: it arrives through pydoll's aiohttp. Pinned because
     # 6.7.0–6.9.0 leak references in items-view union/subtraction.
     "multidict>=6.9.1",

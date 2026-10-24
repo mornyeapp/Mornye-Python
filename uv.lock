@@ -1489,7 +1489,7 @@ requires-dist = [
     { name = "pyacoustid", specifier = ">=1.3.0" },
     { name = "pycryptodome", specifier = ">=3.20.0" },
     { name = "pydantic", specifier = ">=2.7.0" },
-    { name = "pydoll-python", specifier = ">=2.19.0" },
+    { name = "pydoll-python", specifier = "==2.27.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.3" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
     { name = "pytest-httpx", marker = "extra == 'dev'", specifier = ">=0.21" },
@@ -2342,7 +2342,7 @@ wheels = [
 
 [[package]]
 name = "pydoll-python"
-version = "2.26.0"
+version = "2.27.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiofiles" },
@@ -2351,9 +2351,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a1/71/1574b6060238991891fd35c97e691dc1692a687ddf409d29982f5e37b045/pydoll_python-2.26.0.tar.gz", hash = "sha256:129644dae5c977cc07cb173831b5b437f7352c96acf89f890f29bdb82029cb86", size = 276436, upload-time = "2026-08-26T03:08:29.221Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/64/67/2d50f535cd66ca3f00327c11785ed45ac7fb6e5f14850a2d691a649ce47a/pydoll_python-2.27.0.tar.gz", hash = "sha256:e29f3d631a11701c00aed17d4761afaf8c3b38d05fb9ed6861b0b98b475277a6", size = 300306, upload-time = "2026-09-16T18:31:22.978847Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/96/1a/71424380232d1119985c6657585c7a5fd81c686de1fc2d0e950f13c2a29c/pydoll_python-2.26.0-py3-none-any.whl", hash = "sha256:19b474f2569ebd64db78404ddf934d47d3fd41752685ff86b580e90708ec3230", size = 316870, upload-time = "2026-08-26T03:08:30.2Z" },
+    { url = "https://files.pythonhosted.org/packages/aa/60/bf032d2e16c8cc2ba95816eda6fbcce69da89b006be096058ad39ebb03f4/pydoll_python-2.27.0-py3-none-any.whl", hash = "sha256:a85017657f3117eb0872589acd687de80e0184aed7e3d34c2f64c3e13c6b938b", size = 340514, upload-time = "2026-09-16T18:31:24.375241Z" }
 ]
 
 [[package]]
