@@ -195,7 +195,33 @@ def build_v1_router(deps: ApiDeps) -> APIRouter:
         summary="Resolve a URL to its tracks, without downloading anything",
     )
     async def resolve(payload: ResolveRequest) -> ResolveResponse:
+        from ..core.extension_metadata import (
+            ExtensionMetadataClient,
+            parse_catalogue_url,
+        )
         from ..core.spotify_metadata import SpotifyMetadataClient, parse_spotify_url
+
+        link = parse_catalogue_url(payload.url)
+        if link is not None:
+            try:
+                client = ExtensionMetadataClient.for_url(payload.url)
+                name, tracks, _cover = await client.get_url_async(
+                    payload.url,
+                    include_featuring=payload.include_featuring,
+                )
+            except Exception as exc:
+                logger.info("Could not resolve %s: %s", payload.url, exc)
+                raise _fail(
+                    400,
+                    "Could not resolve that URL.",
+                    "It may be private, unsupported, or not a media link.",
+                ) from exc
+            return ResolveResponse(
+                name=name or "",
+                kind=link.kind,
+                total=len(tracks),
+                tracks=[TrackOut.from_metadata(t) for t in tracks],
+            )
 
         client = SpotifyMetadataClient()
         try:

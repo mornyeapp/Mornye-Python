@@ -129,6 +129,51 @@ SITES: tuple[CatalogueSite, ...] = (
         track_url="https://www.deezer.com/track/{id}",
         album_url="https://www.deezer.com/album/{id}",
     ),
+    CatalogueSite(
+        key="qobuz",
+        label="Qobuz",
+        hosts=(
+            "qobuz.com",
+            "www.qobuz.com",
+            "play.qobuz.com",
+            "open.qobuz.com",
+        ),
+        patterns=(
+            (
+                "track",
+                r"/(?:[a-z]{2}-[a-z]{2}/)?track/" r"(?:[^/]+/)?([A-Za-z0-9]{9,14})",
+            ),
+            (
+                "album",
+                r"/(?:[a-z]{2}-[a-z]{2}/)?album/" r"(?:[^/]+/)?([A-Za-z0-9]{9,14})",
+            ),
+            (
+                "artist",
+                r"/(?:[a-z]{2}-[a-z]{2}/)?artist/" r"(?:[^/]+/)?([A-Za-z0-9]{9,14})",
+            ),
+            (
+                "playlist",
+                r"/(?:[a-z]{2}-[a-z]{2}/)?playlist/" r"(?:[^/]+/)?([A-Za-z0-9]{9,14})",
+            ),
+        ),
+        track_url="https://open.qobuz.com/track/{id}",
+        album_url="https://play.qobuz.com/album/{id}",
+        playlist_url="https://open.qobuz.com/playlist/{id}",
+    ),
+    CatalogueSite(
+        key="tidal",
+        label="Tidal",
+        hosts=("tidal.com", "www.tidal.com", "listen.tidal.com"),
+        patterns=(
+            ("track", r"/(?:browse/)?track/(\d+)"),
+            ("album", r"/(?:browse/)?album/(\d+)"),
+            ("artist", r"/(?:browse/)?artist/(\d+)"),
+            ("playlist", r"/(?:browse/)?playlist/(\d+)"),
+        ),
+        track_url="https://tidal.com/browse/track/{id}",
+        album_url="https://tidal.com/browse/album/{id}",
+        playlist_url="https://tidal.com/browse/playlist/{id}",
+    ),
 )
 
 

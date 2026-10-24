@@ -117,6 +117,42 @@ class _Manager:
             "track",
             "4301324572",
         ),
+        (
+            "https://open.qobuz.com/track/123456789",
+            "qobuz",
+            "track",
+            "123456789",
+        ),
+        (
+            "https://play.qobuz.com/album/987654321",
+            "qobuz",
+            "album",
+            "987654321",
+        ),
+        (
+            "https://open.qobuz.com/playlist/1234567890",
+            "qobuz",
+            "playlist",
+            "1234567890",
+        ),
+        (
+            "https://tidal.com/browse/track/1000000001",
+            "tidal",
+            "track",
+            "1000000001",
+        ),
+        (
+            "https://listen.tidal.com/album/2000000002",
+            "tidal",
+            "album",
+            "2000000002",
+        ),
+        (
+            "https://www.tidal.com/browse/playlist/3000000003",
+            "tidal",
+            "playlist",
+            "3000000003",
+        ),
     ],
 )
 def test_links_are_read_per_site(url, site, kind, item_id) -> None:

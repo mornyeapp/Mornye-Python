@@ -163,6 +163,37 @@ def test_resolve_returns_declared_tracks(monkeypatch):
     assert body["tracks"][0]["isrc"] == "ITAAA0000001"
 
 
+def test_resolve_uses_the_catalogue_extension_for_qobuz_and_tidal_links(monkeypatch):
+    track = TrackMetadata(
+        id="q1",
+        title="Song",
+        artists="Artist",
+        album="Album",
+        album_artist="Artist",
+        isrc="ITAAA0000002",
+        duration_ms=1000,
+    )
+
+    class Fake:
+        async def get_url_async(self, url, include_featuring=True):
+            return ("Qobuz Album", [track], "cover")
+
+    monkeypatch.setattr(
+        "mornye.core.extension_metadata.ExtensionMetadataClient.for_url",
+        classmethod(lambda cls, url, manager=None: Fake()),
+    )
+    client, _ = make_client()
+    body = client.post(
+        "/api/v1/resolve",
+        json={"url": "https://open.qobuz.com/album/1102603792"},
+    ).json()
+
+    assert body["name"] == "Qobuz Album"
+    assert body["kind"] == "album"
+    assert body["total"] == 1
+    assert body["tracks"][0]["isrc"] == "ITAAA0000002"
+
+
 def test_resolve_classifies_the_url_off_the_event_loop(monkeypatch):
     """parse_spotify_url() expands a share short link over the network.
 
