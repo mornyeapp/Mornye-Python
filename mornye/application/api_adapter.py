@@ -52,17 +52,21 @@ class ApiAdapter:
             task = asyncio.create_task(self._job_service.execute(job["id"]))
             self._tasks.add(task)
             task.add_done_callback(self._tasks.discard)
+        provider_order = [
+            str(s).removeprefix("ext:").removesuffix("-web").removesuffix("-py")
+            for s in (services or [])
+        ] or [
+            "tidal",
+            "qobuz",
+            "deezer",
+            "apple",
+            "amazon",
+            "youtube",
+        ]
         return {
             "id": job["id"],
             "status": job["status"],
-            "provider_order": [
-                "tidal",
-                "qobuz",
-                "deezer",
-                "apple",
-                "amazon",
-                "youtube",
-            ],
+            "provider_order": provider_order,
             "items": len(request.sources),
             "items_detail": self._job_service.items(job["id"]),
         }

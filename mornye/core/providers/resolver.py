@@ -91,10 +91,16 @@ class ProviderResolver:
 
     def resolve_candidates(self, request: DownloadRequest) -> list[ProviderCandidate]:
         quality = request.config.download.quality.upper()
-        configured_services = {
+        configured = [
             service.removeprefix("ext:").removesuffix("-web").removesuffix("-py")
             for service in request.config.download.services
-        }
+        ]
+        configured_services = set(configured)
+        configured_order = (
+            {name: index for index, name in enumerate(configured)}
+            if configured
+            else {name: index for index, name in enumerate(self._provider_priority)}
+        )
         if not self._profiles:
             candidates = [
                 ProviderCandidate(
@@ -108,11 +114,12 @@ class ProviderResolver:
                 or name.removeprefix("ext:").removesuffix("-web").removesuffix("-py")
                 in configured_services
             ]
+            if configured:
+                candidates.sort(
+                    key=lambda c: configured_order.get(c.name, len(configured_order))
+                )
             return candidates
 
-        configured_order = {
-            name: index for index, name in enumerate(self._provider_priority)
-        }
         profiles: list[ProviderProfile] = [
             profile
             for profile in self._profiles.values()

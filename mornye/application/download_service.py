@@ -246,7 +246,7 @@ class DownloadService:
                     DownloadFailure(
                         source=source,
                         reason=context.errors[0],
-                        provider=context.provider or "tidal",
+                        provider=context.provider or "none",
                         attempts=1,
                         retryable=False,
                     )

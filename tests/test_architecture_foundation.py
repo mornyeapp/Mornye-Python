@@ -1335,6 +1335,14 @@ def test_provider_resolver_preserves_configured_legacy_services():
     assert ProviderResolver().resolve(request) == ["qobuz"]
 
 
+def test_provider_resolver_orders_candidates_by_configured_services():
+    config = MornyeConfig()
+    config.download.services = ["deezer", "tidal"]
+    request = DownloadRequest(sources=["spotify:track:abc123"], config=config)
+
+    assert ProviderResolver().resolve(request) == ["deezer", "tidal"]
+
+
 def test_download_pipeline_prepares_source_and_provider_context():
     """Verify preparation records the selected provider and ordered candidates."""
     request = DownloadRequest(sources=["spotify:track:abc123"], config=MornyeConfig())
@@ -1723,6 +1731,20 @@ def test_api_adapter_builds_job_from_download_request():
     assert response["status"] == "QUEUED"
     assert response["provider_order"][0] == "tidal"
     assert response["items"] == 1
+
+
+def test_api_adapter_reports_the_configured_provider_order():
+    adapter = ApiAdapter()
+    response = asyncio.run(
+        adapter.submit_download(
+            {
+                "sources": ["spotify:track:abc123"],
+                "services": ["deezer", "tidal"],
+            }
+        )
+    )
+
+    assert response["provider_order"] == ["deezer", "tidal"]
 
 
 def test_api_adapter_lists_and_gets_persisted_jobs(tmp_path):
