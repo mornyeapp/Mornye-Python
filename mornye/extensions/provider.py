@@ -166,7 +166,7 @@ class JSExtensionProvider(BaseProvider):
 
     def set_progress_callback(self, cb) -> None:
         """Saves the progress callback provided by the Downloader."""
-        self._progress_cb = cb
+        super().set_progress_callback(cb)
 
     def set_stop_event_async(self, event: asyncio.Event) -> None:
         """Saves the stop event (timeout/cancellation) provided by the Downloader."""
