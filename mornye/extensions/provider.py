@@ -761,10 +761,21 @@ class JSExtensionProvider(BaseProvider):
                 )
                 return DownloadResult.fail(self.name, err)
 
+            # ── Reassemble any segments (e.g., Tidal DASH via extension) ──
+            actual_path = await self._finalize_segments_async(dl_result, output_path)
+            if actual_path is None:
+                return DownloadResult.fail(
+                    self.name,
+                    "Download returned no usable audio (segments unmergeable)",
+                )
+
+            # Logged after the segments are merged: a segmenting extension
+            # leaves nothing at output_path until then, so the size read
+            # before it was always "0 B".
             written = transfer.bytes_on_disk
             with contextlib.suppress(OSError):
-                if output_path.exists():
-                    written = output_path.stat().st_size
+                if Path(actual_path).is_file():
+                    written = Path(actual_path).stat().st_size
             logger.info(
                 "[%s] Download finished: '%s' — %s in %.1fs%s",
                 self.name,
@@ -777,14 +788,6 @@ class JSExtensionProvider(BaseProvider):
                     else ""
                 ),
             )
-
-            # ── Reassemble any segments (e.g., Tidal DASH via extension) ──
-            actual_path = await self._finalize_segments_async(dl_result, output_path)
-            if actual_path is None:
-                return DownloadResult.fail(
-                    self.name,
-                    "Download returned no usable audio (segments unmergeable)",
-                )
 
             if Path(actual_path).suffix.lower() in [".m4a", ".mp4"]:
                 codec = await _get_codec_async(actual_path)
