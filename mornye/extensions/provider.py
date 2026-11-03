@@ -166,7 +166,7 @@ class JSExtensionProvider(BaseProvider):
 
     def set_progress_callback(self, cb) -> None:
         """Saves the progress callback provided by the Downloader."""
-        self._progress_cb = cb
+        super().set_progress_callback(cb)
 
     def set_stop_event_async(self, event: asyncio.Event) -> None:
         """Saves the stop event (timeout/cancellation) provided by the Downloader."""
@@ -510,6 +510,26 @@ class JSExtensionProvider(BaseProvider):
         try:
             if callable(filename_format):
                 filename_format = filename_format(metadata)
+            # Native provider tokens are not necessarily extension tokens:
+            # Qobuz's JS extension treats an unrecognised "27" as CD quality.
+            # Prefer the canonical spelling only when its manifest declares it.
+            manifest = getattr(self._ext, "manifest", {}) or {}
+            quality_ids = {
+                option.get("id")
+                for option in manifest.get("qualityOptions", [])
+                if isinstance(option, dict)
+            }
+            canonical_quality = {
+                "27": "HI_RES_LOSSLESS",
+                "7": "HI_RES",
+                "6": "LOSSLESS",
+            }.get(str(quality))
+            if (
+                canonical_quality is not None
+                and quality not in quality_ids
+                and canonical_quality in quality_ids
+            ):
+                quality = canonical_quality
             return await self._do_download_async(
                 metadata,
                 output_dir,

@@ -314,8 +314,13 @@ class JSRuntime:
 
         # Replaces None with '__progress__' if the method has onProgress
         final_args = list(args)
-        if progress_cb is not None and final_args and final_args[-1] is None:
-            final_args[-1] = "__progress__"
+        if progress_cb is not None:
+            # download(id, quality, path, onProgress, options): the callback
+            # precedes options, so it is not necessarily the final argument.
+            if method == "download" and len(final_args) > 3 and final_args[3] is None:
+                final_args[3] = "__progress__"
+            elif final_args and final_args[-1] is None:
+                final_args[-1] = "__progress__"
             self._progress_cbs[seq] = progress_cb
 
         # The budget travels with the call so utils.getResolutionRemainingMs()
@@ -411,11 +416,11 @@ class JSRuntime:
                     # when available (file.download now always provides them).
                     bytes_received = msg.get("bytesReceived")
                     bytes_total = msg.get("bytesTotal")
-                    if bytes_received is not None and bytes_total:
+                    if bytes_received is not None:
                         cb(
                             float(msg.get("value", 0.0)),
                             int(bytes_received),
-                            int(bytes_total),
+                            int(bytes_total or 0),
                         )
                     else:
                         cb(float(msg.get("value", 0.0)))
