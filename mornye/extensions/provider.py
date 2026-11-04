@@ -513,7 +513,7 @@ class JSExtensionProvider(BaseProvider):
             # Native provider tokens are not necessarily extension tokens:
             # Qobuz's JS extension treats an unrecognised "27" as CD quality.
             # Prefer the canonical spelling only when its manifest declares it.
-            manifest = getattr(self._ext, "manifest", {}) or {}
+            manifest = getattr(getattr(self, "_ext", None), "manifest", None) or {}
             quality_ids = {
                 option.get("id")
                 for option in manifest.get("qualityOptions", [])
