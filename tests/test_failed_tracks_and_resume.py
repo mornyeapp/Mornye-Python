@@ -10,6 +10,7 @@ gone after a restart), and failures stay listed until they download.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 import time
