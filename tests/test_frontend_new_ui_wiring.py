@@ -112,8 +112,9 @@ def test_the_download_dock_lives_outside_the_views(client) -> None:
     assert html.index('id="queue-drawer"') > last_view
 
     css = client.get("/styles.css").text
-    # And it is placed beside the rail rather than under it.
-    assert "left: calc(var(--rail-w) + 20px)" in css
+    # And it is a bar along the bottom that starts beside the sidebar
+    # rather than under it.
+    assert "position: fixed; left: var(--rail-w); right: 0; bottom: 0;" in css
 
 
 def test_discovery_directory_add_list_remove_round_trip_over_http(client) -> None:

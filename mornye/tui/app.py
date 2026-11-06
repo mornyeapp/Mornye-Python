@@ -33,6 +33,7 @@ from typing import Any, Literal, cast
 from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
+from textual.theme import Theme
 from textual.containers import Container, Horizontal
 from textual.widgets import (
     ContentSwitcher,
@@ -45,6 +46,7 @@ from textual.widgets import (
 )
 
 from .banner import Banner, HintBar
+from ..branding_tokens import textual_theme_kwargs
 from ..core.paths import default_download_dir
 from .branding import mode_glyph, notice, panel_tag, panel_title
 from .clipboard import TERMINAL_ONLY_NOTE, copy_text
@@ -76,9 +78,19 @@ MODES: tuple[tuple[str, str], ...] = (
     ("command", "Command"),
 )
 
-#: The nine MovieBox offers, in its order, cycled by `t`. Mocha first
-#: because that is its default and the palette this screen was drawn against.
+#: Mornye's own two themes, built from the palette the GUI uses too
+#: (mornye/branding_tokens.py), so both interfaces share one identity.
+MORNYE_THEMES: tuple[Theme, ...] = (
+    Theme(**textual_theme_kwargs("dark")),
+    Theme(**textual_theme_kwargs("light")),
+)
+
+#: Cycled by `t`. Mornye's dark theme first — it is the default and the
+#: palette this screen is drawn against — then its light one, then the nine
+#: built-in alternatives MovieBox offers, in its order.
 THEMES: tuple[str, ...] = (
+    "mornye-dark",
+    "mornye-light",
     "catppuccin-mocha",
     "catppuccin-latte",
     "catppuccin-macchiato",
@@ -229,6 +241,8 @@ class MornyeTui(App[None]):
     _TWO_COLUMN_MIN_WIDTH = 150
 
     def on_mount(self) -> None:
+        for theme in MORNYE_THEMES:
+            self.register_theme(theme)
         self.theme = THEMES[0]
         self._decorate_panels()
         self.query_one("#log-pane").display = False
@@ -640,7 +654,7 @@ class MornyeTui(App[None]):
     def action_cycle_theme(self) -> None:
         current = THEMES.index(self.theme) if self.theme in THEMES else 0
         self.theme = THEMES[(current + 1) % len(THEMES)]
-        # `t` is unlisted and cycles nine themes. Repainting without naming
+        # `t` is unlisted and cycles eleven themes. Repainting without naming
         # what you landed on leaves you pressing it again to find out, and
         # with no way back to the one you liked two presses ago.
         self._set_status(f"Theme: {self.theme}", "info")

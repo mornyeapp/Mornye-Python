@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mornye"
-version = "1.1.2"
+version = "2.0.0"
 description = "A Python module for metadata and user-configured music-provider extensions."
 readme = "README.md"
 # 3.11 is the floor because Pillow 13+ now requires it. This aligns the
@@ -105,6 +105,7 @@ include-package-data = true
     "extensions/**/*.js",
     "frontend/*",
     "frontend/assets/icons/*",
+    "frontend/assets/fonts/*",
     # Textual reads the TUI's stylesheet from disk at startup (CSS_PATH), so
     # an install without it opens on an unstyled screen rather than failing
     # loudly — worth listing here explicitly.

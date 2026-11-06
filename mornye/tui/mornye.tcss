@@ -1,4 +1,8 @@
-/* Mornye's terminal UI, styled after MovieBox-Tui.
+/* Mornye's terminal UI. The layout grammar comes from MovieBox-Tui; the
+   identity is Mornye's own, shared with the GUI: the default `mornye-dark`
+   / `mornye-light` themes are built from mornye/branding_tokens.py — warm
+   near-black surfaces, the logo's teal as $primary (focus, selection, the
+   wordmark) and a warm amber as $accent (panel tags, the Atmos badge).
 
    Everything is a theme variable, never a literal: MovieBox reads its
    palette rather than hard-coding Catppuccin, which is why all nine of its
@@ -31,8 +35,8 @@ Screen {
        looked like a fourth element in every row. */
     scrollbar-size-vertical: 1;
     scrollbar-color: $panel;
-    scrollbar-color-hover: $accent;
-    scrollbar-color-active: $accent;
+    scrollbar-color-hover: $primary;
+    scrollbar-color-active: $primary;
 }
 
 /* ── Wordmark ──────────────────────────────────────────────────────── */
@@ -115,7 +119,7 @@ Screen {
     background: $panel;
     color: $text;
     text-style: bold;
-    border-left: thick $accent;
+    border-left: thick $primary;
     padding: 1 1 1 0;
 }
 
@@ -159,7 +163,7 @@ Screen {
    fills the dot in its title; the two together say it twice, which is the
    point — a highlight you have to hunt for is not a highlight. */
 #panels > *:focus-within {
-    border: round $accent;
+    border: round $primary;
 }
 
 /* ── Settings form ─────────────────────────────────────────────────── */
@@ -225,7 +229,7 @@ Input {
 }
 
 Input:focus {
-    border: round $accent;
+    border: round $primary;
 }
 
 Select > SelectCurrent {
@@ -245,7 +249,7 @@ OptionList {
 
 SelectionList:focus,
 OptionList:focus {
-    border: round $accent;
+    border: round $primary;
 }
 
 Collapsible {
@@ -540,10 +544,14 @@ SelectionList > .option-list--option-highlighted {
     background: $surface;
 }
 
+/* The bottom of the screen is one bar, like the GUI's download bar: the
+   live status on a raised strip with a teal edge, the key hints under it. */
 #status {
     height: 1;
-    padding: 0 2;
+    padding: 0 2 0 1;
     color: $text-muted;
+    background: $boost;
+    border-left: outer $primary;
 }
 
 #status.notice-info    { color: $primary; }
@@ -554,7 +562,7 @@ SelectionList > .option-list--option-highlighted {
 #hints {
     height: 1;
     padding: 0 2;
-    background: $panel;
+    background: $boost;
     color: $text-muted;
 }
 

@@ -1,5 +1,16 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+    /* ── Fonts ── shipped with the app (SIL OFL, see assets/fonts/README.md):
+       the desktop window works offline, and a font CDN would also be one more
+       third-party request from a --web install. Variable weights, Latin set;
+       anything outside it falls back to the system stacks in the tokens. */
+    @font-face { font-family: 'Inter'; src: url('assets/fonts/Inter-Variable.woff2') format('woff2');
+      font-weight: 100 900; font-style: normal; font-display: swap; }
+    @font-face { font-family: 'Fraunces'; src: url('assets/fonts/Fraunces-Variable.woff2') format('woff2');
+      font-weight: 100 900; font-style: normal; font-display: swap; }
+    @font-face { font-family: 'JetBrains Mono'; src: url('assets/fonts/JetBrainsMono-Variable.woff2') format('woff2');
+      font-weight: 100 800; font-style: normal; font-display: swap; }
+
     /* ── Design tokens ── */
     /* :root carries the DARK values canonically — dark is the app's default
        look. html.light-theme / body.light-theme below only overrides the
@@ -11,55 +22,75 @@
     :root {
       color-scheme: dark;
 
-      /* Neutrals */
-      --bg:         #000000;
-      --surface:    #1c1c1e;
-      --surface2:   #2c2c2e;
-      --surface3:   #3a3a3c;
-      --border:     #38383a;
-      --border2:    #545458;
-      --text:       #f5f5f7;
-      --text2:      #d1d1d6;
-      --muted:      #98989f;
-      --text-dim:   #7c7c82;
-      --input-bg:      #2c2c2e;
-      --input-text:    #f5f5f7;
-      --input-border:  #38383a;
-      --button-bg:     #2c2c2e;
-      --button-text:   #f5f5f7;
-      --button-border: #545458;
-      --scrim:      rgba(0,0,0,.58);
-      --overlay:    rgba(0,0,0,.72);   /* chip sopra artwork */
-      --scrollbar:  #545458;
+      /* Neutrals — warm near-blacks, no blue cast ("warm dark music app").
+         The base values mirror mornye/branding_tokens.py (DARK);
+         tests/test_brand_tokens.py fails if the two drift apart. */
+      --bg:         #0e0c0b;
+      --surface:    #181513;
+      --surface2:   #221e1b;
+      --surface3:   #2d2824;
+      --border:     #332d29;
+      --border2:    #4a423c;
+      --text:       #f3eee8;
+      --text2:      #d4cbc2;
+      --muted:      #9a8f85;
+      --text-dim:   #7d736a;
+      --input-bg:      #221e1b;
+      --input-text:    #f3eee8;
+      --input-border:  #332d29;
+      --button-bg:     #221e1b;
+      --button-text:   #f3eee8;
+      --button-border: #4a423c;
+      --scrim:      rgba(10,8,7,.62);
+      --overlay:    rgba(10,8,7,.72);   /* chip sopra artwork */
+      --scrollbar:  #4a423c;
       /* A <select> is the one control the browser still draws itself, in the
          OS's own chrome and font. Owning the chevron lets it be styled like
          every other surface in the window. */
-      --chevron:    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2398989f' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      --chevron:    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239a8f85' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
 
-      /* Accent — verde del logo */
-      --green-500:      #30d158;
-      --accent:         #30d158;
-      --accent-hover:   #4be06e;
-      --accent-press:   #28c24d;
-      --accent-fg:      #07190c;
-      --accent-text:    #52d979;
-      --accent-subtle:  rgba(48,209,88,.14);
-      --accent-border:  rgba(48,209,88,.42);
-      --accent-ring:    rgba(48,209,88,.34);
+      /* Brand — the logo's petrol and mint, plus one warm highlight kept for
+         the few things that should glow (Hi-Res, "new"). */
+      --brand-deep:   #1f4f4f;
+      --brand-mint:   #a8ecec;
+      --highlight:    #f0a560;
+      --highlight-bg: rgba(240,165,96,.14);
+      --highlight-bd: rgba(240,165,96,.4);
+      --warning:      #e8c07a;
+      /* Window chrome (rail, titlebar, dock): the surface, slightly see-through
+         so the ambient light behind it carries into the frame. */
+      --chrome:       rgba(24,21,19,.78);
+      --chrome-blur:  saturate(140%) blur(18px);
+      /* The window's ambient light: a petrol bloom top-left, a faint warm one
+         bottom-right, so the background reads as a room rather than a void. */
+      --ambient:
+        radial-gradient(1100px 640px at 0% 0%, rgba(31,79,79,.34), transparent 62%),
+        radial-gradient(900px 560px at 100% 100%, rgba(240,165,96,.07), transparent 60%);
 
-      /* Stato / utility */
-      --status-queued-fg:  #6cb8ff;  --status-queued-bg:  rgba(90,155,255,.16);
-      --status-active-fg:  #8ab4ff;  --status-active-bg:  rgba(90,140,255,.18);
-      --status-done-fg:    #55e08d;  --status-done-bg:    rgba(48,209,88,.15);
-      --status-skipped-fg: #f0c674;  --status-skipped-bg: rgba(240,180,90,.15);
-      --status-failed-fg:  #ff8a8a;  --status-failed-bg:  rgba(255,90,90,.15);
-      --status-warn-fg:    #f5c469;  --status-warn-bg:    rgba(245,180,80,.14);
-      --red:  #ff5a5a;  --blue: #5a9bff;  --green: #30d158;
-      --util-lyrics:     #6fb3ff;  --util-lyrics-bd:  rgba(111,179,255,.4);  --util-lyrics-bg: rgba(111,179,255,.15);
-      --util-preview:    #f0b45a;  --util-preview-bd: rgba(240,180,90,.4);  --util-preview-bg: rgba(240,180,90,.15);
-      --util-cover:      #b48bff;  --util-cover-bd:   rgba(180,139,255,.4);  --util-cover-bg: rgba(180,139,255,.15);
-      --util-link:       var(--accent-text);  --util-link-bd: rgba(82,217,121,.4);
-      --log-info:  var(--blue);  --log-ok: var(--accent);  --log-warn: var(--status-warn-fg);
+      /* Accent — teal from the logo (default; data-accent picks another) */
+      --green-500:      #5cd3c3;
+      --accent:         #5cd3c3;
+      --accent-hover:   #7adfd1;
+      --accent-press:   #45bfae;
+      --accent-fg:      #04201c;
+      --accent-text:    #6fdccd;
+      --accent-subtle:  rgba(92,211,195,.14);
+      --accent-border:  rgba(92,211,195,.42);
+      --accent-ring:    rgba(92,211,195,.34);
+
+      /* Stato / utility — tuned to sit on warm surfaces */
+      --status-queued-fg:  #8fb8ff;  --status-queued-bg:  rgba(106,168,255,.14);
+      --status-active-fg:  #6fdccd;  --status-active-bg:  rgba(92,211,195,.16);
+      --status-done-fg:    #7ddca0;  --status-done-bg:    rgba(95,211,138,.14);
+      --status-skipped-fg: #e8c07a;  --status-skipped-bg: rgba(232,192,122,.14);
+      --status-failed-fg:  #ff8f84;  --status-failed-bg:  rgba(255,107,94,.15);
+      --status-warn-fg:    #f0b56f;  --status-warn-bg:    rgba(240,165,96,.14);
+      --red:  #ff6b5e;  --blue: #6aa8ff;  --green: #5fd38a;
+      --util-lyrics:     #8fb8ff;  --util-lyrics-bd:  rgba(143,184,255,.4);  --util-lyrics-bg: rgba(143,184,255,.14);
+      --util-preview:    #f0a560;  --util-preview-bd: rgba(240,165,96,.4);  --util-preview-bg: rgba(240,165,96,.14);
+      --util-cover:      #c3a2ff;  --util-cover-bd:   rgba(195,162,255,.4);  --util-cover-bg: rgba(195,162,255,.14);
+      --util-link:       var(--accent-text);  --util-link-bd: var(--accent-border);
+      --log-info:  var(--blue);  --log-ok: var(--green);  --log-warn: var(--status-warn-fg);
       --log-error: var(--red);   --log-debug: var(--muted);
       --diff-fg: var(--status-warn-fg);
       --dot-close: #ff5f57;  --dot-min: #febc2e;  --dot-max: #28c840;
@@ -70,42 +101,49 @@
       --sp-5: 16px; --sp-6: 20px; --sp-7: 24px; --sp-8: 32px;
       --sp-9: 40px; --sp-10: 48px; --sp-12: 64px; --sp-16: 96px;
 
-      /* System-like body scale; JetBrains Mono remains available for data
-         that benefits from fixed-width numerals and user font preferences. */
+      /* Type: Inter for the interface, Fraunces (a soft display serif) for
+         view and album titles, JetBrains Mono for data. All three ship in
+         assets/fonts/ — the window works offline, so no font CDN. */
       --fs-50:  11px; --lh-50:  1.4;
       --fs-75:  12px; --lh-75:  1.45;
       --fs-100: 13px; --lh-100: 1.45;
       --fs-200: 15px; --lh-200: 1.4;
       --fs-300: 16px; --lh-300: 1.4;   /* titoli riga, enfasi — text-base */
       --fs-400: 18px; --lh-400: 1.3;   /* titoli card, H2 sezione — text-lg */
-      --fs-500: 24px; --lh-500: 1.25;  /* H1 vista — text-2xl */
-      --fs-600: 30px; --lh-600: 1.15;  /* titolo album — text-3xl */
-      --fs-700: 36px; --lh-700: 1.1;   /* wordmark hero — text-4xl */
+      --fs-500: 26px; --lh-500: 1.2;   /* H1 vista — display */
+      --fs-600: 34px; --lh-600: 1.1;   /* titolo album — display */
+      --fs-700: 40px; --lh-700: 1.05;  /* wordmark hero — display */
       --fw-regular:  400; --fw-medium: 500; --fw-semibold: 600; --fw-bold: 700;
       --tracking-tight: -0.02em; --tracking-label: 0.12em; --tracking-wide: 0.04em;
-      --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-      --app-font:  -apple-system, BlinkMacSystemFont, Inter, 'Segoe UI', sans-serif;
+      --font-mono:    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+      --font-display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+      --app-font:     'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 
-      /* Compact grouped surfaces; sheets use their own larger radius. */
-      --radius-xs:   5px;
-      --radius-sm:   8px;
-      --radius-md:   10px;
-      --radius-lg:   12px;
+      /* Softer, roomier shapes than the old compact grouped surfaces. */
+      --radius-xs:   6px;
+      --radius-sm:   10px;
+      --radius-md:   12px;
+      --radius-lg:   16px;
+      --radius-xl:   22px;
       --radius-pill: 999px;  /* SOLO status chip / contatori / toggle / avatar */
       --radius:    var(--radius-md);
 
-      /* Elevazione — flat music-app, niente blur da 44px né bevel bianchi */
+      /* Elevazione — warm-tinted shadows, never pure black on warm ground */
       --elev-0: none;
-      --elev-1: 0 1px 2px rgba(0,0,0,.3);     /* card a riposo */
-      --elev-2: 0 4px 14px rgba(0,0,0,.38);   /* card hover, dock, dropdown */
-      --elev-3: 0 16px 40px rgba(0,0,0,.5);   /* modali, drawer, toast */
-      --elev-pop: 0 8px 24px rgba(0,0,0,.42); /* tooltip, popover */
+      --elev-1: 0 1px 2px rgba(8,5,3,.35);      /* card a riposo */
+      --elev-2: 0 6px 18px rgba(8,5,3,.42);     /* card hover, dock, dropdown */
+      --elev-3: 0 22px 50px rgba(8,5,3,.55);    /* modali, drawer, toast */
+      --elev-pop: 0 10px 28px rgba(8,5,3,.48);  /* tooltip, popover */
       --shadow-soft:   var(--elev-2);  --shadow-strong: var(--elev-3);
 
       /* Width of the left nav rail. Shared so anything anchored to the
          viewport (the download dock) can sit beside it instead of guessing
          the number and ending up underneath it. */
-      --rail-w: 58px;
+      --sidebar-w: 232px;          /* labelled sidebar */
+      --rail-collapsed-w: 68px;    /* folded back to icons */
+      --rail-w: var(--sidebar-w);  /* what is actually on screen right now */
+      /* Height of the fixed download bar along the bottom of the window. */
+      --dock-h: 68px;
 
       /* Z-index — preserva l'ordine attuale */
       --z-content: 1;    --z-tooltip: 100;  --z-sidebar: 150;
@@ -125,67 +163,79 @@
          --bp-sm:600  --bp-md:900  --bp-lg:1200  --bp-xl:1440 */
 
       /* Alias back-compat verso i nuovi token — così index.html/app.js che
-         risolvono ancora --yellow/--yellow-d/--yellow-bg/--ring ottengono il
-         verde senza bisogno di toccare JS/HTML. */
+         risolvono ancora --yellow/--yellow-d/--yellow-bg/--ring ottengono
+         l'accento senza bisogno di toccare JS/HTML. */
       --yellow:    var(--accent);
       --yellow-d:  var(--accent-press);
       --yellow-bg: var(--accent-subtle);
       --ring:      var(--accent-ring);
     }
 
-    /* ── Light theme (solo delta) ── */
+    /* ── Light theme (solo delta) — warm paper, mirrors branding_tokens.LIGHT ── */
     html.light-theme,
     body.light-theme {
       color-scheme: light;
-      --bg:        #f2f2f7;
-      --surface:   #ffffff;
-      --surface2:  #f2f2f7;
-      --surface3:  #e5e5ea;
-      --border:    #e5e5ea;
-      --border2:   #c6c6c8;
-      --text:      #1c1c1e;
-      --text2:     #3a3a3c;
-      --muted:     #6c6c70;
-      --input-bg:      #ffffff;
-      --input-text:    #111113;
-      --input-border:  #c6c6c8;
-      --button-bg:     #ffffff;
-      --button-text:   #111113;
-      --button-border: #c6c6c8;
-      --scrim:      rgba(15,23,42,.4);
-      --scrollbar:  #c6c6c8;
-      --chevron:    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236c6c70' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      --bg:        #f6f2ec;
+      --surface:   #fffdf9;
+      --surface2:  #f1ebe3;
+      --surface3:  #e7dfd5;
+      --border:    #e4dcd2;
+      --border2:   #cbbfb2;
+      --text:      #1d1916;
+      --text2:     #3b342e;
+      --muted:     #6f655c;
+      --text-dim:  #8a7f75;
+      --input-bg:      #fffdf9;
+      --input-text:    #1d1916;
+      --input-border:  #cbbfb2;
+      --button-bg:     #fffdf9;
+      --button-text:   #1d1916;
+      --button-border: #cbbfb2;
+      --scrim:      rgba(40,30,22,.36);
+      --overlay:    rgba(20,14,10,.62);
+      --scrollbar:  #cbbfb2;
+      --chevron:    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236f655c' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
 
-      --accent:        #24863d;
-      --accent-hover:  #1f7936;
-      --accent-press:  #19652d;
-      --accent-text:   #24863d;
-      --accent-subtle: rgba(36,134,61,.12);
-      --accent-border: rgba(36,134,61,.4);
-      --accent-ring:   rgba(36,134,61,.28);
-      --green: #24863d;  --red: #e5484d;  --blue: #3b82f6;
+      --highlight:    #a8560f;
+      --highlight-bg: rgba(168,86,15,.1);
+      --highlight-bd: rgba(168,86,15,.35);
+      --warning:      #8a6210;
+      --chrome:       rgba(255,253,249,.8);
+      --ambient:
+        radial-gradient(1100px 640px at 0% 0%, rgba(31,79,79,.10), transparent 62%),
+        radial-gradient(900px 560px at 100% 100%, rgba(240,165,96,.10), transparent 60%);
 
-      --status-queued-fg:  #2f7dd1;  --status-queued-bg:  rgba(59,130,246,.12);
-      --status-active-fg:  #3b6fe0;  --status-active-bg:  rgba(59,110,224,.12);
-      --status-done-fg:    #24863d;  --status-done-bg:    rgba(36,134,61,.12);
-      --status-skipped-fg: #a06a00;  --status-skipped-bg: rgba(200,140,0,.12);
-      --status-failed-fg:  #c8353c;  --status-failed-bg:  rgba(229,72,77,.12);
-      --status-warn-fg:    #a06a00;  --status-warn-bg:    rgba(217,150,20,.12);
+      --accent:        #12776b;
+      --accent-hover:  #0f6a5f;
+      --accent-press:  #0c5a51;
+      --accent-fg:     #ffffff;
+      --accent-text:   #0f6c61;
+      --accent-subtle: rgba(18,119,107,.11);
+      --accent-border: rgba(18,119,107,.4);
+      --accent-ring:   rgba(18,119,107,.28);
+      --green: #22844a;  --red: #c8392f;  --blue: #2c6fd1;
 
-      --util-lyrics:  #2f7dd1;  --util-lyrics-bd:  rgba(47,125,209,.4);  --util-lyrics-bg: rgba(47,125,209,.12);
-      --util-preview: #b3720a;  --util-preview-bd: rgba(179,114,10,.4);  --util-preview-bg: rgba(179,114,10,.12);
-      --util-cover:   #7c4fd6;  --util-cover-bd:   rgba(124,79,214,.4);  --util-cover-bg: rgba(124,79,214,.12);
-      --util-link:    var(--accent-text);  --util-link-bd: rgba(36,134,61,.4);
+      --status-queued-fg:  #2c6fd1;  --status-queued-bg:  rgba(44,111,209,.1);
+      --status-active-fg:  #0f6c61;  --status-active-bg:  rgba(18,119,107,.11);
+      --status-done-fg:    #22844a;  --status-done-bg:    rgba(34,132,74,.11);
+      --status-skipped-fg: #8a6210;  --status-skipped-bg: rgba(170,120,20,.11);
+      --status-failed-fg:  #c8392f;  --status-failed-bg:  rgba(200,57,47,.1);
+      --status-warn-fg:    #a8560f;  --status-warn-bg:    rgba(168,86,15,.1);
 
-      --elev-1: 0 1px 2px rgba(15,23,42,.06);
-      --elev-2: 0 6px 20px rgba(15,23,42,.1);
-      --elev-3: 0 20px 48px rgba(15,23,42,.16);
+      --util-lyrics:  #2c6fd1;  --util-lyrics-bd:  rgba(44,111,209,.4);  --util-lyrics-bg: rgba(44,111,209,.1);
+      --util-preview: #a8560f;  --util-preview-bd: rgba(168,86,15,.4);  --util-preview-bg: rgba(168,86,15,.1);
+      --util-cover:   #7445c9;  --util-cover-bd:   rgba(116,69,201,.4);  --util-cover-bg: rgba(116,69,201,.1);
+
+      --elev-1: 0 1px 2px rgba(60,40,25,.07);
+      --elev-2: 0 8px 22px rgba(60,40,25,.10);
+      --elev-3: 0 22px 50px rgba(60,40,25,.16);
+      --elev-pop: 0 10px 28px rgba(60,40,25,.14);
     }
 
     /* ── Accent presets ──
        Everything accent-coloured in the app resolves through the eight
        --accent-* tokens, so an alternative accent is those eight values and
-       nothing else — no per-component overrides anywhere. The default green
+       nothing else — no per-component overrides anywhere. The default teal
        stays in :root / .light-theme above; these only exist for the other
        choices, set as data-accent on <html> and <body> (same pair the theme
        classes go on) by applyAccent() in app.js.
@@ -197,7 +247,17 @@
        Values are plain hex/rgba rather than oklch()/color-mix() to match the
        rest of the file — the desktop web view's floor is kept low on purpose.
        Generated from one base colour per accent (hover/press are lightness
-       steps, the tints are the same alphas the green uses). */
+       steps, the tints are the same alphas the teal uses). */
+    html[data-accent="green"], body[data-accent="green"] {
+      --accent: #30d158;  --accent-hover: #4be06e;  --accent-press: #28c24d;
+      --accent-fg: #07190c;  --accent-text: #52d979;
+      --accent-subtle: rgba(48,209,88,.14);  --accent-border: rgba(48,209,88,.42);  --accent-ring: rgba(48,209,88,.34);
+    }
+    html.light-theme[data-accent="green"], body.light-theme[data-accent="green"] {
+      --accent: #24863d;  --accent-hover: #1f7936;  --accent-press: #19652d;
+      --accent-fg: #ffffff;  --accent-text: #24863d;
+      --accent-subtle: rgba(36,134,61,.12);  --accent-border: rgba(36,134,61,.4);  --accent-ring: rgba(36,134,61,.28);
+    }
     html[data-accent="blue"], body[data-accent="blue"] {
       --accent: #4d9dff;  --accent-hover: #76b3ff;  --accent-press: #2989ff;
       --accent-fg: #0b0b0d;  --accent-text: #67abff;
@@ -278,7 +338,16 @@
       user-select: none;
       font-size: var(--fs-200);
       min-height: 0;
-      background: var(--bg);
+      background: var(--ambient), var(--bg);
+      background-attachment: fixed;
+      font-feature-settings: 'cv11', 'ss01';
+      -webkit-font-smoothing: antialiased;
+    }
+    /* Display face for the few titles that name a place or a record. */
+    .hero-title, #album-title, .s-header h1, .track-detail-title, #explore-greeting {
+      font-family: var(--font-display);
+      font-optical-sizing: auto;
+      font-variation-settings: 'SOFT' 50;
     }
     ::selection {
       background: var(--accent-subtle);
@@ -288,7 +357,8 @@
     /* ── Titlebar ── */
     #titlebar {
       height: 46px;
-      background: var(--surface);
+      background: var(--chrome);
+      -webkit-backdrop-filter: var(--chrome-blur); backdrop-filter: var(--chrome-blur);
       border-bottom: 1px solid var(--border);
       display: flex; align-items: center;
       padding: 0 14px;
@@ -396,64 +466,104 @@
     #app-body { flex: 1; display: flex; overflow: hidden; min-height: 0; }
 
     /* ── Sidebar ── */
+    /* ── Sidebar ──
+       A labelled sidebar in the music-app mould: brand on top, grouped
+       destinations with icon + name, collapse control at the foot. Folded
+       (body.sidebar-collapsed, or a narrow desktop window) it is the old icon
+       rail again and the data-label tooltips come back. */
     #sidebar {
       width: var(--rail-w);
-      background: var(--surface);
+      background: var(--chrome);
+      -webkit-backdrop-filter: var(--chrome-blur); backdrop-filter: var(--chrome-blur);
       border-right: 1px solid var(--border);
       display: flex; flex-direction: column;
-      align-items: center; padding: 12px 0 10px; gap: 6px;
+      align-items: stretch; padding: 14px 12px 12px; gap: 2px;
       flex-shrink: 0;
-      overflow: visible;
-      /* No longer a blur-induced stacking context, but the nav tooltips
-         still need to overhang #content — position + z-index keeps that
-         true without any blur. */
+      overflow-x: hidden; overflow-y: auto;
       position: relative;
       z-index: var(--z-sidebar);
+      transition: width var(--dur-3) var(--ease-out);
+    }
+    #sidebar::-webkit-scrollbar { width: 0; }
+    .sb-brand {
+      display: flex; align-items: center; gap: 10px;
+      padding: 4px 8px 14px;
+      min-height: 46px;
+    }
+    .sb-logo {
+      width: 30px; height: 30px; flex-shrink: 0;
+      border-radius: 9px; background: var(--brand-deep);
+      padding: 3px; object-fit: contain;
+    }
+    .sb-name {
+      font-family: var(--font-display); font-size: 21px; font-weight: 600;
+      letter-spacing: -0.01em; color: var(--text); white-space: nowrap;
+    }
+    .sb-group {
+      padding: 14px 12px 6px;
+      font-size: var(--fs-75); font-weight: var(--fw-semibold);
+      color: var(--text-dim); white-space: nowrap;
     }
     .nav-btn {
-      width: 40px; height: 40px;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md); color: var(--muted);
-      cursor: pointer; font-size: 16px;
-      display: flex; align-items: center; justify-content: center;
-      transition: all 0.2s var(--ease-spring), box-shadow 0.15s ease;
-      box-shadow: none;
+      width: 100%; height: 38px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: flex-start; gap: 12px;
+      padding: 0 12px;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm); color: var(--text2);
+      font-family: var(--app-font); font-size: 14px; font-weight: var(--fw-medium);
+      cursor: pointer; text-align: left;
+      transition: background var(--t), color var(--t), border-color var(--t), transform var(--dur-1) var(--ease-out);
       position: relative;
     }
-    .nav-btn:hover {
-      background: var(--surface3);
-      color: var(--text);
-      border-color: var(--border2);
-      /* Was translateY(-2px). In a horizontal toolbar a lift reads as the
-         button rising towards the pointer; in a vertical rail it just reads
-         as the row above it drifting out of line. */
-      transform: scale(1.06);
-      box-shadow: var(--elev-1);
-    }
-    .nav-btn:active { transform: scale(0.95); }
+    .nav-btn svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--muted); transition: color var(--t); }
+    .nav-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .nav-btn:hover { background: var(--surface2); color: var(--text); }
+    .nav-btn:hover svg { color: var(--text); }
+    .nav-btn:active { transform: scale(0.98); }
+    .nav-btn:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 1px; }
+    /* Active is a tinted row with an accent glyph, not a solid slab: the
+       artwork and the one primary button per view stay the loudest things. */
     .nav-btn.active {
-      background: var(--accent);
-      color: var(--accent-fg);
-      border-color: var(--accent);
-      box-shadow: none;
-      font-weight: 600;
+      background: var(--accent-subtle);
+      color: var(--text);
+      border-color: transparent;
+      font-weight: var(--fw-semibold);
     }
-    /* A tab marker on the rail edge. The accent pill already says which view
-       is open, but only while you are looking at the pill; this reads as
-       position — which of eight stops down the rail you are at — from the
-       corner of the eye. */
+    .nav-btn.active svg { color: var(--accent-text); }
     .nav-btn.active::before {
       content: '';
       position: absolute;
-      left: -9px; top: 50%;  /* the sidebar's own left edge: 58px rail, 40px button */
+      left: -12px; top: 50%;  /* the sidebar's own left edge */
       width: 3px; height: 18px;
       transform: translateY(-50%);
       border-radius: 0 3px 3px 0;
       background: var(--accent);
     }
-    .nav-btn.active:hover::before { opacity: .8; }
-    .nav-spacer { flex: 1; }
+    .nav-spacer { flex: 1; min-height: var(--sp-4); }
+    .sb-collapse { color: var(--muted); }
+
+    /* Folded: icons only, centred; brand keeps just the logo. */
+    body.sidebar-collapsed { --rail-w: var(--rail-collapsed-w); }
+    body.sidebar-collapsed #sidebar { padding: 14px 12px 12px; }
+    body.sidebar-collapsed .nav-label,
+    body.sidebar-collapsed .sb-name,
+    body.sidebar-collapsed .sb-group { display: none; }
+    body.sidebar-collapsed .sb-brand { justify-content: center; padding: 4px 0 14px; }
+    body.sidebar-collapsed .nav-btn { justify-content: center; padding: 0; height: 42px; }
+    body.sidebar-collapsed .sb-group + .nav-btn,
+    body.sidebar-collapsed .nav-btn + .sb-group { margin-top: 0; }
+    /* A narrow desktop window folds the sidebar on its own (the phone layout
+       in --web mode has its own bottom bar further down). */
+    @media (max-width: 900px) {
+      body:not(.web-mode) { --rail-w: var(--rail-collapsed-w); }
+      body:not(.web-mode) .nav-label,
+      body:not(.web-mode) .sb-name,
+      body:not(.web-mode) .sb-group,
+      body:not(.web-mode) .sb-collapse { display: none; }
+      body:not(.web-mode) .sb-brand { justify-content: center; padding: 4px 0 14px; }
+      body:not(.web-mode) .nav-btn { justify-content: center; padding: 0; height: 42px; }
+    }
 
     /* ── Content ── */
     #content {
@@ -481,9 +591,12 @@
     /* ══════════ HOME VIEW ══════════ */
     #view-home { overflow: visible; }
 
+    /* Left-aligned, editorial: the sidebar already carries the logo, so the
+       page opens on the name in the display face and a line of what it does,
+       sitting on the same left edge as the search bar under it. */
     #home-hero {
-      padding: var(--sp-8) var(--sp-7) var(--sp-6);
-      display: flex; justify-content: center;
+      padding: var(--sp-10) var(--sp-8) var(--sp-4);
+      display: flex; justify-content: flex-start;
     }
     /* This was a bordered card around the title — a hard-edged rectangle
        whose only content was the thing it framed, which is what made the
@@ -491,21 +604,21 @@
        carrying is worth keeping; the edge is not, so the panel becomes a
        radial glow that fades out before it reaches a border. */
     .hero-text {
-      max-width: 800px; text-align: center;
-      padding: var(--sp-6) var(--sp-8);
+      max-width: 760px; text-align: left;
+      padding: 0;
       border-radius: var(--radius-lg);
     }
     .hero-headline {
-      display: flex; align-items: center; justify-content: center; gap: var(--sp-6);
+      display: flex; align-items: center; justify-content: flex-start; gap: var(--sp-6);
       flex-wrap: wrap;
     }
     .hero-logo {
-      display: grid; place-items: center;
+      display: none; place-items: center;
       gap: var(--sp-3); text-align: center;
     }
     .hero-icon {
       width: 72px; height: 72px; border-radius: var(--radius-lg);
-      background: #204d4e;
+      background: var(--brand-deep);
       display: block;
       box-shadow: var(--elev-1);
       object-fit: contain; padding: var(--sp-3); box-sizing: border-box;
@@ -516,12 +629,12 @@
       padding: var(--sp-2) 10px; border-radius: 999px; text-transform: uppercase;
     }
     .hero-main {
-      display: flex; align-items: center; gap: var(--sp-4); flex-wrap: wrap; justify-content: center;
+      display: flex; align-items: baseline; gap: var(--sp-4); flex-wrap: wrap; justify-content: flex-start;
     }
     /* Keep the wordmark compact and let the system display face carry it. */
     .hero-title {
-      font-size: var(--fs-700); line-height: var(--lh-700); font-weight: var(--fw-bold);
-      letter-spacing: var(--tracking-tight);
+      font-size: var(--fs-700); line-height: var(--lh-700); font-weight: var(--fw-semibold);
+      letter-spacing: -0.01em;
       color: var(--text);
       text-shadow: none;
     }
@@ -534,14 +647,14 @@
     }
     .hero-subtitle {
       margin-top: var(--sp-4); color: var(--muted); font-size: var(--fs-200); line-height: var(--lh-200);
-      max-width: 720px; margin-left: auto; margin-right: auto;
+      max-width: 60ch;
       /* No single trailing word on its own line. */
-      text-wrap: balance;
+      text-wrap: pretty;
     }
 
     /* ── SEARCH BAR v7 ── */
     #search-bar {
-      padding: var(--sp-7) var(--sp-7) var(--sp-6);
+      padding: var(--sp-5) var(--sp-8) var(--sp-7);
       border-bottom: 1px solid var(--border);
     }
 
@@ -1718,61 +1831,73 @@
     .rc-badge.playlist { color: var(--util-cover);   background: var(--util-cover-bg); }
 
     /* Queue drawer */
+    /* ── Download bar ──
+       A player-style bar fixed along the bottom, beside the sidebar: what is
+       downloading, how far along, how fast — always in view whatever page is
+       open. The whole bar opens the queue drawer. */
     #queue-dock {
-      /* Beside the rail, not on top of it: the dock is viewport-anchored, so
-         left:20px put its icon behind the 58px nav rail. */
-      position: fixed; left: calc(var(--rail-w) + 20px); bottom: 20px;
+      position: fixed; left: var(--rail-w); right: 0; bottom: 0;
+      height: var(--dock-h);
       z-index: var(--z-dock);
-      display: none; grid-template-columns: auto 1fr auto;
+      display: none; grid-template-columns: auto minmax(0, 1fr) auto;
       align-items: center; gap: 14px;
-      padding: 14px 18px; background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-lg); cursor: pointer;
-      color: var(--text); box-shadow: var(--elev-2);
-      transition: transform var(--t), background var(--t), border-color var(--t), opacity var(--t), box-shadow var(--t);
-      min-width: 240px;
+      padding: 0 24px; background: var(--chrome);
+      -webkit-backdrop-filter: var(--chrome-blur); backdrop-filter: var(--chrome-blur);
+      border-top: 1px solid var(--border);
+      cursor: pointer;
+      color: var(--text);
+      transition: background var(--t), left var(--dur-3) var(--ease-out);
     }
     #queue-dock.visible { display: grid; }
-    #queue-dock:hover {
-      transform: translateY(-2px);
-      border-color: var(--accent);
-      box-shadow: var(--elev-3);
+    #queue-dock:hover { background: var(--surface); }
+    #queue-dock:hover .qd-chevron { color: var(--accent-text); transform: translateY(-2px); }
+    /* Nothing scrolls underneath the bar: the page ends where it begins. */
+    body:has(#queue-dock.visible) #content { padding-bottom: var(--dock-h); }
+    /* Toasts and the save notice float above the bar, not behind it. */
+    @media (min-width: 701px) {
+      body:has(#queue-dock.visible) .toast-container.bottom-right,
+      body:has(#queue-dock.visible) .toast-container.bottom-left,
+      body:has(#queue-dock.visible) .toast-container.bottom-center,
+      body:has(#queue-dock.visible) .save-toast { bottom: calc(var(--dock-h) + 16px); }
     }
     #queue-dock .qd-icon {
-      width: 38px; height: 38px; border-radius: var(--radius-md);
-      background: var(--surface2); display: grid;
-      place-items: center; color: var(--accent-text); font-size: var(--fs-400);
+      width: 42px; height: 42px; border-radius: var(--radius-sm);
+      background: var(--brand-deep); display: grid;
+      place-items: center; color: var(--brand-mint); font-size: var(--fs-400);
     }
     #queue-dock .qd-icon svg {
       width: 20px; height: 20px; display: block;
     }
-    #queue-dock .qd-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+    #queue-dock .qd-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
     #queue-dock .qd-downloaded {
       font-family: var(--font-mono);
-      font-size: var(--fs-300); font-weight: 700; color: var(--text);
-      letter-spacing: .02em;
+      font-size: var(--fs-200); font-weight: 600; color: var(--text);
+      font-variant-numeric: tabular-nums;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     #queue-dock .qd-speed {
-      font-family: var(--font-mono);
       font-size: var(--fs-100); color: var(--muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     #queue-dock .qd-chevron {
-      font-size: var(--fs-400); color: var(--muted); line-height: 1;
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: var(--fs-100); font-weight: var(--fw-semibold); color: var(--muted); line-height: 1;
+      transition: color var(--t), transform var(--t);
     }
+    #queue-dock .qd-chevron::before { content: 'Queue'; }
 
-    /* The dock's second line is a live rate while one is known and a
-       count of what is done when it is not — see renderQueue(). */
+    /* Progress runs along the bar's top edge, the way a player shows the
+       position in a track. The second line is a live rate while one is
+       known and a count of what is done when it is not — see renderQueue(). */
     #queue-dock .qd-bar {
-      grid-column: 1 / -1;
-      height: 3px; border-radius: 999px;
-      background: var(--surface2); overflow: hidden;
-      margin-top: 2px;
+      position: absolute; left: 0; right: 0; top: -1px;
+      height: 3px;
+      background: transparent; overflow: hidden;
     }
     #queue-dock .qd-bar > i {
       display: block; height: 100%; width: 0%;
-      background: linear-gradient(90deg, var(--yellow-d), var(--yellow));
-      border-radius: inherit;
+      background: linear-gradient(90deg, var(--brand-mint), var(--accent));
+      border-radius: 0 3px 3px 0;
       transition: width .35s cubic-bezier(.22,.61,.36,1);
     }
     #queue-dock.done .qd-bar > i { background: var(--green); }
@@ -2121,7 +2246,7 @@
     /* ══════════ SETTINGS VIEW ══════════ */
     #view-settings { padding: 0; overflow: hidden; }
     .s-header { padding: var(--sp-6) var(--sp-5) var(--sp-4); flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: var(--sp-5); flex-wrap: wrap; }
-    .s-header h1 { font-size: var(--fs-500); font-weight: var(--fw-semibold); letter-spacing: -.04em; }
+    .s-header h1 { font-size: var(--fs-500); font-weight: var(--fw-semibold); letter-spacing: -.01em; }
     .s-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     /* The settings header buttons follow the same 36px control height as the
        rest now; they were 44, which made that one row noticeably chunkier
@@ -2142,22 +2267,80 @@
     .tab-bar::-webkit-scrollbar { display: none; }
     .stab {
       display: inline-flex; align-items: center; gap: var(--sp-3);
-      padding: var(--sp-3) var(--sp-5); background: transparent; border: 1px solid transparent; border-bottom: none;
-      color: var(--text); font-family: var(--font-mono); font-size: 14px; font-weight: 600;
-      cursor: pointer; border-radius: 12px 12px 0 0; white-space: nowrap;
-      transition: all var(--t); margin-bottom: -1px;
+      padding: 7px var(--sp-5); background: transparent; border: 1px solid transparent;
+      color: var(--text2); font-family: var(--app-font); font-size: 14px; font-weight: 600;
+      cursor: pointer; border-radius: var(--radius-pill); white-space: nowrap;
+      transition: background var(--t), color var(--t), border-color var(--t); margin-bottom: 10px;
     }
     .stab svg { width: 18px; height: 18px; stroke-width: 2.2; }
     .stab:hover {
       background: var(--surface2);
-      transform: translateY(-1px);
+      color: var(--text);
     }
     .stab.active {
-      color: var(--accent-fg); background: var(--accent);
-      border-color: var(--accent); border-bottom: 1px solid var(--accent);
+      color: var(--accent-text); background: var(--accent-subtle);
+      border-color: var(--accent-border);
       box-shadow: none;
     }
     .s-body { flex: 1; overflow-y: auto; padding: var(--sp-4) var(--sp-5) var(--sp-5); min-height: 0; }
+
+    /* ── Settings: category list + page (System Settings style) ──
+       The tab bar becomes a column of categories with a search on top; the
+       page sits to its right and scrolls on its own. */
+    #view-settings.active {
+      display: grid;
+      grid-template-columns: 236px minmax(0, 1fr);
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+    #view-settings > .s-header { grid-column: 1 / -1; max-width: none; }
+    #view-settings > .tab-bar {
+      grid-row: 2; grid-column: 1;
+      flex-direction: column; align-items: stretch; gap: 2px;
+      padding: var(--sp-2) var(--sp-4) var(--sp-5);
+      border-bottom: none; border-right: 1px solid var(--border);
+      overflow-y: auto; overflow-x: hidden;
+    }
+    #view-settings > .tab-bar .stab {
+      width: 100%; justify-content: flex-start;
+      border-radius: var(--radius-sm); margin-bottom: 0;
+      padding: 8px 12px; font-weight: var(--fw-medium);
+    }
+    #view-settings > .tab-bar .stab.active { border-color: transparent; color: var(--text); font-weight: var(--fw-semibold); }
+    #view-settings > .tab-bar .stab.active svg { color: var(--accent-text); }
+    #view-settings > .s-body {
+      grid-row: 2; grid-column: 2;
+      max-width: 920px;
+      padding: var(--sp-2) var(--sp-7) var(--sp-8);
+    }
+    .s-search {
+      display: flex; align-items: center; gap: 8px;
+      height: 34px; padding: 0 10px; margin: 0 0 var(--sp-3);
+      background: var(--input-bg); border: 1px solid var(--input-border);
+      border-radius: var(--radius-sm); color: var(--muted);
+      transition: border-color var(--t), box-shadow var(--t);
+    }
+    .s-search:focus-within { border-color: var(--accent-border); box-shadow: 0 0 0 3px var(--accent-ring); }
+    .s-search svg { width: 15px; height: 15px; flex-shrink: 0; }
+    .s-search input {
+      flex: 1; min-width: 0; border: none; outline: none; background: transparent;
+      color: var(--input-text); font-family: var(--app-font); font-size: var(--fs-100);
+    }
+    .s-search input::-webkit-search-cancel-button { filter: grayscale(1); }
+    /* Searching shows every page that has a hit, each under its own name. */
+    .s-body.searching .tc { display: none; }
+    .s-body.searching .tc.search-hit { display: block; columns: auto; }
+    .s-body.searching .s-filtered { display: none !important; }
+    .s-no-match { padding: var(--sp-8) 0; color: var(--muted); text-align: center; }
+    .s-body.searching .tc.search-hit::before {
+      content: attr(data-title); display: block;
+      margin: var(--sp-5) 0 var(--sp-3);
+      font-family: var(--font-display); font-size: var(--fs-400); font-weight: var(--fw-semibold);
+      color: var(--text);
+    }
+    .s-body.searching .tc.search-hit:first-of-type::before { margin-top: 0; }
+    /* While searching no single category is "the" page. */
+    .tab-bar:has(#settings-search:not(:placeholder-shown)) .stab.active { background: transparent; font-weight: var(--fw-medium); }
+
     /* Settings rows are label-left / control-right, so on a wide window the
        two ends of one setting ended up 1200px apart with nothing between
        them. Capped rather than centred: the heading, the tabs and the cards
@@ -2217,7 +2400,7 @@
        fill by flowing, so the two sides stay roughly level instead of
        leaving a grid row as tall as its tallest cell. break-inside stops a
        card being split down the middle across the column boundary. */
-    @media (min-width: 1100px) {
+    @media (min-width: 1900px) {
       .tc.active { columns: 2; column-gap: var(--sp-4); }
       #tc-download.active,
       #tc-status.active { columns: 1; }
@@ -2244,15 +2427,18 @@
       overflow: hidden;
     }
     .s-section:last-child { margin-bottom: 0; }
+    /* Group heading in sentence case, like a System Settings group — the
+       old tracked-out uppercase label read as a form, not as a place. */
     .s-title {
-      font-size: 10.5px; font-weight: var(--fw-semibold); text-transform: uppercase;
-      /* Wider tracking, lighter weight: at this size a heavier weight fills
-         the counters in and the word turns into a block. Uppercase needs the
-         air, not the weight, to read as a heading. */
-      letter-spacing: var(--tracking-label); color: var(--muted); margin-bottom: 14px;
+      font-size: var(--fs-200); font-weight: var(--fw-semibold); text-transform: none;
+      letter-spacing: -0.005em; color: var(--text); margin-bottom: var(--sp-3);
     }
     .s-row { display: flex; align-items: center; justify-content: space-between; min-height: 30px; margin-bottom: 8px; gap: 10px; }
     .s-row:last-child { margin-bottom: 0; }
+    /* Rows of one group read as a list: hairline between neighbours. */
+    .s-section > .s-row { margin-bottom: 0; padding: 10px 0; }
+    .s-section > .s-row + .s-row { border-top: 1px solid var(--border); }
+    .s-section > .s-title + .s-row { padding-top: 4px; }
     .s-row label { display: flex; align-items: center; gap: var(--sp-3); cursor: pointer; }
     .network-destination-layout {
       display: grid;
@@ -2341,7 +2527,7 @@
        and the whole section scrolled sideways. Short labels don't wrap
        anyway — there is nothing in them to break. */
     .s-label { color: var(--text2); font-size: 12.5px; font-weight: 500; min-width: 0; }
-    .s-label small { display: block; color: var(--muted); font-size: var(--fs-50); margin-top: 1px; font-family: var(--font-mono); }
+    .s-label small { display: block; color: var(--muted); font-size: var(--fs-75); font-weight: var(--fw-regular); margin-top: 2px; font-family: var(--app-font); }
     .s-sep { height: 1px; background: var(--border); margin: 8px 0; }
 
     select, input[type="text"], input[type="password"], input[type="number"] {
@@ -2619,6 +2805,10 @@
       box-shadow: var(--elev-pop);
     }
     .nav-btn[data-label]:hover::after { opacity: 1; }
+    /* With the labels on screen a tooltip would only repeat them. */
+    @media (min-width: 901px) {
+      body:not(.sidebar-collapsed) .nav-btn[data-label]::after { display: none; }
+    }
 
     /* ── Action button feedback states ── */
     @keyframes ta-spin { to { transform: rotate(360deg); } }
@@ -3784,6 +3974,25 @@
      for the last button, and no touch device can trigger it anyway. */
   body.web-mode .nav-btn[data-label]::after { display: none; }
   body.web-mode .nav-spacer { display: none; }
+  /* No sidebar brand on a phone, so the home page carries the logo again. */
+  body.web-mode .hero-logo { display: grid; }
+  body.web-mode .nav-label,
+  body.web-mode .sb-brand,
+  body.web-mode .sb-group,
+  body.web-mode .sb-collapse { display: none; }
+  body.web-mode .nav-btn { justify-content: center; padding: 0; }
+  body.web-mode .nav-btn.active svg { color: var(--accent-text); }
+  /* Settings fold back to one column: categories scroll sideways on top. */
+  body.web-mode #view-settings.active { grid-template-columns: minmax(0, 1fr); }
+  body.web-mode #view-settings > .tab-bar {
+    grid-column: 1; grid-row: 2;
+    flex-direction: row; overflow-x: auto; border-right: none;
+    border-bottom: 1px solid var(--border); padding: 0 var(--sp-3) var(--sp-2);
+  }
+  body.web-mode #view-settings > .tab-bar .stab { width: auto; }
+  body.web-mode .s-search { min-width: 160px; margin: 0; }
+  body.web-mode #view-settings.active { grid-template-rows: auto auto minmax(0, 1fr); }
+  body.web-mode #view-settings > .s-body { grid-column: 1; grid-row: 3; padding: var(--sp-3); }
   /* A rail hover lifts the button by scaling it; in a row of touching
      buttons that reads as the neighbours being shoved aside. */
   body.web-mode .nav-btn:hover { transform: none; }
@@ -3793,14 +4002,15 @@
      carrying a title, a speed and a progress bar is legible at 360px only
      if it gets the whole row. */
   body.web-mode #queue-dock {
-    left: var(--sp-3);
-    right: var(--sp-3);
-    bottom: calc(var(--nav-total-h) + var(--sp-3));
-    min-width: 0;
-    padding: 10px var(--sp-4);
+    left: 0;
+    right: 0;
+    bottom: var(--nav-total-h);
+    --dock-h: 60px;
+    padding: 0 var(--sp-4);
     gap: 10px;
   }
-  body.web-mode #queue-dock:hover { transform: none; }
+  body.web-mode:has(#queue-dock.visible) #content { padding-bottom: 60px; }
+  body.web-mode #queue-dock .qd-chevron::before { content: none; }
 
   /* Same for anything else anchored to the bottom edge. The bottom sheets
      above are deliberately not in this list: a sheet covering the nav bar

@@ -1,8 +1,9 @@
 """branding.py — The TUI's visual vocabulary, in one place.
 
-The look is modelled on MovieBox-Tui (Rust + Ratatui), which the plan names
-as the reference. Four things carry that identity, and they are all here so
-that no panel has to reinvent one of them:
+The layout grammar is modelled on MovieBox-Tui (Rust + Ratatui); the colours
+are Mornye's own, shared with the GUI through ``mornye/branding_tokens.py``
+(the default ``mornye-dark`` theme in ``app.py``). Four things carry the
+identity, and they are all here so that no panel has to reinvent one of them:
 
 * **The wordmark** — a centred ANSI-Shadow block letterform, with a two-row
   fallback for narrow terminals and a plain one for terminals that can draw

@@ -252,15 +252,20 @@ def test_the_key_is_the_coloured_part_of_a_hint() -> None:
 @drives_the_ui
 async def test_the_default_theme_is_the_one_the_screen_was_drawn_against() -> None:
     async with MornyeTui(_ready_state()).run_test() as pilot:
-        assert app_of(pilot).theme == "catppuccin-mocha"
+        assert app_of(pilot).theme == "mornye-dark"
 
 
 def test_every_offered_theme_exists() -> None:
     """A missing theme name is a crash on the keypress that selects it."""
     from textual.theme import BUILTIN_THEMES
 
-    missing = [name for name in THEMES if name not in BUILTIN_THEMES]
-    assert not missing, f"THEMES names Textual does not ship: {missing}"
+    from mornye.tui.app import MORNYE_THEMES
+
+    ours = {theme.name for theme in MORNYE_THEMES}
+    missing = [
+        name for name in THEMES if name not in BUILTIN_THEMES and name not in ours
+    ]
+    assert not missing, f"THEMES names neither Textual nor Mornye provides: {missing}"
 
 
 @drives_the_ui

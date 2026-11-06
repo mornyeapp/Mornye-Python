@@ -17,8 +17,8 @@
        tells itself apart from --web. Harmless to load in the desktop
        pywebview window too: manifest/theme-color are simply unused there,
        and the registration script below no-ops without that flag. -->
-  <link rel="manifest" href="manifest.json?v=20261021-mornye-logo">
-  <meta name="theme-color" content="#000000">
+  <link rel="manifest" href="manifest.json?v=20261106-warm-rebrand">
+  <meta name="theme-color" content="#0e0c0b">
   <!-- apple-mobile-web-app-capable is the legacy spelling Safari still reads;
        mobile-web-app-capable is the standard one everything else reads. Both,
        because dropping either loses standalone mode on one of the two. -->
@@ -35,8 +35,8 @@
        gets a 404 in the server log for a file that was never going to
        be there. The artwork already ships. -->
   <link rel="icon" type="image/png" sizes="192x192" href="assets/icons/logo-192.png">
-  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20261021-mornye-logo">
+  <!-- Fonts ship in assets/fonts/ (see the @font-face block in styles.css). -->
+  <link rel="stylesheet" href="styles.css?v=20261106-warm-rebrand">
   <script>
     // Theme, applied before the first paint. app.js used to do this only from
     // its 'pywebviewready' handler, which meant the window painted light and
@@ -68,14 +68,18 @@
       // setThemeClass() for every change after it.
       try {
         var tc = document.querySelector('meta[name="theme-color"]');
-        if (tc) tc.setAttribute('content', dark ? '#000000' : '#f2f2f7');
+        if (tc) tc.setAttribute('content', dark ? '#0e0c0b' : '#f6f2ec');
       } catch (e) {}
       // Accent, for the same reason and in the same breath: without it the
-      // first frames paint the default green before applyAccent() runs.
-      // 'green' is the default and has no data-accent value of its own.
+      // first frames paint the default teal before applyAccent() runs.
+      // 'teal' is the default and has no data-accent value of its own.
+      // Before the 2026 rebrand the default was 'green', so a stored 'green'
+      // from then is almost always the untouched default: it is moved to
+      // teal once ('mornye-brand' marks it done; see migrateAccent in app.js).
       try {
         var accent = localStorage.getItem('mornye-accent');
-        if (accent && accent !== 'green') document.documentElement.setAttribute('data-accent', accent);
+        if (accent === 'green' && localStorage.getItem('mornye-brand') !== '2') accent = 'teal';
+        if (accent && accent !== 'teal') document.documentElement.setAttribute('data-accent', accent);
       } catch (e) {}
     })();
   </script>
@@ -95,6 +99,11 @@
   // off html *and* body (see setThemeClass/applyAccent in app.js).
   var _accent = document.documentElement.getAttribute('data-accent');
   if (_accent) document.body.setAttribute('data-accent', _accent);
+  // Sidebar collapsed or labelled (toggleSidebar in app.js), before paint so
+  // the content does not jump sideways once the app has loaded.
+  try {
+    if (localStorage.getItem('mornye-sidebar') === 'collapsed') document.body.classList.add('sidebar-collapsed');
+  } catch (e) {}
 </script>
 
 <div id="titlebar">
@@ -115,32 +124,54 @@
 
 <div id="app-body">
 
-  <nav id="sidebar">
+  <nav id="sidebar" aria-label="Main">
+    <!-- Brand, group headings and labels are what make this a sidebar rather
+         than a rail; collapsed (toggleSidebar, or a narrow window) it folds
+         back to icons and the data-label tooltips take over again. -->
+    <div class="sb-brand">
+      <img src="assets/icons/logo-transparent.png" alt="" class="sb-logo">
+      <span class="sb-name">Mornye</span>
+    </div>
+    <div class="sb-group">Discover</div>
     <button class="nav-btn active" id="nav-home"     onclick="switchView('home')"     title="Home" data-label="Home">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V21H15v-5h-6v5H3z"/></svg>
+      <span class="nav-label">Home</span>
     </button>
     <button class="nav-btn" id="nav-explore" onclick="switchView('explore'); loadExploreData();" title="Explore" data-label="Explore">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+      <span class="nav-label">Explore</span>
     </button>
+    <div class="sb-group">Library</div>
     <button class="nav-btn" id="nav-local" onclick="switchView('local')" title="Fix Local Files" data-label="Fix Local Files">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+      <span class="nav-label">Fix Local Files</span>
     </button>
     <button class="nav-btn" id="nav-following" onclick="switchView('following'); loadSubscriptions();" title="Following" data-label="Following">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+      <span class="nav-label">Following</span>
     </button>
     <button class="nav-btn" id="nav-stats" onclick="switchView('stats'); loadStats();" title="Your library in numbers" data-label="Stats">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      <span class="nav-label">Stats</span>
     </button>
+    <div class="sb-group">System</div>
     <button class="nav-btn" id="nav-logs"     onclick="switchView('logs')"     title="Logs" data-label="Logs">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      <span class="nav-label">Logs</span>
     </button>
     <button class="nav-btn" id="nav-settings" onclick="switchView('settings')" title="Settings" data-label="Settings">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span class="nav-label">Settings</span>
     </button>
     <div class="nav-spacer"></div>
+    <button class="nav-btn sb-collapse" type="button" onclick="toggleSidebar()" title="Collapse sidebar" data-label="Expand sidebar" aria-pressed="false">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>
+      <span class="nav-label">Collapse</span>
+    </button>
     <button class="nav-btn" title="Report a Bug on GitHub" data-label="Report a Bug"
       onclick="pyWin('open_url', 'https://github.com/mornyeapp/Mornye-Python/issues')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span class="nav-label">Report a Bug</span>
     </button>
   </nav>
 
@@ -612,7 +643,11 @@
       </div>
     </div>
     
-    <div class="tab-bar">
+    <div class="tab-bar" role="tablist" aria-label="Settings sections">
+        <label class="s-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="search" id="settings-search" placeholder="Search settings" autocomplete="off" oninput="filterSettings(this.value)" aria-label="Search settings">
+        </label>
         <button class="stab active" onclick="switchTab('general',this)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/><circle cx="17" cy="14" r="2.5"/><path d="M17 10v1.5"/><path d="M17 16.5v1.5"/><path d="M14 14h1.5"/><path d="M18.5 14H20"/></svg>
           General
@@ -639,8 +674,9 @@
         </button>
       </div>
       <div class="s-body">
+        <div id="settings-no-match" class="s-no-match hidden">No settings match this search.</div>
 
-        <div class="tc active" id="tc-general">
+        <div class="tc active" id="tc-general" data-title="General">
           <div class="s-section">
             <div class="s-title">Logging</div>
             <div class="s-row">
@@ -700,7 +736,7 @@
               </select>
             </div>
             <div class="s-row">
-              <span class="s-label">Accent Color<small>Default: Green</small></span>
+              <span class="s-label">Accent Color<small>Default: Teal</small></span>
               <div class="accent-picker">
                 <!-- A swatch of the current accent next to the select: the
                      names alone ("Cyan" vs "Blue") don't tell you what you
@@ -708,7 +744,8 @@
                      --accent itself, so it is always the real colour. -->
                 <span class="accent-dot" aria-hidden="true"></span>
                 <select id="config-accent" onchange="changeAccent()">
-                  <option value="green" selected>Green</option>
+                  <option value="teal" selected>Teal</option>
+                  <option value="green">Green</option>
                   <option value="blue">Blue</option>
                   <option value="purple">Purple</option>
                   <option value="pink">Pink</option>
@@ -735,13 +772,12 @@
               </div>
             </div>
             <div class="s-row">
-              <span class="s-label">App Font<small>Default: Inter / system</small></span>
+              <span class="s-label">App Font<small>Default: Inter</small></span>
               <select id="config-font" onchange="changeFont()">
-                <option value="-apple-system, BlinkMacSystemFont, Inter, 'Segoe UI', sans-serif" selected>System / Inter</option>
+                <option value="'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" selected>Inter</option>
+                <option value="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">System</option>
                 <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
-                <option value="'Google Sans', 'Syne', sans-serif">Google Sans</option>
-                <option value="'Syne', sans-serif">Syne</option>
-                <option value="'Inter', sans-serif">Inter</option>
+                <option value="'Fraunces', Georgia, serif">Fraunces</option>
                 <option value="Georgia, serif">Georgia</option>
                 <option value="Arial, sans-serif">Arial</option>
               </select>
@@ -759,7 +795,7 @@
           </div>
         </div>
 
-        <div class="tc" id="tc-download">
+        <div class="tc" id="tc-download" data-title="Download">
           <div class="s-section">
             <div class="s-title">Audio Sources</div>
             <div class="s-row"><span class="s-label">Source priority (drag to reorder)</span></div>
@@ -967,7 +1003,7 @@
           </div>
         </div>
 
-        <div class="tc" id="tc-files">
+        <div class="tc" id="tc-files" data-title="Files">
           <div class="s-section">
             <div class="s-title">Download Location</div>
             <div class="s-row" style="justify-content: flex-start; gap: 12px;">
@@ -1037,7 +1073,7 @@
 
         </div>
 
-        <div class="tc" id="tc-metadata">
+        <div class="tc" id="tc-metadata" data-title="Metadata">
           <div class="s-section">
             <div class="s-title">Lyrics</div>
             <div class="s-row">
@@ -1090,7 +1126,7 @@
           </div>
         </div>
 
-        <div class="tc" id="tc-status">
+        <div class="tc" id="tc-status" data-title="Status">
           <div class="s-section status-panel">
             <div class="status-panel-header">
               <div>
@@ -1116,7 +1152,7 @@
           <div id="hc-results"></div>
         </div>
 
-        <div class="tc" id="tc-extensions">
+        <div class="tc" id="tc-extensions" data-title="Extensions">
           <div class="s-section">
             <div class="s-title">Extension Settings</div>
             <p style="font-size:12px;color:var(--muted);margin:-4px 0 12px;line-height:1.6;">

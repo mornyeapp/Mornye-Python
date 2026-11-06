@@ -118,7 +118,63 @@ function switchView(name) {
   $('nav-' + name)?.classList.add('active');
 }
 
+// ── Sidebar ──────────────────────────────────────────────────────────────────
+// Labelled by default; collapsed it folds back to the icon rail. The choice is
+// a per-browser convenience, so localStorage is enough — the <body> script in
+// index.html applies it before the first paint.
+function toggleSidebar(force) {
+  const collapsed = typeof force === 'boolean'
+    ? force
+    : !document.body.classList.contains('sidebar-collapsed');
+  document.body.classList.toggle('sidebar-collapsed', collapsed);
+  const btn = document.querySelector('.sb-collapse');
+  if (btn) {
+    btn.setAttribute('aria-pressed', String(collapsed));
+    btn.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+    const label = btn.querySelector('.nav-label');
+    if (label) label.textContent = collapsed ? 'Expand' : 'Collapse';
+  }
+  try { localStorage.setItem('mornye-sidebar', collapsed ? 'collapsed' : 'expanded'); } catch (e) {}
+}
+
+// ── Settings search ──────────────────────────────────────────────────────────
+// Typing searches every page at once: all pages are shown, rows whose label
+// does not match are hidden, and a section with nothing left goes too. An
+// empty query puts the single active page back.
+function filterSettings(query) {
+  const q = (query || '').trim().toLowerCase();
+  const body = document.querySelector('#view-settings .s-body');
+  if (!body) return;
+  body.classList.toggle('searching', !!q);
+  let anyVisible = false;
+  body.querySelectorAll('.tc').forEach(tc => {
+    let pageHits = 0;
+    tc.querySelectorAll('.s-section').forEach(section => {
+      const title = (section.querySelector('.s-title')?.textContent || '').toLowerCase();
+      const titleHit = !!q && title.includes(q);
+      let hits = 0;
+      section.querySelectorAll('.s-row').forEach(row => {
+        const hit = !q || titleHit || row.textContent.toLowerCase().includes(q);
+        row.classList.toggle('s-filtered', !hit);
+        if (hit) hits++;
+      });
+      const rows = section.querySelectorAll('.s-row').length;
+      // Sections built from something other than .s-row (lists, grids) match
+      // on their whole text instead.
+      const sectionHit = !q || titleHit || hits > 0
+        || (rows === 0 && section.textContent.toLowerCase().includes(q));
+      section.classList.toggle('s-filtered', !sectionHit);
+      if (sectionHit) pageHits++;
+    });
+    tc.classList.toggle('search-hit', !!q && pageHits > 0);
+    if (pageHits > 0) anyVisible = true;
+  });
+  $('settings-no-match')?.classList.toggle('hidden', !q || anyVisible);
+}
+
 function switchTab(name, btn) {
+  const search = $('settings-search');
+  if (search && search.value) { search.value = ''; filterSettings(''); }
   document.querySelectorAll('.stab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tc').forEach(c => c.classList.remove('active'));
   btn.classList.add('active');
@@ -159,7 +215,7 @@ function setThemeClass(dark) {
   // when the OS flips under an 'auto' choice.
   try {
     const tc = document.querySelector('meta[name="theme-color"]');
-    if (tc) tc.setAttribute('content', dark ? '#000000' : '#f2f2f7');
+    if (tc) tc.setAttribute('content', dark ? '#0e0c0b' : '#f6f2ec');
   } catch (e) { /* no <head> access is not worth failing the theme over */ }
 }
 
@@ -202,25 +258,40 @@ function syncSystemTheme(e) {
 }
 
 //: Must match MornyeAPI.ACCENTS in app.py and the --accent-* blocks in
-//: styles.css. 'green' is the default and has no block of its own: it is
-//: what :root already says, so it is applied by removing the attribute.
-const ACCENTS = ['green', 'blue', 'purple', 'pink', 'orange', 'red', 'cyan', 'amber'];
+//: styles.css. 'teal' (the logo's colour) is the default and has no block of
+//: its own: it is what :root already says, so it is applied by removing the
+//: attribute.
+const ACCENTS = ['teal', 'green', 'blue', 'purple', 'pink', 'orange', 'red', 'cyan', 'amber'];
+//: Bumped by a rebrand that changes the default accent. Stored both in
+//: localStorage ('mornye-brand') and in gui-settings.json ('brand', written by
+//: save_accent()) so the one-off migration below happens once per install.
+const BRAND_VERSION = 2;
+
+// Before the warm rebrand the default accent was 'green', and nearly every
+// stored 'green' is that untouched default rather than a choice. Move it to
+// the new default once; anyone who picks green again afterwards keeps it.
+function migrateAccent(accent, cfgBrand) {
+  let done = Number(cfgBrand) >= BRAND_VERSION;
+  try { done = done || localStorage.getItem('mornye-brand') === String(BRAND_VERSION); } catch (e) {}
+  try { localStorage.setItem('mornye-brand', String(BRAND_VERSION)); } catch (e) {}
+  return (!done && accent === 'green') ? 'teal' : accent;
+}
 
 // data-accent goes on <html> *and* <body>, the same pair the theme classes
 // use (see setThemeClass) — styles.css keys the accent blocks off both, so
 // that the token values are in scope no matter which element a rule resolves
 // against.
 function applyAccent(accent) {
-  const val = ACCENTS.includes(accent) ? accent : 'green';
+  const val = ACCENTS.includes(accent) ? accent : 'teal';
   for (const el of [document.documentElement, document.body]) {
     if (!el) continue;
-    if (val === 'green') el.removeAttribute('data-accent');
+    if (val === 'teal') el.removeAttribute('data-accent');
     else el.setAttribute('data-accent', val);
   }
 }
 
 function changeAccent() {
-  const val = $('config-accent')?.value || 'green';
+  const val = $('config-accent')?.value || 'teal';
   applyAccent(val);
   // Three copies for the same reason changeTheme() keeps three: the two
   // localStorage writes are per-origin and can vanish, gui-settings.json is
@@ -239,9 +310,11 @@ function changeAccent() {
 function loadAccentFromStorage() {
   const stored = (() => {
     try { return localStorage.getItem('mornye-accent'); } catch (e) { return null; }
-  })() || 'green';
-  if ($('config-accent')) $('config-accent').value = stored;
-  applyAccent(stored);
+  })() || 'teal';
+  const accent = migrateAccent(stored);
+  try { localStorage.setItem('mornye-accent', accent); } catch (e) {}
+  if ($('config-accent')) $('config-accent').value = accent;
+  applyAccent(accent);
 }
 
 function loadThemeFromStorage() {
@@ -337,11 +410,10 @@ function applySettings(settings = {}) {
   // Same dedicated-key-wins-over-blob dance as the theme above, for the
   // same reason: gui-settings.json is what survives, localStorage is what
   // the next launch reads first.
-  let accent = cfg.accent || 'green';
-  try {
-    accent = localStorage.getItem('mornye-accent') || accent;
-    localStorage.setItem('mornye-accent', accent);
-  } catch (e) {}
+  let accent = cfg.accent || 'teal';
+  try { accent = localStorage.getItem('mornye-accent') || accent; } catch (e) {}
+  accent = migrateAccent(accent, cfg.brand);
+  try { localStorage.setItem('mornye-accent', accent); } catch (e) {}
   if ($('config-accent')) $('config-accent').value = accent;
   const soundEnabled = cfg.sound_enabled !== false && cfg.notification_sound !== false;
   if ($('config-sound-enabled')) $('config-sound-enabled').checked = soundEnabled;
@@ -621,11 +693,11 @@ const ALL_ENRICH = [
 const SETTINGS_STORAGE_KEY = 'mornye-settings';
 const DEFAULT_SETTINGS = {
   theme: 'auto',
-  accent: 'green',
+  accent: 'teal',
   sound_enabled: true,
   notification_sound: true,
   preview_volume: 100,
-  font: "-apple-system, BlinkMacSystemFont, Inter, 'Segoe UI', sans-serif",
+  font: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   quality: 'LOSSLESS',
   allow_fallback: false,
   lyrics: true,
@@ -684,6 +756,8 @@ async function fetchVersionWithRetry(retries = 10, delayMs = 200) {
 }
 
 document.addEventListener('DOMContentLoaded', () => fetchVersionWithRetry(20, 200));
+// Sync the collapse button's label/aria with the state the <body> script restored.
+document.addEventListener('DOMContentLoaded', () => toggleSidebar(document.body.classList.contains('sidebar-collapsed')));
 
 const UPDATE_RELEASE_URL = 'https://github.com/mornyeapp/Mornye-Python/releases';
 
