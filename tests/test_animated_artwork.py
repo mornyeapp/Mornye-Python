@@ -54,6 +54,51 @@ def test_a_missing_animated_artwork_is_not_an_error(httpx_mock) -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "api_url",
+    [
+        "http://apple-music-animated-artworks-api:8080",
+        "  http://apple-music-animated-artworks-api:8080/  ",
+        "https://artwork.example:8443",
+        "http://192.168.1.10:3000",
+    ],
+)
+def test_accepts_self_hosted_api_urls_with_custom_ports(httpx_mock, api_url) -> None:
+    # Regression for issue #259: Docker service URLs with a port were rejected.
+    httpx_mock.add_response(json={"url": STREAM_URL})
+
+    result = asyncio.run(
+        animated_artwork.fetch_animated_artwork_url(
+            "Artist", "Album", api_url=api_url
+        )
+    )
+
+    request = httpx_mock.get_request()
+    assert request is not None
+    assert str(request.url).startswith(api_url.strip().rstrip("/") + "/api/v1/")
+    assert result == STREAM_URL
+
+
+@pytest.mark.parametrize(
+    "api_url",
+    [
+        "ftp://apple-music-animated-artworks-api:8080",
+        "file:///etc/passwd",
+        "apple-music-animated-artworks-api:8080",
+        "http://user:pass@artwork.example",
+        "http://artwork.example:99999",
+        "http://artwork.example:abc",
+    ],
+)
+def test_rejects_invalid_api_urls(api_url) -> None:
+    with pytest.raises(animated_artwork.AnimatedArtworkError, match="HTTP"):
+        asyncio.run(
+            animated_artwork.fetch_animated_artwork_url(
+                "Artist", "Album", api_url=api_url
+            )
+        )
+
+
 def test_rejects_stream_urls_outside_apple_domains(httpx_mock) -> None:
     httpx_mock.add_response(
         url=re.compile(r"https://artwork\.example/api/v1/artwork/search\?.*"),

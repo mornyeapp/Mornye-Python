@@ -47,7 +47,10 @@ def _valid_api_url(url: str) -> bool:
             and bool(parsed.hostname)
             and parsed.username is None
             and parsed.password is None
-            and parsed.port in (None, 80, 443)
+            # Self-hosted instances often listen on a custom port, e.g. a
+            # Docker service such as http://artwork-api:8080 (issue #259).
+            # Accessing .port also rejects malformed or out-of-range ports.
+            and (parsed.port is None or parsed.port > 0)
         )
     except ValueError:
         return False
