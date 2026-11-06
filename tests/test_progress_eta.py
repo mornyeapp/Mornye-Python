@@ -38,5 +38,7 @@ def test_speed_is_sampled_over_128k_or_250ms_not_every_tick() -> None:
 
 
 def test_tui_status_line_shows_time_left() -> None:
-    line = make_status_line({"completed": 1, "queued": 2, "current_speed": 4.0, "eta_seconds": 65})
+    line = make_status_line(
+        {"completed": 1, "queued": 2, "current_speed": 4.0, "eta_seconds": 65}
+    )
     assert "4.0 MB/s" in line and "~1m05s left" in line

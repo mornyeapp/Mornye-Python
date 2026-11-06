@@ -349,7 +349,9 @@ SPEED_SAMPLE_SECONDS = 0.25
 ETA_MAX_SECONDS = 3600
 
 
-def estimate_eta_seconds(progress_mb: float, total_mb: float, speed_mbps: float) -> int | None:
+def estimate_eta_seconds(
+    progress_mb: float, total_mb: float, speed_mbps: float
+) -> int | None:
     """Seconds left for a transfer, the way Mornye computes it: remaining
     bytes over the current speed — only when the size is known, the speed is
     positive and the answer is under an hour."""
@@ -643,9 +645,11 @@ class DownloadManager:
                     "progress": i.progress,
                     "total_size": i.total_size,
                     "speed": i.speed,
-                    "eta_seconds": estimate_eta_seconds(i.progress, i.total_size, i.speed)
-                    if i.status == DownloadStatus.DOWNLOADING
-                    else None,
+                    "eta_seconds": (
+                        estimate_eta_seconds(i.progress, i.total_size, i.speed)
+                        if i.status == DownloadStatus.DOWNLOADING
+                        else None
+                    ),
                     "file_path": i.file_path,
                     "end_time": i.end_time,
                     "error_message": i.error_message,
@@ -1066,7 +1070,11 @@ class ProgressCallback:
         elapsed = now - self._speed_time
         delta = current_bytes - self._speed_bytes
         if delta < 0:  # a restarted transfer: start the window again
-            self._speed_time, self._speed_bytes, self._speed_mbps = now, current_bytes, 0.0
+            self._speed_time, self._speed_bytes, self._speed_mbps = (
+                now,
+                current_bytes,
+                0.0,
+            )
             return 0.0
         if elapsed >= SPEED_SAMPLE_SECONDS or delta >= SPEED_SAMPLE_BYTES:
             if elapsed > 0:
