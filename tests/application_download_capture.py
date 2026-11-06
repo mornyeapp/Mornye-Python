@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 class CapturingDownloadService:
     def __init__(self, *, provider_executor=None, seen=None, **_kwargs):
         self._provider_executor = provider_executor
