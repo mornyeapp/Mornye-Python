@@ -241,9 +241,6 @@ def resolve_library_path(
         return os.path.expanduser(text), ""
 
     platform = platform or sys.platform
-    if platform == "win32":
-        return "\\\\" + "\\".join((ref.host, ref.share, *ref.rest)), ""
-
     table = current_mounts() if mounts is None else mounts
     host_short = ref.host.split(".")[0]
     for mount in table:
@@ -255,6 +252,8 @@ def resolve_library_path(
     by_share = [m for m in table if m.share.lower() == ref.share.lower()]
     if len(by_share) == 1:
         return str(Path(by_share[0].mount_point, *ref.rest)), ""
+    if platform == "win32":
+        return "\\\\" + "\\".join((ref.host, ref.share, *ref.rest)), ""
     return "", _not_mounted(ref, text)
 
 

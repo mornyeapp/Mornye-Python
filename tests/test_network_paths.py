@@ -74,6 +74,17 @@ def test_windows_turns_a_share_into_unc() -> None:
     assert (path, error) == (r"\\nas\Music\Albums", "")
 
 
+def test_windows_prefers_a_known_mount_before_unc_fallback(tmp_path: Path) -> None:
+    mount_point = tmp_path / "Music"
+    mounts = [Mount("nas.local", "Music", str(mount_point), "cifs")]
+
+    path, error = resolve_library_path(
+        "smb://nas.local/Music/Albums", mounts=mounts, platform="win32"
+    )
+
+    assert (path, error) == (str(mount_point / "Albums"), "")
+
+
 def test_plain_paths_pass_through(tmp_path: Path) -> None:
     path, error = resolve_library_path(f"'{tmp_path}'", mounts=[])
     assert (path, error) == (str(tmp_path), "")
