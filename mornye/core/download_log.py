@@ -362,7 +362,8 @@ def search(
         params.append(owner)
     q = (query or "").strip()
     if q:
-        like = f"%{q.replace('%', r'\%').replace('_', r'\_')}%"
+        escaped_q = q.replace("%", r"\%").replace("_", r"\_")
+        like = f"%{escaped_q}%"
         where.append(
             "(title LIKE ? ESCAPE '\\' OR artist LIKE ? ESCAPE '\\' OR album LIKE ? ESCAPE '\\')"
         )

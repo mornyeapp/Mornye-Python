@@ -2175,12 +2175,18 @@ class MornyeAPI(
             if nothing_saved:
                 # Say so: "All tracks saved" after zero downloads read as
                 # success while the folder stayed empty.
-                reason = report.failed[0].reason if report.failed else "no provider returned the track"
+                reason = (
+                    report.failed[0].reason
+                    if report.failed
+                    else "no provider returned the track"
+                )
                 self.set_progress("Nothing downloaded.")
                 self.log(f"Nothing was downloaded — {reason}", "error")
                 with contextlib.suppress(Exception):
                     if announce:
-                        self._push("app_download_finished", False, list(selected_indices))
+                        self._push(
+                            "app_download_finished", False, list(selected_indices)
+                        )
                 return
             self.set_progress("Complete!")
             self.log(f"All tracks saved to: {self.download_dir}", "ok")
