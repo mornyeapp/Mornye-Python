@@ -1966,8 +1966,12 @@ async def _run_download_async(
                 adapter = _legacy_adapter(opts)
                 await adapter.run_async(url, loop_minutes=loop)
             else:
+                from .application.metadata_service import MetadataService
+
                 service = DownloadService(
-                    provider_executor=LegacyDownloadAdapter.from_options(opts)
+                    provider_executor=LegacyDownloadAdapter.from_options(opts),
+                    # Real metadata, not the compatibility stub (see app.py).
+                    metadata_service=MetadataService(compatibility_fallback=False),
                 )
                 await service.download(
                     DownloadRequest(

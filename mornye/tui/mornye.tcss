@@ -686,29 +686,29 @@ Toast.-error .toast--title {
 /* ── Queue (staged) and History ────────────────────────────────────── */
 
 .staged-filters,
-.history-filters {
+.hist-filters {
     height: auto;
 }
 
 .staged-filters Select,
-.history-filters Select {
+.hist-filters Select {
     width: 24;
 }
 
 .staged-filters Input,
-.history-filters Input {
+.hist-filters Input {
     width: 1fr;
 }
 
 #staged-summary,
-#history-summary {
+#hist-summary {
     color: $text-muted;
     padding: 0 1;
     margin-bottom: 1;
 }
 
 #staged-list,
-#history-list {
+#hist-list {
     height: auto;
     min-height: 5;
     max-height: 22;
@@ -718,6 +718,6 @@ Toast.-error .toast--title {
 }
 
 #staged-list:focus,
-#history-list:focus {
+#hist-list:focus {
     border: round $primary;
 }

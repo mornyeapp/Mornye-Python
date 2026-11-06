@@ -119,19 +119,19 @@ class HistoryPanel(VerticalScroll):
                 [("Downloads", "downloads"), ("Fetches", "fetches")],
                 value="downloads",
                 allow_blank=False,
-                id="history-tab",
+                id="hist-tab",
             ),
-            Input(placeholder="Search…", id="history-search"),
-            Select(SORTS, value="newest", allow_blank=False, id="history-sort"),
-            classes="setting-row history-filters",
+            Input(placeholder="Search…", id="hist-search"),
+            Select(SORTS, value="newest", allow_blank=False, id="hist-sort"),
+            classes="setting-row hist-filters",
         )
-        yield Label("", id="history-summary")
-        yield OptionList(id="history-list")
+        yield Label("", id="hist-summary")
+        yield OptionList(id="hist-list")
         yield Horizontal(
-            Button("Open", id="history-open", variant="primary"),
-            Button("Remove", id="history-remove"),
-            Button("Refresh", id="history-refresh"),
-            Button("Clear all", id="history-clear", variant="error"),
+            Button("Open", id="hist-open", variant="primary"),
+            Button("Remove", id="hist-remove"),
+            Button("Refresh", id="hist-refresh"),
+            Button("Clear all", id="hist-clear", variant="error"),
             classes="setting-row",
         )
 
@@ -139,18 +139,18 @@ class HistoryPanel(VerticalScroll):
         self._refresh()
 
     def _tab(self) -> str:
-        return str(self.query_one("#history-tab", Select).value or "downloads")
+        return str(self.query_one("#hist-tab", Select).value or "downloads")
 
     async def reload(self) -> None:
         tab = self._tab()
-        query = self.query_one("#history-search", Input).value.strip()
-        self.query_one("#history-sort", Select).display = tab == "downloads"
-        self.query_one("#history-open", Button).display = tab == "fetches"
-        option_list = self.query_one("#history-list", OptionList)
+        query = self.query_one("#hist-search", Input).value.strip()
+        self.query_one("#hist-sort", Select).display = tab == "downloads"
+        self.query_one("#hist-open", Button).display = tab == "fetches"
+        option_list = self.query_one("#hist-list", OptionList)
         option_list.clear_options()
 
         if tab == "downloads":
-            sort = str(self.query_one("#history-sort", Select).value or "newest")
+            sort = str(self.query_one("#hist-sort", Select).value or "newest")
             records = [
                 r.to_dict() for r in download_log.search(query, sort=sort, limit=500)
             ]
@@ -179,14 +179,14 @@ class HistoryPanel(VerticalScroll):
             options = [Option(describe_fetch(e)) for e in entries]
             empty = "No fetched links match." if query else "Nothing fetched yet."
 
-        self.query_one("#history-summary", Label).update(summary)
+        self.query_one("#hist-summary", Label).update(summary)
         if options:
             option_list.add_options(options)
         else:
             option_list.add_option(Option(empty, disabled=True))
 
     def _current(self) -> dict | None:
-        index = self.query_one("#history-list", OptionList).highlighted
+        index = self.query_one("#hist-list", OptionList).highlighted
         if index is None or not (0 <= index < len(self._rows)):
             return None
         return self._rows[index]
@@ -199,11 +199,11 @@ class HistoryPanel(VerticalScroll):
     # ------------------------------------------------------------------
 
     def on_select_changed(self, event: Select.Changed) -> None:
-        if event.select.id in ("history-tab", "history-sort"):
+        if event.select.id in ("hist-tab", "hist-sort"):
             self._refresh()
 
     def on_input_changed(self, event: Input.Changed) -> None:
-        if event.input.id == "history-search":
+        if event.input.id == "hist-search":
             self._refresh()
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
@@ -213,21 +213,21 @@ class HistoryPanel(VerticalScroll):
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         button = event.button.id
-        if button != "history-clear":
+        if button != "hist-clear":
             self._confirm_clear = False
-            self.query_one("#history-clear", Button).label = "Clear all"
+            self.query_one("#hist-clear", Button).label = "Clear all"
         row = self._current()
-        if button == "history-open" and row and row.get("url"):
+        if button == "hist-open" and row and row.get("url"):
             self.post_message(self.UrlChosen(row["url"]))
             return
-        if button == "history-remove" and row:
+        if button == "hist-remove" and row:
             if self._tab() == "downloads":
                 download_log.delete([int(row["id"])])
             else:
                 from ..core.session_memory import remove_url_from_history_async
 
                 await remove_url_from_history_async(row["url"])
-        elif button == "history-clear":
+        elif button == "hist-clear":
             if not self._confirm_clear:
                 self._confirm_clear = True
                 event.button.label = "Press again to clear"

@@ -936,6 +936,16 @@ populateList('enrich-list',   ALL_ENRICH.map(x => ({ ...x, badge: null })));
 // backend knows: refreshInstalledServices() replaces the list with those,
 // exactly as the interactive wizard does (both read
 // extensions/catalog.installed_download_services).
+// The backend installed or removed extensions (startup install finished, a
+// registry was added): the provider list and the Extensions page re-read.
+window.app_extensions_changed = function () {
+  refreshInstalledServices();
+  if ($('tc-extensions')?.classList.contains('active')) {
+    loadExtensionSettings?.();
+    loadExtensionHealth?.();
+  }
+};
+
 async function refreshInstalledServices() {
   if (typeof window.pywebview?.api?.get_download_services !== 'function') {
     // An older backend that cannot say what is installed: the built-in list.

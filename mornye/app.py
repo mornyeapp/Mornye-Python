@@ -300,13 +300,8 @@ class MornyeAPI(
         self._check_ffmpeg_startup()
         self._check_node_startup()
         try:
-            from .extensions.manager import ExtensionManager
-
             self.log("Download extension...", "debug")
-            threading.Thread(
-                target=lambda: ExtensionManager(auto_install_downloads=True),
-                daemon=True,
-            ).start()
+            self._install_download_extensions()
         except Exception as e:
             self.log(f"Error starting extensions: {e}", "warn")
         try:
@@ -759,6 +754,27 @@ class MornyeAPI(
 
     # ── Extension Registry API ─────────────────────────────────────────────
 
+    def _install_download_extensions(self) -> None:
+        """Install the registries' download extensions in the background,
+        then tell the page so it re-reads the provider list.
+
+        Before, this ran only at startup and said nothing when it finished:
+        a first launch, or a registry added later, left Settings with an
+        empty provider list until the next restart.
+        """
+
+        def run() -> None:
+            try:
+                from .extensions.manager import ExtensionManager
+
+                ExtensionManager(auto_install_downloads=True)
+            except Exception as e:
+                self.log(f"Could not install download extensions: {e}", "warn")
+            with contextlib.suppress(Exception):
+                self._push("app_extensions_changed")
+
+        threading.Thread(target=run, daemon=True).start()
+
     def get_registries(self) -> list | dict:
         """Returns every known extension-registry URL with its origin
         (environment variable, .env file, or added from the GUI) and
@@ -777,6 +793,10 @@ class MornyeAPI(
 
             registries = registry_config.add_registry(url)
             self.log(f"Registry added: {url}", "debug")
+            # A registry is only a list until its extensions are installed:
+            # install the download ones now, the same way startup does, so the
+            # provider list fills without a restart.
+            self._install_download_extensions()
             return {"ok": True, "registries": registries}
         except Exception as e:
             self.log(f"Failed to add registry: {e}", "error")
@@ -2034,10 +2054,19 @@ class MornyeAPI(
                 redownload_fake_hires=redownload_fake_hires,
                 timeout_s=timeout_s,
             )
+            from .application.metadata_service import MetadataService
+
             service = DownloadService(
                 provider_executor=LegacyDownloadAdapter.from_options(
                     legacy_opts,
                     prefetched=prefetched or None,
+                ),
+                # The real resolver. Left to its default, MetadataService
+                # answers a spotify:track: link with its compatibility stub
+                # ("Example Artist — Example Track"), and every provider was
+                # then asked for a song that does not exist.
+                metadata_service=MetadataService(
+                    timeout_s=int(timeout_s or 10), compatibility_fallback=False
                 ),
             )
             report = asyncio.run(
@@ -2138,6 +2167,21 @@ class MornyeAPI(
                     self.log(
                         f"Could not send the run notification: {exc}", "warn-quiet"
                     )
+            nothing_saved = (
+                report is not None
+                and report.success_count == 0
+                and (report.failed or report.total == 0)
+            )
+            if nothing_saved:
+                # Say so: "All tracks saved" after zero downloads read as
+                # success while the folder stayed empty.
+                reason = report.failed[0].reason if report.failed else "no provider returned the track"
+                self.set_progress("Nothing downloaded.")
+                self.log(f"Nothing was downloaded — {reason}", "error")
+                with contextlib.suppress(Exception):
+                    if announce:
+                        self._push("app_download_finished", False, list(selected_indices))
+                return
             self.set_progress("Complete!")
             self.log(f"All tracks saved to: {self.download_dir}", "ok")
             try:

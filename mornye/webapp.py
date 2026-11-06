@@ -1217,7 +1217,13 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
             event_name,
             broadcast_application_event,
         )
-    application_download_service = DownloadService(event_bus=application_events)
+    from .application.metadata_service import MetadataService
+
+    application_download_service = DownloadService(
+        event_bus=application_events,
+        # Real metadata, not the compatibility stub (see app.py).
+        metadata_service=MetadataService(compatibility_fallback=False),
+    )
     application_job_service = JobService(
         download_service=application_download_service,
         event_bus=application_events,

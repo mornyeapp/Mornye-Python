@@ -340,6 +340,7 @@
     'app_smb_library_progress',
     'app_smb_library_results',
     'app_staged_queue_changed',
+    'app_extensions_changed',
     'app_update_download_stats',
     'app_update_playcounts',
     'loadHistoryAndProfiles',
