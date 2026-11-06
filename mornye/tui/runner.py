@@ -218,6 +218,11 @@ def make_status_line(stats: dict) -> str:
         parts.append(f"{int(stats['skipped'])} skipped")
     if speed > 0:
         parts.append(f"{speed:.1f} MB/s")
+    from ..core.progress import format_eta
+
+    eta = format_eta(stats.get("eta_seconds"))
+    if eta:
+        parts.append(f"{eta} left")
     total = float(stats.get("total_downloaded", 0.0) or 0.0)
     if total > 0:
         parts.append(f"{total:.1f} MB")

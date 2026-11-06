@@ -1385,7 +1385,7 @@ let trackRenderToken = 0;
 let currentUrl     = '';
 let currentItemType = 'ALBUM'; // ALBUM, TRACK, ARTIST, PLAYLIST
 let queue          = [];
-let queueStats     = { downloaded:'0.00 MB', speed:'0.00 MB/s' };
+let queueStats     = { downloaded:'0.00 MB', speed:'0.0 MB/s', eta:'' };
 let isDownloading  = false;
 let queueStartTime = null;
 let queueDurationInterval = null;
@@ -1526,7 +1526,11 @@ window.updateFolderLabel = (path) => {
         if (!data) return;
         
         queueStats.downloaded = `${Number(data.total_downloaded || 0).toFixed(2)} MB`;
-        queueStats.speed = `${Number(data.current_speed || 0).toFixed(2)} MB/s`;
+        // One decimal, as Mornye shows it; the ETA is the backend's
+        // (core/progress.py estimate_eta_seconds): remaining bytes over the
+        // current speed, only when the size is known and under an hour.
+        queueStats.speed = `${Number(data.current_speed || 0).toFixed(1)} MB/s`;
+        queueStats.eta = formatEta(data.eta_seconds);
 
         if (isDownloading) {
           const activeItem = queue.find(q => q.status === 'active');
@@ -1535,7 +1539,8 @@ window.updateFolderLabel = (path) => {
             // escapes the message (see toast-system.js escapeHtml), so
             // markup passed here would show up as literal tags instead of
             // being rendered.
-            const msg = `${activeItem.title} — ${activeItem.progress}% · Speed: ${queueStats.speed}`;
+            const msg = `${activeItem.title} — ${activeItem.progress}% · ${queueStats.speed}`
+              + (queueStats.eta ? ` · ${queueStats.eta} left` : '');
 
             if (!currentDownloadToastId) {
               currentDownloadToastId = toastMgr.loading(msg, { title: 'Downloading Tracks...' });
@@ -4036,7 +4041,7 @@ function renderQueueNow() {
 
   const dock = $('queue-dock');
   if (queue.length === 0) {
-    queueStats = { downloaded:'0.00 MB', speed:'0.00 MB/s' };
+    queueStats = { downloaded:'0.00 MB', speed:'0.0 MB/s', eta:'' };
     if (dock) dock.classList.remove('visible');
     $('queue-drawer')?.classList.remove('open');
 
@@ -4130,6 +4135,8 @@ function renderQueueNow() {
   const qsbSpeed = $('qsb-speed');
   if (qsbDownloaded) qsbDownloaded.textContent = queueStats.downloaded;
   if (qsbSpeed) qsbSpeed.textContent = queueStats.speed;
+  const qsbEta = $('qsb-eta');
+  if (qsbEta) qsbEta.textContent = queueStats.eta || '—';
 
   // Sync the Dock indicators
   const downloaded = $('qd-downloaded');
@@ -4142,7 +4149,7 @@ function renderQueueNow() {
     const rate = parseFloat(queueStats.speed);
     const active = queue.some(q => q.status === 'active');
     speed.textContent = rate > 0
-      ? queueStats.speed
+      ? queueStats.speed + (queueStats.eta ? ` · ${queueStats.eta} left` : '')
       : active
         ? `Downloading ${done + 1} of ${queue.length}…`
         : `${done} of ${queue.length} done`;
@@ -4178,6 +4185,15 @@ const STATUS_META = {
   done:    { label: 'Done',        cls: 'done' },
   failed:  { label: 'Failed',      cls: 'failed' },
 };
+
+// "~42s" / "~3m05s" — the same format as core/progress.format_eta and
+// Mornye's queue labels. Empty when there is no estimate.
+function formatEta(seconds) {
+  const s = Math.round(Number(seconds) || 0);
+  if (s <= 0) return '';
+  if (s < 60) return `~${s}s`;
+  return `~${Math.floor(s / 60)}m${String(s % 60).padStart(2, '0')}s`;
+}
 
 function timeAgo(seconds) {
   const t = Number(seconds) || 0;
@@ -4578,7 +4594,7 @@ function updateQueueItem(qi, status, progress) {
 
 function clearQueue() {
   queue = []; isDownloading = false;
-  queueStats = { downloaded:'0.00 MB', speed:'0.00 MB/s' };
+  queueStats = { downloaded:'0.00 MB', speed:'0.0 MB/s', eta:'' };
   resetQueueDuration();
   renderQueue();
   setStatus('Queue cleared.');
