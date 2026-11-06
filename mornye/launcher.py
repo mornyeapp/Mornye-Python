@@ -43,6 +43,9 @@ from .core.animated_artwork import (
 from .core.notifiers import EVENTS as NOTIFY_EVENTS
 from .core.notifiers import KINDS as NOTIFY_KINDS
 from .core.notifiers import NOTIFY_TOKEN_ENV, NOTIFY_URL_ENV
+from .core.notifiers import resolve_chat_id as resolve_notify_chat_id
+from .core.notifiers import resolve_kind as resolve_notify_kind
+from .core.notifiers import resolve_on as resolve_notify_on
 from .core.output_sink import sink_active
 from .core.report import RunReport
 from .core.transcode import LOSSLESS_FORMATS, SUPPORTED_FORMATS
@@ -525,7 +528,7 @@ def parse_args(profile_defaults: dict | None = None) -> argparse.Namespace:
         "--smb-destination",
         default=pd.get("network_destination", pd.get("smb_destination", None)),
         metavar="ID",
-        help="Send completed files to a saved SMB or WebDAV destination. The password is "
+        help="Send completed files to a saved SMB, WebDAV or HTTP(S) upload destination. The password is "
         "prompted securely and is never accepted as a command-line argument.",
         dest="smb_destination",
     )
@@ -534,9 +537,10 @@ def parse_args(profile_defaults: dict | None = None) -> argparse.Namespace:
         "-q",
         default=pd.get("quality", "LOSSLESS"),
         help="Quality: HI_RES_LOSSLESS (best available) or LOSSLESS. "
-        "DOLBY_ATMOS is also accepted but is Tidal-exclusive — any other "
-        "provider falls back to HI_RES_LOSSLESS instead of using it. "
-        "Legacy provider-specific values remain accepted. Default: LOSSLESS",
+        "DOLBY_ATMOS is also accepted: services whose extension offers an "
+        "Atmos quality use it, the others fall back to HI_RES_LOSSLESS. "
+        "Each extension maps the tier onto its own quality options "
+        "(see --ext-quality). Default: LOSSLESS",
     )
     # A pair rather than a lone --no-fallback: a profile can set
     # allow_fallback=False, and without --fallback there would be no way to
@@ -622,14 +626,26 @@ def parse_args(profile_defaults: dict | None = None) -> argparse.Namespace:
         default=pd.get("qobuz_local_api_url", None),
         dest="qobuz_local_api_url",
         metavar="URL",
+        help="Deprecated, has no effect. Provider APIs are each extension's "
+        "own settings: see --ext-settings qobuz-web.",
     )
     parser.add_argument(
         "--tidal-api",
         default=pd.get("tidal_custom_api", None),
         dest="tidal_custom_api",
         metavar="URL",
-        help="URL of a self-hosted hifi-api instance (https://github.com/binimum/hifi-api). "
-        "Takes priority over built-in API pool.",
+        help="Deprecated, has no effect. Set the Tidal download API with "
+        "--ext-set tidal-web.downloadApiUrl=URL instead.",
+    )
+    parser.add_argument(
+        "--ext-quality",
+        action="append",
+        default=None,
+        dest="ext_quality",
+        metavar="SERVICE=ID",
+        help="Use one of an extension's own quality options for a service, "
+        "e.g. --ext-quality amazon=ac4. Repeatable. The ids are listed by "
+        "--ext-settings <extension>. Overrides --quality for that service.",
     )
     parser.add_argument(
         "--registries",
@@ -1064,7 +1080,8 @@ def parse_args(profile_defaults: dict | None = None) -> argparse.Namespace:
         choices=list(NOTIFY_KINDS),
         default=None,
         help="Send run results to a webhook, Discord, Telegram or ntfy. "
-        "Off unless given; nothing is built in.",
+        "Falls back to $MORNYE_NOTIFY (which also covers GUI and --web "
+        "downloads). Off unless one is given; nothing is built in.",
     )
     notify_grp.add_argument(
         "--notify-url",
@@ -1081,15 +1098,20 @@ def parse_args(profile_defaults: dict | None = None) -> argparse.Namespace:
         f"back to ${NOTIFY_TOKEN_ENV}.",
     )
     notify_grp.add_argument(
-        "--notify-chat-id", dest="notify_chat_id", default="", metavar="ID"
+        "--notify-chat-id",
+        dest="notify_chat_id",
+        default="",
+        metavar="ID",
+        help="Telegram chat id. Falls back to $MORNYE_NOTIFY_CHAT_ID.",
     )
     notify_grp.add_argument(
         "--notify-on",
         dest="notify_on",
         choices=list(NOTIFY_EVENTS),
-        default="summary",
+        default=None,
         help="'summary' (default) sends one message for the whole run; "
-        "'success'/'failure'/'both' send one per track.",
+        "'success'/'failure'/'both' send one per track. Falls back to "
+        "$MORNYE_NOTIFY_ON.",
     )
 
     output_grp = parser.add_argument_group("Output")
@@ -1608,6 +1630,88 @@ async def _resolve_csv_async(
     return resolution
 
 
+def _parse_ext_quality(values: list[str] | None) -> dict[str, str]:
+    """``["amazon=ac4", "tidal=LOSSLESS"]`` → ``{"amazon": "ac4", ...}``."""
+    choices: dict[str, str] = {}
+    for item in values or []:
+        service, sep, quality_id = str(item).partition("=")
+        if not sep or not service.strip() or not quality_id.strip():
+            print(
+                f"Ignoring --ext-quality {item!r}: expected SERVICE=ID",
+                file=sys.stderr,
+            )
+            continue
+        choices[service.strip().removeprefix("ext:")] = quality_id.strip()
+    return choices
+
+
+def _ext_settings_command(show: str | None, assignments: list[str]) -> int:
+    """``--ext-settings NAME`` lists an extension's settings and qualities;
+    ``--ext-set NAME.KEY=VALUE`` (repeatable) validates and saves them.
+
+    Returns the process exit code.
+    """
+    from .extensions.catalog import extension_id
+    from .extensions.manager import ExtensionManager
+
+    manager = ExtensionManager(auto_install_downloads=False)
+
+    updates: dict[str, dict[str, str]] = {}
+    for item in assignments:
+        target, sep, value = str(item).partition("=")
+        name, dot, key = target.partition(".")
+        if not sep or not dot or not name or not key:
+            print(
+                f"Error: --ext-set expects NAME.KEY=VALUE, got {item!r}",
+                file=sys.stderr,
+            )
+            return 2
+        updates.setdefault(extension_id(name, manager), {})[key] = value
+
+    for name, values in updates.items():
+        try:
+            manager.update_settings(name, values)
+        except ValueError as e:
+            print(f"Error ({name}): {e}", file=sys.stderr)
+            return 1
+        with contextlib.suppress(Exception):
+            from .core.extension_enrichment import close_extension_provider
+
+            close_extension_provider(name)
+        print(f"Saved settings for {name}: {', '.join(sorted(values))}")
+
+    if show is None:
+        return 0
+
+    ext = manager.get_installed(extension_id(show, manager))
+    if ext is None:
+        print(f"Error: extension '{show}' is not installed.", file=sys.stderr)
+        return 1
+    values = manager.load_settings(ext.name)
+    print(f"{ext.display_name or ext.name} ({ext.name} v{ext.version}, {ext.runtime})")
+    if not ext.settings_schema:
+        print("  No settings.")
+    for entry in ext.settings_schema:
+        if entry["type"] == "button":
+            print(f"  {entry['key']}  [action: {entry.get('action') or '-'}]")
+            continue
+        value = values.get(entry["key"], entry.get("default"))
+        if entry.get("secret") and value:
+            value = "(set)"
+        choices = ""
+        if entry["options"]:
+            choices = "  {" + ", ".join(o["value"] for o in entry["options"]) + "}"
+        print(f"  {entry['key']} = {value!r}  ({entry['type']}){choices}")
+        if entry.get("description"):
+            print(f"      {entry['description']}")
+    if ext.quality_options:
+        print("Quality options (for --ext-quality):")
+        for option in ext.quality_options:
+            kind = f" [{option['kind']}]" if option.get("kind") else ""
+            print(f"  {option['id']}{kind} — {option.get('label') or ''}")
+    return 0
+
+
 async def _run_download_async(
     url: str | list[str],
     *,
@@ -1649,6 +1753,7 @@ async def _run_download_async(
     csv_unresolved: str | None = None,
     m3u_format: str = "m3u8",
     max_concurrent_downloads: int = 2,
+    extension_quality: dict[str, str] | None = None,
     verify_hires: bool = False,
     redownload_fake_hires: bool = False,
     save_lrc: bool = False,
@@ -1779,6 +1884,7 @@ async def _run_download_async(
         use_album_subfolders=use_album_subfolders,
         create_playlist_subfolders=create_playlist_subfolders,
         quality=quality,
+        extension_quality=dict(extension_quality or {}),
         first_artist_only=first_artist_only,
         artist_separator=artist_separator,
         output_path=output_path,
@@ -2045,6 +2151,7 @@ async def run_download_from_cfg(cfg: dict, log_level: int) -> None:
             transcode_bitrate=cfg.get("transcode_bitrate", "320k"),
             transcode_keep_original=cfg.get("transcode_keep_original", False),
             max_concurrent_downloads=cfg.get("max_concurrent_downloads", 2),
+            extension_quality=dict(cfg.get("extension_quality") or {}),
             verify_hires=cfg.get("verify_hires", False),
             redownload_fake_hires=cfg.get("redownload_fake_hires", False),
         )
@@ -2448,13 +2555,35 @@ async def amain() -> None:
         hc_parser.add_argument("--lyrics-providers", nargs="+", default=None)
         hc_args, _ = hc_parser.parse_known_args(sys.argv[1:])
 
-        from .core.health_check import print_health_report, run_health_check
+        from .core.health_check import (
+            print_extension_health_report,
+            print_health_report,
+            run_extension_health_check,
+            run_health_check,
+        )
 
+        # The extensions' own checks first: they are what downloads need.
+        extension_rows = await run_extension_health_check()
+        if extension_rows:
+            print("Extensions:")
+            print_extension_health_report(extension_rows)
+            print("Lyrics:")
         results = await run_health_check(hc_args.lyrics_providers)
         print_health_report(results)
-        if not all(r.ok for r in results):
+        if not all(r.ok for r in results) or not all(
+            row["ok"] for row in extension_rows
+        ):
             sys.exit(1)
         return
+
+    if "--ext-settings" in sys.argv or "--ext-set" in sys.argv:
+        settings_parser = argparse.ArgumentParser(add_help=False)
+        settings_parser.add_argument("--ext-settings", dest="show", default=None)
+        settings_parser.add_argument(
+            "--ext-set", dest="assignments", action="append", default=[]
+        )
+        settings_args, _ = settings_parser.parse_known_args(sys.argv[1:])
+        sys.exit(_ext_settings_command(settings_args.show, settings_args.assignments))
 
     if "--ext-scaffold" in sys.argv:
         scaffold_parser = argparse.ArgumentParser(add_help=False)
@@ -2782,7 +2911,11 @@ async def amain() -> None:
             cli_profile_defaults = await _load_profile_into_defaults(sys.argv[idx + 1])
 
     file_cfg = load_config()
-    merged_defaults = {**file_cfg, **cli_profile_defaults}
+    # MORNYE_<SETTING> environment variables (core/env_settings.py): above
+    # the config file, below --profile and the flags themselves.
+    from .core.env_settings import env_defaults
+
+    merged_defaults = {**file_cfg, **env_defaults(), **cli_profile_defaults}
 
     args = parse_args(profile_defaults=merged_defaults)
     if args.smb_destination:
@@ -2877,6 +3010,23 @@ async def amain() -> None:
         "qobuz_local_api_url",
     )
     tidal_custom_api = args.tidal_custom_api or merged_defaults.get("tidal_custom_api")
+    for flag, value, hint in (
+        (
+            "--tidal-api",
+            args.tidal_custom_api,
+            "--ext-set tidal-web.downloadApiUrl=URL",
+        ),
+        ("--qobuz-local-api", args.qobuz_local_api_url, "--ext-settings qobuz-web"),
+    ):
+        if value:
+            print(
+                f"Warning: {flag} is deprecated and has no effect; the provider "
+                f"APIs are each extension's own settings ({hint}).",
+                file=sys.stderr,
+            )
+    extension_quality = _parse_ext_quality(args.ext_quality) or dict(
+        merged_defaults.get("extension_quality") or {}
+    )
     timeout_s = (
         args.timeout_s
         if args.timeout_s is not None
@@ -2957,13 +3107,16 @@ async def amain() -> None:
             csv_unresolved=args.csv_unresolved,
             m3u_format=args.m3u_format,
             max_concurrent_downloads=args.max_concurrent,
+            extension_quality=extension_quality,
             verify_hires=args.verify_hires,
             redownload_fake_hires=args.redownload_fake_hires,
-            notify=args.notify,
+            # Each --notify* flag falls back to its MORNYE_NOTIFY* variable,
+            # so a container is configured the same way as a command line.
+            notify=resolve_notify_kind(args.notify) or None,
             notify_url=args.notify_url,
             notify_token=args.notify_token,
-            notify_chat_id=args.notify_chat_id,
-            notify_on=args.notify_on,
+            notify_chat_id=resolve_notify_chat_id(args.notify_chat_id),
+            notify_on=resolve_notify_on(args.notify_on),
             smb_destination_id=args.smb_destination,
         )
 
@@ -3004,8 +3157,7 @@ async def amain() -> None:
                 "post_download_command": args.post_command,
                 "resume": args.resume,
                 "post_download_hooks": args.post_hooks or [],
-                "qobuz_local_api_url": qobuz_local_api_url,
-                "tidal_custom_api": tidal_custom_api,
+                "extension_quality": extension_quality,
                 "timeout_s": timeout_s,
                 "loop": args.loop,
                 "watch": args.watch,

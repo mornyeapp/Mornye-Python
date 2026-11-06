@@ -119,8 +119,16 @@ services:
       TS_BROWSER_SLOT_TIMEOUT: "${TS_BROWSER_SLOT_TIMEOUT:-}"
 
       # --- Automation / notifications --------------------------------------
+      # MORNYE_NOTIFY turns notifications on for every download, GUI and web
+      # included: webhook, discord, telegram or ntfy. MORNYE_NOTIFY_ON is
+      # summary (default), success, failure or both. The same as the
+      # --notify / --notify-url / --notify-token / --notify-chat-id /
+      # --notify-on flags.
+      MORNYE_NOTIFY: "${MORNYE_NOTIFY:-}"
       MORNYE_NOTIFY_URL: "${MORNYE_NOTIFY_URL:-}"
       MORNYE_NOTIFY_TOKEN: "${MORNYE_NOTIFY_TOKEN:-}"
+      MORNYE_NOTIFY_CHAT_ID: "${MORNYE_NOTIFY_CHAT_ID:-}"
+      MORNYE_NOTIFY_ON: "${MORNYE_NOTIFY_ON:-}"
       MORNYE_LIBRARY_USER: "${MORNYE_LIBRARY_USER:-}"
       MORNYE_LIBRARY_TOKEN: "${MORNYE_LIBRARY_TOKEN:-}"
 

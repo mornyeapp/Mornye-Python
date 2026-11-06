@@ -134,9 +134,8 @@ ALLOWED_METHODS: set[str] = {
     "remove_history_item",
     "save_profile_data",
     "delete_profile_data",
-    "check_qobuz_api",
-    "check_tidal_api",
     "check_animated_artwork_api",
+    "get_download_dir",
     "set_download_dir",
     "list_network_destinations",
     "save_network_destination",
@@ -178,8 +177,11 @@ ALLOWED_METHODS: set[str] = {
     "set_subscription_interval",
     "reset_subscription",
     "check_subscriptions",
-    # Extension health (read-only, plus a counter reset).
+    # Extension health (read-only, plus a counter reset), and each
+    # extension's own manifest `serviceHealth` checks (read-only GETs to the
+    # URLs the installed manifests declare).
     "get_extension_health",
+    "check_extension_health",
     "reset_extension_health",
     # Signed sessions (core/signed_session_status.py). The listing never
     # carries a secret; clearing and pruning only drop credentials the next
@@ -203,11 +205,25 @@ ALLOWED_METHODS: set[str] = {
     # pointed at a path on the host.
     "preview_csv",
     "fetch_csv",
+    # Each JS extension's own settings (api_mixins/extension_settings.py).
+    # Secrets are never returned; the writes are admin-only in multi-user
+    # mode, since one install's extensions serve every account.
+    "list_extension_settings",
+    "get_extension_settings",
+    "save_extension_settings",
+    "reset_extension_settings",
+    "run_extension_setting_action",
 }
 
 NETWORK_DESTINATION_ADMIN_METHODS = {
     "save_network_destination",
     "remove_network_destination",
+}
+
+EXTENSION_SETTINGS_ADMIN_METHODS = {
+    "save_extension_settings",
+    "reset_extension_settings",
+    "run_extension_setting_action",
 }
 
 # Deliberately absent from ALLOWED_METHODS, even though they exist on the Api
@@ -965,7 +981,9 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
                 },
                 status_code=400,
             )
-        if multiuser and method_name in NETWORK_DESTINATION_ADMIN_METHODS:
+        if multiuser and method_name in (
+            NETWORK_DESTINATION_ADMIN_METHODS | EXTENSION_SETTINGS_ADMIN_METHODS
+        ):
             from .core.web_users import is_admin
 
             if not await run_in_threadpool(

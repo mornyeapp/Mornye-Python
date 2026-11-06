@@ -97,6 +97,11 @@ const $ = id => document.getElementById(id);
 const ts = () => new Date().toLocaleTimeString('en-US');
 // ── Global Initialization ──────────────────────────────────────────────────
 const toastMgr = new ToastManager();
+// A top-level `const` is not a property of `window`, and the settings code
+// reaches the manager as `window.toastMgr`: without this line every
+// "Notification sounds" change and every saved setting was dropped, and the
+// sound followed only the browser's own localStorage (issue #254).
+window.toastMgr = toastMgr;
 
 // ── View switching ───────────────────────────────────────────────────────────
 function switchView(name) {
@@ -118,10 +123,16 @@ function switchTab(name, btn) {
   document.querySelectorAll('.tc').forEach(c => c.classList.remove('active'));
   btn.classList.add('active');
   $('tc-' + name).classList.add('active');
+  if (name === 'status' && !extensionStatusChecking) {
+    // Lists the installed extensions' checks without running them; Check
+    // runs them. Re-read each time: an extension may have been installed.
+    loadExtensionStatusList();
+  }
   if (name === 'extensions') {
     loadRegistries();
     loadDirectories();
     loadTrustedKeys();
+    loadExtensionSettings();
     loadExtensionHealth();
     loadSignedSessions();
   }
@@ -370,8 +381,8 @@ function applySettings(settings = {}) {
   if ($('config-retries')) $('config-retries').value = cfg.track_max_retries;
   if ($('config-post-action')) { $('config-post-action').value = cfg.post_download_action; onPostChange(); }
   if ($('config-post-cmd')) $('config-post-cmd').value = cfg.post_download_command;
-  if ($('config-qobuz-local-api')) $('config-qobuz-local-api').value = cfg.qobuz_local_api_url || '';
-  if ($('config-tidal-api')) $('config-tidal-api').value = cfg.tidal_custom_api || '';
+  extensionQualityChoices = { ...(cfg.extension_quality || {}) };
+  renderExtensionQualityRows();
   if ($('config-animated-artwork-api-url')) $('config-animated-artwork-api-url').value = cfg.animated_artwork_api_url || '';
   if ($('config-acoustid-key')) $('config-acoustid-key').value = cfg.acoustid_api_key || '';
   if ($('config-loop')) $('config-loop').value = cfg.loop;
@@ -637,8 +648,9 @@ const DEFAULT_SETTINGS = {
   transcode_keep_original: false,
   verify_hires: false,
   redownload_fake_hires: false,
-  qobuz_local_api_url: '',
-  tidal_custom_api: '',
+  // Per-service quality id from each extension's manifest qualityOptions,
+  // e.g. { amazon: 'ac4' }. Missing = use the global tier.
+  extension_quality: {},
   acoustid_api_key: '',
   loop: 0,
   log_level: 'INFO',
@@ -780,7 +792,26 @@ function getChecked(id) {
     .map(el => el.dataset.value);
 }
 
-populateList('services-list', ALL_SERVICES);
+// The download sources are the installed extensions and nothing else: the
+// list starts empty and refreshInstalledServices() fills it from the
+// backend. A fresh install with no extension shows that, not twelve
+// services that could only fail.
+function showServicesPlaceholder(message, withLink = false) {
+  const el = $('services-list');
+  if (!el) return;
+  const link = withLink
+    ? ` <a href="#" onclick="openExtensionsSettings(); return false;">Settings → Extensions</a>.`
+    : '';
+  el.innerHTML = `<div class="s-label" style="font-size:11.5px;padding:6px 2px;">${escHtml(message)}${link}</div>`;
+}
+
+function openExtensionsSettings() {
+  switchView('settings');
+  const tab = document.querySelector('.stab[onclick*="extensions"]');
+  if (tab) switchTab('extensions', tab);
+}
+
+showServicesPlaceholder('Reading the installed extensions…');
 populateList('lyrics-list',   ALL_LYRICS.map(x => ({ ...x, badge: null })));
 populateList('enrich-list',   ALL_ENRICH.map(x => ({ ...x, badge: null })));
 
@@ -791,33 +822,51 @@ populateList('enrich-list',   ALL_ENRICH.map(x => ({ ...x, badge: null })));
 // exactly as the interactive wizard does (both read
 // extensions/catalog.installed_download_services).
 async function refreshInstalledServices() {
-  if (typeof window.pywebview?.api?.get_download_services !== 'function') return;
+  if (typeof window.pywebview?.api?.get_download_services !== 'function') {
+    // An older backend that cannot say what is installed: the built-in list.
+    populateList('services-list', ALL_SERVICES);
+    applyListState('services-list', lastAppliedServices);
+    return;
+  }
   let services;
   try {
     const result = await window.pywebview.api.get_download_services();
     services = result?.services;
   } catch (e) {
     console.warn('[services] could not read the installed providers:', e);
+    showServicesPlaceholder('Could not read the installed extensions.');
     return;
   }
-  // Nothing installed, or an older backend: keep the built-in list. An empty
-  // picker is indistinguishable from a broken one.
-  if (!Array.isArray(services) || !services.length) return;
+  // Nothing installed: say so instead of offering sources that cannot work.
+  if (!Array.isArray(services) || !services.length) {
+    installedServiceRows = [];
+    renderExtensionQualityRows();
+    showServicesPlaceholder('No download extension is installed yet. Add a registry in', true);
+    return;
+  }
+
+  installedServiceRows = services;
+  renderExtensionQualityRows();
 
   const known = new Map(ALL_SERVICES.map(x => [x.id, x]));
   const items = services.map(svc => {
     const preset = known.get(svc.id);
-    if (preset) return { ...preset, title: (svc.extensions || []).join(', ') };
+    // The JS extension downloads first; the Python one, if any, is its
+    // fallback. Say so in the tooltip, and take the badge from what the
+    // primary extension's manifest says it delivers.
+    const title = serviceTitle(svc);
+    const badge = serviceBadge(svc);
+    if (preset) return { ...preset, badge: badge || preset.badge, title };
     // A provider this build has no artwork or label for — a third-party
     // extension, most likely. It still belongs in the list.
     return {
       id: svc.id,
       label: svc.label || svc.id,
-      badge: null,
+      badge,
       on: false,
       icon: (svc.id || '?').slice(0, 2).toUpperCase(),
       iconClass: svc.id,
-      title: (svc.extensions || []).join(', '),
+      title,
     };
   });
 
@@ -830,6 +879,68 @@ async function refreshInstalledServices() {
 //: What applySettings() last put in the services list, so a refresh that
 //: arrives after it can restore the user's order instead of the defaults.
 let lastAppliedServices = ALL_SERVICES.filter(s => s.on).map(s => s.id);
+
+// ── Per-service quality (extension qualityOptions) ───────────────────────────
+// `var`, not `let`: applySettings() can run before this part of the file has
+// been evaluated, and a `let` would still be in its temporal dead zone.
+//: Rows from get_download_services(), with each service's quality_options.
+var installedServiceRows = [];
+//: { serviceId: qualityOptionId } — what the user picked per service.
+var extensionQualityChoices = {};
+
+function serviceTitle(svc) {
+  const exts = svc.extensions || [];
+  if (!svc.primary || exts.length < 2) return exts.join(', ');
+  const fallback = exts.filter(e => e !== svc.primary);
+  return `${svc.primary} (fallback: ${fallback.join(', ')})`;
+}
+
+function serviceBadge(svc) {
+  const opts = svc.quality_options || [];
+  if (!opts.length) return null;
+  if (svc.atmos) return 'ATMOS';
+  const text = o => `${o.id} ${o.label}`.toLowerCase();
+  if (opts.some(o => o.kind === 'lossless' || /flac|lossless|alac/.test(text(o)))) return 'FLAC';
+  const first = opts[0];
+  const m = /(aac|opus|mp3|m4a)/.exec(text(first));
+  return m ? m[1].toUpperCase() : null;
+}
+
+function renderExtensionQualityRows() {
+  const section = $('ext-quality-section');
+  const box = $('ext-quality-rows');
+  if (!section || !box) return;
+  const rows = (installedServiceRows || []).filter(s => (s.quality_options || []).length > 1);
+  section.style.display = rows.length ? '' : 'none';
+  box.innerHTML = rows.map(svc => {
+    const current = extensionQualityChoices?.[svc.id] || '';
+    const opts = [`<option value="">Use global quality</option>`].concat(
+      svc.quality_options.map(o =>
+        `<option value="${regEscapeHtml(o.id)}" ${o.id === current ? 'selected' : ''} title="${regEscapeHtml(o.description || '')}">${regEscapeHtml(o.label || o.id)}</option>`)
+    ).join('');
+    return `<div class="s-row" style="padding-left:16px;border-left:2px solid var(--border2);margin-left:4px;">
+      <span class="s-label">${regEscapeHtml(svc.label || svc.id)}<small>${regEscapeHtml(svc.primary || '')}</small></span>
+      <select data-service="${regEscapeHtml(svc.id)}" onchange="onExtensionQualityChange(this)">${opts}</select>
+    </div>`;
+  }).join('');
+}
+
+function onExtensionQualityChange(select) {
+  const service = select.dataset.service;
+  if (!service) return;
+  if (select.value) extensionQualityChoices[service] = select.value;
+  else delete extensionQualityChoices[service];
+  isDirty = true;
+  updateSaveButtonVisual();
+}
+
+function collectExtensionQuality() {
+  const out = {};
+  for (const [service, id] of Object.entries(extensionQualityChoices || {})) {
+    if (id) out[service] = id;
+  }
+  return out;
+}
 
 // ── HC chips ─────────────────────────────────────────────────────────────────
 const API_SOURCES = [
@@ -936,12 +1047,90 @@ function buildStatusCard(source) {
   </div>`;
 }
 
-/** Renders the lyrics provider status cards. */
+/** Renders the extension and lyrics provider status cards. */
 function renderStatusGrids() {
+  renderExtensionStatusGrid();
   const servicesGrid = $('status-services-grid');
   if (servicesGrid) {
     servicesGrid.innerHTML = API_SOURCES.map((source) => buildStatusCard(source)).join('');
   }
+}
+
+// ── Extension checks (manifest `serviceHealth`, core/health_check.py) ──────
+// `var`: renderStatusGrids() runs while this file is still being evaluated.
+var extensionStatusRows = [];
+var extensionStatusChecking = false;
+var extensionStatusLoaded = false;
+
+function extensionStatusOf(row) {
+  if (extensionStatusChecking) return 'checking';
+  if (row.ok === true) return 'online';
+  if (row.ok === false) return 'offline';
+  return 'idle';
+}
+
+function renderExtensionStatusGrid() {
+  const grid = $('status-extensions-grid');
+  if (!grid) return;
+  if (!extensionStatusRows.length) {
+    grid.innerHTML = `<div class="s-label" style="font-size:11.5px;grid-column:1/-1;">${
+      extensionStatusLoaded
+        ? 'No installed extension declares a health check.'
+        : 'Loading the installed extensions…'}</div>`;
+    return;
+  }
+  grid.innerHTML = extensionStatusRows.map((row) => {
+    const checks = (row.checks || []).map((c) => {
+      const state = c.ok === true ? '✓' : c.ok === false ? '✗' : '·';
+      const latency = c.latency >= 0 ? ` · ${c.latency} ms` : '';
+      const detail = c.detail ? ` — ${c.detail}` : '';
+      return `<div class="s-label" style="font-size:11px;" title="${regEscapeHtml(c.url)}">${state} ${regEscapeHtml(c.label)}${regEscapeHtml(detail)}${latency}</div>`;
+    }).join('');
+    return `<div class="status-card" title="${regEscapeHtml(row.name)}">
+      <div class="status-card-header">
+        <div class="status-card-left">
+          ${renderPlatformIcon(row.service)}
+          <div class="status-card-name">${regEscapeHtml(row.display_name)}</div>
+        </div>
+        ${renderStatusIcon(extensionStatusOf(row))}
+      </div>
+      ${checks}
+    </div>`;
+  }).join('');
+}
+
+async function loadExtensionStatusList() {
+  if (!window.pywebview?.api?.check_extension_health) return;
+  try {
+    const res = await window.pywebview.api.check_extension_health(null, false);
+    // Keep the last result of an extension that is still installed.
+    const previous = new Map(extensionStatusRows.map((row) => [row.name, row]));
+    extensionStatusRows = (res?.extensions || []).map((row) => previous.get(row.name) || row);
+  } catch (e) {
+    extensionStatusRows = [];
+  }
+  extensionStatusLoaded = true;
+  renderExtensionStatusGrid();
+}
+
+async function checkExtensions() {
+  if (!window.pywebview?.api?.check_extension_health) return { ok: 0, total: 0 };
+  extensionStatusChecking = true;
+  renderExtensionStatusGrid();
+  try {
+    const res = await window.pywebview.api.check_extension_health(null, true);
+    extensionStatusRows = res?.extensions || [];
+  } catch (e) {
+    extensionStatusRows = extensionStatusRows.map((row) => ({ ...row, ok: false }));
+  } finally {
+    extensionStatusChecking = false;
+    extensionStatusLoaded = true;
+    renderExtensionStatusGrid();
+  }
+  return {
+    ok: extensionStatusRows.filter((row) => row.ok === true).length,
+    total: extensionStatusRows.length,
+  };
 }
 
 /**
@@ -951,6 +1140,15 @@ function renderStatusGrids() {
 function updateStatusSummary(text) {
   const label = $('hc-summary');
   if (label) label.textContent = text;
+}
+
+/** The overall pill from what the cards show: extensions and lyrics. */
+function updateOverallStatusFromCards() {
+  const lyricsDone = API_SOURCES.filter((s) => ['online', 'offline'].includes(apiStatusState.statuses[s.id]));
+  const lyricsOk = lyricsDone.filter((s) => apiStatusState.statuses[s.id] === 'online').length;
+  const extDone = extensionStatusRows.filter((row) => row.ok === true || row.ok === false);
+  const extOk = extDone.filter((row) => row.ok === true).length;
+  updateOverallStatus(lyricsOk + extOk, lyricsDone.length + extDone.length);
 }
 
 function updateOverallStatus(okCount, totalCount) {
@@ -975,6 +1173,9 @@ function checkAll() {
   });
   renderStatusGrids();
   updateStatusSummary('Checking all providers...');
+  // The extensions' own checks run alongside; they answer directly rather
+  // than through the pushed updateHealthResults().
+  checkExtensions().then(() => updateOverallStatusFromCards());
   if (window.pywebview?.api?.run_health_check) {
     window.pywebview.api.run_health_check(sources).catch(() => {
       setFetchingState('hide');
@@ -4239,8 +4440,7 @@ function buildConfig() {
     track_max_retries:      parseInt($('config-retries').value) || 0,
     post_download_action:   $('config-post-action').value,
     post_download_command:  $('config-post-cmd')?.value?.trim() || '',
-    qobuz_local_api_url:    $('config-qobuz-local-api').value.trim() || null,
-    tidal_custom_api:       $('config-tidal-api').value.trim()  || null,
+    extension_quality:      collectExtensionQuality(),
     acoustid_api_key:       $('config-acoustid-key')?.value.trim() || '',
     loop:                   parseInt($('config-loop').value) || null,
     log_level:              $('config-loglevel').value,
@@ -4261,10 +4461,7 @@ async function loadNetworkDestinations() {
     jobSelect.replaceChildren(new Option('Local / mounted folder', ''));
     profileSelect.replaceChildren(new Option('New destination…', ''));
     for (const profile of networkDestinations) {
-      const target = profile.type === 'webdav'
-        ? profile.url
-        : `${profile.host}/${profile.share}`;
-      const label = `${profile.name} — ${target}`;
+      const label = `${profile.name} — ${networkDestinationTarget(profile)}`;
       jobSelect.add(new Option(label, profile.id));
       profileSelect.add(new Option(label, profile.id));
     }
@@ -4291,9 +4488,11 @@ function selectNetworkDestination() {
     $('network-destination-password').value = '';
     $('network-destination-timeout').value = '15';
     $('network-destination-encrypt').checked = false;
+    if ($('network-destination-method')) $('network-destination-method').value = 'PUT';
     updateNetworkDestinationFields();
     return;
   }
+  if ($('network-destination-method')) $('network-destination-method').value = profile.method || 'PUT';
   $('network-destination-type').value = profile.type || 'smb';
   $('network-destination-name').value = profile.name;
   $('network-destination-host').value = profile.host || '';
@@ -4308,18 +4507,48 @@ function selectNetworkDestination() {
   updateNetworkDestinationFields();
 }
 
+function networkDestinationTarget(profile) {
+  if (profile.type === 'webdav') return profile.url;
+  if (profile.type === 'http') return `${profile.method || 'PUT'} ${profile.url}`;
+  return `${profile.host}/${profile.share}`;
+}
+
+function networkDestinationProtocol(type) {
+  if (type === 'webdav') return 'WebDAV';
+  if (type === 'http') return 'HTTP(S) upload';
+  return 'SMB';
+}
+
 function updateNetworkDestinationFields() {
-  const isWebdav = $('network-destination-type')?.value === 'webdav';
+  const type = $('network-destination-type')?.value;
+  const isHttp = type === 'http';
+  // WebDAV and plain HTTP(S) upload both take a URL instead of a server + share.
+  const isWebdav = type === 'webdav' || isHttp;
   $('network-destination-host-field')?.classList.toggle('hidden', isWebdav);
   $('network-destination-share-field')?.classList.toggle('hidden', isWebdav);
   $('network-destination-url-field')?.classList.toggle('hidden', !isWebdav);
+  $('network-destination-method-field')?.classList.toggle('hidden', !isHttp);
   $('network-destination-domain')?.classList.toggle('hidden', isWebdav);
   $('network-destination-encryption')?.classList.toggle('hidden', isWebdav);
+  const urlLabel = $('network-destination-url-label');
+  const urlHint = $('network-destination-url-hint');
+  const urlInput = $('network-destination-url');
+  if (urlLabel) urlLabel.textContent = isHttp ? 'Upload URL (http:// or https://)' : 'WebDAV collection URL';
+  if (urlHint) {
+    urlHint.textContent = isHttp
+      ? 'Each file is sent here with its path appended, or in place of {path}. Use HTTPS when sending a password.'
+      : 'Use HTTPS when connecting over an untrusted network.';
+  }
+  if (urlInput) {
+    urlInput.placeholder = isHttp
+      ? 'https://nas.example.net/upload/{path}'
+      : 'https://cloud.example.net/remote.php/dav/files/user';
+  }
   const usernameLabel = $('network-destination-username')
     ?.closest('.network-destination-field')?.querySelector('span');
   if (usernameLabel) {
     usernameLabel.firstChild.textContent = isWebdav
-      ? 'Username'
+      ? (isHttp ? 'Username (optional, HTTP Basic)' : 'Username')
       : 'Username and optional domain';
   }
 }
@@ -4335,6 +4564,9 @@ function networkDestinationForm() {
   };
   if (profile.type === 'webdav') {
     profile.url = $('network-destination-url').value.trim();
+  } else if (profile.type === 'http') {
+    profile.url = $('network-destination-url').value.trim();
+    profile.method = $('network-destination-method').value || 'PUT';
   } else {
     profile.host = $('network-destination-host').value.trim();
     profile.share = $('network-destination-share').value.trim();
@@ -4377,7 +4609,7 @@ async function testNetworkDestination() {
   let id = $('network-destination-profile').value;
   if (!id) id = await saveNetworkDestination();
   if (!id) return;
-  const protocol = networkDestinationForm().type === 'webdav' ? 'WebDAV' : 'SMB';
+  const protocol = networkDestinationProtocol(networkDestinationForm().type);
   status.textContent = `Testing ${protocol} connection and write permissions…`;
   try {
     const result = await window.pywebview.api.test_network_destination(
@@ -4437,23 +4669,13 @@ async function retryNetworkDelivery() {
 
 let apiConfigTarget = null;
 
+// The provider APIs (Tidal, Qobuz…) moved into each extension's own
+// settings; the popup now only configures the animated artwork API.
 function openApiConfigPopup(target) {
   apiConfigTarget = target;
-  const title = target === 'qobuz'
-    ? 'Qobuz local API'
-    : target === 'tidal'
-      ? 'Custom Tidal API'
-      : 'Animated artwork API';
-  const description = target === 'qobuz'
-    ? 'Enter your local Qobuz stream API URL and verify reachability.'
-    : target === 'tidal'
-      ? 'Enter your self-hosted hifi-api instance URL and verify reachability.'
-      : 'Enter your Apple Music animated artwork API URL and verify reachability.';
-  const existingValue = target === 'qobuz'
-    ? $('config-qobuz-local-api').value.trim()
-    : target === 'tidal'
-      ? $('config-tidal-api').value.trim()
-      : $('config-animated-artwork-api-url').value.trim();
+  const title = 'Animated artwork API';
+  const description = 'Enter your Apple Music animated artwork API URL and verify reachability.';
+  const existingValue = $('config-animated-artwork-api-url').value.trim();
 
   const status = $('api-config-status');
   $('api-config-title').textContent = title;
@@ -4463,16 +4685,8 @@ function openApiConfigPopup(target) {
   status.style.color = '';
   const helpLink = $('api-config-help');
   if (helpLink) {
-    if (target === 'qobuz') {
-      helpLink.href = 'https://github.com/BartolomeoRusso9/qobuz-api';
-      helpLink.textContent = 'How to create your own instance';
-    } else if (target === 'tidal') {
-      helpLink.href = 'https://github.com/binimum/hifi-api';
-      helpLink.textContent = 'How to create your own instance';
-    } else {
-      helpLink.href = 'https://github.com/m8tec/apple-music-animated-artworks';
-      helpLink.textContent = 'How to create your own instance';
-    }
+    helpLink.href = 'https://github.com/m8tec/apple-music-animated-artworks';
+    helpLink.textContent = 'How to create your own instance';
   }
   $('api-config-modal').classList.remove('hidden');
   setTimeout(() => $('api-config-value').focus(), 0);
@@ -4516,11 +4730,7 @@ async function checkApiConfig() {
       return;
     }
     let result = null;
-    if (apiConfigTarget === 'qobuz') {
-      result = await window.pywebview.api.check_qobuz_api(url);
-    } else if (apiConfigTarget === 'tidal') {
-      result = await window.pywebview.api.check_tidal_api(url);
-    } else if (apiConfigTarget === 'animated') {
+    if (apiConfigTarget === 'animated') {
       result = await window.pywebview.api.check_animated_artwork_api(url);
     }
     if (result?.ok) {
@@ -4556,11 +4766,7 @@ function saveApiConfig() {
   if (!apiConfigTarget) return;
   const rawValue = $('api-config-value').value;
   const value = normalizeApiInput(rawValue);
-  if (apiConfigTarget === 'qobuz') {
-    $('config-qobuz-local-api').value = value;
-  } else if (apiConfigTarget === 'tidal') {
-    $('config-tidal-api').value = value;
-  } else if (apiConfigTarget === 'animated') {
+  if (apiConfigTarget === 'animated') {
     $('config-animated-artwork-api-url').value = value;
   }
   if (rawValue.trim() !== value) {
@@ -4575,24 +4781,15 @@ function saveApiConfig() {
 }
 
 function updateApiConfigDisplay(target) {
-  const value = target === 'qobuz'
-    ? $('config-qobuz-local-api').value.trim()
-    : target === 'tidal'
-      ? $('config-tidal-api').value.trim()
-      : $('config-animated-artwork-api-url').value.trim();
-  const display = target === 'qobuz'
-    ? $('config-qobuz-local-api-display')
-    : target === 'tidal'
-      ? $('config-tidal-api-display')
-      : $('config-animated-artwork-api-display');
+  if (target !== 'animated') return;
+  const value = $('config-animated-artwork-api-url')?.value.trim() || '';
+  const display = $('config-animated-artwork-api-display');
   if (!display) return;
   display.textContent = value ? 'Configured' : 'Not set';
   display.classList.toggle('configured', !!value);
 }
 
 function updateAllApiConfigDisplays() {
-  updateApiConfigDisplay('qobuz');
-  updateApiConfigDisplay('tidal');
   updateApiConfigDisplay('animated');
 }
 
@@ -4630,8 +4827,10 @@ async function loadProfile() {
   if (!data) return;
   if (data.quality)                $('config-quality').value            = data.quality;
   if (data.filename_format)         $('config-filename').value           = data.filename_format;
-  $('config-qobuz-local-api').value = data.qobuz_local_api_url || '';
-  $('config-tidal-api').value       = data.tidal_custom_api || '';
+  if (data.extension_quality && typeof data.extension_quality === 'object') {
+    extensionQualityChoices = { ...data.extension_quality };
+    renderExtensionQualityRows();
+  }
   $('config-track-numbers').checked = !!data.use_track_numbers; onTNChange();
   $('config-lyrics').checked = data.lyrics !== false;
   if ($('config-apple-wbw')) $('config-apple-wbw').checked = data.apple_lyrics_word_by_word !== false;
@@ -4667,8 +4866,9 @@ function renderHealthResults(data) {
   const okProviders = Object.values(provMap).filter(rows => rows.some(r => r.ok)).length;
 
   updateStatusSummary(`${okProviders}/${totalProviders} providers OK`);
-  updateOverallStatus(okProviders, totalProviders);
-  
+  // Counts the extension cards too, whichever of the two checks ends last.
+  updateOverallStatusFromCards();
+
   const container = $('hc-results'); container.innerHTML = '';
   Object.entries(provMap).forEach(([prov, rows]) => {
     const anyOk = rows.some(r => r.ok);
@@ -5601,6 +5801,11 @@ window.addEventListener('pywebviewready', async () => {
   // different capitalisations.
   loadHistoryAndProfiles();
   checkAuthStatus();
+  // The real download folder (MORNYE_DOWNLOAD_DIR in a container, the
+  // account's own folder in multi-user mode), not the placeholder in the HTML.
+  window.pywebview.api.get_download_dir?.()
+    .then((res) => { if (res?.download_dir) window.updateFolderLabel(res.download_dir); })
+    .catch(() => {});
 
   await loadNetworkDestinations();
   await loadSettingsFromStorage();
@@ -6680,6 +6885,158 @@ async function resetExtensionHealth() {
   }
 }
 
+// ── Extension settings (api_mixins/extension_settings.py) ─────────────────
+//
+// One collapsible card per JS extension that declares `settings` in its
+// manifest. Fields are rendered from the manifest's own types; the backend
+// validates again on save, so this is presentation only.
+
+async function loadExtensionSettings() {
+  const list = $('ext-settings-list');
+  if (!list) return;
+  if (!window.pywebview?.api?.list_extension_settings) {
+    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">Extension settings are unavailable in this build.</div>';
+    return;
+  }
+  try {
+    renderExtensionSettings(await window.pywebview.api.list_extension_settings());
+  } catch (e) {
+    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Unable to load extension settings.</div>';
+  }
+}
+
+function extSettingFieldHtml(ext, entry, cardIdx) {
+  const id = `ext-set-${cardIdx}-${entry.key}`.replace(/[^A-Za-z0-9_-]/g, '_');
+  const attrs = `id="${id}" data-key="${regEscapeHtml(entry.key)}" data-type="${regEscapeHtml(entry.type)}"`;
+  const value = ext.values?.[entry.key];
+  const desc = entry.description
+    ? `<small>${regEscapeHtml(entry.description)}</small>`
+    : '';
+  const label = `<span class="s-label">${regEscapeHtml(entry.label)}${desc}</span>`;
+
+  if (entry.type === 'button') {
+    return `<div class="s-row">${label}
+      <button class="act-btn secondary" type="button" style="padding:6px 14px;font-size:12px;"
+        onclick="runExtensionSettingAction('${regEscapeHtml(ext.name)}','${regEscapeHtml(entry.key)}')">${regEscapeHtml(entry.label)}</button>
+    </div>`;
+  }
+  if (entry.type === 'boolean') {
+    return `<div class="s-row">${label}
+      <label class="toggle"><input type="checkbox" ${attrs} ${value ? 'checked' : ''}><span class="toggle-sl"></span></label>
+    </div>`;
+  }
+  if (entry.type === 'select') {
+    const opts = (entry.options || []).map((o) =>
+      `<option value="${regEscapeHtml(o.value)}" ${String(o.value) === String(value) ? 'selected' : ''}>${regEscapeHtml(o.label)}</option>`
+    ).join('');
+    return `<div class="s-row">${label}<select ${attrs}>${opts}</select></div>`;
+  }
+  if (entry.secret) {
+    const isSet = (ext.secrets_set || []).includes(entry.key);
+    return `<div class="s-row">${label}
+      <input type="password" class="full" autocomplete="off" ${attrs}
+        placeholder="${isSet ? 'Saved — leave empty to keep it' : 'Not set'}" style="flex:1;max-width:320px;">
+    </div>`;
+  }
+  // Free text, optionally with suggestions (e.g. a storefront list).
+  const listId = entry.options?.length ? `${id}-suggestions` : '';
+  const suggestions = listId
+    ? `<datalist id="${listId}">${entry.options.map((o) => `<option value="${regEscapeHtml(o.value)}">`).join('')}</datalist>`
+    : '';
+  const type = entry.type === 'number' ? 'number' : 'text';
+  return `<div class="s-row">${label}
+    <input type="${type}" class="full" ${attrs} ${listId ? `list="${listId}"` : ''}
+      value="${regEscapeHtml(value ?? '')}" placeholder="${regEscapeHtml(entry.default ?? '')}" style="flex:1;max-width:320px;">
+    ${suggestions}
+  </div>`;
+}
+
+function renderExtensionSettings(data) {
+  const list = $('ext-settings-list');
+  if (!list) return;
+  if (data?.error) {
+    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">' + regEscapeHtml(data.error) + '</div>';
+    return;
+  }
+  const rows = data?.extensions || [];
+  if (!rows.length) {
+    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">No installed extension has settings.</div>';
+    return;
+  }
+  list.innerHTML = rows.map((ext, idx) => `
+    <details class="sort-item reg-item" data-ext="${regEscapeHtml(ext.name)}" style="display:block;">
+      <summary style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <span class="reg-url">${regEscapeHtml(ext.display_name)}</span>
+        <span class="s-label" style="font-size:11px;">${regEscapeHtml(ext.name)} · v${regEscapeHtml(ext.version || '?')}</span>
+      </summary>
+      <div style="margin-top:10px;">
+        ${ext.settings.map((entry) => extSettingFieldHtml(ext, entry, idx)).join('')}
+        <div class="s-row" style="justify-content:flex-end;gap:8px;">
+          <button class="act-btn secondary" type="button" style="padding:6px 14px;font-size:12px;"
+            onclick="resetExtensionSettings('${regEscapeHtml(ext.name)}')">Reset to defaults</button>
+          <button class="act-btn primary" type="button" style="padding:6px 14px;font-size:12px;"
+            onclick="saveExtensionSettings('${regEscapeHtml(ext.name)}', this)">Save</button>
+        </div>
+      </div>
+    </details>`).join('');
+}
+
+function collectExtensionSettings(card) {
+  const values = {};
+  card.querySelectorAll('[data-key][data-type]').forEach((el) => {
+    const key = el.dataset.key;
+    const type = el.dataset.type;
+    if (type === 'button') return;
+    if (type === 'boolean') values[key] = !!el.checked;
+    else values[key] = el.value;
+  });
+  return values;
+}
+
+async function saveExtensionSettings(name, btn) {
+  const card = btn.closest('details[data-ext]');
+  if (!card) return;
+  try {
+    const res = await window.pywebview.api.save_extension_settings(name, collectExtensionSettings(card));
+    if (res?.error) {
+      showToast(res.error, 'error');
+      return;
+    }
+    showToast(`Settings saved for ${res.display_name || name}.`);
+    await loadExtensionSettings();
+  } catch (e) {
+    showToast('Could not save the extension settings.', 'error');
+  }
+}
+
+async function resetExtensionSettings(name) {
+  if (!confirm(`Reset every setting of ${name} to its default?`)) return;
+  try {
+    const res = await window.pywebview.api.reset_extension_settings(name);
+    if (res?.error) {
+      showToast(res.error, 'error');
+      return;
+    }
+    showToast(`Settings of ${res.display_name || name} reset.`);
+    loadExtensionSettings();
+  } catch (e) {
+    showToast('Could not reset the extension settings.', 'error');
+  }
+}
+
+async function runExtensionSettingAction(name, key) {
+  try {
+    const res = await window.pywebview.api.run_extension_setting_action(name, key);
+    if (res?.error) {
+      showToast(res.error, 'error');
+      return;
+    }
+    showToast('Done.');
+  } catch (e) {
+    showToast('The extension action failed.', 'error');
+  }
+}
+
 // ── Signed sessions (core/signed_session_status.py) ───────────────────────
 //
 // Read from disk, no network. The expiry is sent as seconds-from-now and
@@ -6916,16 +7273,15 @@ async function loadStatsSmbDestinations() {
     return;
   }
   try {
-    const profiles = await window.pywebview.api.list_network_destinations();
+    // An HTTP(S) upload destination cannot be listed, so it is no library.
+    const profiles = (await window.pywebview.api.list_network_destinations())
+      .filter(profile => profile.type !== 'http');
     select.replaceChildren(new Option(
       profiles.length ? 'Select network library…' : 'No saved network destinations',
       '',
     ));
     for (const profile of profiles) {
-      const target = profile.type === 'webdav'
-        ? profile.url
-        : `${profile.host}/${profile.share}`;
-      select.add(new Option(`${profile.name} — ${target}`, profile.id));
+      select.add(new Option(`${profile.name} — ${networkDestinationTarget(profile)}`, profile.id));
     }
     select.value = profiles.some(profile => profile.id === previous) ? previous : '';
     select.disabled = profiles.length === 0 || statsSmbScanActive;

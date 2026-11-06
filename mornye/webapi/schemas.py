@@ -138,7 +138,7 @@ class DownloadRequest(BaseModel):
         default=None,
         min_length=8,
         max_length=64,
-        description="ID of a saved SMB or WebDAV destination; credentials are session-only.",
+        description="ID of a saved SMB, WebDAV or HTTP(S) upload destination; credentials are session-only.",
     )
 
     @field_validator("url")

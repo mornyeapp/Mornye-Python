@@ -157,15 +157,78 @@ def test_include_groups_filters_release_types():
 
 
 def test_reset_makes_the_back_catalogue_new_again():
+    """Issue #253: a reset must make the next ordinary check — the GUI's
+    "Check & download", or the scheduler, neither of which passes backfill —
+    report the whole catalogue, not quietly mark it seen again."""
     sub = subs.add(ARTIST_URL)
     client = FakeMetadataClient([_release_item("a1", "First")])
     asyncio.run(subs.check_async(sub, client=client))
 
     subs.forget_seen(sub.id)
-    # An emptied seen-set is a first check again, so backfill is what asks
-    # for the catalogue rather than re-watermarking it.
-    result = asyncio.run(subs.check_async(sub, backfill=True, client=client))
+    result = asyncio.run(subs.check_async(subs.get(sub.id), client=client))
+    assert result.watermarked is False
     assert [r.id for r in result.new] == ["a1"]
+
+    # Reported once: the check after that is back to "only what is new".
+    again = asyncio.run(subs.check_async(subs.get(sub.id), client=client))
+    assert again.new == []
+
+
+def test_reset_right_after_following_downloads_the_back_catalogue():
+    """The GUI's "Follow all" with "Reset seen history": follow, reset, and
+    the very first check hands over everything (issue #253)."""
+    sub = subs.add(ARTIST_URL, include_groups="all")
+    subs.forget_seen(sub.id)
+    client = FakeMetadataClient(
+        [_release_item("a1", "Album"), _release_item("s1", "Single", "SINGLE")]
+    )
+
+    result = asyncio.run(subs.check_async(subs.get(sub.id), client=client))
+    assert result.watermarked is False
+    assert sorted(r.id for r in result.new) == ["a1", "s1"]
+
+
+def test_a_reset_subscription_is_downloaded_by_the_gui_check(monkeypatch):
+    """End to end through the mixin: Reset, then "Check & download" queues
+    every release instead of marking it seen (issue #253)."""
+    from mornye.api_mixins.subscriptions import SubscriptionsMixin
+
+    sub = subs.add(ARTIST_URL)
+    client = FakeMetadataClient([_release_item("a1", "First")])
+    asyncio.run(subs.check_async(sub, client=client))  # the baseline
+
+    real_check_all = subs.check_all_async
+
+    async def check_all(**kwargs):
+        return await real_check_all(client=client, **kwargs)
+
+    monkeypatch.setattr(subs, "check_all_async", check_all)
+
+    class _Api(SubscriptionsMixin):
+        download_dir = "/tmp"
+        owner = ""
+
+        def __init__(self):
+            self.pushed, self.queued = [], []
+
+        def log(self, *_args, **_kwargs):
+            pass
+
+        def _push(self, event, payload):
+            self.pushed.append((event, payload))
+
+        def _release_tracks(self, url):
+            return [url]
+
+        def _queue_subscription_tracks(self, tracks, source_url, config, *, whole):
+            self.queued.append(source_url)
+
+    api = _Api()
+    assert api.reset_subscription(sub.id) == {"ok": True}
+    api._check_subscriptions_thread(True, None)
+
+    assert api.queued == ["https://open.spotify.com/album/a1"]
+    assert api.pushed[-1][1]["new"] == 1
 
 
 def test_check_records_the_error_and_does_not_raise():

@@ -97,6 +97,34 @@ async def _call_metadata_get_url(client, url: str, **kwargs):
     return await asyncio.to_thread(fn, url, **kwargs)
 
 
+def _provider_quality(provider: Any, opts: Any) -> str:
+    """The quality a provider is asked for.
+
+    A JS extension picks from its own manifest ``qualityOptions``
+    (``JSExtensionProvider.select_quality``), so it gets the canonical tier
+    and keeps everything it says — Atmos included. A Python extension keeps
+    its native token from ``quality_for_provider``.
+    """
+    canonical = normalize_quality(opts.quality)
+    if hasattr(provider, "select_quality"):
+        return canonical
+    return quality_for_provider(provider.name, canonical)
+
+
+def _extension_quality_override(provider: Any, opts: Any) -> str | None:
+    """The user's per-service quality for a JS provider, if any."""
+    choices = getattr(opts, "extension_quality", None) or {}
+    if not choices or not hasattr(provider, "select_quality"):
+        return None
+    from ..extensions.catalog import canonical_service_name
+
+    ext_name = str(getattr(provider, "name", "")).removeprefix("ext:")
+    for key in (ext_name, canonical_service_name(ext_name)):
+        if key and choices.get(key):
+            return str(choices[key])
+    return None
+
+
 def _adapt_js_metadata_response(response):
     if isinstance(response, (tuple, list)):
         return response
@@ -124,6 +152,11 @@ class DownloadOptions:
     artist_separator: str | None = None
     include_featuring: bool = True
     quality: str = "LOSSLESS"
+    # Per-service (or per-extension) quality picked from the extension's own
+    # manifest ``qualityOptions``, e.g. {"amazon": "ac4", "tidal": "LOSSLESS"}.
+    # Overrides the global tier for that service's JS extension only; an id
+    # the extension does not declare is ignored.
+    extension_quality: dict[str, str] = field(default_factory=dict)
     allow_fallback: bool = True
     inter_track_delay_s: float = 1.0
     is_album: bool = False
@@ -1090,16 +1123,16 @@ async def _download_one_pass_async(
                     "enrich_metadata": opts.enrich_metadata,
                     "enrich_providers": opts.enrich_providers,
                     "is_album": is_album,
-                    "quality": quality_for_provider(
-                        provider.name,
-                        normalize_quality(opts.quality),
-                    ),
+                    "quality": _provider_quality(provider, opts),
                     "qobuz_token": opts.qobuz_token,
                     # Lets a provider skip work the transcode step would
                     # only undo — see provider._m4a_is_the_final_container.
                     # Ignored by providers that do not take it.
                     "transcode_to": opts.transcode_to,
                 }
+                override = _extension_quality_override(provider, opts)
+                if override:
+                    download_kwargs["extension_quality"] = override
 
                 # Use signature inspection to check if artist_separator is supported
                 try:
@@ -2376,15 +2409,19 @@ class MornyeDownloader:
                     url, include_featuring=self._opts.include_featuring
                 )
             elif is_tidal:
+                from ..core.metadata_fallback import get_url_with_fallback
                 from ..core.tidal_metadata import TidalMetadataClient
 
-                client = TidalMetadataClient()
+                # Built-in client and the tidal-web extension, merged into
+                # the most complete answer (core/metadata_merge.py).
                 (
                     collection_name,
                     tracks,
                     *collection_cover,
-                ) = await _call_metadata_get_url(
-                    client, url, include_featuring=self._opts.include_featuring
+                ) = await get_url_with_fallback(
+                    url,
+                    TidalMetadataClient,
+                    include_featuring=self._opts.include_featuring,
                 )
             elif is_apple:
                 from ..core.apple_music_metadata import AppleMusicMetadataClient
@@ -2503,8 +2540,11 @@ class MornyeDownloader:
     ) -> list[TrackMetadata]:
         missing = [t for t in tracks if not t.isrc]
 
+        from ..extensions.catalog import canonical_service_name
+
         only_youtube = (
-            len(self._opts.services) == 1 and self._opts.services[0] == "youtube"
+            len(self._opts.services) == 1
+            and canonical_service_name(self._opts.services[0]) == "youtube"
         )
 
         if only_youtube:

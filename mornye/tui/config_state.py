@@ -72,12 +72,27 @@ POST_DOWNLOAD_ACTIONS: tuple[str, ...] = ("none", "open_folder", "notify", "comm
 #: tool whose point is lossless. The wizard offered these three too.
 QUALITY_TIERS: tuple[str, ...] = ("LOSSLESS", "HI_RES_LOSSLESS", "DOLBY_ATMOS")
 
-#: Atmos is a Tidal-exclusive stream. `core.quality.quality_for_provider`
-#: already turns it into HI_RES_LOSSLESS for every other provider, so asking
-#: for it alongside Deezer is not an error — it just means "the best each one
-#: has". With Tidal absent altogether it means nothing at all, and the state
-#: settles it back to HI_RES_LOSSLESS rather than carrying a dead value.
+#: Atmos is served only by the services whose extension declares an Atmos
+#: quality in its manifest (tidal-web's DOLBY_ATMOS, amazon's AC-4 Atmos);
+#: see `extensions.catalog.atmos_service_ids`. Every other provider gets its
+#: best lossless instead, so asking for it alongside Deezer is not an error —
+#: it just means "the best each one has". With no Atmos-capable service at
+#: all it means nothing, and the state settles it back to HI_RES_LOSSLESS
+#: rather than carrying a dead value. ATMOS_PROVIDER is the historical
+#: answer, used when the extensions cannot be read.
 ATMOS_PROVIDER = "tidal"
+
+
+def atmos_services() -> set[str]:
+    """The services that can deliver Dolby Atmos on this install."""
+    try:
+        from ..extensions.catalog import atmos_service_ids
+
+        return atmos_service_ids()
+    except Exception:
+        return {ATMOS_PROVIDER}
+
+
 TRANSCODE_BITRATES: tuple[str, ...] = ("320k", "256k", "192k", "128k")
 
 DEFAULT_FILENAME_FORMAT = "{title} - {artist}"
@@ -160,7 +175,14 @@ class ConfigState:
     post_download_command: str = ""
     post_download_hooks: list[str] = field(default_factory=list)
 
-    # ── Custom endpoints ────────────────────────────────────────────────
+    # ── Per-service quality ─────────────────────────────────────────────
+    # {service: quality id} from each extension's own qualityOptions, e.g.
+    # {"amazon": "ac4"}. A service missing here uses the global tier.
+    extension_quality: dict[str, str] = field(default_factory=dict)
+
+    # ── Deprecated custom endpoints ─────────────────────────────────────
+    # Kept so older profiles still load; nothing reads them any more — the
+    # provider APIs are each JS extension's own settings.
     qobuz_local_api_url: str | None = None
     tidal_custom_api: str | None = None
 
@@ -209,7 +231,7 @@ class ConfigState:
         real — Tidal gets Atmos, the others get their best lossless — and
         without it the option would be a lie.
         """
-        return ATMOS_PROVIDER in self.services
+        return bool(atmos_services() & set(self.services))
 
     @property
     def bitrate_applies(self) -> bool:
@@ -300,7 +322,9 @@ class ConfigState:
             state.url = ""
 
         state.quality = normalize_quality(state.quality)
-        if state.quality == "DOLBY_ATMOS" and ATMOS_PROVIDER not in state.services:
+        if state.quality == "DOLBY_ATMOS" and not (
+            atmos_services() & set(state.services)
+        ):
             state.quality = "HI_RES_LOSSLESS"
         if state.quality not in QUALITY_TIERS:
             # HI_RES, HIGH and LOW can still arrive from a saved profile or
@@ -421,6 +445,7 @@ class ConfigState:
             "post_download_hooks": list(state.post_download_hooks),
             "qobuz_local_api_url": state.qobuz_local_api_url,
             "tidal_custom_api": state.tidal_custom_api,
+            "extension_quality": dict(state.extension_quality or {}),
             "verify_hires": state.verify_hires,
             "redownload_fake_hires": state.redownload_fake_hires,
             "m3u_format": state.m3u_format,

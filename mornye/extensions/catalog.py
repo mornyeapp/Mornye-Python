@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from .manager import ExtensionManager
 
-# These are public names historically accepted by the CLI/API.  They are now
-# aliases only; no Python provider is instantiated for them.
+# Public service names historically accepted by the CLI/API, mapped to the
+# JS extension (Mornye-Extension) that implements each service. The JS
+# extension is always the primary provider; an installed Python extension
+# for the same service (e.g. ``tidal-py``) is only tried after it, as a
+# fallback — see application/provider_factory.build_providers_for_name.
 SERVICE_ALIASES = {
     "tidal": "tidal-web",
     "qobuz": "qobuz-web",
@@ -13,8 +16,8 @@ SERVICE_ALIASES = {
     "apple": "apple-music",
     "deezer": "deezer",
     "soundcloud": "soundcloud",
-    "youtube": "ytmusic-mornye",
-    "youtube-music": "ytmusic-mornye",
+    "youtube": "ytmusic-spotiflac",
+    "youtube-music": "ytmusic-spotiflac",
     "gdstudio": "gdstudio",
     "pandora": "pandora",
 }
@@ -89,9 +92,12 @@ def installed_download_services(
     install offered twelve services in Settings and only the installed ones
     on the command line, and a third-party provider appeared in neither.
 
-    Returns ``[{"id", "label", "extensions": [ext ids]}]``, sorted by id.
-    Never raises: a broken extension directory means an empty list and a
-    caller that says so, not a UI that cannot open.
+    Returns ``[{"id", "label", "extensions", "primary", "quality_options",
+    "atmos"}]``, sorted by id. ``primary`` is the extension that downloads
+    first — the JS one whenever the service has one, the Python extension
+    being only its fallback — and ``quality_options`` / ``atmos`` come from
+    that extension's manifest. Never raises: a broken extension directory
+    means an empty list and a caller that says so, not a UI that cannot open.
     """
     try:
         ext_manager = manager or ExtensionManager(auto_install_downloads=False)
@@ -99,19 +105,58 @@ def installed_download_services(
     except Exception:
         return []
 
-    services: dict[str, list[str]] = {}
+    services: dict[str, list[object]] = {}
     for ext in installed:
         if not getattr(ext, "is_download_provider", False):
             continue
         service = canonical_service_name(getattr(ext, "name", ""))
         if not service:
             continue
-        services.setdefault(service, []).append(str(getattr(ext, "name", "")))
+        services.setdefault(service, []).append(ext)
 
-    return [
-        {"id": service, "label": service_label(service), "extensions": sorted(names)}
-        for service, names in sorted(services.items())
-    ]
+    rows: list[dict[str, object]] = []
+    for service, extensions in sorted(services.items()):
+        primary = _primary_extension(extensions)
+        rows.append(
+            {
+                "id": service,
+                "label": service_label(service),
+                "extensions": sorted(str(getattr(e, "name", "")) for e in extensions),
+                "primary": str(getattr(primary, "name", "")),
+                "quality_options": [
+                    {
+                        "id": str(option.get("id")),
+                        "label": str(option.get("label") or option.get("id")),
+                        "description": str(option.get("description") or ""),
+                        "kind": str(option.get("kind") or ""),
+                    }
+                    for option in (getattr(primary, "quality_options", None) or [])
+                ],
+                "atmos": bool(getattr(primary, "has_atmos", False)),
+            }
+        )
+    return rows
+
+
+def _primary_extension(extensions: list[object]) -> object:
+    """The extension a service downloads with first: JS before Python."""
+    for ext in extensions:
+        if getattr(ext, "runtime", "javascript") != "python":
+            return ext
+    return extensions[0]
+
+
+def atmos_service_ids(manager: ExtensionManager | None = None) -> set[str]:
+    """Services whose primary extension declares a Dolby Atmos quality.
+
+    Falls back to ``{"tidal"}`` when the extensions cannot be read (or none
+    declares Atmos), the answer Mornye gave before extensions declared
+    their own qualities.
+    """
+    found = {
+        str(row["id"]) for row in installed_download_services(manager) if row["atmos"]
+    }
+    return found or {"tidal"}
 
 
 def installed_service_ids(manager: ExtensionManager | None = None) -> list[str]:

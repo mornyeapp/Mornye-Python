@@ -658,8 +658,14 @@
               <select id="config-quality">
                 <option value="HI_RES_LOSSLESS">HI-RES-LOSSLESS</option>
                 <option value="LOSSLESS">LOSSLESS</option>
-                <option value="DOLBY_ATMOS">DOLBY ATMOS (Tidal only)</option>
+                <option value="DOLBY_ATMOS">DOLBY ATMOS (services that offer it)</option>
               </select>
+            </div>
+            <div id="ext-quality-section" style="display:none;">
+              <div class="s-row">
+                <span class="s-label">Quality per service<small>Each extension's own quality choices. "Use global quality" maps the tier above onto the closest one the extension offers</small></span>
+              </div>
+              <div id="ext-quality-rows"></div>
             </div>
             <div class="s-row">
               <span class="s-label">Auto quality fallback</span>
@@ -766,7 +772,7 @@
                 <div class="network-destination-heading">Destination</div>
                 <div class="network-destination-fields">
                   <label class="network-destination-field network-destination-field-wide" for="config-network-destination">
-                    <span>Destination for new download jobs<small>Choose a mounted folder, SMB share, or WebDAV collection.</small></span>
+                    <span>Destination for new download jobs<small>Choose a mounted folder, SMB share, WebDAV collection or HTTP(S) upload URL.</small></span>
                     <select id="config-network-destination">
                       <option value="">Local / mounted folder</option>
                     </select>
@@ -782,6 +788,7 @@
                     <select id="network-destination-type" onchange="updateNetworkDestinationFields()">
                       <option value="smb">SMB</option>
                       <option value="webdav">WebDAV</option>
+                      <option value="http">HTTP(S) upload</option>
                     </select>
                   </label>
                   <label class="network-destination-field" for="network-destination-name">
@@ -797,8 +804,15 @@
                     <input type="text" id="network-destination-share" placeholder="Music">
                   </label>
                   <label class="network-destination-field network-destination-field-wide hidden" id="network-destination-url-field" for="network-destination-url">
-                    <span>WebDAV collection URL<small>Use HTTPS when connecting over an untrusted network.</small></span>
+                    <span><span id="network-destination-url-label">WebDAV collection URL</span><small id="network-destination-url-hint">Use HTTPS when connecting over an untrusted network.</small></span>
                     <input type="url" id="network-destination-url" placeholder="https://cloud.example.net/remote.php/dav/files/user" autocomplete="url">
+                  </label>
+                  <label class="network-destination-field hidden" id="network-destination-method-field" for="network-destination-method">
+                    <span>Upload method<small>PUT sends each file to the URL plus its path; POST sends a form with the file and its path</small></span>
+                    <select id="network-destination-method">
+                      <option value="PUT">PUT</option>
+                      <option value="POST">POST (multipart)</option>
+                    </select>
                   </label>
                   <label class="network-destination-field network-destination-field-wide" for="network-destination-subdirectory">
                     <span>Destination subfolder<small>Relative to the share; leave blank for its root</small></span>
@@ -924,22 +938,10 @@
             </div>
           </div>
           <div class="s-section">
-            <div class="s-title">Auth & Custom APIs</div>
+            <div class="s-title">Auth & APIs</div>
             <div class="s-row">
-              <span class="s-label">Custom Qobuz API<small>Optional self-hosted Qobuz stream API</small></span>
-              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                <button class="act-btn secondary" type="button" onclick="openApiConfigPopup('qobuz')" style="padding:5px 12px;font-size:11.5px;">Configure</button>
-                <span id="config-qobuz-local-api-display" class="api-config-pill">Not set</span>
-              </div>
-              <input type="hidden" id="config-qobuz-local-api">
-            </div>
-            <div class="s-row">
-              <span class="s-label">Custom Tidal API<small>Self-hosted hifi-api instance</small></span>
-              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                <button class="act-btn secondary" type="button" onclick="openApiConfigPopup('tidal')" style="padding:5px 12px;font-size:11.5px;">Configure</button>
-                <span id="config-tidal-api-display" class="api-config-pill">Not set</span>
-              </div>
-              <input type="hidden" id="config-tidal-api">
+              <span class="s-label">Provider APIs<small>The APIs each download service uses (Tidal's download API, Deezer's resolver, Qobuz app ID, country codes…) are set in that extension's own settings</small></span>
+              <button class="act-btn secondary" type="button" onclick="switchTab('extensions', document.querySelector('.stab[onclick*=&quot;extensions&quot;]'))" style="padding:5px 12px;font-size:11.5px;">Extension Settings</button>
             </div>
             <div class="s-row">
               <span class="s-label">AcoustID API key<small>Optional. Identifying untagged files uses a key shared by all users, capped at 3 lookups/second between everyone; your own key gets its own budget. Free from acoustid.org/new-application</small></span>
@@ -973,7 +975,7 @@
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
                 Choose Folder
               </button>
-              <span class="folder-pill" id="folder-path">~/Music/Mornye</span>
+              <span class="folder-pill" id="folder-path">…</span>
             </div>
           </div>
           <div class="s-section">
@@ -1100,16 +1102,38 @@
                 <div id="status-overall" class="status-overall idle"><span class="status-overall-icon">—</span><span class="status-overall-text">No checks yet</span></div>
               </div>
             </div>
-            <div id="status-services-grid" class="status-grid"></div>
             <div class="status-section-title">
               <span>Extensions</span>
-              <span class="status-section-hint">Centralized service used by Mornye extensions.</span>
+              <span class="status-section-hint">The endpoints each installed extension declares in its manifest.</span>
             </div>
+            <div id="status-extensions-grid" class="status-grid"></div>
+            <div class="status-section-title">
+              <span>Lyrics</span>
+              <span class="status-section-hint">Direct lyrics servers.</span>
+            </div>
+            <div id="status-services-grid" class="status-grid"></div>
           </div>
           <div id="hc-results"></div>
         </div>
 
         <div class="tc" id="tc-extensions">
+          <div class="s-section">
+            <div class="s-title">Extension Settings</div>
+            <p style="font-size:12px;color:var(--muted);margin:-4px 0 12px;line-height:1.6;">
+              Each extension's own options, as its manifest declares them — country,
+              API URLs, tokens and so on. A saved value reaches the extension the next
+              time it starts, which is the next download, search or link lookup.
+              Secret values are never shown again once saved; leave the field empty
+              to keep the current one.
+            </p>
+            <div class="s-row" style="align-items:stretch;gap:8px;">
+              <button class="act-btn secondary" type="button" onclick="loadExtensionSettings()" style="padding:8px 16px;font-size:12px;">Refresh</button>
+            </div>
+            <div id="ext-settings-list" class="sort-list" style="margin-top:12px;">
+              <div class="s-label" style="font-size:11.5px;">Loading extension settings…</div>
+            </div>
+          </div>
+
           <div class="s-section">
             <div class="s-title">Extension Health</div>
             <p style="font-size:12px;color:var(--muted);margin:-4px 0 12px;line-height:1.6;">

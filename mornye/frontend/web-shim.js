@@ -161,8 +161,8 @@
     'save_settings', 'save_theme', 'load_settings', 'get_registries', 'add_registry', 'remove_registry',
     'get_history', 'get_profiles', 'load_profile_data', 'cache_image', 'get_spotify_home_feed',
     'search_provider', 'search_provider_async', 'get_metadata_sources', 'remove_history_item',
-    'save_profile_data', 'delete_profile_data', 'check_qobuz_api',
-    'check_tidal_api', 'check_animated_artwork_api', 'open_config_folder', 'open_url', 'download_track_lyrics',
+    'save_profile_data', 'delete_profile_data', 'check_animated_artwork_api',
+    'get_download_dir', 'open_config_folder', 'open_url', 'download_track_lyrics',
     'download_track_cover', 'download_cover', 'download_album_cover', 'download_all_covers',
     'download_all_lyrics', 'get_track_preview', 'fetch_metadata', 'download_tracks',
     'run_health_check', 'scan_local', 'apply_local_tags', 'set_download_dir',
@@ -175,7 +175,7 @@
     'get_subscriptions', 'add_subscription', 'remove_subscription',
     'set_subscription_enabled', 'set_subscription_interval',
     'reset_subscription', 'check_subscriptions',
-    'get_extension_health', 'reset_extension_health',
+    'get_extension_health', 'reset_extension_health', 'check_extension_health',
     'get_signed_sessions', 'clear_signed_session', 'prune_signed_sessions',
     'get_stats',
     'scan_smb_library',
@@ -185,6 +185,10 @@
     'retry_network_delivery',
     // CSV import sends the file's text, read in the browser — never a path.
     'preview_csv', 'fetch_csv',
+    // Each JS extension's own settings (api_mixins/extension_settings.py).
+    'list_extension_settings', 'get_extension_settings',
+    'save_extension_settings', 'reset_extension_settings',
+    'run_extension_setting_action',
   ];
 
   // Deliberately NOT here (and not in webapp.py's ALLOWED_METHODS):

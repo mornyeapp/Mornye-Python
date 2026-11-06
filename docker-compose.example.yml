@@ -59,6 +59,32 @@ services:
       # PGID: "${PGID:-1000}"
       # Plain lines instead of animated bars, which `docker logs` mangles.
       MORNYE_PROGRESS_BARS: "${MORNYE_PROGRESS_BARS:-0}"
+      # Notifications for every download, GUI and web included (webhook,
+      # discord, telegram or ntfy) — the env side of the --notify* flags.
+      # MORNYE_NOTIFY: "ntfy"
+      # MORNYE_NOTIFY_URL: "https://ntfy.sh/my-topic"
+      # MORNYE_NOTIFY_TOKEN: ""
+      # MORNYE_NOTIFY_CHAT_ID: ""        # Telegram only
+      # MORNYE_NOTIFY_ON: "summary"      # summary, success, failure, both
+      # Download settings: any of them as MORNYE_<SETTING>. Defaults only —
+      # a value saved from the web page wins. Booleans: true/false; lists:
+      # comma-separated. See mornye/core/env_settings.py for the full list.
+      # MORNYE_SERVICES: "tidal,qobuz,deezer"
+      # MORNYE_QUALITY: "HI_RES_LOSSLESS"
+      # MORNYE_EXTENSION_QUALITY: "amazon=ac4"
+      # MORNYE_MAX_CONCURRENT_DOWNLOADS: "2"
+      # MORNYE_TIMEOUT_S: "180"
+      # MORNYE_TRACK_MAX_RETRIES: "1"
+      # MORNYE_FILENAME_FORMAT: "{track} - {title}"
+      # MORNYE_USE_ARTIST_SUBFOLDERS: "true"
+      # MORNYE_USE_ALBUM_SUBFOLDERS: "true"
+      # MORNYE_EMBED_LYRICS: "true"
+      # MORNYE_LYRICS_PROVIDERS: "apple,binilyrics,lrclib"
+      # MORNYE_SAVE_LRC: "false"
+      # MORNYE_ENRICH_METADATA: "true"
+      # MORNYE_ENRICH_PROVIDERS: "deezer,apple,qobuz,tidal"
+      # MORNYE_TRANSCODE_TO: "alac"
+      # MORNYE_VERIFY_HIRES: "false"
     volumes:
       # host path : container path. The host side is yours to choose, e.g.
       #   - /mnt/media/music:/app/downloads

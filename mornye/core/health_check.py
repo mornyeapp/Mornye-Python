@@ -1,10 +1,11 @@
-"""Health checks for direct lyrics provider servers."""
+"""Health checks: each extension's own `serviceHealth` endpoints, and the
+direct lyrics provider servers."""
 
 from __future__ import annotations
 
 import asyncio
 import time
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import httpx
 
@@ -82,6 +83,220 @@ async def run_health_check(
             *(_probe(client, name, url) for name, url in servers.items())
         )
     return list(results)
+
+
+# ---------------------------------------------------------------------------
+# Extension health: each installed extension's own `serviceHealth` checks
+# ---------------------------------------------------------------------------
+#
+# A Mornye-Extension manifest lists the endpoints it depends on:
+#
+#   "serviceHealth": [{"id": "zarz-api", "label": "Zarz API",
+#                      "url": "https://api.zarz.moe/v1/health",
+#                      "method": "GET", "serviceKey": "deezer",
+#                      "timeoutMs": 4000, "required": true}]
+#
+# Without `serviceKey` the check passes on any 2xx answer. With it, the
+# answer is a shared status page ({"services": {"deezer": {"ok": true}}})
+# and the check is that service's own `ok` — the gateway can be up while
+# the one service behind it is down. Several extensions share one URL, so
+# each URL is fetched once per run.
+
+_MAX_CHECK_TIMEOUT_S = 15.0
+
+
+def _extension_checks(ext: Any) -> list[dict]:
+    raw = (getattr(ext, "manifest", None) or {}).get("serviceHealth") or []
+    if not isinstance(raw, list):
+        return []
+    checks = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        url = str(entry.get("url") or "").strip()
+        if not url.lower().startswith(("http://", "https://")):
+            continue
+        checks.append(entry)
+    return checks
+
+
+async def _fetch_status(
+    client: httpx.AsyncClient, url: str, method: str, timeout_s: float
+) -> tuple[bool, int | None, Any, float, str]:
+    """(http_ok, status_code, parsed_json_or_None, latency_ms, error)."""
+    started = time.perf_counter()
+    try:
+        response = await client.request(
+            method,
+            url,
+            headers={"User-Agent": _UA, "Accept": "application/json,text/plain,*/*"},
+            follow_redirects=True,
+            timeout=timeout_s,
+        )
+    except httpx.TimeoutException:
+        return False, None, None, -1, "timeout"
+    except Exception as exc:
+        return False, None, None, -1, str(exc)[:80]
+    latency = (time.perf_counter() - started) * 1000
+    payload = None
+    try:
+        payload = response.json()
+    except Exception:
+        payload = None
+    ok = 200 <= response.status_code < 300
+    return ok, response.status_code, payload, latency, ""
+
+
+def _keyed_result(payload: Any, key: str) -> tuple[bool, str] | None:
+    """A service's own verdict from a shared status page, if it has one."""
+    if not isinstance(payload, dict):
+        return None
+    services = payload.get("services")
+    if not isinstance(services, dict) or key not in services:
+        return None
+    entry = services[key]
+    if not isinstance(entry, dict):
+        return bool(entry), ""
+    ok = bool(entry.get("ok"))
+    detail = entry.get("error") or entry.get("detail") or ""
+    status = entry.get("status")
+    if not detail and status:
+        detail = f"HTTP {status}"
+    return ok, str(detail or "")
+
+
+async def run_extension_health_check(
+    names: list[str] | None = None,
+    *,
+    manager: Any = None,
+    probe: bool = True,
+) -> list[dict]:
+    """Run the `serviceHealth` checks of the installed extensions.
+
+    Returns one row per extension that declares checks, in display-name
+    order: ``{"name", "display_name", "service", "ok", "checks": [{"id",
+    "label", "url", "ok", "required", "latency", "detail"}]}``. An extension
+    is ok when every required check passes (any check, if none is required).
+    With ``probe=False`` nothing is fetched: the rows list what would be
+    checked, with ``ok`` set to None.
+    """
+    if manager is None:
+        from ..extensions.manager import ExtensionManager
+
+        manager = ExtensionManager(auto_install_downloads=False)
+    try:
+        installed = manager.list_installed()
+    except Exception:
+        return []
+
+    from ..extensions.catalog import canonical_service_name
+
+    targets = []
+    for ext in installed:
+        if names and ext.name not in names:
+            continue
+        checks = _extension_checks(ext)
+        if checks:
+            targets.append((ext, checks))
+    if not targets:
+        return []
+
+    if not probe:
+        rows = [
+            {
+                "name": ext.name,
+                "display_name": getattr(ext, "display_name", "") or ext.name,
+                "service": canonical_service_name(ext.name) or ext.name,
+                "ok": None,
+                "checks": [
+                    {
+                        "id": str(c.get("id") or ""),
+                        "label": str(c.get("label") or c.get("id") or c["url"]),
+                        "url": str(c["url"]),
+                        "ok": None,
+                        "required": c.get("required", True) is not False,
+                        "latency": -1,
+                        "detail": "",
+                    }
+                    for c in checks
+                ],
+            }
+            for ext, checks in targets
+        ]
+        rows.sort(key=lambda row: row["display_name"].lower())
+        return rows
+
+    # One request per (method, url), however many extensions ask for it.
+    wanted: dict[tuple[str, str], float] = {}
+    for _ext, checks in targets:
+        for check in checks:
+            key = (str(check.get("method") or "GET").upper(), str(check["url"]))
+            try:
+                timeout = float(check.get("timeoutMs") or 5000) / 1000
+            except (TypeError, ValueError):
+                timeout = 5.0
+            wanted[key] = min(
+                max(wanted.get(key, 0.0), timeout, 1.0), _MAX_CHECK_TIMEOUT_S
+            )
+
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        keys = list(wanted)
+        fetched = await asyncio.gather(
+            *(
+                _fetch_status(client, url, method, wanted[(method, url)])
+                for method, url in keys
+            )
+        )
+    responses = dict(zip(keys, fetched))
+
+    rows = []
+    for ext, checks in targets:
+        results = []
+        for check in checks:
+            method = str(check.get("method") or "GET").upper()
+            http_ok, status, payload, latency, error = responses[
+                (method, str(check["url"]))
+            ]
+            ok, detail = http_ok, error or (f"HTTP {status}" if status else "")
+            service_key = str(check.get("serviceKey") or "").strip()
+            if service_key and status is not None:
+                keyed = _keyed_result(payload, service_key)
+                if keyed is not None:
+                    ok, keyed_detail = keyed
+                    detail = keyed_detail or ("OK" if ok else detail)
+            results.append(
+                {
+                    "id": str(check.get("id") or ""),
+                    "label": str(check.get("label") or check.get("id") or check["url"]),
+                    "url": str(check["url"]),
+                    "ok": ok,
+                    "required": check.get("required", True) is not False,
+                    "latency": round(latency) if latency >= 0 else -1,
+                    "detail": detail,
+                }
+            )
+        required = [r for r in results if r["required"]] or results
+        rows.append(
+            {
+                "name": ext.name,
+                "display_name": getattr(ext, "display_name", "") or ext.name,
+                "service": canonical_service_name(ext.name) or ext.name,
+                "ok": all(r["ok"] for r in required),
+                "checks": results,
+            }
+        )
+    rows.sort(key=lambda row: row["display_name"].lower())
+    return rows
+
+
+def print_extension_health_report(rows: list[dict]) -> None:
+    """Print the extension checks, one line per check."""
+    for row in rows:
+        state = "OK" if row["ok"] else "FAIL"
+        print(f"{row['display_name']} ({row['name']}): {state}")
+        for check in row["checks"]:
+            mark = "ok" if check["ok"] else "fail"
+            print(f"    {check['label']}: {mark} ({check['detail']}) {check['url']}")
 
 
 def print_health_report(

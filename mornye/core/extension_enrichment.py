@@ -211,6 +211,23 @@ def close_extension_providers() -> None:
                 pass
 
 
+def close_extension_provider(ext_name: str) -> None:
+    """Stop one kept runtime, so the next call starts it with fresh settings.
+
+    An extension's settings reach its Node process when that process
+    starts; after they are saved the long-lived runtime here would keep
+    the old ones until restart.
+    """
+    with _providers_lock:
+        provider = _providers.pop(ext_name, None)
+    close = getattr(provider, "close", None)
+    if close is not None:
+        try:
+            close()
+        except Exception:
+            pass
+
+
 atexit.register(close_extension_providers)
 
 

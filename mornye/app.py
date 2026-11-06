@@ -26,6 +26,7 @@ from .api_mixins.csv_import import CsvImportMixin
 from .api_mixins.dedup import DedupMixin
 from .api_mixins.discovery import DiscoveryMixin
 from .api_mixins.extension_health import ExtensionHealthMixin
+from .api_mixins.extension_settings import ExtensionSettingsMixin
 from .api_mixins.failed_tracks import FailedTracksMixin
 from .api_mixins.local_tagging import LocalTaggingMixin
 from .api_mixins.search import SearchMixin
@@ -178,6 +179,7 @@ class MornyeAPI(
     TrustMixin,
     SubscriptionsMixin,
     ExtensionHealthMixin,
+    ExtensionSettingsMixin,
     CsvImportMixin,
     StatsMixin,
     FailedTracksMixin,
@@ -630,6 +632,12 @@ class MornyeAPI(
                 settings.setdefault("animated_artwork_api_url", artwork_api_url())
                 settings.setdefault("sound_enabled", True)
                 settings.setdefault("notification_sound", True)
+                # MORNYE_<SETTING> environment variables (core/env_settings):
+                # the page shows them until something is saved from it.
+                from .core.env_settings import gui_env_defaults
+
+                for key, value in gui_env_defaults().items():
+                    settings.setdefault(key, value)
                 return settings
         except Exception as e:
             self.log(f"Failed to load settings: {e}", "error")
@@ -839,11 +847,9 @@ class MornyeAPI(
             self.log(f"Failed to delete profile: {e}", "error")
             return False
 
-    def check_qobuz_api(self, url):
-        return self._check_api_endpoint_sync(url)
-
-    def check_tidal_api(self, url):
-        return self._check_api_endpoint_sync(url)
+    # The Qobuz/Tidal custom-API checks are gone with the options they
+    # checked: the provider APIs are now each JS extension's own settings
+    # (see api_mixins/extension_settings.py).
 
     def check_animated_artwork_api(self, url):
         return self._check_api_endpoint_sync(url)
@@ -1003,6 +1009,40 @@ class MornyeAPI(
             "directories": directories,
             "files": files,
         }
+
+    def _notify_target_for_run(self):
+        """(target, report) for this run's environment-configured notifier.
+
+        `report` is a RunReport to install as a hook when the notifier wants
+        one message per run ("summary"), else None. (None, None) when
+        MORNYE_NOTIFY is unset; a misconfigured one is logged, not raised —
+        a broken notifier must not cost the download.
+        """
+        try:
+            from .core.notifiers import target_from_env
+
+            target = target_from_env()
+        except Exception as exc:
+            self.log(f"Notifications are misconfigured: {exc}", "warn")
+            return None, None
+        if target is None:
+            return None, None
+        if target.on == "summary":
+            from .core.report import RunReport
+
+            return target, RunReport()
+        return target, None
+
+    def get_download_dir(self) -> dict:
+        """The folder downloads go to right now.
+
+        The page used to show a "~/Music/Mornye" written into its HTML until
+        the folder was changed, so a container started with
+        MORNYE_DOWNLOAD_DIR (or a per-account folder in multi-user mode)
+        displayed a path nothing was saved to (issue #254). The page asks
+        for the real one at start-up.
+        """
+        return {"download_dir": self.download_dir}
 
     def set_download_dir(self, path: str) -> dict:
         """Web-mode equivalent of choose_folder(): sets the download
@@ -1498,6 +1538,13 @@ class MornyeAPI(
         """
         self._await_download_slot(selected_indices)
         try:
+            # Settings the page does not send (timeout_s, save_lrc, …) come
+            # from MORNYE_<SETTING> when the container sets them; whatever
+            # the page did send wins (core/env_settings.py).
+            if isinstance(config, dict):
+                from .core.env_settings import gui_env_defaults
+
+                config = {**gui_env_defaults(), **config}
             self._run_download_batch(selected_indices, config, **batch)
         finally:
             self._download_lock.release()
@@ -1735,8 +1782,16 @@ class MornyeAPI(
                 )
                 post_download_action = "none"
                 post_download_command = ""
-            qobuz_local_api_url = config.get("qobuz_local_api_url") or None
-            tidal_custom_api = config.get("tidal_custom_api") or None
+            # Per-service quality ids from the extensions' qualityOptions.
+            # (qobuz_local_api_url / tidal_custom_api from older settings
+            # files are ignored: they never reached a provider, and the
+            # provider APIs are now each extension's own settings.)
+            raw_extension_quality = config.get("extension_quality") or {}
+            extension_quality = (
+                {str(k): str(v) for k, v in raw_extension_quality.items() if k and v}
+                if isinstance(raw_extension_quality, dict)
+                else {}
+            )
             resume = config.get("resume", True)
             timeout_s = config.get("timeout_s")
             loop_val = config.get("loop", None)
@@ -1853,6 +1908,17 @@ class MornyeAPI(
             failed_hook = failed_tracks.hook(self.owner, collection_url)
             deferred_download_hooks: list[tuple[Any, Any]] = []
             post_delivery_hooks = [log_hook, failed_hook]
+            # Notifications configured by the environment (MORNYE_NOTIFY and
+            # friends): a GUI or --web download has no --notify flag, and a
+            # container is exactly where nobody watches the run (issue #254).
+            notify_target, notify_report = self._notify_target_for_run()
+            if notify_target is not None:
+                if notify_report is not None:
+                    post_delivery_hooks.append(notify_report)
+                else:
+                    from .core.notifiers import notify_hook
+
+                    post_delivery_hooks.append(notify_hook(notify_target))
             if destination_id:
 
                 async def defer_download_hook(result: Any, metadata: Any) -> None:
@@ -1889,8 +1955,7 @@ class MornyeAPI(
                 canvas_providers=canvas_providers,
                 enrich_metadata=enrich_metadata,
                 enrich_providers=enrich_providers,
-                qobuz_local_api_url=qobuz_local_api_url,
-                tidal_custom_api=tidal_custom_api,
+                extension_quality=extension_quality,
                 transcode_to=transcode_to,
                 transcode_bitrate=transcode_bitrate,
                 transcode_keep_original=transcode_keep_original,
@@ -2001,6 +2066,15 @@ class MornyeAPI(
                 self._push_download_stats()
 
             self._push_download_stats()
+            if notify_target is not None and notify_report is not None:
+                try:
+                    from .core.notifiers import notify_run_summary
+
+                    run_sync(notify_run_summary(notify_target, notify_report))
+                except Exception as exc:
+                    self.log(
+                        f"Could not send the run notification: {exc}", "warn-quiet"
+                    )
             self.set_progress("Complete!")
             self.log(f"All tracks saved to: {self.download_dir}", "ok")
             try:

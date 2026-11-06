@@ -142,12 +142,13 @@ def _is_spotify(source: str | None) -> bool:
 
 
 def _search_client(source: str | None):
-    """Spotify, or the catalogue extension named `source` (see
-    core/extension_metadata.py — Melon, Bugs, Genie)."""
+    """Spotify — the built-in client merged with the spotify-web extension
+    (core/metadata_fallback.MergedSpotifySearch) — or the catalogue
+    extension named `source` (see core/extension_metadata.py)."""
     if _is_spotify(source):
-        from ..core.spotify_metadata import SpotifyMetadataClient
+        from ..core.metadata_fallback import MergedSpotifySearch
 
-        return SpotifyMetadataClient()
+        return MergedSpotifySearch()
     from ..core.extension_metadata import ExtensionMetadataClient
 
     return ExtensionMetadataClient.for_source(source or "")

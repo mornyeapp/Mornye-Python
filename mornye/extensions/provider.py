@@ -188,6 +188,30 @@ class JSExtensionProvider(BaseProvider):
         event = self._stop_event
         return event is not None and event.is_set()
 
+    # ─────────────────────── quality ──────────────────────────
+
+    @property
+    def quality_options(self) -> list[dict]:
+        """The ``qualityOptions`` this extension's manifest declares."""
+        from .quality_options import quality_options
+
+        manifest = getattr(getattr(self, "_ext", None), "manifest", None) or {}
+        return quality_options(manifest)
+
+    def select_quality(self, requested: Any, override: str | None = None) -> Any:
+        """The declared quality id for a Mornye tier, token or user pick.
+
+        See ``quality_options.pick_quality_option``. With no declared
+        options the request passes through unchanged.
+        """
+        from .quality_options import pick_quality_option
+
+        return pick_quality_option(
+            self.quality_options,
+            None if requested is None else str(requested),
+            override,
+        )
+
     # ─────────────────────── helpers ──────────────────────────
 
     def _load_extension(self, ext_id: str) -> InstalledExtension:
@@ -512,24 +536,10 @@ class JSExtensionProvider(BaseProvider):
                 filename_format = filename_format(metadata)
             # Native provider tokens are not necessarily extension tokens:
             # Qobuz's JS extension treats an unrecognised "27" as CD quality.
-            # Prefer the canonical spelling only when its manifest declares it.
-            manifest = getattr(getattr(self, "_ext", None), "manifest", None) or {}
-            quality_ids = {
-                option.get("id")
-                for option in manifest.get("qualityOptions", [])
-                if isinstance(option, dict)
-            }
-            canonical_quality = {
-                "27": "HI_RES_LOSSLESS",
-                "7": "HI_RES",
-                "6": "LOSSLESS",
-            }.get(str(quality))
-            if (
-                canonical_quality is not None
-                and quality not in quality_ids
-                and canonical_quality in quality_ids
-            ):
-                quality = canonical_quality
+            # Always hand the extension one of the ids its manifest declares.
+            quality = self.select_quality(
+                quality, kwargs.pop("extension_quality", None)
+            )
             return await self._do_download_async(
                 metadata,
                 output_dir,

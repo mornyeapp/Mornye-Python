@@ -62,8 +62,16 @@ def stub_registries(monkeypatch):
 
     class _Manager:
         def __init__(self, *args, **kwargs) -> None:
+            # Only an installing manager counts: the extension-settings
+            # editor in the same panel builds a read-only one to list what
+            # is installed.
+            if kwargs.get("auto_install_downloads") is False:
+                return
             state["installed"] += 1
             state["trust"].append(kwargs.get("min_trust_tier"))
+
+        def list_installed(self):
+            return []
 
     monkeypatch.setattr(manager_module, "ExtensionManager", _Manager)
     return state

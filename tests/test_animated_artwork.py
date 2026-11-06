@@ -68,9 +68,7 @@ def test_accepts_self_hosted_api_urls_with_custom_ports(httpx_mock, api_url) -> 
     httpx_mock.add_response(json={"url": STREAM_URL})
 
     result = asyncio.run(
-        animated_artwork.fetch_animated_artwork_url(
-            "Artist", "Album", api_url=api_url
-        )
+        animated_artwork.fetch_animated_artwork_url("Artist", "Album", api_url=api_url)
     )
 
     request = httpx_mock.get_request()
