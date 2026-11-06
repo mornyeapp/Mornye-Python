@@ -231,6 +231,24 @@ def _no_system_clipboard(request, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_pypi_version_lookup(monkeypatch):
+    """The TUI banner asks PyPI for the latest version; never from a test."""
+    from mornye.tui import branding
+
+    monkeypatch.setattr(branding, "FETCH_PUBLISHED", False)
+    monkeypatch.setattr(branding, "_PUBLISHED_VERSION", "")
+
+
+@pytest.fixture(autouse=True)
+def _isolated_staged_queue(monkeypatch, tmp_path_factory):
+    """The Queue page's to-do list lives in the cache dir; never the real one."""
+    from mornye.core import staged_queue
+
+    path = tmp_path_factory.mktemp("staged") / "staged-queue.json"
+    monkeypatch.setattr(staged_queue, "_file", lambda: path)
+
+
+@pytest.fixture(autouse=True)
 def _isolated_database(monkeypatch, tmp_path_factory):
     """Points core/db.py at a throwaway file for every test.
 

@@ -268,6 +268,11 @@ class ConfigState:
                 ("url", "csv_path"),
             ),
             (not self.output_dir, "a destination folder", ("output_dir",)),
+            (
+                bool(self.output_dir) and bool(_share_problem(self.output_dir)),
+                "the destination network share mounted on this computer",
+                ("output_dir",),
+            ),
             (not self.services, "at least one download provider", ("services",)),
             (
                 self.post_download_action == "command"
@@ -407,7 +412,9 @@ class ConfigState:
         return {
             "url": state.url,
             "csv_path": state.csv_path,
-            "output_dir": state.output_dir,
+            # smb://nas/Music or \\\\nas\\Music land where the OS mounted the
+            # share (core/network_paths.py); a plain path passes through.
+            "output_dir": _local_folder(state.output_dir),
             "output_path": state.output_path,
             "services": list(state.services),
             "quality": state.quality,
@@ -531,3 +538,22 @@ class ConfigState:
         if self.log_level is None:
             return "default"
         return logging.getLevelName(self.log_level)
+
+
+def _local_folder(path: str) -> str:
+    """A destination folder as the OS can open it (network shares mapped)."""
+    from ..core.network_paths import parse_share_ref, resolve_library_path
+
+    if not path or parse_share_ref(path) is None:
+        return path
+    mapped, _error = resolve_library_path(path)
+    return mapped or path
+
+
+def _share_problem(path: str) -> str:
+    """Why a network-share destination cannot be used yet, or ""."""
+    from ..core.network_paths import parse_share_ref, resolve_library_path
+
+    if parse_share_ref(path) is None:
+        return ""
+    return resolve_library_path(path)[1]

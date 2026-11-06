@@ -131,6 +131,7 @@
     <div class="sb-brand">
       <img src="assets/icons/logo-transparent.png" alt="" class="sb-logo">
       <span class="sb-name">Mornye</span>
+      <span id="sb-version" class="sb-version clickable-version" onclick="openReleasePage()" title="Latest release on PyPI">v...</span>
     </div>
     <div class="sb-group">Discover</div>
     <button class="nav-btn active" id="nav-home"     onclick="switchView('home')"     title="Home" data-label="Home">
@@ -142,6 +143,15 @@
       <span class="nav-label">Explore</span>
     </button>
     <div class="sb-group">Library</div>
+    <button class="nav-btn" id="nav-queue" onclick="switchView('queue')" title="Queue" data-label="Queue">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>
+      <span class="nav-label">Queue</span>
+      <span class="nav-badge hidden" id="nav-queue-badge"></span>
+    </button>
+    <button class="nav-btn" id="nav-history" onclick="switchView('history')" title="History" data-label="History">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+      <span class="nav-label">History</span>
+    </button>
     <button class="nav-btn" id="nav-local" onclick="switchView('local')" title="Fix Local Files" data-label="Fix Local Files">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
       <span class="nav-label">Fix Local Files</span>
@@ -308,6 +318,10 @@
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                     Download All
                   </button>
+                  <button class="act-btn secondary" type="button" onclick="addToStagedQueue()" id="add-to-queue-btn" title="Keep it in the Queue and download it later">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Add to queue
+                  </button>
                   <button class="act-btn secondary" onclick="downloadSelected()" id="dl-selected-btn" style="display:none;">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="9 12 11 14 15 10"/></svg>
                     Download Selected
@@ -428,12 +442,13 @@
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
             <span class="local-drop-zone-text">Drag & drop a folder or audio file here, or paste a path below</span>
             <div class="s-row" style="align-items:center; gap:8px; width:100%;">
-              <input type="text" id="local-path-input" class="full" placeholder="Enter absolute folder path (e.g., C:\Music\ToFix or /Users/name/Music)..." style="flex:1;" onclick="event.stopPropagation()">
+              <input type="text" id="local-path-input" class="full" placeholder="Folder path or network share — /Users/name/Music, C:\Music, smb://nas/Music" style="flex:1;" onclick="event.stopPropagation()">
               <button class="act-btn secondary" onclick="openFolderBrowser()" style="padding:6px 12px; font-size:12px; white-space:nowrap;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
                 Browse
               </button>
             </div>
+            <div id="local-network-shares" class="share-chips hidden" onclick="event.stopPropagation()" aria-label="Mounted network shares"></div>
             <div id="folder-browser-modal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="folder-browser-title" tabindex="-1">
               <div class="fb-card">
                 <div class="fb-header">
@@ -450,7 +465,7 @@
             </div>
           </div>
           <p style="font-size:11.5px; color:var(--muted); margin-top:8px; line-height:1.5;">
-            Paste (or drop) the folder or file you want to fix. Supported formats: FLAC, MP3, M4A/AAC, OGG Vorbis, Opus, WAV, AIFF, WMA, WavPack, Monkey's Audio, Musepack, TrueAudio.
+            Paste (or drop) the folder or file you want to fix — a NAS works too: type its smb:// address or a \\server\share path once the share is connected on this computer. Supported formats: FLAC, MP3, M4A/AAC, OGG Vorbis, Opus, WAV, AIFF, WMA, WavPack, Monkey's Audio, Musepack, TrueAudio.
             Mornye will scan them, find the correct Spotify metadata, and let you compare before applying changes.
           </p>
         </div>
@@ -566,11 +581,11 @@
             <select id="subscription-interval" style="max-width:170px;" title="Check automatically and download what is new"></select>
             <button class="act-btn primary" type="button" onclick="addSubscription()" style="padding:8px 16px;font-size:12px;white-space:nowrap;">Follow</button>
           </div>
-          <div style="margin-top:14px;">
-            <label for="subscription-bulk-input" class="s-title" style="display:block;margin-bottom:8px;">Follow multiple artists</label>
-            <textarea id="subscription-bulk-input" class="full" rows="4"
-              placeholder="Paste artist URLs separated by newlines or commas…"
-              style="width:100%;resize:vertical;box-sizing:border-box;"></textarea>
+          <div class="bulk-follow">
+            <label for="subscription-bulk-input" class="field-label">Follow several artists at once</label>
+            <p class="field-hint">One artist link per line, or separate them with commas.</p>
+            <textarea id="subscription-bulk-input" class="field-textarea" rows="4"
+              placeholder="https://open.spotify.com/artist/…&#10;https://open.spotify.com/artist/…"></textarea>
             <div class="s-row" style="align-items:center;justify-content:space-between;gap:10px;margin-top:8px;flex-wrap:wrap;">
               <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);">
                 <input type="checkbox" id="subscription-bulk-backfill" checked>
@@ -1263,7 +1278,130 @@
         <div class="s-footer">
         </div>
       </div>
-    </div></div>
+    </div>
+
+    <!-- ── Queue ── staged items (Add to queue → Start) and, below, what is
+         downloading right now (the panel that used to be a side drawer). -->
+    <div class="view" id="view-queue">
+      <div class="s-header">
+        <h1>Queue</h1>
+        <div class="s-actions">
+          <button class="act-btn primary" type="button" id="sq-start-all" onclick="startStaged(false)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg>Start all</button>
+        </div>
+      </div>
+      <div class="page-body">
+        <div class="seg-tabs" role="tablist" aria-label="Queue by type">
+          <button type="button" class="seg-tab active" data-kind="" onclick="setStagedKind('')" role="tab" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg><span>All</span><span class="seg-count" id="sq-count-all">0</span></button>
+          <button type="button" class="seg-tab" data-kind="track" onclick="setStagedKind('track')" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg><span>Tracks</span><span class="seg-count" id="sq-count-track">0</span></button>
+          <button type="button" class="seg-tab" data-kind="album" onclick="setStagedKind('album')" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg><span>Albums</span><span class="seg-count" id="sq-count-album">0</span></button>
+          <button type="button" class="seg-tab" data-kind="playlist" onclick="setStagedKind('playlist')" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15V6"/><path d="M18.5 18a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/><path d="M12 12H3"/><path d="M16 6H3"/><path d="M12 18H3"/></svg><span>Playlists</span><span class="seg-count" id="sq-count-playlist">0</span></button>
+          <button type="button" class="seg-tab" data-kind="artist" onclick="setStagedKind('artist')" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg><span>Artists</span><span class="seg-count" id="sq-count-artist">0</span></button>
+        </div>
+        <div class="page-toolbar">
+          <label class="tb-field tb-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="search" id="sq-search" placeholder="Search the queue…" oninput="renderStaged()" aria-label="Search the queue"></label>
+          <label class="tb-field tb-select"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg><select id="sq-status" onchange="renderStaged()" aria-label="Filter by status">
+            <option value="">All statuses</option>
+            <option value="pending">Waiting</option>
+            <option value="running">Downloading</option>
+            <option value="done">Done</option>
+            <option value="failed">Failed</option>
+          </select></label>
+          <span class="tb-spacer"></span>
+          <button class="act-btn secondary" type="button" onclick="clearStaged('finished')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4l10-10a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>Clear finished</button>
+          <button class="act-btn danger" type="button" onclick="clearStaged('all')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>Clear all</button>
+          <button class="act-btn primary" type="button" onclick="startStaged(true)" title="Start the waiting items shown here"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg>Start</button>
+        </div>
+        <div id="sq-list" class="page-list" aria-live="polite"></div>
+
+        <h2 class="page-section-title">Downloading now</h2>
+      <div id="queue-drawer">
+        <div id="queue-backdrop" onclick="toggleQueueDrawer()"></div>
+        <div class="queue-panel live-panel">
+          <!-- One header row: live numbers on the left, list actions on the right. -->
+          <div class="live-head">
+            <div class="live-metrics">
+              <div class="metric"><span class="metric-label">Downloaded</span><strong id="qsb-downloaded">0.00 MB</strong></div>
+              <div class="metric"><span class="metric-label">Speed</span><strong id="qsb-speed">0.00 MB/s</strong></div>
+              <div class="metric"><span class="metric-label">Elapsed</span><strong id="qd-duration">0s</strong></div>
+            </div>
+            <div class="live-actions">
+              <button type="button" class="act-btn ghost" onclick="exportFailures()" title="Save the failed tracks to a text file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export failures</button>
+              <button type="button" class="act-btn ghost" onclick="clearQueue()" title="Clear finished rows from this list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>Clear list</button>
+            </div>
+          </div>
+          <!-- The counters are also the filters: pressing one narrows the
+               list below to what it counts, pressing it again clears it. -->
+          <div class="live-filters">
+            <div class="queue-summary" role="group" aria-label="Filter by status">
+              <button type="button" class="qs-item queued" onclick="filterQueue('waiting')" aria-pressed="false"><span class="qs-dot"></span>Queued<strong id="q-queued">0</strong></button>
+              <button type="button" class="qs-item completed" onclick="filterQueue('done')" aria-pressed="false"><span class="qs-dot"></span>Completed<strong id="q-completed">0</strong></button>
+              <button type="button" class="qs-item skipped" onclick="filterQueue('skipped')" aria-pressed="false"><span class="qs-dot"></span>Skipped<strong id="q-skipped">0</strong></button>
+              <button type="button" class="qs-item failed" onclick="filterQueue('error')" aria-pressed="false"><span class="qs-dot"></span>Failed<strong id="q-failed">0</strong></button>
+            </div>
+            <label class="tb-field tb-search live-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="queue-search" type="search" placeholder="Search downloads…" oninput="onQueueSearch(this.value)" aria-label="Search downloads"></label>
+            <button type="button" id="queue-clear-filters" class="act-btn secondary hidden" onclick="clearQueueFilters()">Clear filter</button>
+          </div>
+          <!-- The backend's list of tracks that failed and have not downloaded
+               since (core/failed_tracks.py), kept across runs and restarts.
+               The counters above only know this page's own queue, which a
+               reload empties. Hidden while the list is empty. -->
+          <section id="failed-panel" class="failed-panel hidden" aria-labelledby="fp-title">
+            <div class="fp-head">
+              <div class="fp-text">
+                <strong id="fp-title"><span id="fp-count">0</span> tracks still missing</strong>
+                <span class="fp-sub">Kept until they download, even across restarts.</span>
+              </div>
+              <div class="fp-actions">
+                <button type="button" class="act-btn secondary" id="fp-toggle" onclick="toggleFailedList()" aria-expanded="false" aria-controls="fp-list">Show</button>
+                <button type="button" class="act-btn secondary" onclick="clearFailedTracks()">Clear list</button>
+                <button type="button" class="act-btn primary" id="fp-retry" onclick="retryFailedTracks()">Retry all</button>
+              </div>
+            </div>
+            <ul id="fp-list" class="fp-list hidden"></ul>
+          </section>
+
+          <div class="queue-content">
+            <div id="queue-list">
+              <div id="queue-empty" class="queue-empty">
+                <div class="q-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
+                <div class="q-title">Nothing downloading</div>
+                <div class="q-hint">Press Download on a track, album or playlist — or Start on the queue above.</div>
+              </div>
+            </div>
+          </div>
+
+          <div id="queue-counter"><span id="q-count">0 tracks</span><span id="q-done"></span></div>
+        </div>
+      </div>
+      </div>
+    </div>
+
+    <!-- ── History ── what was downloaded (download_log) and what was opened. -->
+    <div class="view" id="view-history">
+      <div class="s-header">
+        <h1>History</h1>
+        <div class="s-actions"><span id="hist-totals" class="page-totals"></span></div>
+      </div>
+      <div class="page-body">
+        <div class="seg-tabs" role="tablist" aria-label="History">
+          <button type="button" class="seg-tab active" data-tab="downloads" onclick="setHistoryTab('downloads')" role="tab" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Downloads</span></button>
+          <button type="button" class="seg-tab" data-tab="fetches" onclick="setHistoryTab('fetches')" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span>Fetches</span></button>
+        </div>
+        <div class="page-toolbar">
+          <label class="tb-field tb-search tb-grow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="search" id="hist-search" placeholder="Search downloads…" oninput="onHistorySearch()" aria-label="Search history"></label>
+          <label class="tb-field tb-select" id="hist-sort-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16"/><path d="m3 8 4-4 4 4"/><path d="M17 20V4"/><path d="m21 16-4 4-4-4"/></svg><select id="hist-sort" onchange="loadHistory()" aria-label="Sort">
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="title">Title A–Z</option>
+            <option value="artist">Artist A–Z</option>
+            <option value="size">Largest first</option>
+          </select></label>
+          <button class="act-btn danger" type="button" onclick="clearHistory()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>Clear all</button>
+        </div>
+        <div id="hist-list" class="page-list" aria-live="polite"></div>
+      </div>
+    </div>
+    </div>
   <div id="api-config-modal" class="api-modal hidden">
     <div class="api-modal-backdrop" onclick="closeApiConfigPopup()"></div>
     <div class="api-modal-card">
@@ -1344,83 +1482,8 @@
         <div class="qd-chevron">›</div>
         <div class="qd-bar"><i id="qd-bar-fill"></i></div>
       </div>
-      <div id="queue-drawer">
-        <div id="queue-backdrop" onclick="toggleQueueDrawer()"></div>
-        <div class="queue-panel" role="dialog" aria-modal="true">
-          <header>
-            <div>
-              <h3>Download Queue</h3>
-            </div>
-            <div class="queue-actions">
-              <button class="export-link" onclick="exportFailures()" title="Export Failures to File">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                <span>Export Failures</span>
-              </button>
-              <button class="clear-link" onclick="clearQueue()" title="Clear history">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-                <span>Clear History</span>
-              </button>
-              <button class="close-btn" onclick="toggleQueueDrawer()" aria-label="Close queue">✕</button>
-            </div>
-          </header>
-          
-          <!-- The counters are also the filters: pressing one narrows the
-               list below to what it counts, pressing it again clears it.
-               Buttons, not divs, so they are reachable by keyboard. -->
-          <div class="queue-summary">
-            <button type="button" class="qs-item queued" onclick="filterQueue('waiting')" aria-pressed="false"><span class="qs-icon">⏱</span><strong id="q-queued">0</strong>Queued</button>
-            <button type="button" class="qs-item completed" onclick="filterQueue('done')" aria-pressed="false"><span class="qs-icon">✓</span><strong id="q-completed">0</strong>Completed</button>
-            <button type="button" class="qs-item skipped" onclick="filterQueue('skipped')" aria-pressed="false"><span class="qs-icon">📄</span><strong id="q-skipped">0</strong>Skipped</button>
-            <button type="button" class="qs-item failed" onclick="filterQueue('error')" aria-pressed="false"><span class="qs-icon">✕</span><strong id="q-failed">0</strong>Failed</button>
-          </div>
-
-          <!-- The backend's list of tracks that failed and have not downloaded
-               since (core/failed_tracks.py), kept across runs and restarts.
-               The counters above only know this page's own queue, which a
-               reload empties. Hidden while the list is empty. -->
-          <section id="failed-panel" class="failed-panel hidden" aria-labelledby="fp-title">
-            <div class="fp-head">
-              <div class="fp-text">
-                <strong id="fp-title"><span id="fp-count">0</span> tracks still missing</strong>
-                <span class="fp-sub">Kept until they download, even across restarts.</span>
-              </div>
-              <div class="fp-actions">
-                <button type="button" class="act-btn secondary" id="fp-toggle" onclick="toggleFailedList()" aria-expanded="false" aria-controls="fp-list">Show</button>
-                <button type="button" class="act-btn secondary" onclick="clearFailedTracks()">Clear list</button>
-                <button type="button" class="act-btn primary" id="fp-retry" onclick="retryFailedTracks()">Retry all</button>
-              </div>
-            </div>
-            <ul id="fp-list" class="fp-list hidden"></ul>
-          </section>
-
-          <div class="queue-toolbar">
-            <span class="ts-icon">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
-            </span>
-            <input id="queue-search" type="text" placeholder="Search the queue…" oninput="onQueueSearch(this.value)">
-            <button type="button" id="queue-clear-filters" class="act-btn secondary hidden" onclick="clearQueueFilters()">Clear filter</button>
-          </div>
-
-          <div class="queue-stats-bar">
-            <div>Downloaded: <strong id="qsb-downloaded">0.00 MB</strong></div>
-            <div>Speed: <strong id="qsb-speed">0.00 MB/s</strong></div>
-            <div>Duration: <strong id="qd-duration">0s</strong></div>
-          </div>
-
-          <div class="queue-content">
-            <div id="queue-list">
-              <div id="queue-empty" class="queue-empty">
-                <div class="q-icon"></div>
-                <div>Add tracks to start</div>
-              </div>
-            </div>
-          </div>
-
-          <div id="queue-counter"><span id="q-count">0 tracks</span><span id="q-done"></span></div>
-        </div>
-      </div>
-  <script src="toast-system.js?v=20261021"></script>
-  <script src="app.js?v=20261021"></script>
+  <script src="toast-system.js?v=20261106-pages"></script>
+  <script src="app.js?v=20261106-pages"></script>
   <script>
     // --web mode only (see sw.js's own comment for what the service worker
     // actually does — installability, not offline caching of live data).

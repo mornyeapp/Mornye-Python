@@ -116,6 +116,32 @@ function switchView(name) {
   document.querySelectorAll('.nav-btn[id^="nav-"]').forEach(b => b.classList.remove('active'));
   $('view-' + name)?.classList.add('active');
   $('nav-' + name)?.classList.add('active');
+  if (name === 'local') loadNetworkShares();
+  if (name === 'queue') loadStaged();
+  if (name === 'history') loadHistory();
+}
+
+// Mounted network shares as one-click picks under the library path field:
+// smb://nas/Music works typed in too, but only once the OS has mounted it,
+// and these are exactly the ones that will open.
+async function loadNetworkShares() {
+  const box = $('local-network-shares');
+  if (!box || !window.pywebview?.api?.get_network_shares) return;
+  try {
+    const res = await window.pywebview.api.get_network_shares();
+    const shares = res?.shares || [];
+    box.classList.toggle('hidden', shares.length === 0);
+    box.innerHTML = shares.length
+      ? '<span class="share-chips-label">Network:</span>' + shares.map(s =>
+          `<button type="button" class="share-chip" title="${escHtml(s.path)}" data-path="${escHtml(s.path)}">`
+          + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><line x1="6" y1="7" x2="6.01" y2="7"/><line x1="6" y1="17" x2="6.01" y2="17"/></svg>'
+          + `${escHtml(s.label)}</button>`).join('')
+      : '';
+    box.querySelectorAll('.share-chip').forEach(btn => btn.addEventListener('click', () => {
+      const input = $('local-path-input');
+      if (input) { input.value = btn.dataset.path; input.focus(); }
+    }));
+  } catch (e) { /* the field still accepts a typed path */ }
 }
 
 // ── Sidebar ──────────────────────────────────────────────────────────────────
@@ -344,6 +370,12 @@ function changePreviewVolume() {
 function changeFont() {
   const font = $('config-font').value;
   document.documentElement.style.setProperty('--app-font', font);
+  // Titles use the display face (Fraunces) only with the default font; any
+  // other choice applies to them too, so the whole window follows the
+  // setting instead of the headings staying behind.
+  const isDefault = /^'Inter'/.test(font);
+  if (isDefault) document.documentElement.style.removeProperty('--font-display');
+  else document.documentElement.style.setProperty('--font-display', font);
   try {
     const stored = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) || '{}');
     stored.font = font;
@@ -738,11 +770,20 @@ async function fetchVersionWithRetry(retries = 10, delayMs = 200) {
   for (let i = 0; i < retries; i++) {
     try {
       if (window.pywebview?.api && typeof window.pywebview.api.get_version === 'function') {
-        const v = await window.pywebview.api.get_version();
-        const tb = document.getElementById('tb-version');
-        const hero = document.getElementById('hero-version');
-        if (tb) tb.innerText = v && v !== 'unknown' ? `v${v}` : 'v...';
-        if (hero) hero.innerText = v && v !== 'unknown' ? `v${v}` : 'v...';
+        const local = await window.pywebview.api.get_version();
+        // The version on show is the published one on PyPI — what `pip
+        // install mornye` gives you — with the local build's own number as
+        // the fallback when PyPI cannot be reached.
+        let v = local;
+        try {
+          const pypi = await window.pywebview.api.get_pypi_version?.();
+          if (pypi?.version) v = pypi.version;
+        } catch (e) { /* offline: keep the local version */ }
+        const label = v && v !== 'unknown' ? `v${v}` : 'v...';
+        for (const id of ['tb-version', 'hero-version', 'sb-version']) {
+          const el = document.getElementById(id);
+          if (el) el.innerText = label;
+        }
         if (v && v !== 'unknown' && v !== '...') {
           await checkLatestVersion(v);
         }
@@ -3476,6 +3517,68 @@ function onSearchResultClick(url) {
   onFetch();
 }
 
+// ── Error states ─────────────────────────────────────────────────────────────
+// Turns a backend error into something a person can act on. The commonest one
+// on a fresh install is a missing extension ("The optional utilities extension
+// is not installed; '…' requires 'utilities.sflx' …"): that is not a network
+// problem, and saying "check your connection" sent people the wrong way.
+function describeError(message, what) {
+  const text = String(message || '').trim();
+  const missing = text.match(/optional (\S+) extension is not installed/i)
+    || text.match(/requires '([\w-]+)\./i);
+  if (missing || /no (provider|extension)s? (is |are )?installed/i.test(text)) {
+    const name = missing ? missing[1] : '';
+    const pretty = name ? name.charAt(0).toUpperCase() + name.slice(1) : '';
+    return {
+      kind: 'setup',
+      title: pretty ? `${pretty} extension needed` : 'No extension installed',
+      body: `${what} runs through extensions, and ${pretty ? `the ${pretty} one` : 'none'} is installed yet. `
+        + 'Add one from Settings → Extensions, then try again.',
+      action: { label: 'Open Extensions', onclick: 'openExtensionsSettings()' },
+      detail: text,
+    };
+  }
+  if (/timed? ?out|network|connection|ENOTFOUND|getaddrinfo|unreachable/i.test(text)) {
+    return {
+      kind: 'network',
+      title: 'Could not reach the service',
+      body: `${what} needs a connection, and the request did not get through. Check that you are online, then retry.`,
+      detail: text,
+    };
+  }
+  return {
+    kind: 'error',
+    title: `${what} failed`,
+    body: text ? 'The provider answered with an error. The details are below and in Logs.' : 'Something went wrong. The details are in Logs.',
+    detail: text,
+  };
+}
+
+function errorStateHTML(info, retry) {
+  const icon = info.kind === 'setup'
+    ? '<path d="M12 2v4"/><path d="M12 18v4"/><path d="m4.93 4.93 2.83 2.83"/><path d="m16.24 16.24 2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><circle cx="12" cy="12" r="3"/>'
+    : info.kind === 'network'
+      ? '<path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/><line x1="2" y1="2" x2="22" y2="22"/>'
+      : '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>';
+  const buttons = [
+    info.action ? `<button type="button" class="act-btn primary" onclick="${info.action.onclick}">${escHtml(info.action.label)}</button>` : '',
+    retry ? `<button type="button" class="act-btn secondary" onclick="${retry}">Try again</button>` : '',
+  ].join('');
+  return `<div class="error-state ${info.kind}" role="alert">
+    <div class="es-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${icon}</svg></div>
+    <div class="es-title">${escHtml(info.title)}</div>
+    <p class="es-body">${escHtml(info.body)}</p>
+    ${buttons ? `<div class="es-actions">${buttons}</div>` : ''}
+    ${info.detail ? `<details class="es-detail"><summary>Technical details</summary><code>${escHtml(info.detail)}</code></details>` : ''}
+  </div>`;
+}
+
+function openExtensionsSettings() {
+  switchView('settings');
+  const btn = [...document.querySelectorAll('.stab')].find(b => b.textContent.trim() === 'Extensions');
+  if (btn) switchTab('extensions', btn);
+}
+
 window.app_handle_provider_search_error = function(message) {
   if (message && typeof message === 'object') {
     if (!isCurrentSearchRequest(message)) return;
@@ -3483,10 +3586,11 @@ window.app_handle_provider_search_error = function(message) {
   }
   clearSearchUI();
   setFetchingState('error');
-  $('track-rows').innerHTML = `<div class="queue-empty">Provider search failed.</div>`;
+  const info = describeError(message, 'Search');
+  $('track-rows').innerHTML = errorStateHTML(info, info.kind === 'setup' ? '' : 'onFetch()');
   $('track-controls').classList.add('hidden');
   $('track-table-wrap').classList.remove('hidden');
-  setStatus('Provider search error.', false);
+  setStatus(info.title + '.', false);
   logMessage(`Provider search error: ${message}`, 'error');
   $('urlInput').disabled = false;
   $('fetchBtn').disabled = false;
@@ -3902,9 +4006,11 @@ function renderQueueNow() {
   if (!empty) {
     empty = document.createElement('div');
     empty.id = 'queue-empty';
+    empty.className = 'queue-empty';
     empty.innerHTML = `
-      <div class="q-icon">📥</div>
-      <div>No items in queue.<br>Add tracks to start downloading.</div>
+      <div class="q-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
+      <div class="q-title">Nothing downloading</div>
+      <div class="q-hint">Press Download on a track, album or playlist — or Start on the queue above.</div>
     `;
   }
 
@@ -4049,11 +4155,317 @@ function renderQueueNow() {
   syncTrackRowsWithQueue();
 }
 
+// The queue is a page now (Queue in the sidebar): the bottom bar and every
+// old "open the drawer" call land there.
 function toggleQueueDrawer() {
-  const drawer = $('queue-drawer');
-  if (!drawer) return;
-  drawer.classList.toggle('open');
-  if (drawer.classList.contains('open')) loadFailedTracks();
+  switchView('queue');
+  loadFailedTracks();
+}
+
+// ── Queue page: staged items ────────────────────────────────────────────────
+let stagedState = { items: [], counts: {}, running: false };
+let stagedKind = '';
+
+const KIND_META = {
+  track:    { label: 'Track',    icon: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>' },
+  album:    { label: 'Album',    icon: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>' },
+  playlist: { label: 'Playlist', icon: '<path d="M21 15V6"/><path d="M18.5 18a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/><path d="M12 12H3"/><path d="M16 6H3"/><path d="M12 18H3"/>' },
+  artist:   { label: 'Artist',   icon: '<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/>' },
+};
+const STATUS_META = {
+  pending: { label: 'Waiting',     cls: 'queued' },
+  running: { label: 'Downloading', cls: 'active' },
+  done:    { label: 'Done',        cls: 'done' },
+  failed:  { label: 'Failed',      cls: 'failed' },
+};
+
+function timeAgo(seconds) {
+  const t = Number(seconds) || 0;
+  if (!t) return '';
+  const diff = Math.max(0, Date.now() / 1000 - t);
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} h ago`;
+  if (diff < 86400 * 7) return `${Math.floor(diff / 86400)} d ago`;
+  return new Date(t * 1000).toLocaleDateString();
+}
+
+function formatSize(bytes) {
+  const b = Number(bytes) || 0;
+  if (!b) return '';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let v = b, u = 0;
+  while (v >= 1024 && u < units.length - 1) { v /= 1024; u++; }
+  return `${v.toFixed(v >= 100 || u === 0 ? 0 : 1)} ${units[u]}`;
+}
+
+async function loadStaged() {
+  if (!window.pywebview?.api?.get_staged_queue) return;
+  try {
+    stagedState = await window.pywebview.api.get_staged_queue() || stagedState;
+  } catch (e) { /* keep what is shown */ }
+  renderStaged();
+}
+
+window.app_staged_queue_changed = function (state) {
+  if (state && Array.isArray(state.items)) stagedState = state;
+  renderStaged();
+};
+
+function setStagedKind(kind) {
+  stagedKind = kind || '';
+  document.querySelectorAll('#view-queue .seg-tab').forEach(tab => {
+    const on = tab.dataset.kind === stagedKind;
+    tab.classList.toggle('active', on);
+    tab.setAttribute('aria-selected', String(on));
+  });
+  renderStaged();
+}
+
+function visibleStaged() {
+  const q = ($('sq-search')?.value || '').trim().toLowerCase();
+  const status = $('sq-status')?.value || '';
+  return (stagedState.items || []).filter(item =>
+    (!stagedKind || item.kind === stagedKind)
+    && (!status || item.status === status)
+    && (!q || `${item.title} ${item.subtitle}`.toLowerCase().includes(q)));
+}
+
+function renderStaged() {
+  const items = stagedState.items || [];
+  const counts = { '': items.length, ...(stagedState.counts || {}) };
+  for (const kind of ['', 'track', 'album', 'playlist', 'artist']) {
+    const el = $(`sq-count-${kind || 'all'}`);
+    if (el) el.textContent = counts[kind] || 0;
+  }
+  const pending = items.filter(i => i.status === 'pending').length;
+  const badge = $('nav-queue-badge');
+  if (badge) { badge.textContent = pending; badge.classList.toggle('hidden', !pending); }
+  const startAll = $('sq-start-all');
+  if (startAll) startAll.disabled = !pending;
+
+  const list = $('sq-list');
+  if (!list) return;
+  const shown = visibleStaged();
+  if (!shown.length) {
+    list.innerHTML = items.length
+      ? emptyState('disc', 'Nothing matches', 'Try another type, status or search.')
+      : emptyState('disc', 'The queue is empty',
+          'Use Add to queue on a track, album, playlist or discography, then press Start.');
+    return;
+  }
+  list.innerHTML = shown.map(item => {
+    const kind = KIND_META[item.kind] || KIND_META.album;
+    const st = STATUS_META[item.status] || STATUS_META.pending;
+    const cover = item.cover
+      ? `<img src="${escHtml(item.cover)}" alt="" loading="lazy">`
+      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${kind.icon}</svg>`;
+    const meta = [kind.label, `${item.track_count} track${item.track_count === 1 ? '' : 's'}`, `added ${timeAgo(item.added_at)}`]
+      .filter(Boolean).join(' · ');
+    const actions = [
+      item.status === 'pending' ? `<button type="button" class="row-btn accent" title="Start" onclick="startStagedOne('${item.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg></button>` : '',
+      (item.status === 'failed' || item.status === 'done') ? `<button type="button" class="row-btn" title="Queue again" onclick="retryStaged('${item.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>` : '',
+      item.status !== 'running' ? `<button type="button" class="row-btn" title="Remove" onclick="removeStaged('${item.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>` : '',
+    ].join('');
+    return `<div class="page-row status-${item.status}">
+      <div class="pr-cover">${cover}</div>
+      <div class="pr-main">
+        <div class="pr-title">${escHtml(item.title)}</div>
+        <div class="pr-sub">${escHtml(item.subtitle || (item.preview || []).join(', '))}</div>
+        <div class="pr-meta">${escHtml(meta)}${item.error ? ` · <span class="pr-error">${escHtml(item.error)}</span>` : ''}</div>
+      </div>
+      <span class="status-pill ${st.cls}">${item.status === 'running' ? '<i class="pill-spinner"></i>' : ''}${st.label}</span>
+      <div class="pr-actions">${actions}</div>
+    </div>`;
+  }).join('');
+}
+
+async function addToStagedQueue() {
+  if (!window.pywebview?.api?.add_to_staged_queue) return;
+  const checked = [...document.querySelectorAll('.track-cb:checked')].map(cb => parseInt(cb.value));
+  const indices = checked.length ? checked : currentTracks.map((_, i) => i);
+  if (!indices.length) { setStatus('No tracks loaded.'); return; }
+  const coverImg = document.querySelector('#album-cover img');
+  const bg = $('album-cover')?.style.backgroundImage || '';
+  const info = {
+    kind: detectUrlType(currentUrl) || (indices.length === 1 ? 'track' : 'album'),
+    title: ($('album-title')?.textContent || '').trim(),
+    subtitle: ($('album-artist')?.textContent || '').trim().replace(/^—$/, ''),
+    cover: coverImg?.src || (bg.match(/url\(["']?(.*?)["']?\)/) || [])[1] || '',
+    source_url: currentUrl || '',
+  };
+  try {
+    const res = await window.pywebview.api.add_to_staged_queue(indices, info);
+    if (res?.ok) {
+      showToast(`Added "${res.item.title}" to the queue (${res.item.track_count} track${res.item.track_count === 1 ? '' : 's'}).`);
+      logMessage(`Queued for later: ${res.item.title}`, 'ok');
+    } else {
+      showToast(res?.error || 'Could not add to the queue.', 'error');
+    }
+  } catch (e) {
+    showToast('Could not add to the queue: ' + e, 'error');
+  }
+}
+
+async function startStaged(onlyShown) {
+  if (!window.pywebview?.api?.start_staged_items) return;
+  const ids = onlyShown ? visibleStaged().filter(i => i.status === 'pending').map(i => i.id) : [];
+  if (onlyShown && !ids.length) { showToast('Nothing waiting among the items shown.', 'info'); return; }
+  const res = await window.pywebview.api.start_staged_items(ids, buildConfig());
+  if (res?.ok) showToast(`Starting ${res.started} item${res.started === 1 ? '' : 's'}.`);
+  else showToast(res?.error || 'Nothing to start.', 'info');
+  loadStaged();
+}
+
+async function startStagedOne(id) {
+  const res = await window.pywebview?.api?.start_staged_items?.([id], buildConfig());
+  if (res && !res.ok) showToast(res.error || 'Could not start it.', 'error');
+  loadStaged();
+}
+
+async function removeStaged(id) {
+  await window.pywebview?.api?.remove_staged_items?.([id]);
+  loadStaged();
+}
+
+async function retryStaged(id) {
+  await window.pywebview?.api?.retry_staged_items?.([id]);
+  loadStaged();
+}
+
+async function clearStaged(scope) {
+  if (scope === 'all' && !confirm('Remove everything waiting in the queue? Downloads in progress keep going.')) return;
+  await window.pywebview?.api?.clear_staged_queue?.(scope);
+  loadStaged();
+}
+
+// ── History page ────────────────────────────────────────────────────────────
+let historyTab = 'downloads';
+let historySearchTimer = null;
+
+function setHistoryTab(tab) {
+  historyTab = tab;
+  document.querySelectorAll('#view-history .seg-tab').forEach(btn => {
+    const on = btn.dataset.tab === tab;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-selected', String(on));
+  });
+  const search = $('hist-search');
+  if (search) search.placeholder = tab === 'downloads' ? 'Search downloads…' : 'Search fetched links…';
+  $('hist-sort-wrap')?.classList.toggle('hidden', tab !== 'downloads');
+  loadHistory();
+}
+
+function onHistorySearch() {
+  clearTimeout(historySearchTimer);
+  historySearchTimer = setTimeout(loadHistory, 180);
+}
+
+async function loadHistory() {
+  const list = $('hist-list');
+  if (!list || !window.pywebview?.api) return;
+  const q = ($('hist-search')?.value || '').trim();
+  try {
+    if (historyTab === 'downloads') {
+      const res = await window.pywebview.api.get_download_history(q, $('hist-sort')?.value || 'newest', 500);
+      renderDownloadHistory(res?.items || [], res?.totals || {}, q);
+    } else {
+      const hist = await window.pywebview.api.get_history() || [];
+      const ql = q.toLowerCase();
+      renderFetchHistory(hist.filter(h => !ql || `${h.label || ''} ${h.artist || ''} ${h.url || ''}`.toLowerCase().includes(ql)), q);
+    }
+  } catch (e) {
+    list.innerHTML = errorStateHTML(describeError(String(e), 'History'), 'loadHistory()');
+  }
+}
+
+function renderDownloadHistory(items, totals, q) {
+  const list = $('hist-list');
+  const tot = $('hist-totals');
+  if (tot) tot.textContent = totals.tracks ? `${totals.tracks} tracks · ${formatSize(totals.bytes)}` : '';
+  if (!items.length) {
+    list.innerHTML = q
+      ? emptyState('disc', 'No downloads match', 'Try a different title, artist or album.')
+      : emptyState('disc', 'No download history yet', 'Tracks you download show up here.');
+    return;
+  }
+  list.innerHTML = items.map(r => {
+    const meta = [r.provider, r.format ? r.format.toUpperCase() : '', formatSize(r.bytes), timeAgo(r.downloaded_at)]
+      .filter(Boolean).join(' · ');
+    return `<div class="page-row${r.success ? '' : ' status-failed'}">
+      <div class="pr-cover"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${KIND_META.track.icon}</svg></div>
+      <div class="pr-main">
+        <div class="pr-title">${escHtml(r.title || 'Untitled')}</div>
+        <div class="pr-sub">${escHtml([r.artist, r.album].filter(Boolean).join(' · '))}</div>
+        <div class="pr-meta" title="${escHtml(r.file_path || '')}">${escHtml(meta)}</div>
+      </div>
+      ${r.success ? '' : '<span class="status-pill failed">Failed</span>'}
+      <div class="pr-actions">
+        <button type="button" class="row-btn" title="Remove from history" onclick="removeDownloadHistory(${Number(r.id)})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderFetchHistory(items, q) {
+  const list = $('hist-list');
+  const tot = $('hist-totals');
+  if (tot) tot.textContent = items.length ? `${items.length} link${items.length === 1 ? '' : 's'}` : '';
+  if (!items.length) {
+    list.innerHTML = q
+      ? emptyState('disc', 'No fetched links match', 'Try a different name.')
+      : emptyState('disc', 'Nothing fetched yet', 'Links you open on Home show up here.');
+    return;
+  }
+  list.innerHTML = items.map((h, idx) => {
+    const kind = h.url_type || detectUrlType(h.url || '');
+    const km = KIND_META[kind] || KIND_META.album;
+    const cover = h.cover
+      ? `<img src="${escHtml(h.cover)}" alt="" loading="lazy">`
+      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${km.icon}</svg>`;
+    const meta = [km.label, h.track_count ? `${h.track_count} tracks` : '', timeAgo(h.at)].filter(Boolean).join(' · ');
+    return `<div class="page-row clickable" data-idx="${idx}" title="Open this link again">
+      <div class="pr-cover">${cover}</div>
+      <div class="pr-main">
+        <div class="pr-title">${escHtml(h.label || h.url || '—')}</div>
+        <div class="pr-sub">${escHtml(h.artist || '')}</div>
+        <div class="pr-meta">${escHtml(meta)}</div>
+      </div>
+      <div class="pr-actions">
+        <button type="button" class="row-btn" title="Remove from history" data-remove="${idx}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.page-row.clickable').forEach(row => {
+    const h = items[Number(row.dataset.idx)];
+    row.addEventListener('click', (ev) => {
+      if (ev.target.closest('[data-remove]')) {
+        ev.stopPropagation();
+        window.pywebview?.api?.remove_history_item?.(h.url);
+        setTimeout(() => { loadHistory(); window.pywebview?.api?.get_history?.().then(renderRecent); }, 150);
+        return;
+      }
+      switchView('home');
+      $('urlInput').value = normalizeHistoryUrl(h.url || '');
+      onFetch();
+    });
+  });
+}
+
+async function removeDownloadHistory(id) {
+  await window.pywebview?.api?.remove_download_history?.([id]);
+  loadHistory();
+}
+
+async function clearHistory() {
+  const what = historyTab === 'downloads' ? 'the download history (your files stay where they are)' : 'the list of fetched links';
+  if (!confirm(`Clear ${what}?`)) return;
+  if (historyTab === 'downloads') await window.pywebview?.api?.clear_download_history?.();
+  else {
+    await window.pywebview?.api?.clear_fetch_history?.();
+    window.pywebview?.api?.get_history?.().then(renderRecent);
+  }
+  loadHistory();
 }
 
 // ── Tracks still missing ─────────────────────────────────────────────────
@@ -4438,7 +4850,7 @@ async function onFetch() {
           setStatus(`Searching "${url}"...`, true);
         })
         .catch((e) => {
-          setStatus('Provider search error.', false);
+          setStatus(describeError(String(e), 'Search').title + '.', false);
           logMessage('Search error: ' + e, 'error');
           setFetchingState('error');
         });
@@ -5798,11 +6210,13 @@ async function loadExploreData() {
         if (greetingEl) greetingEl.textContent = homeData.greeting || 'Explore';
         renderHomeSections(homeData.sections);
       } else {
-        sectionsContainer.innerHTML = '<div style="color:var(--red);">Unable to load feed. Check your connection.</div>';
+        const error = homeData?.error || '';
+        if (error) logMessage('Failed to load explore feed: ' + error, 'error');
+        sectionsContainer.innerHTML = errorStateHTML(describeError(error, 'The Explore feed'), 'loadExploreData()');
       }
     } catch (e) {
       logMessage('Failed to load explore feed: ' + e, 'error');
-      sectionsContainer.innerHTML = '<div style="color:var(--red);">Network error.</div>';
+      sectionsContainer.innerHTML = errorStateHTML(describeError(String(e), 'The Explore feed'), 'loadExploreData()');
     }
   } else {
     // Demo Mode
@@ -5874,6 +6288,7 @@ window.addEventListener('pywebviewready', async () => {
   // announcing it from this side too printed the same event twice, in two
   // different capitalisations.
   loadHistoryAndProfiles();
+  loadStaged();  // the sidebar's waiting-count badge
   checkAuthStatus();
   // The real download folder (MORNYE_DOWNLOAD_DIR in a container, the
   // account's own folder in multi-user mode), not the placeholder in the HTML.

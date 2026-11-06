@@ -110,6 +110,18 @@ def _token_matches(candidate: str | None, expected: str) -> bool:
 ALLOWED_METHODS: set[str] = {
     "get_version",
     "get_latest_version",
+    "get_pypi_version",
+    "get_network_shares",
+    "get_staged_queue",
+    "add_to_staged_queue",
+    "remove_staged_items",
+    "clear_staged_queue",
+    "retry_staged_items",
+    "start_staged_items",
+    "get_download_history",
+    "remove_download_history",
+    "clear_download_history",
+    "clear_fetch_history",
     "get_artist_images",
     "get_ffmpeg_status",
     "get_node_status",
@@ -1244,11 +1256,16 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
         html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
         inject = (
             "<script>window.__MORNYE_WEB_MODE__ = true;</script>\n"
-            '<script src="/web-shim.js?v=20261021"></script>\n'
+            '<script src="/web-shim.js?v=20261106"></script>\n'
         )
-        html = html.replace(
-            '<script src="toast-system.js?v=20261021"></script>',
-            inject + '<script src="toast-system.js?v=20261021"></script>',
+        # Before the first app script, whatever its cache-busting version:
+        # matching one exact `?v=` string silently dropped the shim (and with
+        # it every API call) the first time index.html bumped the version.
+        html = re.sub(
+            r'(<script src="toast-system\.js[^"]*"></script>)',
+            lambda m: inject + m.group(1),
+            html,
+            count=1,
         )
         # Marks the document as browser-served before the first paint, so CSS
         # can drop the chrome that only makes sense in the pywebview window

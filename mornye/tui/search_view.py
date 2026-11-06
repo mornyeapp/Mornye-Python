@@ -116,7 +116,9 @@ class SearchPanel(VerticalScroll):
 
                 results = await search_metadata_async(query)
             except Exception as exc:
-                self.query_one("#search-status", Label).update(f"Search failed — {exc}")
+                from ..core.error_hints import explain
+
+                self.query_one("#search-status", Label).update(explain(str(exc), "Search"))
                 return
 
             self._render_results(query, results)

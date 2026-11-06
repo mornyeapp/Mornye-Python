@@ -682,3 +682,42 @@ Toast.-error {
 Toast.-error .toast--title {
     color: $error;
 }
+
+/* ── Queue (staged) and History ────────────────────────────────────── */
+
+.staged-filters,
+.history-filters {
+    height: auto;
+}
+
+.staged-filters Select,
+.history-filters Select {
+    width: 24;
+}
+
+.staged-filters Input,
+.history-filters Input {
+    width: 1fr;
+}
+
+#staged-summary,
+#history-summary {
+    color: $text-muted;
+    padding: 0 1;
+    margin-bottom: 1;
+}
+
+#staged-list,
+#history-list {
+    height: auto;
+    min-height: 5;
+    max-height: 22;
+    border: round $panel;
+    background: $surface;
+    padding: 0 1;
+}
+
+#staged-list:focus,
+#history-list:focus {
+    border: round $primary;
+}

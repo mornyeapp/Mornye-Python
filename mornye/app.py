@@ -24,6 +24,7 @@ import webview
 from .api_mixins.covers_lyrics import CoversLyricsMixin
 from .api_mixins.csv_import import CsvImportMixin
 from .api_mixins.dedup import DedupMixin
+from .api_mixins.queue_history import QueueHistoryMixin
 from .api_mixins.discovery import DiscoveryMixin
 from .api_mixins.extension_health import ExtensionHealthMixin
 from .api_mixins.extension_settings import ExtensionSettingsMixin
@@ -184,6 +185,7 @@ class MornyeAPI(
     StatsMixin,
     FailedTracksMixin,
     SignedSessionsMixin,
+    QueueHistoryMixin,
 ):
     """pywebview/`--web` bridge — every method here (plus the two mixins
     above) becomes a callable the frontend invokes as `pywebview.api.<name>`
@@ -218,6 +220,12 @@ class MornyeAPI(
         # Tells this process's own download jobs from ones a queue restored
         # from an earlier process — see run_download_job().
         self._session_id = uuid.uuid4().hex
+        # A staged-queue item left "running" by a process that died is put
+        # back to pending, so Start picks it up again instead of it hanging.
+        with contextlib.suppress(Exception):
+            from .core import staged_queue
+
+            staged_queue.recover_interrupted()
         # Optional callable set by webapp.py in web mode: fn(event_name, args_list).
         # Desktop (pywebview) mode never sets this and is completely unaffected.
         self._ws_broadcast = None
@@ -341,6 +349,30 @@ class MornyeAPI(
                 }
             except Exception:
                 return {"latest_version": "", "published_at": ""}
+
+        return run_sync(_inner())
+
+    #: The project's PyPI name; the version shown in the window is the one
+    #: published there (get_pypi_version), so it matches what pip installs.
+    PYPI_PROJECT = "mornye"
+
+    def get_pypi_version(self) -> dict:
+        """Latest released version on PyPI, or "" when it cannot be reached."""
+
+        async def _inner():
+            try:
+                client = AsyncHttpClient("pypi", timeout_s=10)
+                resp = await client.get(
+                    f"https://pypi.org/pypi/{self.PYPI_PROJECT}/json",
+                    headers={"Accept": "application/json", "User-Agent": "Mornye-Desktop"},
+                    timeout=10,
+                )
+                if resp.status_code != 200:
+                    return {"version": ""}
+                info = (resp.json() or {}).get("info") or {}
+                return {"version": str(info.get("version", "") or "").strip()}
+            except Exception:
+                return {"version": ""}
 
         return run_sync(_inner())
 
@@ -985,8 +1017,22 @@ class MornyeAPI(
         """Return the user's home dir for desktop and browser folder pickers."""
         return str(Path.home())
 
+    def get_network_shares(self) -> dict:
+        """Network shares this machine has mounted, for the library pickers."""
+        from .core.network_paths import describe_shares
+
+        try:
+            return {"ok": True, "shares": describe_shares()}
+        except Exception as e:
+            return {"ok": False, "shares": [], "error": str(e)}
+
     def browse_folder(self, path: str | None = None) -> dict:
         """List subdirectories and files for a folder, matching the web-mode /api/browse-folder payload."""
+        if path:
+            from .core.network_paths import resolve_library_path
+
+            mapped, _error = resolve_library_path(path)
+            path = mapped or path
         base = Path(path).expanduser() if path else Path.home()
         try:
             base = base.resolve()

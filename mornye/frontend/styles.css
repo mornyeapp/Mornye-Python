@@ -499,6 +499,14 @@
       font-family: var(--font-display); font-size: 21px; font-weight: 600;
       letter-spacing: -0.01em; color: var(--text); white-space: nowrap;
     }
+    .sb-version {
+      margin-left: auto;
+      font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+      color: var(--accent-text); background: var(--accent-subtle);
+      padding: 2px 7px; border-radius: var(--radius-pill);
+      white-space: nowrap; cursor: pointer;
+    }
+    body.sidebar-collapsed .sb-version { display: none; }
     .sb-group {
       padding: 14px 12px 6px;
       font-size: var(--fs-75); font-weight: var(--fw-semibold);
@@ -591,12 +599,11 @@
     /* ══════════ HOME VIEW ══════════ */
     #view-home { overflow: visible; }
 
-    /* Left-aligned, editorial: the sidebar already carries the logo, so the
-       page opens on the name in the display face and a line of what it does,
-       sitting on the same left edge as the search bar under it. */
+    /* Centred, as before the sidebar: logo, name and version on one line,
+       the line of what it does under them, the search bar below. */
     #home-hero {
-      padding: var(--sp-10) var(--sp-8) var(--sp-4);
-      display: flex; justify-content: flex-start;
+      padding: var(--sp-8) var(--sp-7) var(--sp-4);
+      display: flex; justify-content: center;
     }
     /* This was a bordered card around the title — a hard-edged rectangle
        whose only content was the thing it framed, which is what made the
@@ -604,16 +611,16 @@
        carrying is worth keeping; the edge is not, so the panel becomes a
        radial glow that fades out before it reaches a border. */
     .hero-text {
-      max-width: 760px; text-align: left;
-      padding: 0;
+      max-width: 800px; text-align: center;
+      padding: var(--sp-4) var(--sp-8) 0;
       border-radius: var(--radius-lg);
     }
     .hero-headline {
-      display: flex; align-items: center; justify-content: flex-start; gap: var(--sp-6);
+      display: flex; align-items: center; justify-content: center; gap: var(--sp-6);
       flex-wrap: wrap;
     }
     .hero-logo {
-      display: none; place-items: center;
+      display: grid; place-items: center;
       gap: var(--sp-3); text-align: center;
     }
     .hero-icon {
@@ -629,8 +636,10 @@
       padding: var(--sp-2) 10px; border-radius: 999px; text-transform: uppercase;
     }
     .hero-main {
-      display: flex; align-items: baseline; gap: var(--sp-4); flex-wrap: wrap; justify-content: flex-start;
+      /* Name and version on one line, centred on each other. */
+      display: flex; align-items: center; gap: var(--sp-4); flex-wrap: nowrap; justify-content: center;
     }
+    .hero-version { flex-shrink: 0; }
     /* Keep the wordmark compact and let the system display face carry it. */
     .hero-title {
       font-size: var(--fs-700); line-height: var(--lh-700); font-weight: var(--fw-semibold);
@@ -647,14 +656,14 @@
     }
     .hero-subtitle {
       margin-top: var(--sp-4); color: var(--muted); font-size: var(--fs-200); line-height: var(--lh-200);
-      max-width: 60ch;
+      max-width: 720px; margin-left: auto; margin-right: auto;
       /* No single trailing word on its own line. */
-      text-wrap: pretty;
+      text-wrap: balance;
     }
 
     /* ── SEARCH BAR v7 ── */
     #search-bar {
-      padding: var(--sp-5) var(--sp-8) var(--sp-7);
+      padding: var(--sp-5) var(--sp-7) var(--sp-6);
       border-bottom: 1px solid var(--border);
     }
 
@@ -2331,6 +2340,300 @@
     .s-body.searching .tc.search-hit { display: block; columns: auto; }
     .s-body.searching .s-filtered { display: none !important; }
     .s-no-match { padding: var(--sp-8) 0; color: var(--muted); text-align: center; }
+
+    /* ── Error state ──
+       One shape for "this did not work": what happened, what to do, a way to
+       do it, and the raw message folded away for when it is needed. */
+    .error-state {
+      display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-3);
+      max-width: 560px; margin: var(--sp-6) 0; padding: var(--sp-6);
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); box-shadow: var(--elev-1);
+      text-align: left; user-select: text;
+    }
+    .error-state .es-icon {
+      width: 40px; height: 40px; border-radius: var(--radius-sm);
+      display: grid; place-items: center;
+      background: var(--status-failed-bg); color: var(--status-failed-fg);
+    }
+    .error-state.setup .es-icon { background: var(--accent-subtle); color: var(--accent-text); }
+    .error-state.network .es-icon { background: var(--status-warn-bg); color: var(--status-warn-fg); }
+    .error-state .es-icon svg { width: 20px; height: 20px; }
+    .error-state .es-title { font-family: var(--font-display); font-size: var(--fs-400); font-weight: var(--fw-semibold); color: var(--text); }
+    .error-state .es-body { margin: 0; font-size: var(--fs-200); line-height: 1.55; color: var(--text2); max-width: 60ch; }
+    .error-state .es-actions { display: flex; gap: var(--sp-3); flex-wrap: wrap; margin-top: var(--sp-2); }
+    .error-state .es-detail { width: 100%; font-size: var(--fs-75); color: var(--muted); }
+    .error-state .es-detail summary { cursor: pointer; width: fit-content; }
+    .error-state .es-detail summary:hover { color: var(--text2); }
+    .error-state .es-detail code {
+      display: block; margin-top: var(--sp-2); padding: var(--sp-3);
+      background: var(--surface2); border-radius: var(--radius-sm);
+      font-family: var(--font-mono); font-size: var(--fs-75); color: var(--text2);
+      white-space: pre-wrap; overflow-wrap: anywhere;
+    }
+    #track-rows > .error-state { margin: var(--sp-6) auto; }
+
+    /* Mounted network shares under the local-library path field. */
+    .share-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); width: 100%; }
+    .share-chips-label { font-size: var(--fs-75); color: var(--muted); margin-right: var(--sp-1); }
+    .share-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 10px; border-radius: var(--radius-pill);
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text2); font-family: var(--app-font); font-size: var(--fs-75); font-weight: var(--fw-medium);
+      cursor: pointer; transition: background var(--t), border-color var(--t), color var(--t);
+    }
+    .share-chip svg { width: 13px; height: 13px; color: var(--accent-text); }
+    .share-chip:hover { background: var(--accent-subtle); border-color: var(--accent-border); color: var(--text); }
+
+    /* ── Queue & History pages ──────────────────────────────────────────
+       Shared page grammar: segmented type tabs with counts, one toolbar row
+       (search, filter, actions — destructive in red, primary last), then a
+       list of rows: artwork, title, two lines of context, status, actions. */
+    .page-body { padding: 0 var(--sp-5) var(--sp-8); max-width: 1180px; width: 100%; }
+    .page-totals { font-size: var(--fs-100); color: var(--muted); font-variant-numeric: tabular-nums; }
+    .act-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
+    .act-btn:disabled { opacity: .45; cursor: not-allowed; transform: none !important; box-shadow: none; }
+
+    .seg-tabs {
+      display: flex; gap: var(--sp-2); flex-wrap: wrap;
+      padding-bottom: var(--sp-4); margin-bottom: var(--sp-4);
+      border-bottom: 1px solid var(--border);
+    }
+    .seg-tab {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 7px 14px; border-radius: var(--radius-pill);
+      background: transparent; border: 1px solid transparent;
+      color: var(--text2); font-family: var(--app-font); font-size: 14px; font-weight: var(--fw-medium);
+      cursor: pointer; transition: background var(--t), color var(--t), border-color var(--t);
+    }
+    .seg-tab svg { width: 16px; height: 16px; color: var(--muted); }
+    .seg-tab:hover { background: var(--surface2); color: var(--text); }
+    .seg-tab.active { background: var(--accent-subtle); border-color: var(--accent-border); color: var(--text); font-weight: var(--fw-semibold); }
+    .seg-tab.active svg { color: var(--accent-text); }
+    .seg-count {
+      min-width: 22px; padding: 1px 7px; border-radius: var(--radius-pill);
+      background: var(--surface2); color: var(--muted);
+      font-size: var(--fs-50); font-weight: var(--fw-semibold); text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+    .seg-tab.active .seg-count { background: var(--accent); color: var(--accent-fg); }
+
+    .page-toolbar { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; margin-bottom: var(--sp-4); }
+    .tb-spacer { flex: 1; }
+    .tb-field {
+      display: inline-flex; align-items: center; gap: 8px;
+      height: 38px; padding: 0 12px;
+      background: var(--input-bg); border: 1px solid var(--input-border);
+      border-radius: var(--radius-sm); color: var(--muted);
+      transition: border-color var(--t), box-shadow var(--t);
+    }
+    .tb-field:focus-within { border-color: var(--accent-border); box-shadow: 0 0 0 3px var(--accent-ring); }
+    .tb-field svg { width: 15px; height: 15px; flex-shrink: 0; }
+    /* Doubled up so it outranks the global input/select theming: the field
+       box is the label, the control inside it draws nothing of its own. */
+    .tb-field.tb-field input, .tb-field.tb-field select {
+      border: none; outline: none; background-color: transparent; box-shadow: none;
+      border-radius: 0; min-height: 0;
+      color: var(--input-text); font-family: var(--app-font); font-size: var(--fs-100);
+      height: 100%; min-width: 0; padding: 0;
+    }
+    .tb-search { width: 260px; }
+    .tb-search input { flex: 1; }
+    .tb-grow { flex: 1; width: auto; min-width: 200px; }
+    .tb-select select { padding-right: 18px; background-position: right center; cursor: pointer; }
+
+    .page-list { display: flex; flex-direction: column; gap: var(--sp-2); }
+    .page-list > .empty-state, .page-list > .error-state {
+      padding: var(--sp-10) var(--sp-6);
+      border: 1px dashed var(--border); border-radius: var(--radius-lg);
+    }
+    .page-row {
+      display: grid; grid-template-columns: 52px minmax(0, 1fr) auto auto;
+      align-items: center; gap: var(--sp-4);
+      padding: 10px 14px 10px 10px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      transition: background var(--t), border-color var(--t);
+    }
+    .page-row:hover { background: var(--surface2); border-color: var(--border2); }
+    .page-row.clickable { cursor: pointer; }
+    .pr-cover {
+      width: 52px; height: 52px; border-radius: var(--radius-sm); overflow: hidden;
+      display: grid; place-items: center;
+      background: var(--brand-deep); color: var(--brand-mint);
+    }
+    .pr-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .pr-cover svg { width: 22px; height: 22px; }
+    .pr-main { min-width: 0; }
+    .pr-title, .pr-sub, .pr-meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pr-title { font-size: var(--fs-200); font-weight: var(--fw-semibold); color: var(--text); }
+    .pr-sub { font-size: var(--fs-100); color: var(--text2); margin-top: 1px; }
+    .pr-meta { font-size: var(--fs-75); color: var(--muted); margin-top: 3px; font-variant-numeric: tabular-nums; }
+    .pr-error { color: var(--status-failed-fg); }
+    .pr-actions { display: flex; gap: 4px; }
+    .row-btn {
+      width: 32px; height: 32px; border-radius: var(--radius-sm);
+      display: grid; place-items: center;
+      background: transparent; border: 1px solid transparent; color: var(--muted);
+      cursor: pointer; transition: background var(--t), color var(--t), border-color var(--t);
+    }
+    .row-btn svg { width: 15px; height: 15px; }
+    .row-btn:hover { background: var(--surface3); color: var(--text); }
+    .row-btn.accent { color: var(--accent-text); background: var(--accent-subtle); }
+    .row-btn.accent:hover { background: var(--accent); color: var(--accent-fg); }
+    .row-btn:focus-visible, .seg-tab:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 1px; }
+
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 10px; border-radius: var(--radius-pill);
+      font-size: var(--fs-75); font-weight: var(--fw-semibold); white-space: nowrap;
+    }
+    .status-pill.queued { color: var(--status-queued-fg); background: var(--status-queued-bg); }
+    .status-pill.active { color: var(--status-active-fg); background: var(--status-active-bg); }
+    .status-pill.done   { color: var(--status-done-fg);   background: var(--status-done-bg); }
+    .status-pill.failed { color: var(--status-failed-fg); background: var(--status-failed-bg); }
+    .pill-spinner {
+      width: 9px; height: 9px; border-radius: 50%;
+      border: 2px solid currentColor; border-right-color: transparent;
+      animation: pill-spin .8s linear infinite;
+    }
+    @keyframes pill-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .pill-spinner { animation: none; } }
+
+    .page-section-title {
+      font-family: var(--font-display); font-size: var(--fs-400); font-weight: var(--fw-semibold);
+      color: var(--text); margin: var(--sp-8) 0 var(--sp-3);
+    }
+    /* The live download list, at home in the page instead of a modal. */
+    #view-queue #queue-drawer { position: static; display: block; padding: 0; pointer-events: auto; z-index: auto; }
+    #view-queue #queue-backdrop,
+    #view-queue .queue-panel .close-btn,
+    #view-queue .queue-panel header h3 { display: none; }
+    #view-queue .queue-panel {
+      width: 100%; max-height: none; box-shadow: none; z-index: auto;
+      border-radius: var(--radius-lg);
+    }
+    #view-queue .queue-panel header { padding: var(--sp-4) var(--sp-5) 0; justify-content: flex-end; }
+
+    .nav-badge {
+      margin-left: auto; min-width: 20px; padding: 1px 6px;
+      border-radius: var(--radius-pill); background: var(--accent); color: var(--accent-fg);
+      font-size: 11px; font-weight: var(--fw-bold); text-align: center; font-variant-numeric: tabular-nums;
+    }
+    body.sidebar-collapsed .nav-badge { position: absolute; top: 4px; right: 4px; margin: 0; min-width: 16px; padding: 0 4px; font-size: 10px; }
+    @media (max-width: 700px) {
+      .page-row { grid-template-columns: 44px minmax(0, 1fr) auto; }
+      .page-row .status-pill { grid-column: 2; justify-self: start; }
+      .page-row .pr-actions { grid-column: 3; grid-row: 1 / span 2; }
+      .pr-cover { width: 44px; height: 44px; }
+      .tb-search { width: 100%; }
+      body.web-mode .nav-badge { display: none; }
+    }
+
+    /* ── Downloading now (live list on the Queue page) ──
+       One card: live numbers and list actions on the first row, the status
+       counters as a row of filter pills with the search beside them, then
+       the rows. Replaces the drawer's four big emoji tiles. */
+    .act-btn.ghost {
+      background: transparent; border-color: transparent; box-shadow: none;
+      color: var(--text2); font-weight: var(--fw-medium);
+    }
+    .act-btn.ghost:hover { background: var(--surface2); color: var(--text); transform: none; }
+    #view-queue .live-panel { padding: 0; overflow: hidden; }
+    .live-head {
+      display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4);
+      flex-wrap: wrap; padding: var(--sp-4) var(--sp-5);
+      border-bottom: 1px solid var(--border);
+    }
+    .live-metrics { display: flex; gap: var(--sp-8); flex-wrap: wrap; }
+    .metric { display: flex; flex-direction: column; gap: 2px; min-width: 88px; }
+    .metric-label {
+      font-size: var(--fs-50); font-weight: var(--fw-semibold); color: var(--muted);
+      letter-spacing: .02em;
+    }
+    .metric strong {
+      font-family: var(--font-mono); font-size: var(--fs-300); font-weight: 600;
+      color: var(--text); font-variant-numeric: tabular-nums;
+    }
+    .live-actions { display: flex; gap: var(--sp-1); }
+    .live-filters {
+      display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
+      padding: var(--sp-3) var(--sp-5);
+      border-bottom: 1px solid var(--border);
+    }
+    #view-queue .queue-summary {
+      display: flex; gap: var(--sp-2); flex-wrap: wrap; margin: 0; padding: 0;
+      grid-template-columns: none;
+    }
+    #view-queue .queue-summary .qs-item {
+      display: inline-flex; align-items: center; gap: 8px;
+      height: 32px; padding: 0 12px; min-width: 0;
+      border-radius: var(--radius-pill);
+      background: var(--surface2); border: 1px solid transparent;
+      color: var(--text2); font-family: var(--app-font); font-size: var(--fs-100); font-weight: var(--fw-medium);
+      box-shadow: none;
+    }
+    #view-queue .queue-summary .qs-item strong {
+      font-family: var(--font-mono); font-size: var(--fs-100); color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+    #view-queue .queue-summary .qs-item:hover { background: var(--surface3); }
+    #view-queue .queue-summary .qs-item.is-filtering {
+      background: var(--accent-subtle); border-color: var(--accent-border); color: var(--text);
+    }
+    .qs-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+    .qs-item.queued .qs-dot    { color: var(--status-queued-fg); }
+    .qs-item.completed .qs-dot { color: var(--status-done-fg); }
+    .qs-item.skipped .qs-dot   { color: var(--status-skipped-fg); }
+    .qs-item.failed .qs-dot    { color: var(--status-failed-fg); }
+    .live-search { margin-left: auto; width: 240px; height: 34px; }
+    .live-search #queue-search { border: none; background: transparent; padding: 0; height: 100%; width: 100%; box-shadow: none; }
+    #view-queue .failed-panel { margin: var(--sp-3) var(--sp-5) 0; }
+    #view-queue .queue-content { max-height: none; min-height: 200px; padding: var(--sp-2) var(--sp-3); }
+    #view-queue .queue-empty {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 6px; padding: var(--sp-10) var(--sp-5); text-align: center; color: var(--muted);
+    }
+    #view-queue .queue-empty .q-icon {
+      width: 44px; height: 44px; margin: 0 0 6px; opacity: 1;
+      display: grid; place-items: center; border-radius: var(--radius-md);
+      background: var(--surface2); color: var(--muted); font-size: 0;
+    }
+    #view-queue .queue-empty .q-icon svg { width: 20px; height: 20px; }
+    #view-queue .queue-empty .q-title { font-size: var(--fs-200); font-weight: var(--fw-semibold); color: var(--text); }
+    #view-queue .queue-empty .q-hint { font-size: var(--fs-100); max-width: 46ch; }
+    #view-queue #queue-counter {
+      display: flex; justify-content: space-between;
+      padding: var(--sp-3) var(--sp-5); border-top: 1px solid var(--border);
+      font-size: var(--fs-75); color: var(--muted); font-variant-numeric: tabular-nums;
+    }
+    /* "0 tracks" under an empty list says nothing the empty state does not. */
+    #view-queue .live-panel:has(#queue-empty:not([style*="none"])) #queue-counter { display: none; }
+    @media (max-width: 700px) {
+      .live-metrics { gap: var(--sp-5); }
+      .live-search { margin-left: 0; width: 100%; }
+    }
+
+    /* ── Form field: label, hint, textarea ── */
+    .bulk-follow { margin-top: var(--sp-6); }
+    .field-label {
+      display: block; font-family: var(--app-font);
+      font-size: var(--fs-200); font-weight: var(--fw-semibold); color: var(--text);
+      text-transform: none; letter-spacing: -0.005em;
+    }
+    .field-hint { margin: 2px 0 var(--sp-3); font-size: var(--fs-100); color: var(--muted); }
+    .field-textarea {
+      display: block; width: 100%; min-height: 108px; resize: vertical;
+      padding: 12px 14px;
+      background: var(--input-bg); color: var(--input-text);
+      border: 1px solid var(--input-border); border-radius: var(--radius-md);
+      font-family: var(--app-font); font-size: var(--fs-200); line-height: 1.55;
+      transition: border-color var(--t), box-shadow var(--t);
+    }
+    .field-textarea::placeholder { color: var(--text-dim); font-family: var(--font-mono); font-size: var(--fs-100); }
+    .field-textarea:hover { border-color: var(--border2); }
+    .field-textarea:focus { outline: none; border-color: var(--accent-border); box-shadow: 0 0 0 3px var(--accent-ring); }
     .s-body.searching .tc.search-hit::before {
       content: attr(data-title); display: block;
       margin: var(--sp-5) 0 var(--sp-3);
@@ -3974,8 +4277,6 @@
      for the last button, and no touch device can trigger it anyway. */
   body.web-mode .nav-btn[data-label]::after { display: none; }
   body.web-mode .nav-spacer { display: none; }
-  /* No sidebar brand on a phone, so the home page carries the logo again. */
-  body.web-mode .hero-logo { display: grid; }
   body.web-mode .nav-label,
   body.web-mode .sb-brand,
   body.web-mode .sb-group,

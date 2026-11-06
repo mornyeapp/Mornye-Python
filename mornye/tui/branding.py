@@ -199,7 +199,9 @@ _MODE_GLYPHS: dict[str, tuple[str, str]] = {
     "download": ("↓", "v"),
     "search": ("⌕", "?"),
     "tracks": ("♪", "#"),
+    "staged": ("☰", "Q"),
     "queue": ("≡", "="),
+    "history": ("↺", "h"),
     "session": ("◷", "@"),
     "extensions": ("⧉", "+"),
     "health": ("♥", "!"),
@@ -336,7 +338,38 @@ def notice(kind: str, message: str, *, plain: bool | None = None) -> tuple[str, 
     return f"{plain_mark if plain else fancy}  {message}", css
 
 
+#: The latest release on PyPI, once Banner has asked (see
+#: fetch_published_version). Shown in preference to the installed version so
+#: the TUI and the GUI print the same number — the one `pip install` gives.
+_PUBLISHED_VERSION = ""
+#: Off in the test suite (tests/conftest.py): no network from a pilot run.
+FETCH_PUBLISHED = True
+
+
+def fetch_published_version(timeout: float = 4.0) -> str:
+    """Ask PyPI for the latest released version; "" when it cannot."""
+    global _PUBLISHED_VERSION
+    if not FETCH_PUBLISHED:
+        return ""
+    try:
+        import json
+        import urllib.request
+
+        request = urllib.request.Request(
+            "https://pypi.org/pypi/mornye/json",
+            headers={"Accept": "application/json", "User-Agent": "Mornye-TUI"},
+        )
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+            info = json.load(response).get("info") or {}
+        _PUBLISHED_VERSION = str(info.get("version") or "").strip()
+    except Exception:
+        return ""
+    return _PUBLISHED_VERSION
+
+
 def version() -> str:
+    if _PUBLISHED_VERSION:
+        return _PUBLISHED_VERSION
     try:
         from importlib.metadata import PackageNotFoundError, version as _version
 

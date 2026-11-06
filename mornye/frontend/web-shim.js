@@ -157,7 +157,7 @@
   }
 
   const REMOTE_METHODS = [
-    'get_version', 'get_latest_version', 'get_artist_images', 'get_ffmpeg_status', 'get_node_status',
+    'get_version', 'get_latest_version', 'get_pypi_version', 'get_network_shares', 'get_staged_queue', 'add_to_staged_queue', 'remove_staged_items', 'clear_staged_queue', 'retry_staged_items', 'start_staged_items', 'get_download_history', 'remove_download_history', 'clear_download_history', 'clear_fetch_history', 'get_artist_images', 'get_ffmpeg_status', 'get_node_status',
     'save_settings', 'save_theme', 'load_settings', 'get_registries', 'add_registry', 'remove_registry',
     'get_history', 'get_profiles', 'load_profile_data', 'cache_image', 'get_spotify_home_feed',
     'search_provider', 'search_provider_async', 'get_metadata_sources', 'remove_history_item',
@@ -339,6 +339,7 @@
     'app_smb_library_error',
     'app_smb_library_progress',
     'app_smb_library_results',
+    'app_staged_queue_changed',
     'app_update_download_stats',
     'app_update_playcounts',
     'loadHistoryAndProfiles',
