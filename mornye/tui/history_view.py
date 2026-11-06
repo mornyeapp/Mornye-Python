@@ -60,12 +60,14 @@ def size(num: int) -> str:
 def describe_download(record: dict) -> str:
     who = " · ".join(x for x in (record.get("artist"), record.get("album")) if x)
     meta = " · ".join(
-        x for x in (
+        x
+        for x in (
             record.get("provider"),
             (record.get("format") or "").upper(),
             size(record.get("bytes") or 0),
             ago(record.get("downloaded_at") or 0),
-        ) if x
+        )
+        if x
     )
     mark = "✓" if record.get("success", True) else "✗"
     return (
@@ -78,11 +80,13 @@ def describe_download(record: dict) -> str:
 def describe_fetch(entry: dict) -> str:
     kind = (entry.get("url_type") or "link").capitalize()
     extra = " · ".join(
-        x for x in (
+        x
+        for x in (
             kind,
             f"{entry['track_count']} tracks" if entry.get("track_count") else "",
             ago(entry.get("at") or 0),
-        ) if x
+        )
+        if x
     )
     who = f" — {entry['artist']}" if entry.get("artist") else ""
     return f"{entry.get('label') or entry.get('url') or '—'}{who}   ({extra})"
@@ -111,8 +115,12 @@ class HistoryPanel(VerticalScroll):
             classes="panel-intro",
         )
         yield Horizontal(
-            Select([("Downloads", "downloads"), ("Fetches", "fetches")],
-                   value="downloads", allow_blank=False, id="history-tab"),
+            Select(
+                [("Downloads", "downloads"), ("Fetches", "fetches")],
+                value="downloads",
+                allow_blank=False,
+                id="history-tab",
+            ),
             Input(placeholder="Search…", id="history-search"),
             Select(SORTS, value="newest", allow_blank=False, id="history-sort"),
             classes="setting-row history-filters",
@@ -143,7 +151,9 @@ class HistoryPanel(VerticalScroll):
 
         if tab == "downloads":
             sort = str(self.query_one("#history-sort", Select).value or "newest")
-            records = [r.to_dict() for r in download_log.search(query, sort=sort, limit=500)]
+            records = [
+                r.to_dict() for r in download_log.search(query, sort=sort, limit=500)
+            ]
             self._rows = records
             totals = download_log.totals()
             summary = f"{totals['tracks']} track(s) downloaded · {size(totals['bytes']) or '0 B'}"
@@ -158,8 +168,11 @@ class HistoryPanel(VerticalScroll):
                 entries = []
             ql = query.lower()
             entries = [
-                e for e in entries
-                if not ql or ql in f"{e.get('label', '')} {e.get('artist', '')} {e.get('url', '')}".lower()
+                e
+                for e in entries
+                if not ql
+                or ql
+                in f"{e.get('label', '')} {e.get('artist', '')} {e.get('url', '')}".lower()
             ]
             self._rows = entries
             summary = f"{len(entries)} link(s)"

@@ -96,7 +96,11 @@ class LocalTaggingMixin:
 
         # Quotes stripped, ~ expanded, and a network share (smb://nas/Music,
         # \\nas\Music) mapped to where the OS mounted it.
-        from ..core.network_paths import is_unc_path, network_roots, resolve_library_path
+        from ..core.network_paths import (
+            is_unc_path,
+            network_roots,
+            resolve_library_path,
+        )
 
         path, share_error = resolve_library_path(path)
         if share_error:

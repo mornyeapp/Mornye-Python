@@ -20,7 +20,12 @@ from textual.widgets.option_list import Option
 
 from ..core import staged_queue
 
-KIND_LABELS = {"track": "Track", "album": "Album", "playlist": "Playlist", "artist": "Artist"}
+KIND_LABELS = {
+    "track": "Track",
+    "album": "Album",
+    "playlist": "Playlist",
+    "artist": "Artist",
+}
 STATUS_LABELS = {
     "pending": "WAITING",
     "running": "↓ RUNNING",
@@ -70,12 +75,21 @@ class StagedQueuePanel(VerticalScroll):
         yield Horizontal(
             Select(
                 [("All types", ""), *[(f"{v}s", k) for k, v in KIND_LABELS.items()]],
-                value="", allow_blank=False, id="staged-kind",
+                value="",
+                allow_blank=False,
+                id="staged-kind",
             ),
             Select(
-                [("All statuses", ""), ("Waiting", "pending"), ("Running", "running"),
-                 ("Done", "done"), ("Failed", "failed")],
-                value="", allow_blank=False, id="staged-status",
+                [
+                    ("All statuses", ""),
+                    ("Waiting", "pending"),
+                    ("Running", "running"),
+                    ("Done", "done"),
+                    ("Failed", "failed"),
+                ],
+                value="",
+                allow_blank=False,
+                id="staged-status",
             ),
             Input(placeholder="Search the queue…", id="staged-search"),
             classes="setting-row staged-filters",
@@ -107,14 +121,18 @@ class StagedQueuePanel(VerticalScroll):
         items = staged_queue.list_items()
         kind, status, query = self._filters()
         shown = [
-            i for i in items
+            i
+            for i in items
             if (not kind or i.get("kind") == kind)
             and (not status or i.get("status") == status)
-            and (not query or query in f"{i.get('title', '')} {i.get('subtitle', '')}".lower())
+            and (
+                not query
+                or query in f"{i.get('title', '')} {i.get('subtitle', '')}".lower()
+            )
         ]
-        signature = repr([(i["id"], i.get("status"), i.get("error")) for i in shown]) + repr(
-            (kind, status, query, len(items))
-        )
+        signature = repr(
+            [(i["id"], i.get("status"), i.get("error")) for i in shown]
+        ) + repr((kind, status, query, len(items)))
         if signature == self._signature and not force:
             return
         self._signature = signature
@@ -130,8 +148,11 @@ class StagedQueuePanel(VerticalScroll):
         else:
             option_list.add_option(
                 Option(
-                    "Nothing matches these filters." if items
-                    else "The queue is empty. Press l on the Tracks panel to add the selection.",
+                    (
+                        "Nothing matches these filters."
+                        if items
+                        else "The queue is empty. Press l on the Tracks panel to add the selection."
+                    ),
                     disabled=True,
                 )
             )
@@ -140,7 +161,8 @@ class StagedQueuePanel(VerticalScroll):
         running = sum(1 for i in items if i.get("status") == "running")
         counts = {k: sum(1 for i in items if i.get("kind") == k) for k in KIND_LABELS}
         by_kind = " · ".join(
-            f"{counts[k]} {v.lower()}{'s' if counts[k] != 1 else ''}" for k, v in KIND_LABELS.items()
+            f"{counts[k]} {v.lower()}{'s' if counts[k] != 1 else ''}"
+            for k, v in KIND_LABELS.items()
         )
         self.query_one("#staged-summary", Label).update(
             f"{len(items)} item(s) — {waiting} waiting, {running} running  ·  {by_kind}"

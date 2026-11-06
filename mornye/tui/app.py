@@ -419,14 +419,17 @@ class MornyeTui(App[None]):
             elif isinstance(track, dict):
                 tracks.append(dict(track))
             else:
-                tracks.append({k: v for k, v in vars(track).items() if not k.startswith("_")})
+                tracks.append(
+                    {k: v for k, v in vars(track).items() if not k.startswith("_")}
+                )
         if not tracks:
             return
         whole = len(tracks) == len(tracklist.tracks)
         url = tracklist.source_url or self.state.url
         meta = tracklist.meta or {}
         item = staged_queue.add(
-            kind=staged_queue.kind_for_url(url) or ("track" if len(tracks) == 1 else "album"),
+            kind=staged_queue.kind_for_url(url)
+            or ("track" if len(tracks) == 1 else "album"),
             title=tracklist.name or str(tracks[0].get("title") or ""),
             subtitle=str(meta.get("artist") or meta.get("owner") or ""),
             cover=tracklist.cover or "",
@@ -450,7 +453,9 @@ class MornyeTui(App[None]):
     @on(StagedQueuePanel.StartRequested)
     def _start_staged(self, event: StagedQueuePanel.StartRequested) -> None:
         if self._download_running:
-            self._set_status("A download is already running. Ctrl+C to stop it first.", "warning")
+            self._set_status(
+                "A download is already running. Ctrl+C to stop it first.", "warning"
+            )
             return
         # The item brings its own link, so only the rest of the form counts.
         problems = [
@@ -459,14 +464,18 @@ class MornyeTui(App[None]):
             if unmet and not set(names) & {"url", "csv_path"}
         ]
         if problems:
-            self._announce("Cannot start — still needed: " + ", ".join(problems), "warning")
+            self._announce(
+                "Cannot start — still needed: " + ", ".join(problems), "warning"
+            )
             self._show_panel("download")
             return
         self._download_running = True
         self.query_one("#queue", QueuePanel).reset()
         self._show_panel("queue")
         self._set_log_visible(True)
-        self.run_worker(self._run_staged(list(event.ids)), exclusive=True, group="download")
+        self.run_worker(
+            self._run_staged(list(event.ids)), exclusive=True, group="download"
+        )
 
     async def _run_staged(self, ids: list[str]) -> None:
         """Every waiting item (or just `ids`), one after another."""
@@ -478,8 +487,10 @@ class MornyeTui(App[None]):
             while True:
                 item = next(
                     (
-                        i for i in staged_queue.list_items()
-                        if i.get("status") == "pending" and (not wanted or i["id"] in wanted)
+                        i
+                        for i in staged_queue.list_items()
+                        if i.get("status") == "pending"
+                        and (not wanted or i["id"] in wanted)
                     ),
                     None,
                 )

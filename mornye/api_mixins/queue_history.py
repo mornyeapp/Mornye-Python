@@ -66,7 +66,10 @@ class QueueHistoryMixin:
             indices = [int(i) for i in selected_indices or []]
             tracks = [self.current_tracks[i].model_dump(mode="json") for i in indices]
         except (AttributeError, IndexError, TypeError, ValueError):
-            return {"ok": False, "error": "Those tracks are no longer loaded; fetch the link again."}
+            return {
+                "ok": False,
+                "error": "Those tracks are no longer loaded; fetch the link again.",
+            }
         if not tracks:
             return {"ok": False, "error": "Select at least one track to queue."}
         try:
@@ -119,7 +122,8 @@ class QueueHistoryMixin:
 
         wanted = {str(i) for i in ids or []}
         pending = [
-            i for i in staged_queue.list_items()
+            i
+            for i in staged_queue.list_items()
             if i.get("status") == "pending" and (not wanted or i["id"] in wanted)
         ]
         if not pending:
@@ -138,8 +142,10 @@ class QueueHistoryMixin:
             wanted = getattr(self, "_staged_wanted", set())
             item = next(
                 (
-                    i for i in staged_queue.list_items()
-                    if i.get("status") == "pending" and (not wanted or i["id"] in wanted)
+                    i
+                    for i in staged_queue.list_items()
+                    if i.get("status") == "pending"
+                    and (not wanted or i["id"] in wanted)
                 ),
                 None,
             )
@@ -174,10 +180,14 @@ class QueueHistoryMixin:
 
     # ── History ────────────────────────────────────────────────────────
 
-    def get_download_history(self, query: str = "", sort: str = "newest", limit: int = 500) -> dict:
+    def get_download_history(
+        self, query: str = "", sort: str = "newest", limit: int = 500
+    ) -> dict:
         from ..core import download_log
 
-        records = download_log.search(query, sort=sort, limit=limit, owner=self._owner())
+        records = download_log.search(
+            query, sort=sort, limit=limit, owner=self._owner()
+        )
         return {
             "items": [r.to_dict() for r in records],
             "totals": download_log.totals(owner=self._owner()),
@@ -186,7 +196,10 @@ class QueueHistoryMixin:
     def remove_download_history(self, ids) -> dict:
         from ..core import download_log
 
-        return {"ok": True, "removed": download_log.delete(list(ids or []), owner=self._owner())}
+        return {
+            "ok": True,
+            "removed": download_log.delete(list(ids or []), owner=self._owner()),
+        }
 
     def clear_download_history(self) -> dict:
         from ..core import download_log

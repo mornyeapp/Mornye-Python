@@ -21,8 +21,12 @@ def _track(title: str) -> dict:
 
 
 def test_items_are_kept_with_their_tracks_until_removed() -> None:
-    item = staged_queue.add(kind="album", title="Record", subtitle="Someone",
-                            tracks=[_track("One"), _track("Two")])
+    item = staged_queue.add(
+        kind="album",
+        title="Record",
+        subtitle="Someone",
+        tracks=[_track("One"), _track("Two")],
+    )
     assert item["status"] == "pending" and item["track_count"] == 2
     stored = staged_queue.get(item["id"])
     assert [t["title"] for t in stored["tracks"]] == ["One", "Two"]
@@ -33,7 +37,9 @@ def test_items_are_kept_with_their_tracks_until_removed() -> None:
 
 
 def test_unknown_kind_is_guessed_and_empty_is_refused() -> None:
-    assert staged_queue.add(kind="?", title="", tracks=[_track("Solo")])["kind"] == "track"
+    assert (
+        staged_queue.add(kind="?", title="", tracks=[_track("Solo")])["kind"] == "track"
+    )
     with pytest.raises(ValueError):
         staged_queue.add(kind="album", title="x", tracks=[])
 
@@ -67,8 +73,12 @@ def _api():
 def test_start_runs_each_pending_item_as_a_download_job(monkeypatch) -> None:
     api = _api()
     ran: list[dict] = []
-    api.run_download_job = lambda payload: ran.append(payload) or {"tracks": len(payload["tracks"])}
-    first = staged_queue.add(kind="album", title="One", tracks=[_track("a"), _track("b")])
+    api.run_download_job = lambda payload: ran.append(payload) or {
+        "tracks": len(payload["tracks"])
+    }
+    first = staged_queue.add(
+        kind="album", title="One", tracks=[_track("a"), _track("b")]
+    )
     second = staged_queue.add(kind="track", title="Two", tracks=[_track("c")])
 
     res = api.start_staged_items([], {"quality": "LOSSLESS"})
@@ -103,19 +113,33 @@ def test_a_failing_item_is_marked_and_the_rest_still_run() -> None:
 
 
 def test_nothing_pending_is_reported() -> None:
-    assert _api().start_staged_items() == {"ok": False, "error": "Nothing waiting to start."}
+    assert _api().start_staged_items() == {
+        "ok": False,
+        "error": "Nothing waiting to start.",
+    }
 
 
 def test_download_history_search_sort_delete_clear() -> None:
-    download_log.record(title="Night Drive", artist="Zed", album="Dark", file_path="/a.flac", size_bytes=10)
-    download_log.record(title="Morning", artist="Abe", album="Light", file_path="/b.flac", size_bytes=20)
+    download_log.record(
+        title="Night Drive",
+        artist="Zed",
+        album="Dark",
+        file_path="/a.flac",
+        size_bytes=10,
+    )
+    download_log.record(
+        title="Morning", artist="Abe", album="Light", file_path="/b.flac", size_bytes=20
+    )
     api = _api()
 
     res = api.get_download_history("night")
     assert [r["title"] for r in res["items"]] == ["Night Drive"]
     by_artist = api.get_download_history("", "artist")["items"]
     assert [r["artist"] for r in by_artist] == ["Abe", "Zed"]
-    assert [r["title"] for r in api.get_download_history("", "size")["items"]] == ["Morning", "Night Drive"]
+    assert [r["title"] for r in api.get_download_history("", "size")["items"]] == [
+        "Morning",
+        "Night Drive",
+    ]
     # LIKE wildcards in the query are literal.
     assert api.get_download_history("%")["items"] == []
 

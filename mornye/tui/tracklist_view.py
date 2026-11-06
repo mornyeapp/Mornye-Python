@@ -144,7 +144,11 @@ class TracklistPanel(VerticalScroll):
 
             # A missing extension gets the fix; anything else keeps the
             # exception's type, which is what a bug report needs.
-            message = str(exc) if kind(str(exc)) != "error" else f"{type(exc).__name__}: {exc}"
+            message = (
+                str(exc)
+                if kind(str(exc)) != "error"
+                else f"{type(exc).__name__}: {exc}"
+            )
             self._say(explain(message, "Reading this link"))
             self._loading = False
             return

@@ -22,7 +22,7 @@ _NETWORK = re.compile(
 
 
 def kind(message: str) -> str:
-    """"setup", "network" or "error"."""
+    """ "setup", "network" or "error"."""
     text = str(message or "")
     if any(p.search(text) for p in _MISSING) or _NO_EXTENSIONS.search(text):
         return "setup"

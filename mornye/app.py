@@ -364,7 +364,10 @@ class MornyeAPI(
                 client = AsyncHttpClient("pypi", timeout_s=10)
                 resp = await client.get(
                     f"https://pypi.org/pypi/{self.PYPI_PROJECT}/json",
-                    headers={"Accept": "application/json", "User-Agent": "Mornye-Desktop"},
+                    headers={
+                        "Accept": "application/json",
+                        "User-Agent": "Mornye-Desktop",
+                    },
                     timeout=10,
                 )
                 if resp.status_code != 200:

@@ -18,7 +18,9 @@ _KEYS = [key for key, _ in MODES]
 
 
 def _ready_state() -> ConfigState:
-    return ConfigState(url="https://open.spotify.com/album/x", output_dir="/tmp/mornye-test")
+    return ConfigState(
+        url="https://open.spotify.com/album/x", output_dir="/tmp/mornye-test"
+    )
 
 
 def test_new_modes_are_in_the_sidebar() -> None:
@@ -27,20 +29,43 @@ def test_new_modes_are_in_the_sidebar() -> None:
 
 
 def test_describe_reads_like_the_gui_row() -> None:
-    line = describe({"status": "failed", "title": "Mix", "subtitle": "me", "kind": "playlist",
-                     "track_count": 2, "error": "no provider"})
-    assert "FAILED" in line and "Mix" in line and "Playlist · 2 tracks · no provider" in line
+    line = describe(
+        {
+            "status": "failed",
+            "title": "Mix",
+            "subtitle": "me",
+            "kind": "playlist",
+            "track_count": 2,
+            "error": "no provider",
+        }
+    )
+    assert (
+        "FAILED" in line
+        and "Mix" in line
+        and "Playlist · 2 tracks · no provider" in line
+    )
 
 
 def test_download_target_prefers_the_collection_when_whole() -> None:
-    whole = staged_queue.add(kind="album", title="A", source_url="https://open.spotify.com/album/1",
-                             tracks=[{"title": "x", "id": "1"}], whole=True)
+    whole = staged_queue.add(
+        kind="album",
+        title="A",
+        source_url="https://open.spotify.com/album/1",
+        tracks=[{"title": "x", "id": "1"}],
+        whole=True,
+    )
     assert staged_queue.download_target(whole) == "https://open.spotify.com/album/1"
-    part = staged_queue.add(kind="album", title="B", source_url="https://open.spotify.com/album/1",
-                            tracks=[{"title": "y", "external_url": "https://open.spotify.com/track/9"}])
+    part = staged_queue.add(
+        kind="album",
+        title="B",
+        source_url="https://open.spotify.com/album/1",
+        tracks=[{"title": "y", "external_url": "https://open.spotify.com/track/9"}],
+    )
     assert staged_queue.download_target(part) == ["https://open.spotify.com/track/9"]
     staged_queue.set_target(part["id"], ["https://example.com/t"])
-    assert staged_queue.download_target(staged_queue.get(part["id"])) == ["https://example.com/t"]
+    assert staged_queue.download_target(staged_queue.get(part["id"])) == [
+        "https://example.com/t"
+    ]
 
 
 def test_error_hints_name_the_missing_extension() -> None:
@@ -58,8 +83,14 @@ async def test_l_on_tracks_queues_the_selection() -> None:
         panel = app.query_one("#tracks", TracklistPanel)
         panel.tracklist = Tracklist(
             name="Record",
-            tracks=[SimpleNamespace(title="One", id="1", external_url="https://open.spotify.com/track/1"),
-                    SimpleNamespace(title="Two", id="2", external_url="https://open.spotify.com/track/2")],
+            tracks=[
+                SimpleNamespace(
+                    title="One", id="1", external_url="https://open.spotify.com/track/1"
+                ),
+                SimpleNamespace(
+                    title="Two", id="2", external_url="https://open.spotify.com/track/2"
+                ),
+            ],
             source_url="https://open.spotify.com/album/x",
         )
         panel.selected = {1}
@@ -68,7 +99,9 @@ async def test_l_on_tracks_queues_the_selection() -> None:
         items = staged_queue.list_items()
         assert len(items) == 1
         assert items[0]["title"] == "Record" and items[0]["kind"] == "album"
-        assert staged_queue.download_target(items[0]) == ["https://open.spotify.com/track/2"]
+        assert staged_queue.download_target(items[0]) == [
+            "https://open.spotify.com/track/2"
+        ]
 
 
 @drives_the_ui
@@ -91,7 +124,13 @@ async def test_queue_panel_lists_and_removes_items() -> None:
 
 @drives_the_ui
 async def test_history_panel_shows_downloads() -> None:
-    download_log.record(title="Night Drive", artist="Zed", album="Dark", file_path="/a.flac", size_bytes=10)
+    download_log.record(
+        title="Night Drive",
+        artist="Zed",
+        album="Dark",
+        file_path="/a.flac",
+        size_bytes=10,
+    )
     async with MornyeTui(_ready_state()).run_test() as pilot:
         app = app_of(pilot)
         app.query_one("#sidebar").index = _KEYS.index("history")

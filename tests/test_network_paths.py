@@ -25,7 +25,9 @@ def test_share_references_are_recognised() -> None:
     assert parse_share_ref("smb://user@NAS.local/Music/A%20B") == np_.ShareRef(
         "nas.local", "Music", ("A B",)
     )
-    assert parse_share_ref(r"\\nas\Music\Albums") == np_.ShareRef("nas", "Music", ("Albums",))
+    assert parse_share_ref(r"\\nas\Music\Albums") == np_.ShareRef(
+        "nas", "Music", ("Albums",)
+    )
     assert parse_share_ref("//nas/Music") == np_.ShareRef("nas", "Music", ())
     assert parse_share_ref("/Users/me/Music") is None
     assert parse_share_ref("smb://nas") is None  # no share named
@@ -45,22 +47,30 @@ def test_mount_tables_list_only_network_shares() -> None:
 
 def test_smb_url_maps_to_the_mount_point() -> None:
     mounts = np_.parse_mount_output(MAC_MOUNT)
-    path, error = resolve_library_path("smb://nas.local/Music/Albums/X", mounts=mounts, platform="darwin")
+    path, error = resolve_library_path(
+        "smb://nas.local/Music/Albums/X", mounts=mounts, platform="darwin"
+    )
     assert error == ""
     assert path == str(Path("/Volumes/Music/Albums/X"))
     # Short host name and a different case still find it.
-    path, error = resolve_library_path("smb://NAS/music", mounts=mounts, platform="darwin")
+    path, error = resolve_library_path(
+        "smb://NAS/music", mounts=mounts, platform="darwin"
+    )
     assert (path, error) == (str(Path("/Volumes/Music")), "")
 
 
 def test_unmounted_share_explains_how_to_connect() -> None:
-    path, error = resolve_library_path("smb://other/Share", mounts=[], platform="darwin")
+    path, error = resolve_library_path(
+        "smb://other/Share", mounts=[], platform="darwin"
+    )
     assert path == ""
     assert "not mounted" in error and "'Share'" in error
 
 
 def test_windows_turns_a_share_into_unc() -> None:
-    path, error = resolve_library_path("smb://nas/Music/Albums", mounts=[], platform="win32")
+    path, error = resolve_library_path(
+        "smb://nas/Music/Albums", mounts=[], platform="win32"
+    )
     assert (path, error) == (r"\\nas\Music\Albums", "")
 
 
@@ -70,7 +80,9 @@ def test_plain_paths_pass_through(tmp_path: Path) -> None:
     assert resolve_library_path("", mounts=[]) == ("", "No path given")
 
 
-def test_scan_local_accepts_a_mounted_share(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_scan_local_accepts_a_mounted_share(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """Outside home and the download folder, but mounted: allowed."""
     from mornye.app import MornyeAPI
 
@@ -82,7 +94,9 @@ def test_scan_local_accepts_a_mounted_share(monkeypatch: pytest.MonkeyPatch, tmp
     api = MornyeAPI.__new__(MornyeAPI)
     api.download_dir = str(tmp_path / "downloads")
     started = []
-    monkeypatch.setattr(api, "_scan_local_thread", lambda p: started.append(p), raising=False)
+    monkeypatch.setattr(
+        api, "_scan_local_thread", lambda p: started.append(p), raising=False
+    )
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "home"))
 
     result = api.scan_local("smb://nas.local/Music/Albums")

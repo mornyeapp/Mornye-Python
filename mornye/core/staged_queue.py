@@ -67,9 +67,7 @@ def recover_interrupted() -> None:
 def public(item: dict) -> dict:
     """The item without its full tracklist (the page needs the count only)."""
     out = {k: v for k, v in item.items() if k != "tracks"}
-    out["preview"] = [
-        str(t.get("title") or "") for t in (item.get("tracks") or [])[:3]
-    ]
+    out["preview"] = [str(t.get("title") or "") for t in (item.get("tracks") or [])[:3]]
     return out
 
 
@@ -157,7 +155,9 @@ def download_target(item: dict) -> str | list[str]:
         return source
     urls = []
     for raw in item.get("tracks") or []:
-        url = track_url(SimpleNamespace(**raw) if isinstance(raw, dict) else raw, source)
+        url = track_url(
+            SimpleNamespace(**raw) if isinstance(raw, dict) else raw, source
+        )
         if url:
             urls.append(url)
     return urls or source
@@ -198,7 +198,9 @@ def remove(item_ids: list[str]) -> int:
     with _lock:
         items = _read()
         # A running item is mid-download: removing it would orphan the batch.
-        kept = [i for i in items if i["id"] not in wanted or i.get("status") == "running"]
+        kept = [
+            i for i in items if i["id"] not in wanted or i.get("status") == "running"
+        ]
         _write(kept)
         return len(items) - len(kept)
 

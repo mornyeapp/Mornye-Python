@@ -31,11 +31,19 @@ from urllib.parse import unquote, urlsplit
 #: Filesystem types that are a network share, as the mount tables name them.
 NETWORK_FS_TYPES = frozenset(
     {
-        "smbfs", "cifs", "smb3", "smb2",
-        "nfs", "nfs4",
+        "smbfs",
+        "cifs",
+        "smb3",
+        "smb2",
+        "nfs",
+        "nfs4",
         "afpfs",
-        "webdav", "davfs", "fuse.davfs2",
-        "fuse.sshfs", "sshfs", "macfuse",
+        "webdav",
+        "davfs",
+        "fuse.davfs2",
+        "fuse.sshfs",
+        "sshfs",
+        "macfuse",
     }
 )
 
@@ -77,7 +85,9 @@ def parse_share_ref(raw: str) -> ShareRef | None:
         parts = urlsplit(text)
         host = (parts.hostname or "").lower()
         segments = [unquote(p) for p in parts.path.split("/") if p]
-    elif text.startswith("\\\\") or (text.startswith("//") and not text.startswith("///")):
+    elif text.startswith("\\\\") or (
+        text.startswith("//") and not text.startswith("///")
+    ):
         segments = [p for p in re.split(r"[\\/]+", text[2:]) if p]
         if not segments:
             return None
@@ -100,9 +110,7 @@ def _source_host_share(source: str) -> tuple[str, str] | None:
     """``//user@nas/Music`` · ``nas:/export/music`` · GVFS folder names."""
     gvfs = re.match(r"smb-share:(.*)", source)
     if gvfs:
-        fields = dict(
-            kv.split("=", 1) for kv in gvfs.group(1).split(",") if "=" in kv
-        )
+        fields = dict(kv.split("=", 1) for kv in gvfs.group(1).split(",") if "=" in kv)
         if fields.get("server") and fields.get("share"):
             return fields["server"].lower(), unquote(fields["share"])
         return None
@@ -173,7 +181,9 @@ def current_mounts() -> list[Mount]:
             return parse_mount_output(out)
         if sys.platform.startswith("linux"):
             try:
-                text = Path("/proc/mounts").read_text(encoding="utf-8", errors="replace")
+                text = Path("/proc/mounts").read_text(
+                    encoding="utf-8", errors="replace"
+                )
             except OSError:
                 text = ""
             return parse_proc_mounts(text) + _gvfs_mounts()
@@ -184,7 +194,9 @@ def current_mounts() -> list[Mount]:
 
 def network_roots(mounts: list[Mount] | None = None) -> list[Path]:
     """Mount points of the shares, for an approved-roots check."""
-    return [Path(m.mount_point) for m in (current_mounts() if mounts is None else mounts)]
+    return [
+        Path(m.mount_point) for m in (current_mounts() if mounts is None else mounts)
+    ]
 
 
 def is_unc_path(path: str) -> bool:
@@ -252,7 +264,11 @@ def describe_shares(mounts: list[Mount] | None = None) -> list[dict]:
     return [
         {
             "label": f"{m.share} on {m.host}",
-            "url": f"smb://{m.host}/{m.share}" if m.fs_type in {"smbfs", "cifs", "smb3", "smb2", "gvfs"} else "",
+            "url": (
+                f"smb://{m.host}/{m.share}"
+                if m.fs_type in {"smbfs", "cifs", "smb3", "smb2", "gvfs"}
+                else ""
+            ),
             "path": m.mount_point,
             "type": m.fs_type,
         }

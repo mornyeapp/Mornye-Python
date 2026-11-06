@@ -49,7 +49,11 @@ class DedupMixin:
         """
         if not path:
             return "", "No path given"
-        from ..core.network_paths import is_unc_path, network_roots, resolve_library_path
+        from ..core.network_paths import (
+            is_unc_path,
+            network_roots,
+            resolve_library_path,
+        )
 
         path, share_error = resolve_library_path(path)
         if share_error:
