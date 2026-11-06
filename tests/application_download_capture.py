@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-
-
 class CapturingDownloadService:
     def __init__(self, *, provider_executor=None, seen=None, **_kwargs):
         self._provider_executor = provider_executor
@@ -18,7 +15,7 @@ class CapturingDownloadService:
             dict(request.prefetched) if request.prefetched else None
         )
         self._seen.append(payload)
-        return SimpleNamespace()
+        return None
 
 
 def capture_service(monkeypatch, seen):
