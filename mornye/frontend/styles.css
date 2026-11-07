@@ -2446,7 +2446,12 @@
     .tb-search { width: 260px; }
     .tb-search input { flex: 1; }
     .tb-grow { flex: 1; width: auto; min-width: 200px; }
-    .tb-select select { padding-right: 18px; background-position: right center; cursor: pointer; }
+    /* .tb-field.tb-select, not .tb-select: the reset above (padding: 0)
+       outranked the plain selector, so the label ran into the chevron. */
+    .tb-field.tb-select select {
+      padding-right: 22px; background-position: right center; background-size: 13px 13px;
+      cursor: pointer;
+    }
 
     .page-list { display: flex; flex-direction: column; gap: var(--sp-2); }
     .page-list > .empty-state, .page-list > .error-state {
