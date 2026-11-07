@@ -155,6 +155,7 @@ def test_unitune_is_tried_when_primary_resolver_has_no_links() -> None:
             )
 
     resolver.http = _Client()
+    resolver.unitune_http = _Client()
     links = asyncio.run(
         resolver._resolve_links_async(
             {"platform": "spotify", "type": "track", "id": "track id"}
@@ -196,7 +197,60 @@ def test_a_transport_failure_is_not_an_exception(monkeypatch) -> None:
             raise OSError("connection reset")
 
     monkeypatch.setattr(resolver, "http", _Boom())
+    monkeypatch.setattr(resolver, "unitune_http", _Boom())
     assert asyncio.run(resolver._resolve_links_async({"url": "https://x"})) == {}
+
+
+def test_unitune_gets_one_short_attempt() -> None:
+    from mornye.core import link_resolver as lr
+
+    client = LinkResolver().unitune_http
+    assert client._retry.max_attempts == 1
+    assert client._timeout == lr.UNITUNE_TIMEOUT_S <= 5
+
+
+def test_an_unreachable_unitune_is_skipped_for_the_rest_of_the_queue(
+    monkeypatch,
+) -> None:
+    from mornye.core import link_resolver as lr
+    from mornye.core.errors import NetworkError
+
+    monkeypatch.setattr(lr, "_unitune_unavailable_until", 0.0)
+    calls: list[str] = []
+
+    class _Down:
+        async def get(self, url, **kwargs):
+            calls.append(url)
+            raise NetworkError("unitune", "Request failed: ReadTimeout")
+
+    payload = {"platform": "spotify", "type": "track", "id": "abc"}
+    first, second = LinkResolver(), LinkResolver()
+    first.unitune_http = _Down()
+    second.unitune_http = _Down()
+
+    assert asyncio.run(first._resolve_unitune_async(payload)) == {}
+    assert asyncio.run(second._resolve_unitune_async(payload)) == {}
+    assert len(calls) == 1
+
+
+def test_a_track_unitune_does_not_know_does_not_switch_it_off(monkeypatch) -> None:
+    from mornye.core import link_resolver as lr
+    from mornye.core.errors import TrackNotFoundError
+
+    monkeypatch.setattr(lr, "_unitune_unavailable_until", 0.0)
+    calls: list[str] = []
+
+    class _NotFound:
+        async def get(self, url, **kwargs):
+            calls.append(url)
+            raise TrackNotFoundError("unitune", url)
+
+    resolver = LinkResolver()
+    resolver.unitune_http = _NotFound()
+    payload = {"platform": "spotify", "type": "track", "id": "abc"}
+    asyncio.run(resolver._resolve_unitune_async(payload))
+    asyncio.run(resolver._resolve_unitune_async(payload))
+    assert len(calls) == 2
 
 
 def test_an_isrc_resolves_to_spotify_through_the_resolve_api(monkeypatch) -> None:

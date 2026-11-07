@@ -5,17 +5,30 @@ import json
 import logging
 import random
 import re
+import time
 import urllib.parse
 from typing import Any
 
 import httpx
 
-from .http import AsyncHttpClient, async_zarz_rate_limiter
+from .errors import NetworkError, RateLimitedError
+from .http import AsyncHttpClient, RetryConfig, async_zarz_rate_limiter
 from .response_cache import get as get_cached_response
 from .response_cache import put as put_cached_response
 from .url_utils import url_host_matches, url_path_contains
 
 logger = logging.getLogger(__name__)
+
+#: UniTune is only a fallback for links the primary resolver does not know,
+#: and the download provider usually finds the track on its own anyway. It
+#: used to get the default treatment — 20s timeout, three attempts — so an
+#: unreachable UniTune cost about a minute before every track's download
+#: started. Now it gets one short attempt, and a timeout or connection
+#: failure switches it off for a while so the rest of the queue does not pay
+#: for the same outage again.
+UNITUNE_TIMEOUT_S = 5
+UNITUNE_COOLDOWN_S = 300.0
+_unitune_unavailable_until = 0.0
 
 
 class LinkResolver:
@@ -51,6 +64,13 @@ class LinkResolver:
             rate_limiter=async_zarz_rate_limiter,
         )
         self._deezer_async_cache: dict[str, str] = {}
+        # Its own client: one attempt, and not behind the zarz rate limiter,
+        # which has nothing to do with UniTune.
+        self.unitune_http = AsyncHttpClient(
+            "unitune",
+            timeout_s=UNITUNE_TIMEOUT_S,
+            retry=RetryConfig(max_attempts=1),
+        )
 
     async def _safe_get_json(self, url: str, params: dict | None = None) -> dict:
         """Robust helper that adds User-Agent and Accept to avoid Varnish/WAF 406 blocking."""
@@ -245,16 +265,35 @@ class LinkResolver:
         return template.format(urllib.parse.quote(str(payload["id"]), safe=""))
 
     async def _resolve_unitune_async(self, payload: dict) -> dict[str, str]:
+        global _unitune_unavailable_until
         source_url = self._unitune_source_url(payload)
         if not source_url:
             return {}
+        if time.monotonic() < _unitune_unavailable_until:
+            logger.debug("[link_resolver] UniTune skipped: recently unreachable")
+            return {}
         try:
-            response = await self.http.get(
+            response = await self.unitune_http.get(
                 self.UNITUNE_RESOLVE_API_URL,
                 params={"url": source_url},
-                timeout=20,
+                timeout=UNITUNE_TIMEOUT_S,
             )
             return self._process_unitune_response(response.json())
+        except (
+            NetworkError,
+            RateLimitedError,
+            httpx.TransportError,
+            TimeoutError,
+        ) as exc:
+            # The service itself is down or slow, not just missing this
+            # track: stop asking it for a while.
+            _unitune_unavailable_until = time.monotonic() + UNITUNE_COOLDOWN_S
+            logger.debug(
+                "[link_resolver] UniTune unreachable (%s); skipped for %ds",
+                exc,
+                int(UNITUNE_COOLDOWN_S),
+            )
+            return {}
         except Exception as exc:
             logger.debug("[link_resolver] UniTune API failed: %s", exc)
             return {}
