@@ -40,13 +40,13 @@ from ..core.transcode import TRANSCODE_CHOICES
 from .branding import glyph, quality_badge
 from ..extensions.catalog import installed_service_ids
 from .config_state import (
-    ATMOS_PROVIDER,
     ENRICH_PROVIDERS,
     CANVAS_PROVIDERS,
     LYRICS_PROVIDERS,
     POST_DOWNLOAD_ACTIONS,
     TRANSCODE_BITRATES,
     ConfigState,
+    atmos_services,
 )
 
 _FIELD_PREFIX = "cfg-"
@@ -63,23 +63,46 @@ _PROFILE_STATUS_ID = "profile-status"
 QUALITY_LABELS: dict[str, str] = {
     "HI_RES_LOSSLESS": "HI_RES_LOSSLESS — best available anywhere",
     "LOSSLESS": "LOSSLESS — CD quality FLAC/ALAC",
-    "DOLBY_ATMOS": "DOLBY_ATMOS — Tidal only",
+    "DOLBY_ATMOS": "DOLBY_ATMOS — services whose extension serves Atmos",
 }
+
+
+#: Ids of the per-service quality menus. Not `cfg-`: one menu writes one key
+#: of the `extension_quality` dict, not a field of its own.
+_EXT_QUALITY_PREFIX = "extq-"
+
+
+def _services_with_quality_choices() -> list[dict]:
+    """Installed services whose primary extension offers several qualities."""
+    try:
+        from ..extensions.catalog import installed_download_services
+
+        def has_multiple_quality_options(row: dict) -> bool:
+            options = row.get("quality_options")
+            return isinstance(options, list) and len(options) > 1
+
+        return [
+            row
+            for row in installed_download_services()
+            if has_multiple_quality_options(row)
+        ]
+    except Exception:
+        return []
 
 
 def quality_choices(services: list[str]) -> list[tuple[str, str]]:
     """The tiers to offer, given the providers currently picked.
 
-    Atmos is dropped when Tidal is not among them: no other provider serves
-    it, so offering it would promise something nothing can deliver. With
-    Tidal present it stays, and the providers alongside Tidal quietly get
-    their best lossless instead — which is what the command line already
-    does, in `core.quality.quality_for_provider`.
+    Atmos is dropped when none of them has an extension that declares an
+    Atmos quality: offering it would promise something nothing can deliver.
+    With one present it stays, and the other providers quietly get their
+    best lossless instead.
     """
+    atmos = bool(atmos_services() & set(services))
     return [
         (QUALITY_LABELS[tier], tier)
         for tier in ("HI_RES_LOSSLESS", "LOSSLESS", "DOLBY_ATMOS")
-        if tier != "DOLBY_ATMOS" or ATMOS_PROVIDER in services
+        if tier != "DOLBY_ATMOS" or atmos
     ]
 
 
@@ -313,6 +336,31 @@ class ConfigPanel(VerticalScroll):
                 "Allow quality fallback",
                 Switch(value=state.allow_fallback, id=_field_id("allow_fallback")),
             )
+
+        # One menu per service whose extension declares more than one
+        # quality: the extension's own choices, or the global tier above.
+        per_service = _services_with_quality_choices()
+        if per_service:
+            with Collapsible(title="Quality per service", collapsed=True):
+                for service in per_service:
+                    options = [("Use global quality", "")] + [
+                        (str(o.get("label") or o["id"]), str(o["id"]))
+                        for o in service["quality_options"]
+                    ]
+                    current = (state.extension_quality or {}).get(
+                        str(service["id"]), ""
+                    )
+                    if current not in {value for _l, value in options}:
+                        current = ""
+                    yield Row(
+                        str(service["label"]),
+                        Select(
+                            options,
+                            value=current,
+                            allow_blank=False,
+                            id=f"{_EXT_QUALITY_PREFIX}{service['id']}",
+                        ),
+                    )
 
         with Collapsible(title="Transcoding", collapsed=True):
             yield Row(
@@ -564,23 +612,9 @@ class ConfigPanel(VerticalScroll):
                 hint="forever",
             )
 
-        with Collapsible(title="Custom endpoints", collapsed=True):
-            yield Row(
-                "Qobuz local API",
-                Input(
-                    value=state.qobuz_local_api_url or "",
-                    placeholder="blank to skip",
-                    id=_field_id("qobuz_local_api_url"),
-                ),
-            )
-            yield Row(
-                "Custom Tidal API",
-                Input(
-                    value=state.tidal_custom_api or "",
-                    placeholder="blank to skip",
-                    id=_field_id("tidal_custom_api"),
-                ),
-            )
+        # The provider APIs (Tidal's download API, Qobuz app ID…) are each
+        # extension's own settings now — the Extensions panel edits them.
+        with Collapsible(title="Advanced", collapsed=True):
             yield Row(
                 "Verbose logging",
                 Switch(value=state.verbose, id=_field_id("verbose")),
@@ -742,6 +776,17 @@ class ConfigPanel(VerticalScroll):
             if event.value == self.state.profile_loaded:
                 return
             self.run_worker(self._apply_profile(event.value), exclusive=False)
+            return
+
+        select_id = event.select.id or ""
+        if select_id.startswith(_EXT_QUALITY_PREFIX):
+            service = select_id[len(_EXT_QUALITY_PREFIX) :]
+            choices = dict(self.state.extension_quality or {})
+            if isinstance(event.value, str) and event.value:
+                choices[service] = event.value
+            else:
+                choices.pop(service, None)
+            self._assign("extension_quality", choices)
             return
 
         name = _field_name(event.select.id)

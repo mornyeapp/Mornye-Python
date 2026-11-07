@@ -33,6 +33,7 @@ from typing import Any, Literal, cast
 from textual import on
 from textual.app import App, ComposeResult
 from textual.binding import Binding
+from textual.theme import Theme
 from textual.containers import Container, Horizontal
 from textual.widgets import (
     ContentSwitcher,
@@ -45,6 +46,7 @@ from textual.widgets import (
 )
 
 from .banner import Banner, HintBar
+from ..branding_tokens import textual_theme_kwargs
 from ..core.paths import default_download_dir
 from .branding import mode_glyph, notice, panel_tag, panel_title
 from .clipboard import TERMINAL_ONLY_NOTE, copy_text
@@ -60,6 +62,8 @@ from .search_view import SearchPanel
 from .tracklist_view import TracklistPanel
 from .session_view import SessionPanel
 from .signed_sessions_view import SignedSessionsPanel
+from .staged_view import StagedQueuePanel
+from .history_view import HistoryPanel
 from .runner import FAILED, FINISHED, OUTPUT, STATS, DownloadRunner
 
 #: Sidebar entries: (id, label), in the order the work is usually done.
@@ -67,7 +71,9 @@ MODES: tuple[tuple[str, str], ...] = (
     ("download", "Download"),
     ("search", "Search"),
     ("tracks", "Tracks"),
-    ("queue", "Queue"),
+    ("staged", "Queue"),
+    ("queue", "Live"),
+    ("history", "History"),
     ("session", "Session"),
     ("library", "Library"),
     ("extensions", "Extensions"),
@@ -76,9 +82,19 @@ MODES: tuple[tuple[str, str], ...] = (
     ("command", "Command"),
 )
 
-#: The nine MovieBox offers, in its order, cycled by `t`. Mocha first
-#: because that is its default and the palette this screen was drawn against.
+#: Mornye's own two themes, built from the palette the GUI uses too
+#: (mornye/branding_tokens.py), so both interfaces share one identity.
+MORNYE_THEMES: tuple[Theme, ...] = (
+    Theme(**textual_theme_kwargs("dark")),
+    Theme(**textual_theme_kwargs("light")),
+)
+
+#: Cycled by `t`. Mornye's dark theme first — it is the default and the
+#: palette this screen is drawn against — then its light one, then the nine
+#: built-in alternatives MovieBox offers, in its order.
 THEMES: tuple[str, ...] = (
+    "mornye-dark",
+    "mornye-light",
     "catppuccin-mocha",
     "catppuccin-latte",
     "catppuccin-macchiato",
@@ -97,7 +113,9 @@ PANEL_TITLES: dict[str, tuple[str, str]] = {
     "download": ("Configuration", "Ctrl+R to run"),
     "search": ("Search", "/ to search"),
     "tracks": ("Tracks", "space to pick"),
-    "queue": ("Queue", "live"),
+    "staged": ("Queue", "Enter to start"),
+    "queue": ("Downloading now", "live"),
+    "history": ("History", "downloads · fetches"),
     "session": ("Session", "history · profiles"),
     "library": ("Library", "SMB scan"),
     "extensions": ("Extensions", "registries"),
@@ -190,7 +208,9 @@ class MornyeTui(App[None]):
                     yield ConfigPanel(self.state, id="download")
                     yield SearchPanel(id="search")
                     yield TracklistPanel(lambda: self.state.url, id="tracks")
+                    yield StagedQueuePanel(id="staged")
                     yield QueuePanel(id="queue")
+                    yield HistoryPanel(id="history")
                     yield SessionPanel(lambda: self.state, id="session")
                     yield LibraryPanel(id="library")
                     yield ExtensionsPanel(self._min_trust_tier, id="extensions")
@@ -229,6 +249,8 @@ class MornyeTui(App[None]):
     _TWO_COLUMN_MIN_WIDTH = 150
 
     def on_mount(self) -> None:
+        for theme in MORNYE_THEMES:
+            self.register_theme(theme)
         self.theme = THEMES[0]
         self._decorate_panels()
         self.query_one("#log-pane").display = False
@@ -372,6 +394,136 @@ class MornyeTui(App[None]):
         self.query_one("#cfg-url", Input).value = event.url
         self._show_panel("download")
         self._announce(f"“{event.label}” is the target — Ctrl+R to start.", "success")
+
+    @on(HistoryPanel.UrlChosen)
+    def _adopt_history_url(self, event: HistoryPanel.UrlChosen) -> None:
+        self.query_one("#cfg-url", Input).value = event.url
+        self._show_panel("download")
+        self._announce("Link restored — Ctrl+R to download it again.", "success")
+
+    @on(TracklistPanel.QueueLater)
+    def _queue_later(self, event: TracklistPanel.QueueLater) -> None:
+        """The Tracks panel's pick, written to the shared Queue for later."""
+        from ..core import staged_queue
+        from ..core.tracklist import download_target
+
+        panel = self.query_one("#tracks", TracklistPanel)
+        tracklist = panel.tracklist
+        tracks = []
+        for index in event.indices:
+            if not 0 <= index < len(tracklist.tracks):
+                continue
+            track = tracklist.tracks[index]
+            if hasattr(track, "model_dump"):
+                tracks.append(track.model_dump(mode="json"))
+            elif isinstance(track, dict):
+                tracks.append(dict(track))
+            else:
+                tracks.append(
+                    {k: v for k, v in vars(track).items() if not k.startswith("_")}
+                )
+        if not tracks:
+            return
+        whole = len(tracks) == len(tracklist.tracks)
+        url = tracklist.source_url or self.state.url
+        meta = tracklist.meta or {}
+        item = staged_queue.add(
+            kind=staged_queue.kind_for_url(url)
+            or ("track" if len(tracks) == 1 else "album"),
+            title=tracklist.name or str(tracks[0].get("title") or ""),
+            subtitle=str(meta.get("artist") or meta.get("owner") or ""),
+            cover=tracklist.cover or "",
+            source_url=url,
+            tracks=tracks,
+            whole=whole,
+        )
+        if not whole:
+            # The CLI runner takes links, not metadata: write the pick down
+            # as links now, while the tracklist that produced them is here.
+            target = download_target(tracklist, event.indices)
+            if target:
+                staged_queue.set_target(item["id"], target)
+        self.query_one("#staged", StagedQueuePanel).reload(force=True)
+        self._announce(
+            f"Queued “{item['title']}” ({item['track_count']} track(s)) — "
+            "start it from the Queue panel.",
+            "success",
+        )
+
+    @on(StagedQueuePanel.StartRequested)
+    def _start_staged(self, event: StagedQueuePanel.StartRequested) -> None:
+        if self._download_running:
+            self._set_status(
+                "A download is already running. Ctrl+C to stop it first.", "warning"
+            )
+            return
+        # The item brings its own link, so only the rest of the form counts.
+        problems = [
+            phrase
+            for unmet, phrase, names in self.state._requirements()
+            if unmet and not set(names) & {"url", "csv_path"}
+        ]
+        if problems:
+            self._announce(
+                "Cannot start — still needed: " + ", ".join(problems), "warning"
+            )
+            self._show_panel("download")
+            return
+        self._download_running = True
+        self.query_one("#queue", QueuePanel).reset()
+        self._show_panel("queue")
+        self._set_log_visible(True)
+        self.run_worker(
+            self._run_staged(list(event.ids)), exclusive=True, group="download"
+        )
+
+    async def _run_staged(self, ids: list[str]) -> None:
+        """Every waiting item (or just `ids`), one after another."""
+        from ..core import staged_queue
+
+        wanted = set(ids)
+        current = ""
+        try:
+            while True:
+                item = next(
+                    (
+                        i
+                        for i in staged_queue.list_items()
+                        if i.get("status") == "pending"
+                        and (not wanted or i["id"] in wanted)
+                    ),
+                    None,
+                )
+                if item is None:
+                    break
+                current = item["id"]
+                staged_queue.set_status(current, "running")
+                self._refresh_staged()
+                self._set_status(f"Queue: downloading “{item['title']}”…")
+                cfg = self.state.to_cfg()
+                cfg["url"] = staged_queue.download_target(item)
+                cfg["csv_path"] = ""
+                outcome = await self._consume_run(cfg)
+                if outcome is not None and bool(getattr(outcome, "error", "")):
+                    staged_queue.set_status(item["id"], "failed", str(outcome.error))
+                else:
+                    staged_queue.set_status(item["id"], "done")
+                current = ""
+                self._refresh_staged()
+        finally:
+            # Stopped (Ctrl+C) mid-item: it goes back to waiting, not lost.
+            if current:
+                staged_queue.set_status(current, "pending")
+            self._download_running = False
+            self._runner = None
+            self._refresh_staged()
+            await self._remember_folder()
+
+    def _refresh_staged(self) -> None:
+        try:
+            self.query_one("#staged", StagedQueuePanel).reload(force=True)
+        except NoMatches:
+            pass
 
     @on(SessionPanel.StateLoaded)
     async def _adopt_state(self, event: SessionPanel.StateLoaded) -> None:
@@ -640,7 +792,7 @@ class MornyeTui(App[None]):
     def action_cycle_theme(self) -> None:
         current = THEMES.index(self.theme) if self.theme in THEMES else 0
         self.theme = THEMES[(current + 1) % len(THEMES)]
-        # `t` is unlisted and cycles nine themes. Repainting without naming
+        # `t` is unlisted and cycles eleven themes. Repainting without naming
         # what you landed on leaves you pressing it again to find out, and
         # with no way back to the one you liked two presses ago.
         self._set_status(f"Theme: {self.theme}", "info")
@@ -732,31 +884,39 @@ class MornyeTui(App[None]):
                 + ("…" if len(unresolved) > 5 else ""),
                 "warn",
             )
-        log_level = logging.DEBUG if self.state.verbose else logging.INFO
-        runner = DownloadRunner(cfg, log_level)
-        self._runner = runner
-
-        queue = self.query_one("#queue", QueuePanel)
         try:
-            async with aclosing(runner.events()) as events:
-                async for kind, payload, severity in events:
-                    try:
-                        if kind == OUTPUT:
-                            self._write_log(str(payload), severity)
-                        elif kind == STATS:
-                            queue.apply_stats(payload)
-                            self._set_status(_status_for(payload))
-                        elif kind in (FINISHED, FAILED):
-                            self._announce(
-                                _outcome_line(payload),
-                                "error" if kind == FAILED else "success",
-                            )
-                    except NoMatches:
-                        break
+            await self._consume_run(cfg)
         finally:
             self._download_running = False
             self._runner = None
             await self._remember_folder()
+
+    async def _consume_run(self, cfg: dict):
+        """Runs one download config to the end, feeding the Live panel and
+        the log; returns the run's outcome (None if it never reported one)."""
+        log_level = logging.DEBUG if self.state.verbose else logging.INFO
+        runner = DownloadRunner(cfg, log_level)
+        self._runner = runner
+        outcome = None
+
+        queue = self.query_one("#queue", QueuePanel)
+        async with aclosing(runner.events()) as events:
+            async for kind, payload, severity in events:
+                try:
+                    if kind == OUTPUT:
+                        self._write_log(str(payload), severity)
+                    elif kind == STATS:
+                        queue.apply_stats(payload)
+                        self._set_status(_status_for(payload))
+                    elif kind in (FINISHED, FAILED):
+                        outcome = payload
+                        self._announce(
+                            _outcome_line(payload),
+                            "error" if kind == FAILED else "success",
+                        )
+                except NoMatches:
+                    break
+        return outcome
 
     async def _remember_folder(self) -> None:
         """Records where this run landed, for the other frontends.

@@ -13,8 +13,18 @@ from __future__ import annotations
 import sys
 import types
 from collections import ChainMap
+from typing import TYPE_CHECKING, Any, cast
 
 from .application import download_engine as _engine
+
+if TYPE_CHECKING:
+    from .application.download_engine import (
+        DownloadOptions as DownloadOptions,
+        MornyeDownloader as MornyeDownloader,
+        _call_metadata_get_url as _call_metadata_get_url,
+    )
+
+_MODULE_DICT_DESCRIPTOR: Any = cast(Any, types.ModuleType.__dict__)["__dict__"]
 
 
 class _DownloaderCompatModule(types.ModuleType):
@@ -40,10 +50,8 @@ class _DownloaderCompatModule(types.ModuleType):
         # here, so a bare module dict made them look "absent" and the undo
         # *deleted* the engine attribute instead of restoring it.  Reads
         # fall through to the engine; writes go to it, like __setattr__.
-        return ChainMap(_engine.__dict__, _MODULE_DICT.__get__(self))
+        return ChainMap(_engine.__dict__, _MODULE_DICT_DESCRIPTOR.__get__(self))
 
-
-_MODULE_DICT = types.ModuleType.__dict__["__dict__"]
 
 sys.modules[__name__].__class__ = _DownloaderCompatModule
 

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from ..core.env import env_value
 
+import contextlib
 import hashlib
 import importlib.util
 import io
@@ -33,6 +34,7 @@ import traceback
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import httpx
 
@@ -76,7 +78,7 @@ DEFAULT_REGISTRY_RECHECK_SECONDS = 3600
 
 def registry_recheck_interval() -> float:
     """Seconds between registry checks in one process; 0 or less means once."""
-    raw = env_value(REGISTRY_RECHECK_ENV_KEY, "").strip()
+    raw = (env_value(REGISTRY_RECHECK_ENV_KEY, "") or "").strip()
     if not raw:
         return float(DEFAULT_REGISTRY_RECHECK_SECONDS)
     try:
@@ -174,12 +176,148 @@ class InstalledExtension:
 
     @property
     def settings_schema(self) -> list[dict]:
-        return self.manifest.get("settings", [])
+        """The manifest's ``settings``, normalized for a settings editor.
+
+        Every entry has ``key``, ``type`` (``string``, ``select``,
+        ``boolean``, ``number`` or ``button``), ``label``, ``description``,
+        ``default``, ``options`` (``[{"value", "label"}]``), ``required``,
+        ``secret`` and, for buttons, ``action``. Entries without a key are
+        dropped.
+        """
+        raw = self.manifest.get("settings") or []
+        if not isinstance(raw, list):
+            return []
+        return [
+            normalized
+            for entry in raw
+            if (normalized := normalize_setting(entry)) is not None
+        ]
 
     def default_settings(self) -> dict:
         return {
             s["key"]: s.get("default", "") for s in self.settings_schema if "key" in s
         }
+
+    @property
+    def quality_options(self) -> list[dict]:
+        """The manifest's ``qualityOptions``, in declared order."""
+        from .quality_options import quality_options
+
+        return quality_options(self.manifest)
+
+    @property
+    def has_atmos(self) -> bool:
+        from .quality_options import has_atmos
+
+        return has_atmos(self.manifest)
+
+
+#: Setting types a settings editor knows how to render and store.
+SETTING_TYPES = ("string", "select", "boolean", "number", "button")
+
+
+def normalize_setting(entry: Any) -> dict | None:
+    """One manifest ``settings`` entry in the shape every editor reads."""
+    if not isinstance(entry, dict):
+        return None
+    key = str(entry.get("key") or "").strip()
+    if not key:
+        return None
+    setting_type = str(entry.get("type") or "string").strip().lower()
+    if setting_type in ("bool", "toggle", "switch"):
+        setting_type = "boolean"
+    elif setting_type in ("int", "integer", "float"):
+        setting_type = "number"
+    elif setting_type in ("text", "password", "url"):
+        setting_type = "string"
+    if setting_type not in SETTING_TYPES:
+        setting_type = "string"
+
+    # A "string" with options (apple-music's storefront) is free text with
+    # suggestions; a "select" must be one of them.
+    options: list[dict[str, str]] = []
+    for option in entry.get("options") or []:
+        if isinstance(option, dict):
+            value = option.get("value", option.get("id"))
+            if value is None:
+                continue
+            options.append(
+                {"value": str(value), "label": str(option.get("label") or value)}
+            )
+        elif option is not None:
+            options.append({"value": str(option), "label": str(option)})
+
+    normalized: dict[str, Any] = {
+        "key": key,
+        "type": setting_type,
+        "label": str(entry.get("label") or key),
+        "description": str(entry.get("description") or ""),
+        "default": entry.get("default", False if setting_type == "boolean" else ""),
+        "options": options,
+        "required": bool(entry.get("required", False)),
+        "secret": bool(entry.get("secret", False)),
+    }
+    if setting_type == "button":
+        normalized["action"] = str(entry.get("action") or "")
+        normalized["default"] = None
+    return normalized
+
+
+def validate_settings(schema: list[dict], values: dict) -> dict:
+    """Check ``values`` against a normalized settings schema.
+
+    Returns the values coerced to their declared types. Raises ValueError
+    naming every problem at once: an unknown key, a button (an action, not
+    a value), a select value outside its options, a non-numeric number or
+    an empty required field.
+    """
+    if not isinstance(values, dict):
+        msg = "Settings must be an object of key/value pairs."
+        raise ValueError(msg)
+    by_key = {entry["key"]: entry for entry in schema}
+    clean: dict[str, Any] = {}
+    problems: list[str] = []
+    for key, value in values.items():
+        entry = by_key.get(key)
+        if entry is None:
+            problems.append(f"unknown setting '{key}'")
+            continue
+        setting_type = entry["type"]
+        if setting_type == "button":
+            problems.append(f"'{key}' is an action, not a value")
+            continue
+        if setting_type == "boolean":
+            if isinstance(value, str):
+                value = value.strip().lower() in ("1", "true", "yes", "on")
+            clean[key] = bool(value)
+            continue
+        if setting_type == "number":
+            if value in ("", None):
+                if entry["required"]:
+                    problems.append(f"'{key}' is required")
+                    continue
+                clean[key] = entry.get("default")
+                continue
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                problems.append(f"'{key}' must be a number")
+                continue
+            clean[key] = int(number) if number.is_integer() else number
+            continue
+        text = "" if value is None else str(value).strip()
+        if setting_type == "select":
+            allowed = [option["value"] for option in entry["options"]]
+            if allowed and text not in allowed:
+                problems.append(f"'{key}' must be one of: {', '.join(allowed)}")
+                continue
+        if entry["required"] and not text:
+            problems.append(f"'{key}' is required")
+            continue
+        clean[key] = text
+    if problems:
+        raise ValueError("Invalid settings: " + "; ".join(problems))
+    return clean
 
 
 # ─────────────────────────────────────────────────────────────
@@ -974,6 +1112,42 @@ class ExtensionManager:
             json.dumps(settings, indent=2),
             encoding="utf-8",
         )
+
+    def update_settings(self, ext_id: str, values: dict) -> dict:
+        """Validate ``values`` against the manifest and merge them in.
+
+        Only keys the manifest declares are accepted (see
+        ``validate_settings``). Returns the effective settings — defaults
+        plus everything saved — which is what the extension will receive
+        the next time its runtime starts.
+        """
+        ext = self.get_installed(ext_id)
+        if not ext:
+            msg = f"Extension '{ext_id}' not installed."
+            raise ValueError(msg)
+        clean = validate_settings(ext.settings_schema, values)
+        saved: dict = {}
+        settings_path = ext.ext_dir / "settings.json"
+        if settings_path.exists():
+            try:
+                loaded = json.loads(settings_path.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    saved = loaded
+            except Exception:
+                saved = {}
+        saved.update(clean)
+        self.save_settings(ext.name, saved)
+        return self.load_settings(ext.name)
+
+    def reset_settings(self, ext_id: str) -> dict:
+        """Forget every saved value; the extension goes back to its defaults."""
+        ext = self.get_installed(ext_id)
+        if not ext:
+            msg = f"Extension '{ext_id}' not installed."
+            raise ValueError(msg)
+        with contextlib.suppress(FileNotFoundError):
+            (ext.ext_dir / "settings.json").unlink()
+        return ext.default_settings()
 
     # ── URL Resolution ──────────────────────────────────────
 

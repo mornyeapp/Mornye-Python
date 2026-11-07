@@ -28,7 +28,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -109,7 +109,7 @@ class DownloadRunner:
     # Consuming
     # ------------------------------------------------------------------
 
-    async def events(self) -> AsyncIterator[Event]:
+    async def events(self) -> AsyncGenerator[Event, None]:
         """Runs the download, yielding UI events until it ends.
 
         An async generator rather than callbacks because the consumer is a
@@ -218,6 +218,11 @@ def make_status_line(stats: dict) -> str:
         parts.append(f"{int(stats['skipped'])} skipped")
     if speed > 0:
         parts.append(f"{speed:.1f} MB/s")
+    from ..core.progress import format_eta
+
+    eta = format_eta(stats.get("eta_seconds"))
+    if eta:
+        parts.append(f"{eta} left")
     total = float(stats.get("total_downloaded", 0.0) or 0.0)
     if total > 0:
         parts.append(f"{total:.1f} MB")

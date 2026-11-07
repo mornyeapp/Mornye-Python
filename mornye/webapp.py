@@ -110,6 +110,18 @@ def _token_matches(candidate: str | None, expected: str) -> bool:
 ALLOWED_METHODS: set[str] = {
     "get_version",
     "get_latest_version",
+    "get_pypi_version",
+    "get_network_shares",
+    "get_staged_queue",
+    "add_to_staged_queue",
+    "remove_staged_items",
+    "clear_staged_queue",
+    "retry_staged_items",
+    "start_staged_items",
+    "get_download_history",
+    "remove_download_history",
+    "clear_download_history",
+    "clear_fetch_history",
     "get_artist_images",
     "get_ffmpeg_status",
     "get_node_status",
@@ -134,9 +146,8 @@ ALLOWED_METHODS: set[str] = {
     "remove_history_item",
     "save_profile_data",
     "delete_profile_data",
-    "check_qobuz_api",
-    "check_tidal_api",
     "check_animated_artwork_api",
+    "get_download_dir",
     "set_download_dir",
     "list_network_destinations",
     "save_network_destination",
@@ -178,8 +189,11 @@ ALLOWED_METHODS: set[str] = {
     "set_subscription_interval",
     "reset_subscription",
     "check_subscriptions",
-    # Extension health (read-only, plus a counter reset).
+    # Extension health (read-only, plus a counter reset), and each
+    # extension's own manifest `serviceHealth` checks (read-only GETs to the
+    # URLs the installed manifests declare).
     "get_extension_health",
+    "check_extension_health",
     "reset_extension_health",
     # Signed sessions (core/signed_session_status.py). The listing never
     # carries a secret; clearing and pruning only drop credentials the next
@@ -203,11 +217,25 @@ ALLOWED_METHODS: set[str] = {
     # pointed at a path on the host.
     "preview_csv",
     "fetch_csv",
+    # Each JS extension's own settings (api_mixins/extension_settings.py).
+    # Secrets are never returned; the writes are admin-only in multi-user
+    # mode, since one install's extensions serve every account.
+    "list_extension_settings",
+    "get_extension_settings",
+    "save_extension_settings",
+    "reset_extension_settings",
+    "run_extension_setting_action",
 }
 
 NETWORK_DESTINATION_ADMIN_METHODS = {
     "save_network_destination",
     "remove_network_destination",
+}
+
+EXTENSION_SETTINGS_ADMIN_METHODS = {
+    "save_extension_settings",
+    "reset_extension_settings",
+    "run_extension_setting_action",
 }
 
 # Deliberately absent from ALLOWED_METHODS, even though they exist on the Api
@@ -965,7 +993,9 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
                 },
                 status_code=400,
             )
-        if multiuser and method_name in NETWORK_DESTINATION_ADMIN_METHODS:
+        if multiuser and method_name in (
+            NETWORK_DESTINATION_ADMIN_METHODS | EXTENSION_SETTINGS_ADMIN_METHODS
+        ):
             from .core.web_users import is_admin
 
             if not await run_in_threadpool(
@@ -1187,7 +1217,13 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
             event_name,
             broadcast_application_event,
         )
-    application_download_service = DownloadService(event_bus=application_events)
+    from .application.metadata_service import MetadataService
+
+    application_download_service = DownloadService(
+        event_bus=application_events,
+        # Real metadata, not the compatibility stub (see app.py).
+        metadata_service=MetadataService(compatibility_fallback=False),
+    )
     application_job_service = JobService(
         download_service=application_download_service,
         event_bus=application_events,
@@ -1226,11 +1262,16 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
         html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
         inject = (
             "<script>window.__MORNYE_WEB_MODE__ = true;</script>\n"
-            '<script src="/web-shim.js?v=20261021"></script>\n'
+            '<script src="/web-shim.js?v=20261106"></script>\n'
         )
-        html = html.replace(
-            '<script src="toast-system.js?v=20261021"></script>',
-            inject + '<script src="toast-system.js?v=20261021"></script>',
+        # Before the first app script, whatever its cache-busting version:
+        # matching one exact `?v=` string silently dropped the shim (and with
+        # it every API call) the first time index.html bumped the version.
+        html = re.sub(
+            r'(<script src="toast-system\.js[^"]*"></script>)',
+            lambda m: inject + m.group(1),
+            html,
+            count=1,
         )
         # Marks the document as browser-served before the first paint, so CSS
         # can drop the chrome that only makes sense in the pywebview window

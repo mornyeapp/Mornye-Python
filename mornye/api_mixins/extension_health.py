@@ -76,6 +76,29 @@ class ExtensionHealthMixin:
             },
         }
 
+    def check_extension_health(
+        self, names: list[str] | None = None, probe: bool = True
+    ) -> dict:
+        """Run each installed extension's own `serviceHealth` checks.
+
+        Shape: {"extensions": [{"name", "display_name", "service", "ok",
+        "checks": [...]}, ...]} — see core/health_check.
+        run_extension_health_check. Extensions that declare no check are
+        not listed. `probe=False` lists them without fetching anything.
+        """
+        try:
+            from ..core.health_check import run_extension_health_check
+            from ..core.loop_runner import run_sync
+
+            wanted = [str(n) for n in names] if names else None
+            return {
+                "extensions": run_sync(
+                    run_extension_health_check(wanted, probe=bool(probe))
+                )
+            }
+        except Exception as e:
+            return {"extensions": [], "error": str(e)}
+
     def get_download_services(self) -> dict:
         """The download services this install can actually offer.
 

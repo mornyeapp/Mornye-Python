@@ -1,8 +1,9 @@
 """branding.py — The TUI's visual vocabulary, in one place.
 
-The look is modelled on MovieBox-Tui (Rust + Ratatui), which the plan names
-as the reference. Four things carry that identity, and they are all here so
-that no panel has to reinvent one of them:
+The layout grammar is modelled on MovieBox-Tui (Rust + Ratatui); the colours
+are Mornye's own, shared with the GUI through ``mornye/branding_tokens.py``
+(the default ``mornye-dark`` theme in ``app.py``). Four things carry the
+identity, and they are all here so that no panel has to reinvent one of them:
 
 * **The wordmark** — a centred ANSI-Shadow block letterform, with a two-row
   fallback for narrow terminals and a plain one for terminals that can draw
@@ -47,7 +48,7 @@ def plain_terminal() -> bool:
     Windows session to ASCII, block letterform and all, on terminals that
     draw the fancy form perfectly well.
     """
-    if env_value("MORNYE_PLAIN_TUI", "").strip().lower() in {
+    if (env_value("MORNYE_PLAIN_TUI", "") or "").strip().lower() in {
         "1",
         "true",
         "yes",
@@ -198,7 +199,9 @@ _MODE_GLYPHS: dict[str, tuple[str, str]] = {
     "download": ("↓", "v"),
     "search": ("⌕", "?"),
     "tracks": ("♪", "#"),
+    "staged": ("☰", "Q"),
     "queue": ("≡", "="),
+    "history": ("↺", "h"),
     "session": ("◷", "@"),
     "extensions": ("⧉", "+"),
     "health": ("♥", "!"),
@@ -335,7 +338,38 @@ def notice(kind: str, message: str, *, plain: bool | None = None) -> tuple[str, 
     return f"{plain_mark if plain else fancy}  {message}", css
 
 
+#: The latest release on PyPI, once Banner has asked (see
+#: fetch_published_version). Shown in preference to the installed version so
+#: the TUI and the GUI print the same number — the one `pip install` gives.
+_PUBLISHED_VERSION = ""
+#: Off in the test suite (tests/conftest.py): no network from a pilot run.
+FETCH_PUBLISHED = True
+
+
+def fetch_published_version(timeout: float = 4.0) -> str:
+    """Ask PyPI for the latest released version; "" when it cannot."""
+    global _PUBLISHED_VERSION
+    if not FETCH_PUBLISHED:
+        return ""
+    try:
+        import json
+        import urllib.request
+
+        request = urllib.request.Request(
+            "https://pypi.org/pypi/mornye/json",
+            headers={"Accept": "application/json", "User-Agent": "Mornye-TUI"},
+        )
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+            info = json.load(response).get("info") or {}
+        _PUBLISHED_VERSION = str(info.get("version") or "").strip()
+    except Exception:
+        return ""
+    return _PUBLISHED_VERSION
+
+
 def version() -> str:
+    if _PUBLISHED_VERSION:
+        return _PUBLISHED_VERSION
     try:
         from importlib.metadata import PackageNotFoundError, version as _version
 

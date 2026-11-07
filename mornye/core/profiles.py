@@ -72,6 +72,11 @@ class ProfileConfig(BaseModel):
     track_max_retries: int = 0
     post_download_action: str = "none"
     post_download_command: str = ""
+    #: Per-service quality id from each extension's qualityOptions, e.g.
+    #: {"amazon": "ac4"}. A service missing here uses `quality`.
+    extension_quality: dict[str, str] = Field(default_factory=dict)
+    #: Deprecated: kept so older profiles load. Nothing reads them — the
+    #: provider APIs are each JS extension's own settings now.
     qobuz_local_api_url: str | None = None
     tidal_custom_api: str | None = None
     timeout_s: int | None = None

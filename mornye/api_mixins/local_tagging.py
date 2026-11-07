@@ -94,9 +94,17 @@ class LocalTaggingMixin:
         if not path:
             return {"status": "error", "error": "No path given"}
 
-        # Clean up path: remove leading/trailing quotes and expand ~ to home
-        path = path.strip().strip("'\"")
-        path = os.path.expanduser(path)
+        # Quotes stripped, ~ expanded, and a network share (smb://nas/Music,
+        # \\nas\Music) mapped to where the OS mounted it.
+        from ..core.network_paths import (
+            is_unc_path,
+            network_roots,
+            resolve_library_path,
+        )
+
+        path, share_error = resolve_library_path(path)
+        if share_error:
+            return {"status": "error", "error": share_error}
 
         # Validate that the path exists
         if not os.path.exists(path):
@@ -113,8 +121,11 @@ class LocalTaggingMixin:
             approved_roots = [
                 Path(self.download_dir).resolve(),
                 Path.home().resolve(),
+                # Mounted network shares: mounting one is the user granting
+                # access to it, the same as it being under their home.
+                *(root.resolve() for root in network_roots()),
             ]
-            is_safe = False
+            is_safe = is_unc_path(path)
             for root in approved_roots:
                 try:
                     resolved.relative_to(root)

@@ -338,6 +338,46 @@ class DownloadStatus(Enum):
     SKIPPED = "skipped"
 
 
+#: Speed is measured over at least this much data or this much time, the
+#: thresholds Mornye's own transfer reporter uses (rust core/progress:
+#: UPDATE_BYTES = 128 KiB, 250 ms). Sampling every 100 ms as before turned
+#: a steady 5 MB/s into a needle swinging between 0 and 20 whenever a chunk
+#: landed just before or just after the tick.
+SPEED_SAMPLE_BYTES = 128 * 1024
+SPEED_SAMPLE_SECONDS = 0.25
+#: Above this an estimate is noise, and Mornye shows none (queue_tab labels).
+ETA_MAX_SECONDS = 3600
+
+
+def estimate_eta_seconds(
+    progress_mb: float, total_mb: float, speed_mbps: float
+) -> int | None:
+    """Seconds left for a transfer, the way Mornye computes it: remaining
+    bytes over the current speed — only when the size is known, the speed is
+    positive and the answer is under an hour."""
+    try:
+        remaining = float(total_mb) - float(progress_mb)
+        speed = float(speed_mbps)
+    except (TypeError, ValueError):
+        return None
+    if total_mb <= 0 or speed <= 0 or remaining <= 0:
+        return None
+    seconds = remaining / speed
+    if seconds != seconds or seconds > ETA_MAX_SECONDS:  # NaN or too far out
+        return None
+    return max(1, round(seconds))
+
+
+def format_eta(seconds: int | float | None) -> str:
+    """``~42s`` / ``~3m05s``, or "" — Mornye's queue label format."""
+    if not seconds or seconds <= 0:
+        return ""
+    seconds = round(seconds)
+    if seconds < 60:
+        return f"~{seconds}s"
+    return f"~{seconds // 60}m{seconds % 60:02d}s"
+
+
 @dataclass
 class DownloadItem:
     id: str
@@ -588,6 +628,8 @@ class DownloadManager:
             is_downloading = False
             current_speed = 0.0
             active_progress = 0.0
+            active_remaining = 0.0
+            active_unknown_size = False
             queued = 0
             failed = 0
             skipped = 0
@@ -603,6 +645,11 @@ class DownloadManager:
                     "progress": i.progress,
                     "total_size": i.total_size,
                     "speed": i.speed,
+                    "eta_seconds": (
+                        estimate_eta_seconds(i.progress, i.total_size, i.speed)
+                        if i.status == DownloadStatus.DOWNLOADING
+                        else None
+                    ),
                     "file_path": i.file_path,
                     "end_time": i.end_time,
                     "error_message": i.error_message,
@@ -614,6 +661,10 @@ class DownloadManager:
                     is_downloading = True
                     current_speed += i.speed
                     active_progress += i.progress
+                    if i.total_size > 0:
+                        active_remaining += max(0.0, i.total_size - i.progress)
+                    else:
+                        active_unknown_size = True
                 elif i.status == DownloadStatus.QUEUED:
                     queued += 1
                 elif i.status == DownloadStatus.COMPLETED:
@@ -623,12 +674,24 @@ class DownloadManager:
                 elif i.status == DownloadStatus.SKIPPED:
                     skipped += 1
 
-            completed_items.sort(key=lambda x: x["end_time"], reverse=True)
+            completed_items.sort(
+                key=lambda item: float(item["end_time"] or 0.0), reverse=True
+            )
             latest_completed = completed_items[:20]
+
+            # What is downloading now, at the combined speed. Not the tracks
+            # still queued: their sizes are unknown until they start, and an
+            # estimate that jumps every time one begins is worse than none.
+            eta_seconds = (
+                None
+                if active_unknown_size
+                else estimate_eta_seconds(0.0, active_remaining, current_speed)
+            )
 
             return {
                 "is_downloading": is_downloading,
                 "current_speed": current_speed,
+                "eta_seconds": eta_seconds,
                 "total_downloaded": self.total_downloaded + active_progress,
                 "queued": queued,
                 "completed": len(completed_items),
@@ -994,6 +1057,33 @@ class ProgressCallback:
         self._track_name = track_name
         self._last_refresh_time = 0.0
         self._last_reported_bytes = 0
+        # The speed has its own sample window (SPEED_SAMPLE_*), wider than the
+        # 100 ms refresh: the bar may move often, the rate is measured over
+        # enough data to mean something.
+        self._speed_time = 0.0
+        self._speed_bytes = 0
+        self._speed_mbps = 0.0
+
+    def _sample_speed(self, now: float, current_bytes: int) -> float:
+        if self._speed_time == 0.0:
+            self._speed_time = now
+            self._speed_bytes = current_bytes
+            return 0.0
+        elapsed = now - self._speed_time
+        delta = current_bytes - self._speed_bytes
+        if delta < 0:  # a restarted transfer: start the window again
+            self._speed_time, self._speed_bytes, self._speed_mbps = (
+                now,
+                current_bytes,
+                0.0,
+            )
+            return 0.0
+        if elapsed >= SPEED_SAMPLE_SECONDS or delta >= SPEED_SAMPLE_BYTES:
+            if elapsed > 0:
+                self._speed_mbps = round((delta / (1024 * 1024)) / elapsed, 2)
+            self._speed_time = now
+            self._speed_bytes = current_bytes
+        return self._speed_mbps
 
     async def __call__(self, current_bytes: int, total_bytes: int) -> None:
         now = time.time()
@@ -1018,16 +1108,9 @@ class ProgressCallback:
         current_mb = current_bytes / (1024 * 1024)
         total_mb = total_bytes / (1024 * 1024) if total_bytes else 0.0
 
-        if self._last_refresh_time == 0.0:
-            self._last_refresh_time = now
-            self._last_reported_bytes = current_bytes
-            speed_mbps = 0.0
-        else:
-            time_diff = now - self._last_refresh_time
-            bytes_diff = current_bytes - self._last_reported_bytes
-            speed_mbps = (bytes_diff / (1024 * 1024)) / time_diff
-            self._last_refresh_time = now
-            self._last_reported_bytes = current_bytes
+        self._last_refresh_time = now
+        self._last_reported_bytes = current_bytes
+        speed_mbps = self._sample_speed(now, current_bytes)
 
         asyncio.create_task(
             DownloadManager().update_progress(

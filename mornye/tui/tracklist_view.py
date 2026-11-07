@@ -44,7 +44,15 @@ class TracklistPanel(VerticalScroll):
         Binding("a", "select_all", "All", show=False),
         Binding("n", "select_none", "None", show=False),
         Binding("i", "invert", "Invert", show=False),
+        Binding("l", "queue_later", "Queue for later", show=False),
     ]
+
+    class QueueLater(Message):
+        """Put the current selection in the Queue (core/staged_queue)."""
+
+        def __init__(self, indices: list[int]) -> None:
+            super().__init__()
+            self.indices = indices
 
     class SelectionChanged(Message):
         """The selection changed; the app may want to say so."""
@@ -70,13 +78,14 @@ class TracklistPanel(VerticalScroll):
     def compose(self) -> ComposeResult:
         yield Label(
             "The tracks behind the link. Space picks one, a picks all, "
-            "n picks none, i inverts.",
+            "n picks none, i inverts, l queues the pick for later.",
             classes="panel-intro",
         )
         yield Horizontal(
             Button("Load tracks", id="tracks-load", variant="primary"),
             Button("All", id="tracks-all"),
             Button("None", id="tracks-none"),
+            Button("Queue for later", id="tracks-later"),
             classes="setting-row",
         )
         yield Label("", id="tracks-status")
@@ -104,6 +113,17 @@ class TracklistPanel(VerticalScroll):
             self.action_select_all()
         elif event.button.id == "tracks-none":
             self.action_select_none()
+        elif event.button.id == "tracks-later":
+            self.action_queue_later()
+
+    def action_queue_later(self) -> None:
+        if not self.tracklist:
+            self._say("Load the tracks first, then pick what to queue.")
+            return
+        if not self.selected:
+            self._say("Nothing selected — pick at least one track to queue.")
+            return
+        self.post_message(self.QueueLater(sorted(self.selected)))
 
     def load(self) -> None:
         if self._loading:
@@ -120,7 +140,16 @@ class TracklistPanel(VerticalScroll):
         try:
             tracklist = await resolve_tracklist(url)
         except Exception as exc:
-            self._say(f"Could not read it — {type(exc).__name__}: {exc}")
+            from ..core.error_hints import explain, kind
+
+            # A missing extension gets the fix; anything else keeps the
+            # exception's type, which is what a bug report needs.
+            message = (
+                str(exc)
+                if kind(str(exc)) != "error"
+                else f"{type(exc).__name__}: {exc}"
+            )
+            self._say(explain(message, "Reading this link"))
             self._loading = False
             return
 

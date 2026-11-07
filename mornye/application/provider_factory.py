@@ -34,29 +34,10 @@ def build_providers_for_name(name: str, options: Any) -> list[BaseProvider]:
         wants_explicit_js = "-web" in name.lower()
         wants_explicit_py = "-py" in name.lower()
 
-        if not wants_explicit_js:
-            py_candidate_name = manager.find_python_extension(base_name)
-            if py_candidate_name:
-                try:
-                    from mornye.extensions.python_provider import (
-                        PythonExtensionProvider,
-                    )
-
-                    py_provider = cast(Any, PythonExtensionProvider)(
-                        py_candidate_name,
-                        ext_dir=options.ext_dir,
-                    )
-                    providers.append(py_provider)
-                    logger.debug(
-                        "Added Python provider candidate: %s", py_candidate_name
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "Python extension '%s' failed to initialize: %s",
-                        py_candidate_name,
-                        exc,
-                    )
-
+        # JS extensions are the primary implementation of every service; a
+        # Python extension for the same service is only a fallback, tried
+        # after the JS one fails. "-web" asks for JS only, "-py" for Python
+        # only.
         installed_js = manager.get_installed(original_ext_id)
         installed_types = installed_js.types if installed_js is not None else []
         not_a_downloader = bool(installed_types) and not (
@@ -77,13 +58,36 @@ def build_providers_for_name(name: str, options: Any) -> list[BaseProvider]:
                     timeout_s=options.timeout_s or 180,
                 )
                 providers.append(js_provider)
-                logger.debug("Added JS provider fallback: %s", original_ext_id)
+                logger.debug("Added JS provider (primary): %s", original_ext_id)
             except Exception as exc:
                 logger.debug(
-                    "JS extension fallback not available for '%s': %s",
+                    "JS extension not available for '%s': %s",
                     original_ext_id,
                     exc,
                 )
+
+        if not wants_explicit_js:
+            py_candidate_name = manager.find_python_extension(base_name)
+            if py_candidate_name:
+                try:
+                    from mornye.extensions.python_provider import (
+                        PythonExtensionProvider,
+                    )
+
+                    py_provider = cast(Any, PythonExtensionProvider)(
+                        py_candidate_name,
+                        ext_dir=options.ext_dir,
+                    )
+                    providers.append(py_provider)
+                    logger.debug(
+                        "Added Python provider (fallback): %s", py_candidate_name
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Python extension '%s' failed to initialize: %s",
+                        py_candidate_name,
+                        exc,
+                    )
     except Exception as exc:
         logger.warning("Failed to resolve providers for %s: %s", name, exc)
 

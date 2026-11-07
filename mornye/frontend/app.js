@@ -97,6 +97,11 @@ const $ = id => document.getElementById(id);
 const ts = () => new Date().toLocaleTimeString('en-US');
 // ── Global Initialization ──────────────────────────────────────────────────
 const toastMgr = new ToastManager();
+// A top-level `const` is not a property of `window`, and the settings code
+// reaches the manager as `window.toastMgr`: without this line every
+// "Notification sounds" change and every saved setting was dropped, and the
+// sound followed only the browser's own localStorage (issue #254).
+window.toastMgr = toastMgr;
 
 // ── View switching ───────────────────────────────────────────────────────────
 function switchView(name) {
@@ -111,17 +116,105 @@ function switchView(name) {
   document.querySelectorAll('.nav-btn[id^="nav-"]').forEach(b => b.classList.remove('active'));
   $('view-' + name)?.classList.add('active');
   $('nav-' + name)?.classList.add('active');
+  if (name === 'local') loadNetworkShares();
+  if (name === 'queue') loadStaged();
+  if (name === 'history') loadHistory();
+}
+
+// Mounted network shares as one-click picks under the library path field:
+// smb://nas/Music works typed in too, but only once the OS has mounted it,
+// and these are exactly the ones that will open.
+async function loadNetworkShares() {
+  const box = $('local-network-shares');
+  if (!box || !window.pywebview?.api?.get_network_shares) return;
+  try {
+    const res = await window.pywebview.api.get_network_shares();
+    const shares = res?.shares || [];
+    box.classList.toggle('hidden', shares.length === 0);
+    box.innerHTML = shares.length
+      ? '<span class="share-chips-label">Network:</span>' + shares.map(s =>
+          `<button type="button" class="share-chip" title="${escHtml(s.path)}" data-path="${escHtml(s.path)}">`
+          + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><line x1="6" y1="7" x2="6.01" y2="7"/><line x1="6" y1="17" x2="6.01" y2="17"/></svg>'
+          + `${escHtml(s.label)}</button>`).join('')
+      : '';
+    box.querySelectorAll('.share-chip').forEach(btn => btn.addEventListener('click', () => {
+      const input = $('local-path-input');
+      if (input) { input.value = btn.dataset.path; input.focus(); }
+    }));
+  } catch (e) { /* the field still accepts a typed path */ }
+}
+
+// ── Sidebar ──────────────────────────────────────────────────────────────────
+// Labelled by default; collapsed it folds back to the icon rail. The choice is
+// a per-browser convenience, so localStorage is enough — the <body> script in
+// index.html applies it before the first paint.
+function toggleSidebar(force) {
+  const collapsed = typeof force === 'boolean'
+    ? force
+    : !document.body.classList.contains('sidebar-collapsed');
+  document.body.classList.toggle('sidebar-collapsed', collapsed);
+  const btn = document.querySelector('.sb-collapse');
+  if (btn) {
+    btn.setAttribute('aria-pressed', String(collapsed));
+    btn.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+    const label = btn.querySelector('.nav-label');
+    if (label) label.textContent = collapsed ? 'Expand' : 'Collapse';
+  }
+  try { localStorage.setItem('mornye-sidebar', collapsed ? 'collapsed' : 'expanded'); } catch (e) {}
+}
+
+// ── Settings search ──────────────────────────────────────────────────────────
+// Typing searches every page at once: all pages are shown, rows whose label
+// does not match are hidden, and a section with nothing left goes too. An
+// empty query puts the single active page back.
+function filterSettings(query) {
+  const q = (query || '').trim().toLowerCase();
+  const body = document.querySelector('#view-settings .s-body');
+  if (!body) return;
+  body.classList.toggle('searching', !!q);
+  let anyVisible = false;
+  body.querySelectorAll('.tc').forEach(tc => {
+    let pageHits = 0;
+    tc.querySelectorAll('.s-section').forEach(section => {
+      const title = (section.querySelector('.s-title')?.textContent || '').toLowerCase();
+      const titleHit = !!q && title.includes(q);
+      let hits = 0;
+      section.querySelectorAll('.s-row').forEach(row => {
+        const hit = !q || titleHit || row.textContent.toLowerCase().includes(q);
+        row.classList.toggle('s-filtered', !hit);
+        if (hit) hits++;
+      });
+      const rows = section.querySelectorAll('.s-row').length;
+      // Sections built from something other than .s-row (lists, grids) match
+      // on their whole text instead.
+      const sectionHit = !q || titleHit || hits > 0
+        || (rows === 0 && section.textContent.toLowerCase().includes(q));
+      section.classList.toggle('s-filtered', !sectionHit);
+      if (sectionHit) pageHits++;
+    });
+    tc.classList.toggle('search-hit', !!q && pageHits > 0);
+    if (pageHits > 0) anyVisible = true;
+  });
+  $('settings-no-match')?.classList.toggle('hidden', !q || anyVisible);
 }
 
 function switchTab(name, btn) {
+  const search = $('settings-search');
+  if (search && search.value) { search.value = ''; filterSettings(''); }
   document.querySelectorAll('.stab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tc').forEach(c => c.classList.remove('active'));
   btn.classList.add('active');
   $('tc-' + name).classList.add('active');
+  if (name === 'status' && !extensionStatusChecking) {
+    // Lists the installed extensions' checks without running them; Check
+    // runs them. Re-read each time: an extension may have been installed.
+    loadExtensionStatusList();
+  }
   if (name === 'extensions') {
     loadRegistries();
     loadDirectories();
     loadTrustedKeys();
+    loadExtensionSettings();
     loadExtensionHealth();
     loadSignedSessions();
   }
@@ -148,7 +241,7 @@ function setThemeClass(dark) {
   // when the OS flips under an 'auto' choice.
   try {
     const tc = document.querySelector('meta[name="theme-color"]');
-    if (tc) tc.setAttribute('content', dark ? '#000000' : '#f2f2f7');
+    if (tc) tc.setAttribute('content', dark ? '#0e0c0b' : '#f6f2ec');
   } catch (e) { /* no <head> access is not worth failing the theme over */ }
 }
 
@@ -191,25 +284,40 @@ function syncSystemTheme(e) {
 }
 
 //: Must match MornyeAPI.ACCENTS in app.py and the --accent-* blocks in
-//: styles.css. 'green' is the default and has no block of its own: it is
-//: what :root already says, so it is applied by removing the attribute.
-const ACCENTS = ['green', 'blue', 'purple', 'pink', 'orange', 'red', 'cyan', 'amber'];
+//: styles.css. 'teal' (the logo's colour) is the default and has no block of
+//: its own: it is what :root already says, so it is applied by removing the
+//: attribute.
+const ACCENTS = ['teal', 'green', 'blue', 'purple', 'pink', 'orange', 'red', 'cyan', 'amber'];
+//: Bumped by a rebrand that changes the default accent. Stored both in
+//: localStorage ('mornye-brand') and in gui-settings.json ('brand', written by
+//: save_accent()) so the one-off migration below happens once per install.
+const BRAND_VERSION = 2;
+
+// Before the warm rebrand the default accent was 'green', and nearly every
+// stored 'green' is that untouched default rather than a choice. Move it to
+// the new default once; anyone who picks green again afterwards keeps it.
+function migrateAccent(accent, cfgBrand) {
+  let done = Number(cfgBrand) >= BRAND_VERSION;
+  try { done = done || localStorage.getItem('mornye-brand') === String(BRAND_VERSION); } catch (e) {}
+  try { localStorage.setItem('mornye-brand', String(BRAND_VERSION)); } catch (e) {}
+  return (!done && accent === 'green') ? 'teal' : accent;
+}
 
 // data-accent goes on <html> *and* <body>, the same pair the theme classes
 // use (see setThemeClass) — styles.css keys the accent blocks off both, so
 // that the token values are in scope no matter which element a rule resolves
 // against.
 function applyAccent(accent) {
-  const val = ACCENTS.includes(accent) ? accent : 'green';
+  const val = ACCENTS.includes(accent) ? accent : 'teal';
   for (const el of [document.documentElement, document.body]) {
     if (!el) continue;
-    if (val === 'green') el.removeAttribute('data-accent');
+    if (val === 'teal') el.removeAttribute('data-accent');
     else el.setAttribute('data-accent', val);
   }
 }
 
 function changeAccent() {
-  const val = $('config-accent')?.value || 'green';
+  const val = $('config-accent')?.value || 'teal';
   applyAccent(val);
   // Three copies for the same reason changeTheme() keeps three: the two
   // localStorage writes are per-origin and can vanish, gui-settings.json is
@@ -228,9 +336,11 @@ function changeAccent() {
 function loadAccentFromStorage() {
   const stored = (() => {
     try { return localStorage.getItem('mornye-accent'); } catch (e) { return null; }
-  })() || 'green';
-  if ($('config-accent')) $('config-accent').value = stored;
-  applyAccent(stored);
+  })() || 'teal';
+  const accent = migrateAccent(stored);
+  try { localStorage.setItem('mornye-accent', accent); } catch (e) {}
+  if ($('config-accent')) $('config-accent').value = accent;
+  applyAccent(accent);
 }
 
 function loadThemeFromStorage() {
@@ -260,6 +370,12 @@ function changePreviewVolume() {
 function changeFont() {
   const font = $('config-font').value;
   document.documentElement.style.setProperty('--app-font', font);
+  // Titles use the display face (Fraunces) only with the default font; any
+  // other choice applies to them too, so the whole window follows the
+  // setting instead of the headings staying behind.
+  const isDefault = /^'Inter'/.test(font);
+  if (isDefault) document.documentElement.style.removeProperty('--font-display');
+  else document.documentElement.style.setProperty('--font-display', font);
   try {
     const stored = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) || '{}');
     stored.font = font;
@@ -326,11 +442,10 @@ function applySettings(settings = {}) {
   // Same dedicated-key-wins-over-blob dance as the theme above, for the
   // same reason: gui-settings.json is what survives, localStorage is what
   // the next launch reads first.
-  let accent = cfg.accent || 'green';
-  try {
-    accent = localStorage.getItem('mornye-accent') || accent;
-    localStorage.setItem('mornye-accent', accent);
-  } catch (e) {}
+  let accent = cfg.accent || 'teal';
+  try { accent = localStorage.getItem('mornye-accent') || accent; } catch (e) {}
+  accent = migrateAccent(accent, cfg.brand);
+  try { localStorage.setItem('mornye-accent', accent); } catch (e) {}
   if ($('config-accent')) $('config-accent').value = accent;
   const soundEnabled = cfg.sound_enabled !== false && cfg.notification_sound !== false;
   if ($('config-sound-enabled')) $('config-sound-enabled').checked = soundEnabled;
@@ -370,8 +485,8 @@ function applySettings(settings = {}) {
   if ($('config-retries')) $('config-retries').value = cfg.track_max_retries;
   if ($('config-post-action')) { $('config-post-action').value = cfg.post_download_action; onPostChange(); }
   if ($('config-post-cmd')) $('config-post-cmd').value = cfg.post_download_command;
-  if ($('config-qobuz-local-api')) $('config-qobuz-local-api').value = cfg.qobuz_local_api_url || '';
-  if ($('config-tidal-api')) $('config-tidal-api').value = cfg.tidal_custom_api || '';
+  extensionQualityChoices = { ...(cfg.extension_quality || {}) };
+  renderExtensionQualityRows();
   if ($('config-animated-artwork-api-url')) $('config-animated-artwork-api-url').value = cfg.animated_artwork_api_url || '';
   if ($('config-acoustid-key')) $('config-acoustid-key').value = cfg.acoustid_api_key || '';
   if ($('config-loop')) $('config-loop').value = cfg.loop;
@@ -610,11 +725,11 @@ const ALL_ENRICH = [
 const SETTINGS_STORAGE_KEY = 'mornye-settings';
 const DEFAULT_SETTINGS = {
   theme: 'auto',
-  accent: 'green',
+  accent: 'teal',
   sound_enabled: true,
   notification_sound: true,
   preview_volume: 100,
-  font: "-apple-system, BlinkMacSystemFont, Inter, 'Segoe UI', sans-serif",
+  font: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   quality: 'LOSSLESS',
   allow_fallback: false,
   lyrics: true,
@@ -637,8 +752,9 @@ const DEFAULT_SETTINGS = {
   transcode_keep_original: false,
   verify_hires: false,
   redownload_fake_hires: false,
-  qobuz_local_api_url: '',
-  tidal_custom_api: '',
+  // Per-service quality id from each extension's manifest qualityOptions,
+  // e.g. { amazon: 'ac4' }. Missing = use the global tier.
+  extension_quality: {},
   acoustid_api_key: '',
   loop: 0,
   log_level: 'INFO',
@@ -654,11 +770,20 @@ async function fetchVersionWithRetry(retries = 10, delayMs = 200) {
   for (let i = 0; i < retries; i++) {
     try {
       if (window.pywebview?.api && typeof window.pywebview.api.get_version === 'function') {
-        const v = await window.pywebview.api.get_version();
-        const tb = document.getElementById('tb-version');
-        const hero = document.getElementById('hero-version');
-        if (tb) tb.innerText = v && v !== 'unknown' ? `v${v}` : 'v...';
-        if (hero) hero.innerText = v && v !== 'unknown' ? `v${v}` : 'v...';
+        const local = await window.pywebview.api.get_version();
+        // The version on show is the published one on PyPI — what `pip
+        // install mornye` gives you — with the local build's own number as
+        // the fallback when PyPI cannot be reached.
+        let v = local;
+        try {
+          const pypi = await window.pywebview.api.get_pypi_version?.();
+          if (pypi?.version) v = pypi.version;
+        } catch (e) { /* offline: keep the local version */ }
+        const label = v && v !== 'unknown' ? `v${v}` : 'v...';
+        for (const id of ['tb-version', 'hero-version', 'sb-version']) {
+          const el = document.getElementById(id);
+          if (el) el.innerText = label;
+        }
         if (v && v !== 'unknown' && v !== '...') {
           await checkLatestVersion(v);
         }
@@ -672,6 +797,8 @@ async function fetchVersionWithRetry(retries = 10, delayMs = 200) {
 }
 
 document.addEventListener('DOMContentLoaded', () => fetchVersionWithRetry(20, 200));
+// Sync the collapse button's label/aria with the state the <body> script restored.
+document.addEventListener('DOMContentLoaded', () => toggleSidebar(document.body.classList.contains('sidebar-collapsed')));
 
 const UPDATE_RELEASE_URL = 'https://github.com/mornyeapp/Mornye-Python/releases';
 
@@ -780,7 +907,26 @@ function getChecked(id) {
     .map(el => el.dataset.value);
 }
 
-populateList('services-list', ALL_SERVICES);
+// The download sources are the installed extensions and nothing else: the
+// list starts empty and refreshInstalledServices() fills it from the
+// backend. A fresh install with no extension shows that, not twelve
+// services that could only fail.
+function showServicesPlaceholder(message, withLink = false) {
+  const el = $('services-list');
+  if (!el) return;
+  const link = withLink
+    ? ` <a href="#" onclick="openExtensionsSettings(); return false;">Settings → Extensions</a>.`
+    : '';
+  el.innerHTML = `<div class="s-label" style="font-size:11.5px;padding:6px 2px;">${escHtml(message)}${link}</div>`;
+}
+
+function openExtensionsSettings() {
+  switchView('settings');
+  const tab = document.querySelector('.stab[onclick*="extensions"]');
+  if (tab) switchTab('extensions', tab);
+}
+
+showServicesPlaceholder('Reading the installed extensions…');
 populateList('lyrics-list',   ALL_LYRICS.map(x => ({ ...x, badge: null })));
 populateList('enrich-list',   ALL_ENRICH.map(x => ({ ...x, badge: null })));
 
@@ -790,34 +936,62 @@ populateList('enrich-list',   ALL_ENRICH.map(x => ({ ...x, badge: null })));
 // backend knows: refreshInstalledServices() replaces the list with those,
 // exactly as the interactive wizard does (both read
 // extensions/catalog.installed_download_services).
+// The backend installed or removed extensions (startup install finished, a
+// registry was added): the provider list and the Extensions page re-read.
+window.app_extensions_changed = function () {
+  refreshInstalledServices();
+  if ($('tc-extensions')?.classList.contains('active')) {
+    loadExtensionSettings?.();
+    loadExtensionHealth?.();
+  }
+};
+
 async function refreshInstalledServices() {
-  if (typeof window.pywebview?.api?.get_download_services !== 'function') return;
+  if (typeof window.pywebview?.api?.get_download_services !== 'function') {
+    // An older backend that cannot say what is installed: the built-in list.
+    populateList('services-list', ALL_SERVICES);
+    applyListState('services-list', lastAppliedServices);
+    return;
+  }
   let services;
   try {
     const result = await window.pywebview.api.get_download_services();
     services = result?.services;
   } catch (e) {
     console.warn('[services] could not read the installed providers:', e);
+    showServicesPlaceholder('Could not read the installed extensions.');
     return;
   }
-  // Nothing installed, or an older backend: keep the built-in list. An empty
-  // picker is indistinguishable from a broken one.
-  if (!Array.isArray(services) || !services.length) return;
+  // Nothing installed: say so instead of offering sources that cannot work.
+  if (!Array.isArray(services) || !services.length) {
+    installedServiceRows = [];
+    renderExtensionQualityRows();
+    showServicesPlaceholder('No download extension is installed yet. Add a registry in', true);
+    return;
+  }
+
+  installedServiceRows = services;
+  renderExtensionQualityRows();
 
   const known = new Map(ALL_SERVICES.map(x => [x.id, x]));
   const items = services.map(svc => {
     const preset = known.get(svc.id);
-    if (preset) return { ...preset, title: (svc.extensions || []).join(', ') };
+    // The JS extension downloads first; the Python one, if any, is its
+    // fallback. Say so in the tooltip, and take the badge from what the
+    // primary extension's manifest says it delivers.
+    const title = serviceTitle(svc);
+    const badge = serviceBadge(svc);
+    if (preset) return { ...preset, badge: badge || preset.badge, title };
     // A provider this build has no artwork or label for — a third-party
     // extension, most likely. It still belongs in the list.
     return {
       id: svc.id,
       label: svc.label || svc.id,
-      badge: null,
+      badge,
       on: false,
       icon: (svc.id || '?').slice(0, 2).toUpperCase(),
       iconClass: svc.id,
-      title: (svc.extensions || []).join(', '),
+      title,
     };
   });
 
@@ -830,6 +1004,68 @@ async function refreshInstalledServices() {
 //: What applySettings() last put in the services list, so a refresh that
 //: arrives after it can restore the user's order instead of the defaults.
 let lastAppliedServices = ALL_SERVICES.filter(s => s.on).map(s => s.id);
+
+// ── Per-service quality (extension qualityOptions) ───────────────────────────
+// `var`, not `let`: applySettings() can run before this part of the file has
+// been evaluated, and a `let` would still be in its temporal dead zone.
+//: Rows from get_download_services(), with each service's quality_options.
+var installedServiceRows = [];
+//: { serviceId: qualityOptionId } — what the user picked per service.
+var extensionQualityChoices = {};
+
+function serviceTitle(svc) {
+  const exts = svc.extensions || [];
+  if (!svc.primary || exts.length < 2) return exts.join(', ');
+  const fallback = exts.filter(e => e !== svc.primary);
+  return `${svc.primary} (fallback: ${fallback.join(', ')})`;
+}
+
+function serviceBadge(svc) {
+  const opts = svc.quality_options || [];
+  if (!opts.length) return null;
+  if (svc.atmos) return 'ATMOS';
+  const text = o => `${o.id} ${o.label}`.toLowerCase();
+  if (opts.some(o => o.kind === 'lossless' || /flac|lossless|alac/.test(text(o)))) return 'FLAC';
+  const first = opts[0];
+  const m = /(aac|opus|mp3|m4a)/.exec(text(first));
+  return m ? m[1].toUpperCase() : null;
+}
+
+function renderExtensionQualityRows() {
+  const section = $('ext-quality-section');
+  const box = $('ext-quality-rows');
+  if (!section || !box) return;
+  const rows = (installedServiceRows || []).filter(s => (s.quality_options || []).length > 1);
+  section.style.display = rows.length ? '' : 'none';
+  box.innerHTML = rows.map(svc => {
+    const current = extensionQualityChoices?.[svc.id] || '';
+    const opts = [`<option value="">Use global quality</option>`].concat(
+      svc.quality_options.map(o =>
+        `<option value="${regEscapeHtml(o.id)}" ${o.id === current ? 'selected' : ''} title="${regEscapeHtml(o.description || '')}">${regEscapeHtml(o.label || o.id)}</option>`)
+    ).join('');
+    return `<div class="s-row" style="padding-left:16px;border-left:2px solid var(--border2);margin-left:4px;">
+      <span class="s-label">${regEscapeHtml(svc.label || svc.id)}<small>${regEscapeHtml(svc.primary || '')}</small></span>
+      <select data-service="${regEscapeHtml(svc.id)}" onchange="onExtensionQualityChange(this)">${opts}</select>
+    </div>`;
+  }).join('');
+}
+
+function onExtensionQualityChange(select) {
+  const service = select.dataset.service;
+  if (!service) return;
+  if (select.value) extensionQualityChoices[service] = select.value;
+  else delete extensionQualityChoices[service];
+  isDirty = true;
+  updateSaveButtonVisual();
+}
+
+function collectExtensionQuality() {
+  const out = {};
+  for (const [service, id] of Object.entries(extensionQualityChoices || {})) {
+    if (id) out[service] = id;
+  }
+  return out;
+}
 
 // ── HC chips ─────────────────────────────────────────────────────────────────
 const API_SOURCES = [
@@ -936,12 +1172,90 @@ function buildStatusCard(source) {
   </div>`;
 }
 
-/** Renders the lyrics provider status cards. */
+/** Renders the extension and lyrics provider status cards. */
 function renderStatusGrids() {
+  renderExtensionStatusGrid();
   const servicesGrid = $('status-services-grid');
   if (servicesGrid) {
     servicesGrid.innerHTML = API_SOURCES.map((source) => buildStatusCard(source)).join('');
   }
+}
+
+// ── Extension checks (manifest `serviceHealth`, core/health_check.py) ──────
+// `var`: renderStatusGrids() runs while this file is still being evaluated.
+var extensionStatusRows = [];
+var extensionStatusChecking = false;
+var extensionStatusLoaded = false;
+
+function extensionStatusOf(row) {
+  if (extensionStatusChecking) return 'checking';
+  if (row.ok === true) return 'online';
+  if (row.ok === false) return 'offline';
+  return 'idle';
+}
+
+function renderExtensionStatusGrid() {
+  const grid = $('status-extensions-grid');
+  if (!grid) return;
+  if (!extensionStatusRows.length) {
+    grid.innerHTML = `<div class="s-label" style="font-size:11.5px;grid-column:1/-1;">${
+      extensionStatusLoaded
+        ? 'No installed extension declares a health check.'
+        : 'Loading the installed extensions…'}</div>`;
+    return;
+  }
+  grid.innerHTML = extensionStatusRows.map((row) => {
+    const checks = (row.checks || []).map((c) => {
+      const state = c.ok === true ? '✓' : c.ok === false ? '✗' : '·';
+      const latency = c.latency >= 0 ? ` · ${c.latency} ms` : '';
+      const detail = c.detail ? ` — ${c.detail}` : '';
+      return `<div class="s-label" style="font-size:11px;" title="${regEscapeHtml(c.url)}">${state} ${regEscapeHtml(c.label)}${regEscapeHtml(detail)}${latency}</div>`;
+    }).join('');
+    return `<div class="status-card" title="${regEscapeHtml(row.name)}">
+      <div class="status-card-header">
+        <div class="status-card-left">
+          ${renderPlatformIcon(row.service)}
+          <div class="status-card-name">${regEscapeHtml(row.display_name)}</div>
+        </div>
+        ${renderStatusIcon(extensionStatusOf(row))}
+      </div>
+      ${checks}
+    </div>`;
+  }).join('');
+}
+
+async function loadExtensionStatusList() {
+  if (!window.pywebview?.api?.check_extension_health) return;
+  try {
+    const res = await window.pywebview.api.check_extension_health(null, false);
+    // Keep the last result of an extension that is still installed.
+    const previous = new Map(extensionStatusRows.map((row) => [row.name, row]));
+    extensionStatusRows = (res?.extensions || []).map((row) => previous.get(row.name) || row);
+  } catch (e) {
+    extensionStatusRows = [];
+  }
+  extensionStatusLoaded = true;
+  renderExtensionStatusGrid();
+}
+
+async function checkExtensions() {
+  if (!window.pywebview?.api?.check_extension_health) return { ok: 0, total: 0 };
+  extensionStatusChecking = true;
+  renderExtensionStatusGrid();
+  try {
+    const res = await window.pywebview.api.check_extension_health(null, true);
+    extensionStatusRows = res?.extensions || [];
+  } catch (e) {
+    extensionStatusRows = extensionStatusRows.map((row) => ({ ...row, ok: false }));
+  } finally {
+    extensionStatusChecking = false;
+    extensionStatusLoaded = true;
+    renderExtensionStatusGrid();
+  }
+  return {
+    ok: extensionStatusRows.filter((row) => row.ok === true).length,
+    total: extensionStatusRows.length,
+  };
 }
 
 /**
@@ -951,6 +1265,15 @@ function renderStatusGrids() {
 function updateStatusSummary(text) {
   const label = $('hc-summary');
   if (label) label.textContent = text;
+}
+
+/** The overall pill from what the cards show: extensions and lyrics. */
+function updateOverallStatusFromCards() {
+  const lyricsDone = API_SOURCES.filter((s) => ['online', 'offline'].includes(apiStatusState.statuses[s.id]));
+  const lyricsOk = lyricsDone.filter((s) => apiStatusState.statuses[s.id] === 'online').length;
+  const extDone = extensionStatusRows.filter((row) => row.ok === true || row.ok === false);
+  const extOk = extDone.filter((row) => row.ok === true).length;
+  updateOverallStatus(lyricsOk + extOk, lyricsDone.length + extDone.length);
 }
 
 function updateOverallStatus(okCount, totalCount) {
@@ -975,6 +1298,9 @@ function checkAll() {
   });
   renderStatusGrids();
   updateStatusSummary('Checking all providers...');
+  // The extensions' own checks run alongside; they answer directly rather
+  // than through the pushed updateHealthResults().
+  checkExtensions().then(() => updateOverallStatusFromCards());
   if (window.pywebview?.api?.run_health_check) {
     window.pywebview.api.run_health_check(sources).catch(() => {
       setFetchingState('hide');
@@ -1069,7 +1395,7 @@ let trackRenderToken = 0;
 let currentUrl     = '';
 let currentItemType = 'ALBUM'; // ALBUM, TRACK, ARTIST, PLAYLIST
 let queue          = [];
-let queueStats     = { downloaded:'0.00 MB', speed:'0.00 MB/s' };
+let queueStats     = { downloaded:'0.00 MB', speed:'0.0 MB/s', eta:'' };
 let isDownloading  = false;
 let queueStartTime = null;
 let queueDurationInterval = null;
@@ -1210,7 +1536,11 @@ window.updateFolderLabel = (path) => {
         if (!data) return;
         
         queueStats.downloaded = `${Number(data.total_downloaded || 0).toFixed(2)} MB`;
-        queueStats.speed = `${Number(data.current_speed || 0).toFixed(2)} MB/s`;
+        // One decimal, as Mornye shows it; the ETA is the backend's
+        // (core/progress.py estimate_eta_seconds): remaining bytes over the
+        // current speed, only when the size is known and under an hour.
+        queueStats.speed = `${Number(data.current_speed || 0).toFixed(1)} MB/s`;
+        queueStats.eta = formatEta(data.eta_seconds);
 
         if (isDownloading) {
           const activeItem = queue.find(q => q.status === 'active');
@@ -1219,7 +1549,8 @@ window.updateFolderLabel = (path) => {
             // escapes the message (see toast-system.js escapeHtml), so
             // markup passed here would show up as literal tags instead of
             // being rendered.
-            const msg = `${activeItem.title} — ${activeItem.progress}% · Speed: ${queueStats.speed}`;
+            const msg = `${activeItem.title} — ${activeItem.progress}% · ${queueStats.speed}`
+              + (queueStats.eta ? ` · ${queueStats.eta} left` : '');
 
             if (!currentDownloadToastId) {
               currentDownloadToastId = toastMgr.loading(msg, { title: 'Downloading Tracks...' });
@@ -3201,6 +3532,68 @@ function onSearchResultClick(url) {
   onFetch();
 }
 
+// ── Error states ─────────────────────────────────────────────────────────────
+// Turns a backend error into something a person can act on. The commonest one
+// on a fresh install is a missing extension ("The optional utilities extension
+// is not installed; '…' requires 'utilities.sflx' …"): that is not a network
+// problem, and saying "check your connection" sent people the wrong way.
+function describeError(message, what) {
+  const text = String(message || '').trim();
+  const missing = text.match(/optional (\S+) extension is not installed/i)
+    || text.match(/requires '([\w-]+)\./i);
+  if (missing || /no (provider|extension)s? (is |are )?installed/i.test(text)) {
+    const name = missing ? missing[1] : '';
+    const pretty = name ? name.charAt(0).toUpperCase() + name.slice(1) : '';
+    return {
+      kind: 'setup',
+      title: pretty ? `${pretty} extension needed` : 'No extension installed',
+      body: `${what} runs through extensions, and ${pretty ? `the ${pretty} one` : 'none'} is installed yet. `
+        + 'Add one from Settings → Extensions, then try again.',
+      action: { label: 'Open Extensions', onclick: 'openExtensionsSettings()' },
+      detail: text,
+    };
+  }
+  if (/timed? ?out|network|connection|ENOTFOUND|getaddrinfo|unreachable/i.test(text)) {
+    return {
+      kind: 'network',
+      title: 'Could not reach the service',
+      body: `${what} needs a connection, and the request did not get through. Check that you are online, then retry.`,
+      detail: text,
+    };
+  }
+  return {
+    kind: 'error',
+    title: `${what} failed`,
+    body: text ? 'The provider answered with an error. The details are below and in Logs.' : 'Something went wrong. The details are in Logs.',
+    detail: text,
+  };
+}
+
+function errorStateHTML(info, retry) {
+  const icon = info.kind === 'setup'
+    ? '<path d="M12 2v4"/><path d="M12 18v4"/><path d="m4.93 4.93 2.83 2.83"/><path d="m16.24 16.24 2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><circle cx="12" cy="12" r="3"/>'
+    : info.kind === 'network'
+      ? '<path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/><line x1="2" y1="2" x2="22" y2="22"/>'
+      : '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>';
+  const buttons = [
+    info.action ? `<button type="button" class="act-btn primary" onclick="${info.action.onclick}">${escHtml(info.action.label)}</button>` : '',
+    retry ? `<button type="button" class="act-btn secondary" onclick="${retry}">Try again</button>` : '',
+  ].join('');
+  return `<div class="error-state ${info.kind}" role="alert">
+    <div class="es-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${icon}</svg></div>
+    <div class="es-title">${escHtml(info.title)}</div>
+    <p class="es-body">${escHtml(info.body)}</p>
+    ${buttons ? `<div class="es-actions">${buttons}</div>` : ''}
+    ${info.detail ? `<details class="es-detail"><summary>Technical details</summary><code>${escHtml(info.detail)}</code></details>` : ''}
+  </div>`;
+}
+
+function openExtensionsSettings() {
+  switchView('settings');
+  const btn = [...document.querySelectorAll('.stab')].find(b => b.textContent.trim() === 'Extensions');
+  if (btn) switchTab('extensions', btn);
+}
+
 window.app_handle_provider_search_error = function(message) {
   if (message && typeof message === 'object') {
     if (!isCurrentSearchRequest(message)) return;
@@ -3208,10 +3601,11 @@ window.app_handle_provider_search_error = function(message) {
   }
   clearSearchUI();
   setFetchingState('error');
-  $('track-rows').innerHTML = `<div class="queue-empty">Provider search failed.</div>`;
+  const info = describeError(message, 'Search');
+  $('track-rows').innerHTML = errorStateHTML(info, info.kind === 'setup' ? '' : 'onFetch()');
   $('track-controls').classList.add('hidden');
   $('track-table-wrap').classList.remove('hidden');
-  setStatus('Provider search error.', false);
+  setStatus(info.title + '.', false);
   logMessage(`Provider search error: ${message}`, 'error');
   $('urlInput').disabled = false;
   $('fetchBtn').disabled = false;
@@ -3627,9 +4021,11 @@ function renderQueueNow() {
   if (!empty) {
     empty = document.createElement('div');
     empty.id = 'queue-empty';
+    empty.className = 'queue-empty';
     empty.innerHTML = `
-      <div class="q-icon">📥</div>
-      <div>No items in queue.<br>Add tracks to start downloading.</div>
+      <div class="q-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
+      <div class="q-title">Nothing downloading</div>
+      <div class="q-hint">Press Download on a track, album or playlist — or Start on the queue above.</div>
     `;
   }
 
@@ -3655,7 +4051,7 @@ function renderQueueNow() {
 
   const dock = $('queue-dock');
   if (queue.length === 0) {
-    queueStats = { downloaded:'0.00 MB', speed:'0.00 MB/s' };
+    queueStats = { downloaded:'0.00 MB', speed:'0.0 MB/s', eta:'' };
     if (dock) dock.classList.remove('visible');
     $('queue-drawer')?.classList.remove('open');
 
@@ -3749,6 +4145,8 @@ function renderQueueNow() {
   const qsbSpeed = $('qsb-speed');
   if (qsbDownloaded) qsbDownloaded.textContent = queueStats.downloaded;
   if (qsbSpeed) qsbSpeed.textContent = queueStats.speed;
+  const qsbEta = $('qsb-eta');
+  if (qsbEta) qsbEta.textContent = queueStats.eta || '—';
 
   // Sync the Dock indicators
   const downloaded = $('qd-downloaded');
@@ -3761,7 +4159,7 @@ function renderQueueNow() {
     const rate = parseFloat(queueStats.speed);
     const active = queue.some(q => q.status === 'active');
     speed.textContent = rate > 0
-      ? queueStats.speed
+      ? queueStats.speed + (queueStats.eta ? ` · ${queueStats.eta} left` : '')
       : active
         ? `Downloading ${done + 1} of ${queue.length}…`
         : `${done} of ${queue.length} done`;
@@ -3774,11 +4172,326 @@ function renderQueueNow() {
   syncTrackRowsWithQueue();
 }
 
+// The queue is a page now (Queue in the sidebar): the bottom bar and every
+// old "open the drawer" call land there.
 function toggleQueueDrawer() {
-  const drawer = $('queue-drawer');
-  if (!drawer) return;
-  drawer.classList.toggle('open');
-  if (drawer.classList.contains('open')) loadFailedTracks();
+  switchView('queue');
+  loadFailedTracks();
+}
+
+// ── Queue page: staged items ────────────────────────────────────────────────
+let stagedState = { items: [], counts: {}, running: false };
+let stagedKind = '';
+
+const KIND_META = {
+  track:    { label: 'Track',    icon: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>' },
+  album:    { label: 'Album',    icon: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>' },
+  playlist: { label: 'Playlist', icon: '<path d="M21 15V6"/><path d="M18.5 18a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/><path d="M12 12H3"/><path d="M16 6H3"/><path d="M12 18H3"/>' },
+  artist:   { label: 'Artist',   icon: '<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/>' },
+};
+const STATUS_META = {
+  pending: { label: 'Waiting',     cls: 'queued' },
+  running: { label: 'Downloading', cls: 'active' },
+  done:    { label: 'Done',        cls: 'done' },
+  failed:  { label: 'Failed',      cls: 'failed' },
+};
+
+// "~42s" / "~3m05s" — the same format as core/progress.format_eta and
+// Mornye's queue labels. Empty when there is no estimate.
+function formatEta(seconds) {
+  const s = Math.round(Number(seconds) || 0);
+  if (s <= 0) return '';
+  if (s < 60) return `~${s}s`;
+  return `~${Math.floor(s / 60)}m${String(s % 60).padStart(2, '0')}s`;
+}
+
+function timeAgo(seconds) {
+  const t = Number(seconds) || 0;
+  if (!t) return '';
+  const diff = Math.max(0, Date.now() / 1000 - t);
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} h ago`;
+  if (diff < 86400 * 7) return `${Math.floor(diff / 86400)} d ago`;
+  return new Date(t * 1000).toLocaleDateString();
+}
+
+function formatSize(bytes) {
+  const b = Number(bytes) || 0;
+  if (!b) return '';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let v = b, u = 0;
+  while (v >= 1024 && u < units.length - 1) { v /= 1024; u++; }
+  return `${v.toFixed(v >= 100 || u === 0 ? 0 : 1)} ${units[u]}`;
+}
+
+async function loadStaged() {
+  if (!window.pywebview?.api?.get_staged_queue) return;
+  try {
+    stagedState = await window.pywebview.api.get_staged_queue() || stagedState;
+  } catch (e) { /* keep what is shown */ }
+  renderStaged();
+}
+
+window.app_staged_queue_changed = function (state) {
+  if (state && Array.isArray(state.items)) stagedState = state;
+  renderStaged();
+};
+
+function setStagedKind(kind) {
+  stagedKind = kind || '';
+  document.querySelectorAll('#view-queue .seg-tab').forEach(tab => {
+    const on = tab.dataset.kind === stagedKind;
+    tab.classList.toggle('active', on);
+    tab.setAttribute('aria-selected', String(on));
+  });
+  renderStaged();
+}
+
+function visibleStaged() {
+  const q = ($('sq-search')?.value || '').trim().toLowerCase();
+  const status = $('sq-status')?.value || '';
+  return (stagedState.items || []).filter(item =>
+    (!stagedKind || item.kind === stagedKind)
+    && (!status || item.status === status)
+    && (!q || `${item.title} ${item.subtitle}`.toLowerCase().includes(q)));
+}
+
+function renderStaged() {
+  const items = stagedState.items || [];
+  const counts = { '': items.length, ...(stagedState.counts || {}) };
+  for (const kind of ['', 'track', 'album', 'playlist', 'artist']) {
+    const el = $(`sq-count-${kind || 'all'}`);
+    if (el) el.textContent = counts[kind] || 0;
+  }
+  const pending = items.filter(i => i.status === 'pending').length;
+  const badge = $('nav-queue-badge');
+  if (badge) { badge.textContent = pending; badge.classList.toggle('hidden', !pending); }
+  const startAll = $('sq-start-all');
+  if (startAll) startAll.disabled = !pending;
+
+  const list = $('sq-list');
+  if (!list) return;
+  const shown = visibleStaged();
+  if (!shown.length) {
+    list.innerHTML = items.length
+      ? emptyState('disc', 'Nothing matches', 'Try another type, status or search.')
+      : emptyState('disc', 'The queue is empty',
+          'Use Add to queue on a track, album, playlist or discography, then press Start.');
+    return;
+  }
+  list.innerHTML = shown.map(item => {
+    const kind = KIND_META[item.kind] || KIND_META.album;
+    const st = STATUS_META[item.status] || STATUS_META.pending;
+    const cover = item.cover
+      ? `<img src="${escHtml(item.cover)}" alt="" loading="lazy">`
+      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${kind.icon}</svg>`;
+    const meta = [kind.label, `${item.track_count} track${item.track_count === 1 ? '' : 's'}`, `added ${timeAgo(item.added_at)}`]
+      .filter(Boolean).join(' · ');
+    const actions = [
+      item.status === 'pending' ? `<button type="button" class="row-btn accent" title="Start" onclick="startStagedOne('${item.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg></button>` : '',
+      (item.status === 'failed' || item.status === 'done') ? `<button type="button" class="row-btn" title="Queue again" onclick="retryStaged('${item.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>` : '',
+      item.status !== 'running' ? `<button type="button" class="row-btn" title="Remove" onclick="removeStaged('${item.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>` : '',
+    ].join('');
+    return `<div class="page-row status-${item.status}">
+      <div class="pr-cover">${cover}</div>
+      <div class="pr-main">
+        <div class="pr-title">${escHtml(item.title)}</div>
+        <div class="pr-sub">${escHtml(item.subtitle || (item.preview || []).join(', '))}</div>
+        <div class="pr-meta">${escHtml(meta)}${item.error ? ` · <span class="pr-error">${escHtml(item.error)}</span>` : ''}</div>
+      </div>
+      <span class="status-pill ${st.cls}">${item.status === 'running' ? '<i class="pill-spinner"></i>' : ''}${st.label}</span>
+      <div class="pr-actions">${actions}</div>
+    </div>`;
+  }).join('');
+}
+
+async function addToStagedQueue() {
+  if (!window.pywebview?.api?.add_to_staged_queue) return;
+  const checked = [...document.querySelectorAll('.track-cb:checked')].map(cb => parseInt(cb.value));
+  const indices = checked.length ? checked : currentTracks.map((_, i) => i);
+  if (!indices.length) { setStatus('No tracks loaded.'); return; }
+  const coverImg = document.querySelector('#album-cover img');
+  const bg = $('album-cover')?.style.backgroundImage || '';
+  const info = {
+    kind: detectUrlType(currentUrl) || (indices.length === 1 ? 'track' : 'album'),
+    title: ($('album-title')?.textContent || '').trim(),
+    subtitle: ($('album-artist')?.textContent || '').trim().replace(/^—$/, ''),
+    cover: coverImg?.src || (bg.match(/url\(["']?(.*?)["']?\)/) || [])[1] || '',
+    source_url: currentUrl || '',
+  };
+  try {
+    const res = await window.pywebview.api.add_to_staged_queue(indices, info);
+    if (res?.ok) {
+      showToast(`Added "${res.item.title}" to the queue (${res.item.track_count} track${res.item.track_count === 1 ? '' : 's'}).`);
+      logMessage(`Queued for later: ${res.item.title}`, 'ok');
+    } else {
+      showToast(res?.error || 'Could not add to the queue.', 'error');
+    }
+  } catch (e) {
+    showToast('Could not add to the queue: ' + e, 'error');
+  }
+}
+
+async function startStaged(onlyShown) {
+  if (!window.pywebview?.api?.start_staged_items) return;
+  const ids = onlyShown ? visibleStaged().filter(i => i.status === 'pending').map(i => i.id) : [];
+  if (onlyShown && !ids.length) { showToast('Nothing waiting among the items shown.', 'info'); return; }
+  const res = await window.pywebview.api.start_staged_items(ids, buildConfig());
+  if (res?.ok) showToast(`Starting ${res.started} item${res.started === 1 ? '' : 's'}.`);
+  else showToast(res?.error || 'Nothing to start.', 'info');
+  loadStaged();
+}
+
+async function startStagedOne(id) {
+  const res = await window.pywebview?.api?.start_staged_items?.([id], buildConfig());
+  if (res && !res.ok) showToast(res.error || 'Could not start it.', 'error');
+  loadStaged();
+}
+
+async function removeStaged(id) {
+  await window.pywebview?.api?.remove_staged_items?.([id]);
+  loadStaged();
+}
+
+async function retryStaged(id) {
+  await window.pywebview?.api?.retry_staged_items?.([id]);
+  loadStaged();
+}
+
+async function clearStaged(scope) {
+  if (scope === 'all' && !confirm('Remove everything waiting in the queue? Downloads in progress keep going.')) return;
+  await window.pywebview?.api?.clear_staged_queue?.(scope);
+  loadStaged();
+}
+
+// ── History page ────────────────────────────────────────────────────────────
+let historyTab = 'downloads';
+let historySearchTimer = null;
+
+function setHistoryTab(tab) {
+  historyTab = tab;
+  document.querySelectorAll('#view-history .seg-tab').forEach(btn => {
+    const on = btn.dataset.tab === tab;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-selected', String(on));
+  });
+  const search = $('hist-search');
+  if (search) search.placeholder = tab === 'downloads' ? 'Search downloads…' : 'Search fetched links…';
+  $('hist-sort-wrap')?.classList.toggle('hidden', tab !== 'downloads');
+  loadHistory();
+}
+
+function onHistorySearch() {
+  clearTimeout(historySearchTimer);
+  historySearchTimer = setTimeout(loadHistory, 180);
+}
+
+async function loadHistory() {
+  const list = $('hist-list');
+  if (!list || !window.pywebview?.api) return;
+  const q = ($('hist-search')?.value || '').trim();
+  try {
+    if (historyTab === 'downloads') {
+      const res = await window.pywebview.api.get_download_history(q, $('hist-sort')?.value || 'newest', 500);
+      renderDownloadHistory(res?.items || [], res?.totals || {}, q);
+    } else {
+      const hist = await window.pywebview.api.get_history() || [];
+      const ql = q.toLowerCase();
+      renderFetchHistory(hist.filter(h => !ql || `${h.label || ''} ${h.artist || ''} ${h.url || ''}`.toLowerCase().includes(ql)), q);
+    }
+  } catch (e) {
+    list.innerHTML = errorStateHTML(describeError(String(e), 'History'), 'loadHistory()');
+  }
+}
+
+function renderDownloadHistory(items, totals, q) {
+  const list = $('hist-list');
+  const tot = $('hist-totals');
+  if (tot) tot.textContent = totals.tracks ? `${totals.tracks} tracks · ${formatSize(totals.bytes)}` : '';
+  if (!items.length) {
+    list.innerHTML = q
+      ? emptyState('disc', 'No downloads match', 'Try a different title, artist or album.')
+      : emptyState('disc', 'No download history yet', 'Tracks you download show up here.');
+    return;
+  }
+  list.innerHTML = items.map(r => {
+    const meta = [r.provider, r.format ? r.format.toUpperCase() : '', formatSize(r.bytes), timeAgo(r.downloaded_at)]
+      .filter(Boolean).join(' · ');
+    return `<div class="page-row${r.success ? '' : ' status-failed'}">
+      <div class="pr-cover"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${KIND_META.track.icon}</svg></div>
+      <div class="pr-main">
+        <div class="pr-title">${escHtml(r.title || 'Untitled')}</div>
+        <div class="pr-sub">${escHtml([r.artist, r.album].filter(Boolean).join(' · '))}</div>
+        <div class="pr-meta" title="${escHtml(r.file_path || '')}">${escHtml(meta)}</div>
+      </div>
+      ${r.success ? '' : '<span class="status-pill failed">Failed</span>'}
+      <div class="pr-actions">
+        <button type="button" class="row-btn" title="Remove from history" onclick="removeDownloadHistory(${Number(r.id)})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderFetchHistory(items, q) {
+  const list = $('hist-list');
+  const tot = $('hist-totals');
+  if (tot) tot.textContent = items.length ? `${items.length} link${items.length === 1 ? '' : 's'}` : '';
+  if (!items.length) {
+    list.innerHTML = q
+      ? emptyState('disc', 'No fetched links match', 'Try a different name.')
+      : emptyState('disc', 'Nothing fetched yet', 'Links you open on Home show up here.');
+    return;
+  }
+  list.innerHTML = items.map((h, idx) => {
+    const kind = h.url_type || detectUrlType(h.url || '');
+    const km = KIND_META[kind] || KIND_META.album;
+    const cover = h.cover
+      ? `<img src="${escHtml(h.cover)}" alt="" loading="lazy">`
+      : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${km.icon}</svg>`;
+    const meta = [km.label, h.track_count ? `${h.track_count} tracks` : '', timeAgo(h.at)].filter(Boolean).join(' · ');
+    return `<div class="page-row clickable" data-idx="${idx}" title="Open this link again">
+      <div class="pr-cover">${cover}</div>
+      <div class="pr-main">
+        <div class="pr-title">${escHtml(h.label || h.url || '—')}</div>
+        <div class="pr-sub">${escHtml(h.artist || '')}</div>
+        <div class="pr-meta">${escHtml(meta)}</div>
+      </div>
+      <div class="pr-actions">
+        <button type="button" class="row-btn" title="Remove from history" data-remove="${idx}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.page-row.clickable').forEach(row => {
+    const h = items[Number(row.dataset.idx)];
+    row.addEventListener('click', (ev) => {
+      if (ev.target.closest('[data-remove]')) {
+        ev.stopPropagation();
+        window.pywebview?.api?.remove_history_item?.(h.url);
+        setTimeout(() => { loadHistory(); window.pywebview?.api?.get_history?.().then(renderRecent); }, 150);
+        return;
+      }
+      switchView('home');
+      $('urlInput').value = normalizeHistoryUrl(h.url || '');
+      onFetch();
+    });
+  });
+}
+
+async function removeDownloadHistory(id) {
+  await window.pywebview?.api?.remove_download_history?.([id]);
+  loadHistory();
+}
+
+async function clearHistory() {
+  const what = historyTab === 'downloads' ? 'the download history (your files stay where they are)' : 'the list of fetched links';
+  if (!confirm(`Clear ${what}?`)) return;
+  if (historyTab === 'downloads') await window.pywebview?.api?.clear_download_history?.();
+  else {
+    await window.pywebview?.api?.clear_fetch_history?.();
+    window.pywebview?.api?.get_history?.().then(renderRecent);
+  }
+  loadHistory();
 }
 
 // ── Tracks still missing ─────────────────────────────────────────────────
@@ -3891,7 +4604,7 @@ function updateQueueItem(qi, status, progress) {
 
 function clearQueue() {
   queue = []; isDownloading = false;
-  queueStats = { downloaded:'0.00 MB', speed:'0.00 MB/s' };
+  queueStats = { downloaded:'0.00 MB', speed:'0.0 MB/s', eta:'' };
   resetQueueDuration();
   renderQueue();
   setStatus('Queue cleared.');
@@ -4163,7 +4876,7 @@ async function onFetch() {
           setStatus(`Searching "${url}"...`, true);
         })
         .catch((e) => {
-          setStatus('Provider search error.', false);
+          setStatus(describeError(String(e), 'Search').title + '.', false);
           logMessage('Search error: ' + e, 'error');
           setFetchingState('error');
         });
@@ -4239,8 +4952,7 @@ function buildConfig() {
     track_max_retries:      parseInt($('config-retries').value) || 0,
     post_download_action:   $('config-post-action').value,
     post_download_command:  $('config-post-cmd')?.value?.trim() || '',
-    qobuz_local_api_url:    $('config-qobuz-local-api').value.trim() || null,
-    tidal_custom_api:       $('config-tidal-api').value.trim()  || null,
+    extension_quality:      collectExtensionQuality(),
     acoustid_api_key:       $('config-acoustid-key')?.value.trim() || '',
     loop:                   parseInt($('config-loop').value) || null,
     log_level:              $('config-loglevel').value,
@@ -4261,10 +4973,7 @@ async function loadNetworkDestinations() {
     jobSelect.replaceChildren(new Option('Local / mounted folder', ''));
     profileSelect.replaceChildren(new Option('New destination…', ''));
     for (const profile of networkDestinations) {
-      const target = profile.type === 'webdav'
-        ? profile.url
-        : `${profile.host}/${profile.share}`;
-      const label = `${profile.name} — ${target}`;
+      const label = `${profile.name} — ${networkDestinationTarget(profile)}`;
       jobSelect.add(new Option(label, profile.id));
       profileSelect.add(new Option(label, profile.id));
     }
@@ -4291,9 +5000,11 @@ function selectNetworkDestination() {
     $('network-destination-password').value = '';
     $('network-destination-timeout').value = '15';
     $('network-destination-encrypt').checked = false;
+    if ($('network-destination-method')) $('network-destination-method').value = 'PUT';
     updateNetworkDestinationFields();
     return;
   }
+  if ($('network-destination-method')) $('network-destination-method').value = profile.method || 'PUT';
   $('network-destination-type').value = profile.type || 'smb';
   $('network-destination-name').value = profile.name;
   $('network-destination-host').value = profile.host || '';
@@ -4308,18 +5019,48 @@ function selectNetworkDestination() {
   updateNetworkDestinationFields();
 }
 
+function networkDestinationTarget(profile) {
+  if (profile.type === 'webdav') return profile.url;
+  if (profile.type === 'http') return `${profile.method || 'PUT'} ${profile.url}`;
+  return `${profile.host}/${profile.share}`;
+}
+
+function networkDestinationProtocol(type) {
+  if (type === 'webdav') return 'WebDAV';
+  if (type === 'http') return 'HTTP(S) upload';
+  return 'SMB';
+}
+
 function updateNetworkDestinationFields() {
-  const isWebdav = $('network-destination-type')?.value === 'webdav';
+  const type = $('network-destination-type')?.value;
+  const isHttp = type === 'http';
+  // WebDAV and plain HTTP(S) upload both take a URL instead of a server + share.
+  const isWebdav = type === 'webdav' || isHttp;
   $('network-destination-host-field')?.classList.toggle('hidden', isWebdav);
   $('network-destination-share-field')?.classList.toggle('hidden', isWebdav);
   $('network-destination-url-field')?.classList.toggle('hidden', !isWebdav);
+  $('network-destination-method-field')?.classList.toggle('hidden', !isHttp);
   $('network-destination-domain')?.classList.toggle('hidden', isWebdav);
   $('network-destination-encryption')?.classList.toggle('hidden', isWebdav);
+  const urlLabel = $('network-destination-url-label');
+  const urlHint = $('network-destination-url-hint');
+  const urlInput = $('network-destination-url');
+  if (urlLabel) urlLabel.textContent = isHttp ? 'Upload URL (http:// or https://)' : 'WebDAV collection URL';
+  if (urlHint) {
+    urlHint.textContent = isHttp
+      ? 'Each file is sent here with its path appended, or in place of {path}. Use HTTPS when sending a password.'
+      : 'Use HTTPS when connecting over an untrusted network.';
+  }
+  if (urlInput) {
+    urlInput.placeholder = isHttp
+      ? 'https://nas.example.net/upload/{path}'
+      : 'https://cloud.example.net/remote.php/dav/files/user';
+  }
   const usernameLabel = $('network-destination-username')
     ?.closest('.network-destination-field')?.querySelector('span');
   if (usernameLabel) {
     usernameLabel.firstChild.textContent = isWebdav
-      ? 'Username'
+      ? (isHttp ? 'Username (optional, HTTP Basic)' : 'Username')
       : 'Username and optional domain';
   }
 }
@@ -4335,6 +5076,9 @@ function networkDestinationForm() {
   };
   if (profile.type === 'webdav') {
     profile.url = $('network-destination-url').value.trim();
+  } else if (profile.type === 'http') {
+    profile.url = $('network-destination-url').value.trim();
+    profile.method = $('network-destination-method').value || 'PUT';
   } else {
     profile.host = $('network-destination-host').value.trim();
     profile.share = $('network-destination-share').value.trim();
@@ -4377,7 +5121,7 @@ async function testNetworkDestination() {
   let id = $('network-destination-profile').value;
   if (!id) id = await saveNetworkDestination();
   if (!id) return;
-  const protocol = networkDestinationForm().type === 'webdav' ? 'WebDAV' : 'SMB';
+  const protocol = networkDestinationProtocol(networkDestinationForm().type);
   status.textContent = `Testing ${protocol} connection and write permissions…`;
   try {
     const result = await window.pywebview.api.test_network_destination(
@@ -4437,23 +5181,13 @@ async function retryNetworkDelivery() {
 
 let apiConfigTarget = null;
 
+// The provider APIs (Tidal, Qobuz…) moved into each extension's own
+// settings; the popup now only configures the animated artwork API.
 function openApiConfigPopup(target) {
   apiConfigTarget = target;
-  const title = target === 'qobuz'
-    ? 'Qobuz local API'
-    : target === 'tidal'
-      ? 'Custom Tidal API'
-      : 'Animated artwork API';
-  const description = target === 'qobuz'
-    ? 'Enter your local Qobuz stream API URL and verify reachability.'
-    : target === 'tidal'
-      ? 'Enter your self-hosted hifi-api instance URL and verify reachability.'
-      : 'Enter your Apple Music animated artwork API URL and verify reachability.';
-  const existingValue = target === 'qobuz'
-    ? $('config-qobuz-local-api').value.trim()
-    : target === 'tidal'
-      ? $('config-tidal-api').value.trim()
-      : $('config-animated-artwork-api-url').value.trim();
+  const title = 'Animated artwork API';
+  const description = 'Enter your Apple Music animated artwork API URL and verify reachability.';
+  const existingValue = $('config-animated-artwork-api-url').value.trim();
 
   const status = $('api-config-status');
   $('api-config-title').textContent = title;
@@ -4463,16 +5197,8 @@ function openApiConfigPopup(target) {
   status.style.color = '';
   const helpLink = $('api-config-help');
   if (helpLink) {
-    if (target === 'qobuz') {
-      helpLink.href = 'https://github.com/BartolomeoRusso9/qobuz-api';
-      helpLink.textContent = 'How to create your own instance';
-    } else if (target === 'tidal') {
-      helpLink.href = 'https://github.com/binimum/hifi-api';
-      helpLink.textContent = 'How to create your own instance';
-    } else {
-      helpLink.href = 'https://github.com/m8tec/apple-music-animated-artworks';
-      helpLink.textContent = 'How to create your own instance';
-    }
+    helpLink.href = 'https://github.com/m8tec/apple-music-animated-artworks';
+    helpLink.textContent = 'How to create your own instance';
   }
   $('api-config-modal').classList.remove('hidden');
   setTimeout(() => $('api-config-value').focus(), 0);
@@ -4516,11 +5242,7 @@ async function checkApiConfig() {
       return;
     }
     let result = null;
-    if (apiConfigTarget === 'qobuz') {
-      result = await window.pywebview.api.check_qobuz_api(url);
-    } else if (apiConfigTarget === 'tidal') {
-      result = await window.pywebview.api.check_tidal_api(url);
-    } else if (apiConfigTarget === 'animated') {
+    if (apiConfigTarget === 'animated') {
       result = await window.pywebview.api.check_animated_artwork_api(url);
     }
     if (result?.ok) {
@@ -4556,11 +5278,7 @@ function saveApiConfig() {
   if (!apiConfigTarget) return;
   const rawValue = $('api-config-value').value;
   const value = normalizeApiInput(rawValue);
-  if (apiConfigTarget === 'qobuz') {
-    $('config-qobuz-local-api').value = value;
-  } else if (apiConfigTarget === 'tidal') {
-    $('config-tidal-api').value = value;
-  } else if (apiConfigTarget === 'animated') {
+  if (apiConfigTarget === 'animated') {
     $('config-animated-artwork-api-url').value = value;
   }
   if (rawValue.trim() !== value) {
@@ -4575,24 +5293,15 @@ function saveApiConfig() {
 }
 
 function updateApiConfigDisplay(target) {
-  const value = target === 'qobuz'
-    ? $('config-qobuz-local-api').value.trim()
-    : target === 'tidal'
-      ? $('config-tidal-api').value.trim()
-      : $('config-animated-artwork-api-url').value.trim();
-  const display = target === 'qobuz'
-    ? $('config-qobuz-local-api-display')
-    : target === 'tidal'
-      ? $('config-tidal-api-display')
-      : $('config-animated-artwork-api-display');
+  if (target !== 'animated') return;
+  const value = $('config-animated-artwork-api-url')?.value.trim() || '';
+  const display = $('config-animated-artwork-api-display');
   if (!display) return;
   display.textContent = value ? 'Configured' : 'Not set';
   display.classList.toggle('configured', !!value);
 }
 
 function updateAllApiConfigDisplays() {
-  updateApiConfigDisplay('qobuz');
-  updateApiConfigDisplay('tidal');
   updateApiConfigDisplay('animated');
 }
 
@@ -4630,8 +5339,10 @@ async function loadProfile() {
   if (!data) return;
   if (data.quality)                $('config-quality').value            = data.quality;
   if (data.filename_format)         $('config-filename').value           = data.filename_format;
-  $('config-qobuz-local-api').value = data.qobuz_local_api_url || '';
-  $('config-tidal-api').value       = data.tidal_custom_api || '';
+  if (data.extension_quality && typeof data.extension_quality === 'object') {
+    extensionQualityChoices = { ...data.extension_quality };
+    renderExtensionQualityRows();
+  }
   $('config-track-numbers').checked = !!data.use_track_numbers; onTNChange();
   $('config-lyrics').checked = data.lyrics !== false;
   if ($('config-apple-wbw')) $('config-apple-wbw').checked = data.apple_lyrics_word_by_word !== false;
@@ -4667,8 +5378,9 @@ function renderHealthResults(data) {
   const okProviders = Object.values(provMap).filter(rows => rows.some(r => r.ok)).length;
 
   updateStatusSummary(`${okProviders}/${totalProviders} providers OK`);
-  updateOverallStatus(okProviders, totalProviders);
-  
+  // Counts the extension cards too, whichever of the two checks ends last.
+  updateOverallStatusFromCards();
+
   const container = $('hc-results'); container.innerHTML = '';
   Object.entries(provMap).forEach(([prov, rows]) => {
     const anyOk = rows.some(r => r.ok);
@@ -5524,11 +6236,13 @@ async function loadExploreData() {
         if (greetingEl) greetingEl.textContent = homeData.greeting || 'Explore';
         renderHomeSections(homeData.sections);
       } else {
-        sectionsContainer.innerHTML = '<div style="color:var(--red);">Unable to load feed. Check your connection.</div>';
+        const error = homeData?.error || '';
+        if (error) logMessage('Failed to load explore feed: ' + error, 'error');
+        sectionsContainer.innerHTML = errorStateHTML(describeError(error, 'The Explore feed'), 'loadExploreData()');
       }
     } catch (e) {
       logMessage('Failed to load explore feed: ' + e, 'error');
-      sectionsContainer.innerHTML = '<div style="color:var(--red);">Network error.</div>';
+      sectionsContainer.innerHTML = errorStateHTML(describeError(String(e), 'The Explore feed'), 'loadExploreData()');
     }
   } else {
     // Demo Mode
@@ -5600,7 +6314,13 @@ window.addEventListener('pywebviewready', async () => {
   // announcing it from this side too printed the same event twice, in two
   // different capitalisations.
   loadHistoryAndProfiles();
+  loadStaged();  // the sidebar's waiting-count badge
   checkAuthStatus();
+  // The real download folder (MORNYE_DOWNLOAD_DIR in a container, the
+  // account's own folder in multi-user mode), not the placeholder in the HTML.
+  window.pywebview.api.get_download_dir?.()
+    .then((res) => { if (res?.download_dir) window.updateFolderLabel(res.download_dir); })
+    .catch(() => {});
 
   await loadNetworkDestinations();
   await loadSettingsFromStorage();
@@ -6680,6 +7400,158 @@ async function resetExtensionHealth() {
   }
 }
 
+// ── Extension settings (api_mixins/extension_settings.py) ─────────────────
+//
+// One collapsible card per JS extension that declares `settings` in its
+// manifest. Fields are rendered from the manifest's own types; the backend
+// validates again on save, so this is presentation only.
+
+async function loadExtensionSettings() {
+  const list = $('ext-settings-list');
+  if (!list) return;
+  if (!window.pywebview?.api?.list_extension_settings) {
+    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">Extension settings are unavailable in this build.</div>';
+    return;
+  }
+  try {
+    renderExtensionSettings(await window.pywebview.api.list_extension_settings());
+  } catch (e) {
+    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Unable to load extension settings.</div>';
+  }
+}
+
+function extSettingFieldHtml(ext, entry, cardIdx) {
+  const id = `ext-set-${cardIdx}-${entry.key}`.replace(/[^A-Za-z0-9_-]/g, '_');
+  const attrs = `id="${id}" data-key="${regEscapeHtml(entry.key)}" data-type="${regEscapeHtml(entry.type)}"`;
+  const value = ext.values?.[entry.key];
+  const desc = entry.description
+    ? `<small>${regEscapeHtml(entry.description)}</small>`
+    : '';
+  const label = `<span class="s-label">${regEscapeHtml(entry.label)}${desc}</span>`;
+
+  if (entry.type === 'button') {
+    return `<div class="s-row">${label}
+      <button class="act-btn secondary" type="button" style="padding:6px 14px;font-size:12px;"
+        onclick="runExtensionSettingAction('${regEscapeHtml(ext.name)}','${regEscapeHtml(entry.key)}')">${regEscapeHtml(entry.label)}</button>
+    </div>`;
+  }
+  if (entry.type === 'boolean') {
+    return `<div class="s-row">${label}
+      <label class="toggle"><input type="checkbox" ${attrs} ${value ? 'checked' : ''}><span class="toggle-sl"></span></label>
+    </div>`;
+  }
+  if (entry.type === 'select') {
+    const opts = (entry.options || []).map((o) =>
+      `<option value="${regEscapeHtml(o.value)}" ${String(o.value) === String(value) ? 'selected' : ''}>${regEscapeHtml(o.label)}</option>`
+    ).join('');
+    return `<div class="s-row">${label}<select ${attrs}>${opts}</select></div>`;
+  }
+  if (entry.secret) {
+    const isSet = (ext.secrets_set || []).includes(entry.key);
+    return `<div class="s-row">${label}
+      <input type="password" class="full" autocomplete="off" ${attrs}
+        placeholder="${isSet ? 'Saved — leave empty to keep it' : 'Not set'}" style="flex:1;max-width:320px;">
+    </div>`;
+  }
+  // Free text, optionally with suggestions (e.g. a storefront list).
+  const listId = entry.options?.length ? `${id}-suggestions` : '';
+  const suggestions = listId
+    ? `<datalist id="${listId}">${entry.options.map((o) => `<option value="${regEscapeHtml(o.value)}">`).join('')}</datalist>`
+    : '';
+  const type = entry.type === 'number' ? 'number' : 'text';
+  return `<div class="s-row">${label}
+    <input type="${type}" class="full" ${attrs} ${listId ? `list="${listId}"` : ''}
+      value="${regEscapeHtml(value ?? '')}" placeholder="${regEscapeHtml(entry.default ?? '')}" style="flex:1;max-width:320px;">
+    ${suggestions}
+  </div>`;
+}
+
+function renderExtensionSettings(data) {
+  const list = $('ext-settings-list');
+  if (!list) return;
+  if (data?.error) {
+    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">' + regEscapeHtml(data.error) + '</div>';
+    return;
+  }
+  const rows = data?.extensions || [];
+  if (!rows.length) {
+    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">No installed extension has settings.</div>';
+    return;
+  }
+  list.innerHTML = rows.map((ext, idx) => `
+    <details class="sort-item reg-item" data-ext="${regEscapeHtml(ext.name)}" style="display:block;">
+      <summary style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <span class="reg-url">${regEscapeHtml(ext.display_name)}</span>
+        <span class="s-label" style="font-size:11px;">${regEscapeHtml(ext.name)} · v${regEscapeHtml(ext.version || '?')}</span>
+      </summary>
+      <div style="margin-top:10px;">
+        ${ext.settings.map((entry) => extSettingFieldHtml(ext, entry, idx)).join('')}
+        <div class="s-row" style="justify-content:flex-end;gap:8px;">
+          <button class="act-btn secondary" type="button" style="padding:6px 14px;font-size:12px;"
+            onclick="resetExtensionSettings('${regEscapeHtml(ext.name)}')">Reset to defaults</button>
+          <button class="act-btn primary" type="button" style="padding:6px 14px;font-size:12px;"
+            onclick="saveExtensionSettings('${regEscapeHtml(ext.name)}', this)">Save</button>
+        </div>
+      </div>
+    </details>`).join('');
+}
+
+function collectExtensionSettings(card) {
+  const values = {};
+  card.querySelectorAll('[data-key][data-type]').forEach((el) => {
+    const key = el.dataset.key;
+    const type = el.dataset.type;
+    if (type === 'button') return;
+    if (type === 'boolean') values[key] = !!el.checked;
+    else values[key] = el.value;
+  });
+  return values;
+}
+
+async function saveExtensionSettings(name, btn) {
+  const card = btn.closest('details[data-ext]');
+  if (!card) return;
+  try {
+    const res = await window.pywebview.api.save_extension_settings(name, collectExtensionSettings(card));
+    if (res?.error) {
+      showToast(res.error, 'error');
+      return;
+    }
+    showToast(`Settings saved for ${res.display_name || name}.`);
+    await loadExtensionSettings();
+  } catch (e) {
+    showToast('Could not save the extension settings.', 'error');
+  }
+}
+
+async function resetExtensionSettings(name) {
+  if (!confirm(`Reset every setting of ${name} to its default?`)) return;
+  try {
+    const res = await window.pywebview.api.reset_extension_settings(name);
+    if (res?.error) {
+      showToast(res.error, 'error');
+      return;
+    }
+    showToast(`Settings of ${res.display_name || name} reset.`);
+    loadExtensionSettings();
+  } catch (e) {
+    showToast('Could not reset the extension settings.', 'error');
+  }
+}
+
+async function runExtensionSettingAction(name, key) {
+  try {
+    const res = await window.pywebview.api.run_extension_setting_action(name, key);
+    if (res?.error) {
+      showToast(res.error, 'error');
+      return;
+    }
+    showToast('Done.');
+  } catch (e) {
+    showToast('The extension action failed.', 'error');
+  }
+}
+
 // ── Signed sessions (core/signed_session_status.py) ───────────────────────
 //
 // Read from disk, no network. The expiry is sent as seconds-from-now and
@@ -6916,16 +7788,15 @@ async function loadStatsSmbDestinations() {
     return;
   }
   try {
-    const profiles = await window.pywebview.api.list_network_destinations();
+    // An HTTP(S) upload destination cannot be listed, so it is no library.
+    const profiles = (await window.pywebview.api.list_network_destinations())
+      .filter(profile => profile.type !== 'http');
     select.replaceChildren(new Option(
       profiles.length ? 'Select network library…' : 'No saved network destinations',
       '',
     ));
     for (const profile of profiles) {
-      const target = profile.type === 'webdav'
-        ? profile.url
-        : `${profile.host}/${profile.share}`;
-      select.add(new Option(`${profile.name} — ${target}`, profile.id));
+      select.add(new Option(`${profile.name} — ${networkDestinationTarget(profile)}`, profile.id));
     }
     select.value = profiles.some(profile => profile.id === previous) ? previous : '';
     select.disabled = profiles.length === 0 || statsSmbScanActive;

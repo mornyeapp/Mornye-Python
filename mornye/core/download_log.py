@@ -334,3 +334,87 @@ def totals(owner: str | None = None) -> dict:
     except Exception:
         logger.debug("[download_log] totals failed", exc_info=True)
         return {"tracks": 0, "bytes": 0}
+
+
+#: History page sort orders -> ORDER BY clause (whitelisted, never user SQL).
+_SORTS = {
+    "newest": "downloaded_at DESC",
+    "oldest": "downloaded_at ASC",
+    "title": "title COLLATE NOCASE ASC, downloaded_at DESC",
+    "artist": "artist COLLATE NOCASE ASC, album COLLATE NOCASE ASC, downloaded_at DESC",
+    "size": "bytes DESC, downloaded_at DESC",
+}
+
+
+def search(
+    query: str = "",
+    *,
+    sort: str = "newest",
+    limit: int = 500,
+    owner: str | None = None,
+) -> list[DownloadRecord]:
+    """The History page's list: newest first by default, filtered by a
+    case-insensitive match on title, artist or album."""
+    where: list[str] = []
+    params: list = []
+    if owner is not None:
+        where.append("owner = ?")
+        params.append(owner)
+    q = (query or "").strip()
+    if q:
+        escaped_q = q.replace("%", r"\%").replace("_", r"\_")
+        like = f"%{escaped_q}%"
+        where.append(
+            "(title LIKE ? ESCAPE '\\' OR artist LIKE ? ESCAPE '\\' OR album LIKE ? ESCAPE '\\')"
+        )
+        params.extend([like, like, like])
+    sql = "SELECT * FROM downloads"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += f" ORDER BY {_SORTS.get(sort, _SORTS['newest'])} LIMIT ?"
+    params.append(max(1, min(int(limit or 500), 5000)))
+    try:
+        rows = db.connection().execute(sql, params).fetchall()
+        return [_row_to_record(r) for r in rows]
+    except Exception:
+        logger.debug("[download_log] search failed", exc_info=True)
+        return []
+
+
+def delete(record_ids: list[int], *, owner: str | None = None) -> int:
+    """Forget these rows (the files on disk are not touched)."""
+    ids = [int(i) for i in record_ids or []]
+    if not ids:
+        return 0
+    sql = f"DELETE FROM downloads WHERE id IN ({','.join('?' * len(ids))})"
+    params: list = list(ids)
+    if owner is not None:
+        sql += " AND owner = ?"
+        params.append(owner)
+    try:
+        with db.transaction() as conn:
+            cur = conn.execute(sql, params)
+        return int(cur.rowcount or 0)
+    except Exception:
+        logger.debug("[download_log] delete failed", exc_info=True)
+        return 0
+
+
+def clear(*, owner: str | None = None) -> int:
+    """Forget every row (for this owner). Files on disk are not touched.
+
+    Quotas and "already downloaded" checks read this table too, so clearing it
+    also resets those — which is what "clear history" is expected to mean.
+    """
+    sql = "DELETE FROM downloads"
+    params: list = []
+    if owner is not None:
+        sql += " WHERE owner = ?"
+        params.append(owner)
+    try:
+        with db.transaction() as conn:
+            cur = conn.execute(sql, params)
+        return int(cur.rowcount or 0)
+    except Exception:
+        logger.debug("[download_log] clear failed", exc_info=True)
+        return 0

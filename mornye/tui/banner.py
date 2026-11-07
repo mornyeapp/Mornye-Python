@@ -43,6 +43,15 @@ class Banner(Container):
 
     def on_mount(self) -> None:
         self._redraw()
+        # The published version replaces the installed one once PyPI answers;
+        # in a thread, so an offline start is never held up by it.
+        self.run_worker(self._fetch_version, thread=True, exit_on_error=False)
+
+    def _fetch_version(self) -> None:
+        from .branding import fetch_published_version
+
+        if fetch_published_version():
+            self.app.call_from_thread(self._redraw)
 
     def on_resize(self) -> None:
         self._redraw()

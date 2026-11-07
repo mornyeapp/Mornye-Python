@@ -65,7 +65,8 @@ def test_mobile_provider_aliases_are_accepted(service):
 
 def test_mobile_youtube_music_alias_resolves_to_its_extension():
     """Verify the YouTube Music alias selects its installed extension ID."""
-    assert extension_id("youtube-music") == "ytmusic-mornye"
+    assert extension_id("youtube-music") == "ytmusic-spotiflac"
+    assert extension_id("youtube") == "ytmusic-spotiflac"
 
 
 def test_two_extensions_for_one_service_are_one_row():
@@ -97,8 +98,44 @@ def test_a_third_party_provider_is_listed_too():
             "id": "my-own-provider",
             "label": "My Own Provider",
             "extensions": ["my-own-provider"],
+            "primary": "my-own-provider",
+            "quality_options": [],
+            "atmos": False,
         }
     ]
+
+
+def test_the_js_extension_is_the_primary_one_and_carries_its_qualities():
+    class _JsExt(_Ext):
+        runtime = "javascript"
+        quality_options = [
+            {"id": "DOLBY_ATMOS", "label": "Dolby Atmos", "kind": "spatial"},
+            {"id": "LOSSLESS", "label": "Lossless", "kind": "lossless"},
+        ]
+        has_atmos = True
+
+    class _PyExt(_Ext):
+        runtime = "python"
+
+    services = installed_download_services(
+        _Manager([_PyExt("tidal-py"), _JsExt("tidal-web")])
+    )
+
+    (tidal,) = services
+    assert tidal["primary"] == "tidal-web"
+    assert tidal["atmos"] is True
+    assert [o["id"] for o in tidal["quality_options"]] == ["DOLBY_ATMOS", "LOSSLESS"]
+
+
+def test_atmos_follows_the_manifests_not_a_hard_coded_service():
+    from mornye.extensions.catalog import atmos_service_ids
+
+    class _Atmos(_Ext):
+        has_atmos = True
+
+    assert atmos_service_ids(_Manager([_Atmos("amazon"), _Ext("deezer")])) == {"amazon"}
+    # Nothing readable: the historical answer.
+    assert atmos_service_ids(_Manager([])) == {"tidal"}
 
 
 def test_a_broken_extension_directory_is_an_empty_list_not_a_crash():

@@ -9,6 +9,8 @@ failure is reported instead of raised.
 
 from __future__ import annotations
 
+import asyncio
+from threading import Event
 
 import pytest
 
@@ -16,6 +18,7 @@ from tui_harness import app_of, drives_the_ui
 
 from mornye.tui.app import MODES, MornyeTui
 from mornye.tui.config_state import ConfigState
+from mornye.tui.extensions_view import ExtensionsPanel
 
 _EXT_INDEX = [key for key, _ in MODES].index("extensions")
 
@@ -62,8 +65,16 @@ def stub_registries(monkeypatch):
 
     class _Manager:
         def __init__(self, *args, **kwargs) -> None:
+            # Only an installing manager counts: the extension-settings
+            # editor in the same panel builds a read-only one to list what
+            # is installed.
+            if kwargs.get("auto_install_downloads") is False:
+                return
             state["installed"] += 1
             state["trust"].append(kwargs.get("min_trust_tier"))
+
+        def list_installed(self):
+            return []
 
     monkeypatch.setattr(manager_module, "ExtensionManager", _Manager)
     return state
@@ -76,6 +87,32 @@ def _ready_state() -> ConfigState:
 async def _settled(pilot) -> None:
     for _ in range(15):
         await pilot.pause()
+
+
+@drives_the_ui
+async def test_extension_settings_load_only_when_panel_is_shown(monkeypatch) -> None:
+    loaded = Event()
+
+    class SettingsAPI:
+        def list_extension_settings(self) -> dict:
+            loaded.set()
+            return {"extensions": []}
+
+    monkeypatch.setattr(
+        ExtensionsPanel, "_settings_api", staticmethod(lambda: SettingsAPI())
+    )
+
+    async with MornyeTui(_ready_state()).run_test() as pilot:
+        await pilot.pause()
+        assert not loaded.is_set()
+
+        app_of(pilot).query_one("#sidebar").index = _EXT_INDEX
+        assert await asyncio.to_thread(loaded.wait, 2)
+        await _settled(pilot)
+
+        assert "No installed extension has settings" in str(
+            app_of(pilot).query_one("#extset-status").render(),
+        )
 
 
 @drives_the_ui

@@ -1,10 +1,10 @@
-"""`core/metadata_fallback.py` — an extension, when the built-in client fails.
+"""`core/metadata_fallback.py` — built-in clients and extensions, merged.
 
-The order is the point: the built-in Spotify and Apple Music clients are
-always asked first, and an extension only when they raise or come back
-empty. What must not happen is the opposite — an extension consulted while
-the built-in client works, a malformed link sent around to a second reader,
-or the built-in client's real error replaced by the fallback's.
+Both readers are asked for a Spotify, Apple Music or Tidal link and their
+answers merged, the built-in answer being the base (its ids and values
+stay, the extension fills the gaps). What must not happen: a malformed link
+answered by the extension, the built-in client's real error replaced by the
+extension's, or a track added that the built-in client did not return.
 """
 
 from __future__ import annotations
@@ -131,10 +131,52 @@ def _run(url, *, native_factory=lambda: object(), manager=None, provider=None):
     )
 
 
-def test_a_working_built_in_client_is_all_that_is_asked(native) -> None:
+def test_a_working_built_in_client_is_merged_with_the_extension(native) -> None:
+    """Both readers are asked; the built-in answer is the base and the
+    extension fills what it left empty (here: the label and release date)."""
+    from mornye.core.models import TrackMetadata
+
+    native["outcome"] = (
+        "Palette",
+        [
+            TrackMetadata(
+                id="4NPARrLIbtMl29ZJv8ESr2",
+                title="dlwlrma",
+                artists="IU",
+                album="Palette",
+                album_artist="IU",
+                track_number=1,
+                plays="12345",
+                composer="IU",
+            )
+        ],
+        "https://built-in/cover",
+        {},
+    )
+    provider = _Provider(ALBUM_RESPONSE)
+
+    name, [track], cover, _meta = _run(SPOTIFY_ALBUM, provider=provider)
+
+    assert provider.calls == [("handleUrl", (SPOTIFY_ALBUM,))]
+    assert (name, cover) == ("Palette", "https://built-in/cover")
+    # Kept from the built-in client …
+    assert (track.plays, track.composer) == ("12345", "IU")
+    # … and filled from the extension.
+    assert track.publisher == "EDAM Entertainment"
+    assert track.release_date == "2017-04-21"
+    assert track.duration_ms == 176098
+
+
+def test_merging_can_be_turned_off(native, monkeypatch) -> None:
+    monkeypatch.setenv("MORNYE_METADATA_MERGE", "0")
     manager = _Manager(SPOTIFY_WEB)
     assert _run(SPOTIFY_ALBUM, manager=manager) == ("Native", ["t"], "", {})
     assert manager.listed == 0  # the extensions were not even looked at
+
+
+def test_a_failing_extension_leaves_the_built_in_answer_alone(native) -> None:
+    provider = _Provider({"success": False, "error": "boom"})
+    assert _run(SPOTIFY_ALBUM, provider=provider) == ("Native", ["t"], "", {})
 
 
 def test_a_failing_spotify_client_hands_over_to_spotify_web(native) -> None:
@@ -191,13 +233,13 @@ def test_apple_music_tracks_keep_the_built_in_id_prefix(native) -> None:
     assert name == "Palette (feat. G-DRAGON)"
 
 
-def test_a_malformed_link_is_not_sent_anywhere_else(native) -> None:
+def test_a_malformed_link_is_never_answered_by_the_extension(native) -> None:
+    """Both readers run at once, but a link the built-in client calls
+    malformed is an error even when the extension made something of it."""
     native["outcome"] = MornyeError(ErrorKind.INVALID_URL, "not a Spotify link")
-    manager = _Manager(SPOTIFY_WEB)
     with pytest.raises(MornyeError) as err:
-        _run(SPOTIFY_ALBUM, manager=manager)
+        _run(SPOTIFY_ALBUM, provider=_Provider(ALBUM_RESPONSE))
     assert err.value.kind == ErrorKind.INVALID_URL
-    assert manager.listed == 0
 
 
 def test_with_no_extension_the_built_in_error_is_what_the_caller_sees(native) -> None:
@@ -216,11 +258,99 @@ def test_when_the_extension_fails_too_the_first_error_wins(native) -> None:
 
 
 def test_services_without_a_stand_in_are_not_looked_up(native) -> None:
-    native["outcome"] = MornyeError(ErrorKind.NETWORK_ERROR, "tidal down")
+    native["outcome"] = MornyeError(ErrorKind.NETWORK_ERROR, "deezer down")
     manager = _Manager(SPOTIFY_WEB)
-    with pytest.raises(MornyeError, match="tidal down"):
-        _run("https://tidal.com/browse/album/1", manager=manager)
+    with pytest.raises(MornyeError, match="deezer down"):
+        _run("https://www.deezer.com/album/1", manager=manager)
     assert manager.listed == 0
+
+
+def test_tidal_links_are_read_by_tidal_web_too(native) -> None:
+    tidal_web = _installed("tidal-web", ["metadata_provider"], ["tidal.com"])
+    native["outcome"] = MornyeError(ErrorKind.NETWORK_ERROR, "tidal down")
+    response = {
+        "success": True,
+        "type": "track",
+        "track": {"id": "77646168", "name": "Paris", "artists": "Else"},
+    }
+    name, [track], _cover, _meta = asyncio.run(
+        get_url_with_fallback(
+            "https://tidal.com/browse/track/77646168",
+            lambda: object(),
+            manager=_Manager(tidal_web),
+            provider_factory=lambda name: _Provider(response),
+        )
+    )
+    assert track.id == "tidal_77646168"
+    assert name == "Paris"
+
+
+# ---------------------------------------------------------------------------
+# Merging two answers (core/metadata_merge.py)
+# ---------------------------------------------------------------------------
+
+
+def _track(**fields):
+    from mornye.core.models import TrackMetadata
+
+    base = {
+        "id": "1",
+        "title": "Song",
+        "artists": "A",
+        "album": "X",
+        "album_artist": "A",
+    }
+    return TrackMetadata(**{**base, **fields})
+
+
+def test_the_more_complete_value_wins_field_by_field() -> None:
+    from mornye.core.metadata_merge import merge_track
+
+    merged = merge_track(
+        _track(release_date="2017", genre="Pop", artists="A", total_tracks=10),
+        _track(
+            release_date="2017-04-21",
+            genre="K-Pop, pop",
+            artists="A, B",
+            total_tracks=12,
+            upc="880",
+            is_explicit=True,
+        ),
+    )
+    assert merged.release_date == "2017-04-21"
+    assert merged.genre == "Pop, K-Pop"
+    assert merged.artists == "A, B"
+    assert merged.total_tracks == 12
+    assert merged.upc == "880"
+    assert merged.is_explicit is True
+    assert merged.id == "1"
+
+
+def test_the_built_in_value_stays_when_both_have_one() -> None:
+    from mornye.core.metadata_merge import merge_track
+
+    merged = merge_track(
+        _track(publisher="Label A", cover_url="https://a"),
+        _track(publisher="Label B", cover_url="https://b"),
+    )
+    assert (merged.publisher, merged.cover_url) == ("Label A", "https://a")
+
+
+def test_tracks_are_paired_by_isrc_then_title_and_never_added() -> None:
+    from mornye.core.metadata_merge import merge_track_lists
+
+    base = [
+        _track(id="a", title="One", isrc="USX1", track_number=1),
+        _track(id="b", title="Two (Remastered)", track_number=2),
+    ]
+    other = [
+        _track(id="z", title="Two", track_number=2, upc="2"),
+        _track(id="y", title="Whatever", isrc="usx1", upc="1"),
+        _track(id="x", title="Only the extension has this"),
+    ]
+    merged = merge_track_lists(base, other)
+    assert [t.id for t in merged] == ["a", "b"]
+    assert [t.upc for t in merged] == ["1", "2"]
 
 
 # ---------------------------------------------------------------------------

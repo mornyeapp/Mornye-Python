@@ -250,12 +250,12 @@ class AppleMusicMetadataClient:
         self._media_user_token = (
             media_user_token
             if media_user_token is not None
-            else env_value("MORNYE_APPLE_MEDIA_USER_TOKEN", "")
+            else env_value("MORNYE_APPLE_MEDIA_USER_TOKEN", "") or ""
         ).strip()
         self._storefront = (
             storefront
             if storefront is not None
-            else env_value("MORNYE_APPLE_STOREFRONT", "us")
+            else env_value("MORNYE_APPLE_STOREFRONT", "us") or "us"
         ).strip().lower() or "us"
         self._http = AsyncHttpClient(
             provider="apple_metadata",
@@ -957,7 +957,12 @@ class AppleMusicMetadataClient:
         shape while avoiding album hydration for every search hit.
         """
         query = str(query or "").strip()
-        empty = {"tracks": [], "albums": [], "artists": [], "playlists": []}
+        empty: dict[str, list[Any]] = {
+            "tracks": [],
+            "albums": [],
+            "artists": [],
+            "playlists": [],
+        }
         if not query:
             return empty
         store = self._normalize_storefront(storefront, self._storefront)
@@ -986,7 +991,7 @@ class AppleMusicMetadataClient:
                 "offset": 0,
             },
         )
-        result = {key: [] for key in empty}
+        result: dict[str, list[Any]] = {key: [] for key in empty}
         raw = data.get("results") or {}
         songs = (raw.get("songs") or {}).get("data") or []
         if kind in (None, "track", "tracks"):

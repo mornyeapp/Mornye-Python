@@ -49,13 +49,27 @@ class DedupMixin:
         """
         if not path:
             return "", "No path given"
-        path = os.path.expanduser(path.strip().strip("'\""))
+        from ..core.network_paths import (
+            is_unc_path,
+            network_roots,
+            resolve_library_path,
+        )
+
+        path, share_error = resolve_library_path(path)
+        if share_error:
+            return "", share_error
         if not os.path.exists(path):
             return "", f"Path does not exist: {path}"
         try:
             resolved = Path(path).resolve()
-            approved_roots = [Path(self.download_dir).resolve(), Path.home().resolve()]
-            if not any(_is_within(resolved, root) for root in approved_roots):
+            approved_roots = [
+                Path(self.download_dir).resolve(),
+                Path.home().resolve(),
+                *(root.resolve() for root in network_roots()),
+            ]
+            if not is_unc_path(path) and not any(
+                _is_within(resolved, root) for root in approved_roots
+            ):
                 return "", "Access denied: path is outside approved directories"
         except Exception as e:
             return "", f"Path validation failed: {e}"

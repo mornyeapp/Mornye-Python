@@ -128,11 +128,16 @@ DEFAULT_FILE_SIZE_MB = 4096
 
 
 def sandbox_disabled() -> bool:
-    return env_value(DISABLE_ENV, "").strip().lower() in ("1", "true", "yes", "y")
+    return (env_value(DISABLE_ENV, "") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "y",
+    )
 
 
 def _passthrough_names() -> tuple[str, ...]:
-    raw = env_value(PASSTHROUGH_ENV, "")
+    raw = env_value(PASSTHROUGH_ENV, "") or ""
     return tuple(name.strip() for name in raw.split(",") if name.strip())
 
 

@@ -10,11 +10,10 @@ gone after a restart), and failures stay listed until they download.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 import time
-from types import SimpleNamespace
-
 import pytest
 
 from mornye.app import MornyeAPI
@@ -61,7 +60,7 @@ def calls(monkeypatch) -> Any:
                     "prefetched_tracks": dict(request.prefetched or {}),
                 }
             )
-            return SimpleNamespace()
+            return None
 
     monkeypatch.setattr("mornye.application.DownloadService", FakeDownloadService)
     return seen

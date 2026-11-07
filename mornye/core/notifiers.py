@@ -16,8 +16,11 @@ Four shapes cover nearly every request for this:
 
 Credentials and destinations
 ----------------------------
-The target is read from `--notify` / `$MORNYE_NOTIFY_URL`, never from the
-config a GUI or web request can supply. Same reasoning as the post-download
+The target is read from the `--notify*` flags or their environment variables
+(`$MORNYE_NOTIFY`, `$MORNYE_NOTIFY_URL`, `$MORNYE_NOTIFY_TOKEN`,
+`$MORNYE_NOTIFY_CHAT_ID`, `$MORNYE_NOTIFY_ON`), never from the
+config a GUI or web request can supply. GUI and `--web` downloads use the
+environment ones (`target_from_env`). Same reasoning as the post-download
 shell command (see app.py's POST_COMMAND_ENV) and the library token: this
 sends data *out* of the instance to a host of someone's choosing, and an HTTP
 request must not get to choose which host that is. A `--web` user who could
@@ -47,6 +50,13 @@ logger = logging.getLogger(__name__)
 
 NOTIFY_URL_ENV = "MORNYE_NOTIFY_URL"
 NOTIFY_TOKEN_ENV = "MORNYE_NOTIFY_TOKEN"
+#: The rest of the flags, as environment variables too, so a container can
+#: be configured completely without a command line: --notify, --notify-chat-id
+#: and --notify-on. Like the URL and the token they come from the process
+#: environment only, never from a GUI or web request (see the docstring).
+NOTIFY_KIND_ENV = "MORNYE_NOTIFY"
+NOTIFY_CHAT_ID_ENV = "MORNYE_NOTIFY_CHAT_ID"
+NOTIFY_ON_ENV = "MORNYE_NOTIFY_ON"
 
 KINDS = ("webhook", "discord", "telegram", "ntfy")
 
@@ -84,6 +94,35 @@ def resolve_url(explicit: str | None) -> str:
 
 def resolve_token(explicit: str | None) -> str:
     return (explicit if explicit is not None else env_value(NOTIFY_TOKEN_ENV)) or ""
+
+
+def resolve_kind(explicit: str | None) -> str:
+    """`--notify`, else $MORNYE_NOTIFY; empty means notifications are off."""
+    value = explicit if explicit is not None else env_value(NOTIFY_KIND_ENV)
+    return (value or "").strip().lower()
+
+
+def resolve_chat_id(explicit: str | None) -> str:
+    value = explicit if explicit else env_value(NOTIFY_CHAT_ID_ENV)
+    return (value or "").strip()
+
+
+def resolve_on(explicit: str | None, default: str = "summary") -> str:
+    value = explicit if explicit else env_value(NOTIFY_ON_ENV)
+    return (value or default).strip().lower()
+
+
+def target_from_env() -> NotifyTarget | None:
+    """The notifier the process environment configures, or None.
+
+    What GUI and `--web` downloads use: they have no command line, and the
+    destination must never come from a request (see the module docstring).
+    Raises NotifierError when $MORNYE_NOTIFY is set but incomplete.
+    """
+    kind = resolve_kind(None)
+    if not kind:
+        return None
+    return build_target(kind, None, None, resolve_chat_id(None), resolve_on(None))
 
 
 def build_target(

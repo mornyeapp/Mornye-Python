@@ -1,4 +1,4 @@
-"""Saved network destinations and safe SMB/WebDAV file delivery.
+"""Saved network destinations and safe SMB/WebDAV/HTTP(S) file delivery.
 
 Destination profiles contain connection metadata only. Passwords are held in
 process memory for the current session and are never written to disk.
@@ -89,7 +89,33 @@ class WebDAVProfile:
         return asdict(self)
 
 
-NetworkProfile = SMBProfile | WebDAVProfile
+@dataclass(frozen=True)
+class HTTPProfile:
+    """Plain HTTP(S) upload: each delivered file is sent to `url`.
+
+    `method` PUT sends the file as the request body to the URL with the
+    file's relative path appended (or substituted for a ``{path}``
+    placeholder). `method` POST sends a multipart form to `url` itself, with
+    the file in the ``file`` field and its relative path in ``path``.
+    """
+
+    id: str
+    name: str
+    url: str
+    type: str = "http"
+    method: str = "PUT"
+    subdirectory: str = ""
+    username: str = ""
+    timeout: int = 15
+
+    def public_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+NetworkProfile = SMBProfile | WebDAVProfile | HTTPProfile
+
+#: The placeholder an HTTP upload URL may carry for the file's relative path.
+HTTP_PATH_PLACEHOLDER = "{path}"
 
 
 def normalize_mounted_path(path: str, *, platform: str | None = None) -> str:
@@ -150,6 +176,8 @@ def _validate_subdirectory(value: str) -> str:
 def validate_profile(data: dict[str, Any]) -> NetworkProfile:
     if data.get("type") == "webdav":
         return validate_webdav_profile(data)
+    if data.get("type") in {"http", "https"}:
+        return validate_http_profile(data)
 
     name = str(data.get("name") or "").strip()
     host = str(data.get("host") or "").strip().strip("[]")
@@ -202,6 +230,79 @@ def validate_profile(data: dict[str, Any]) -> NetworkProfile:
         domain=domain,
         timeout=timeout,
         encrypt=data.get("encrypt") is True,
+    )
+
+
+def validate_http_profile(data: dict[str, Any]) -> HTTPProfile:
+    name = str(data.get("name") or "").strip()
+    url = str(data.get("url") or "").strip()
+    username = str(data.get("username") or "").strip()
+    method = str(data.get("method") or "PUT").strip().upper()
+    if not name or len(name) > 80:
+        raise DestinationError("Destination name must be 1–80 characters.")
+    if method not in {"PUT", "POST"}:
+        raise DestinationError("The HTTP upload method must be PUT or POST.")
+    parsed = urlsplit(url)
+    if (
+        parsed.scheme.lower() not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise DestinationError(
+            "Enter an upload URL using HTTP or HTTPS, without embedded "
+            "credentials or query parameters."
+        )
+    try:
+        _ = parsed.port
+    except ValueError as exc:
+        raise DestinationError("Enter a valid upload URL and port.") from exc
+    if any(ord(character) < 32 for character in url):
+        raise DestinationError("The upload URL contains invalid characters.")
+    placeholders = url.count(HTTP_PATH_PLACEHOLDER)
+    if placeholders > 1 or (placeholders and HTTP_PATH_PLACEHOLDER not in parsed.path):
+        raise DestinationError(
+            "Use {path} at most once, and only in the path of the upload URL."
+        )
+    if placeholders and method == "POST":
+        raise DestinationError(
+            "{path} is for PUT uploads; POST sends the path as a form field."
+        )
+    decoded_parts = unquote(unquote(parsed.path)).split("/")
+    if any(part in {".", ".."} or "\\" in part for part in decoded_parts):
+        raise DestinationError("The upload URL must stay within its server path.")
+    if not placeholders:
+        url = url.rstrip("/")
+    if len(username) > 256:
+        raise DestinationError("The username must be 256 characters or fewer.")
+    try:
+        timeout = int(data.get("timeout", 15))
+    except (TypeError, ValueError) as exc:
+        raise DestinationError(
+            "Connection timeout must be a number of seconds."
+        ) from exc
+    if not 1 <= timeout <= 120:
+        raise DestinationError("Connection timeout must be between 1 and 120 seconds.")
+    profile_id = str(data.get("id") or uuid.uuid4().hex)
+    if not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", profile_id):
+        raise DestinationError("Invalid destination identifier.")
+    subdirectory = str(data.get("subdirectory") or "").replace("\\", "/").strip("/")
+    if any(
+        part in {"", ".", ".."} or any(ord(char) < 32 for char in part)
+        for part in subdirectory.split("/")
+        if subdirectory
+    ):
+        raise DestinationError("The upload subfolder must stay within the URL.")
+    return HTTPProfile(
+        id=profile_id,
+        name=name,
+        url=url,
+        method=method,
+        subdirectory=subdirectory,
+        username=username,
+        timeout=timeout,
     )
 
 
@@ -542,8 +643,12 @@ class SMBBackend:
         found: list[dict[str, Any]] = []
         while pending:
             directory = pending.pop()
+
+            def list_directory(directory: str = directory) -> list[Any]:
+                return list(client.scandir(directory))
+
             entries = self._remote_call(
-                lambda directory=directory: list(client.scandir(directory)),
+                list_directory,
                 writing=False,
             )
             for entry in entries:
@@ -555,8 +660,12 @@ class SMBBackend:
                 ):
                     continue
                 path = ntpath.join(directory, name)
+
+                def stat_entry(entry: Any = entry) -> Any:
+                    return entry.stat(follow_symlinks=False)
+
                 info = self._remote_call(
-                    lambda entry=entry: entry.stat(follow_symlinks=False),
+                    stat_entry,
                     writing=False,
                 )
                 if _is_directory(info):
@@ -875,6 +984,10 @@ def create_backend(
         from .webdav import WebDAVBackend
 
         return WebDAVBackend(profile, username, password)
+    if isinstance(profile, HTTPProfile):
+        from .http_destination import HTTPUploadBackend
+
+        return HTTPUploadBackend(profile, username, password)
     return SMBBackend(profile, username, password)
 
 

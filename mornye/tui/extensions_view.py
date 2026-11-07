@@ -20,9 +20,11 @@ from __future__ import annotations
 
 import asyncio
 
+import re
+
 from textual.app import ComposeResult
-from textual.containers import Horizontal, VerticalScroll
-from textual.widgets import Button, DataTable, Input, Label
+from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.widgets import Button, DataTable, Input, Label, Select, Switch
 
 #: How each source reads to someone who did not set it up.
 SOURCE_LABELS = {
@@ -44,6 +46,7 @@ class ExtensionsPanel(VerticalScroll):
         self._min_trust_tier = min_trust_tier
         self._urls: list[str] = []
         self._busy = False
+        self._extension_list_started = False
 
     def compose(self) -> ComposeResult:
         yield Label(
@@ -62,11 +65,177 @@ class ExtensionsPanel(VerticalScroll):
         )
         yield Label("", id="registry-status")
 
+        # Each JS extension's own settings, from its manifest — the same
+        # editor as the GUI's Settings → Extensions (both go through
+        # api_mixins/extension_settings).
+        yield Label("Extension settings", classes="panel-intro")
+        yield Select([], prompt="Choose an extension…", id="extset-picker")
+        yield Vertical(id="extset-form")
+        yield Horizontal(
+            Button("Save", id="extset-save", variant="primary"),
+            Button("Reset to defaults", id="extset-reset", variant="warning"),
+            classes="setting-row",
+        )
+        yield Label("", id="extset-status")
+
     def on_mount(self) -> None:
         table = self.query_one("#registry-table", DataTable)
         for column in _COLUMNS:
             table.add_column(column, key=column)
         self.run_worker(self.reload(), exclusive=False)
+        self._extset: dict | None = None
+        self._extset_widgets: dict[str, str] = {}
+
+    def on_show(self) -> None:
+        if self._extension_list_started:
+            return
+        self._extension_list_started = True
+        self.run_worker(self._load_extension_list(), exclusive=False)
+
+    # ── Extension settings ────────────────────────────────────────────────
+
+    @staticmethod
+    def _settings_api():
+        from ..api_mixins.extension_settings import ExtensionSettingsMixin
+
+        return ExtensionSettingsMixin()
+
+    def _extset_say(self, message: str) -> None:
+        self.query_one("#extset-status", Label).update(message)
+
+    async def _load_extension_list(self) -> None:
+        data = await asyncio.to_thread(self._settings_api().list_extension_settings)
+        rows = data.get("extensions") or []
+        picker = self.query_one("#extset-picker", Select)
+        picker.set_options(
+            [(f"{r['display_name']} ({r['name']})", r["name"]) for r in rows]
+        )
+        if data.get("error"):
+            self._extset_say(f"Could not read the extensions — {data['error']}")
+        elif not rows:
+            self._extset_say("No installed extension has settings.")
+        else:
+            self._extset_say(f"{len(rows)} extension(s) with settings.")
+
+    async def _show_extension(self, name: str) -> None:
+        data = await asyncio.to_thread(
+            self._settings_api().get_extension_settings, name
+        )
+        form = self.query_one("#extset-form", Vertical)
+        await form.remove_children()
+        self._extset = None
+        self._extset_widgets = {}
+        if data.get("error"):
+            self._extset_say(data["error"])
+            return
+        self._extset = data
+        rows = []
+        for idx, entry in enumerate(data["settings"]):
+            key = entry["key"]
+            widget_id = f"extset-f-{idx}-{re.sub(r'[^A-Za-z0-9_-]', '_', key)}"
+            self._extset_widgets[widget_id] = key
+            value = data["values"].get(key, entry.get("default"))
+            widget: Input | Select | Switch | Button
+            if entry["type"] == "button":
+                widget = Button(entry["label"], id=widget_id)
+            elif entry["type"] == "boolean":
+                widget = Switch(value=bool(value), id=widget_id)
+            elif entry["type"] == "select" and entry["options"]:
+                options = [(o["label"], o["value"]) for o in entry["options"]]
+                allowed = {v for _l, v in options}
+                current = str(value) if str(value) in allowed else options[0][1]
+                widget = Select(options, value=current, allow_blank=False, id=widget_id)
+            elif entry.get("secret"):
+                is_set = key in data.get("secrets_set", [])
+                widget = Input(
+                    password=True,
+                    placeholder=(
+                        "saved — leave empty to keep it" if is_set else "not set"
+                    ),
+                    id=widget_id,
+                )
+            else:
+                widget = Input(
+                    value="" if value is None else str(value),
+                    placeholder=str(entry.get("default") or ""),
+                    type="number" if entry["type"] == "number" else "text",
+                    id=widget_id,
+                )
+            label = entry["label"]
+            if entry.get("description"):
+                label = f"{label} — {entry['description']}"
+            rows.append(
+                Horizontal(Label(label, markup=False), widget, classes="setting-row")
+            )
+        if rows:
+            await form.mount_all(rows)
+        self._extset_say(
+            f"{data['display_name']}: {len(rows)} setting(s). Saved values apply "
+            "the next time the extension starts."
+        )
+
+    def _collect_extension_values(self) -> dict:
+        values: dict = {}
+        if not self._extset:
+            return values
+        types = {e["key"]: e["type"] for e in self._extset["settings"]}
+        for widget_id, key in self._extset_widgets.items():
+            if types.get(key) == "button":
+                continue
+            widget = self.query_one(f"#{widget_id}")
+            if isinstance(widget, Switch):
+                values[key] = bool(widget.value)
+            elif isinstance(widget, Select):
+                values[key] = str(widget.value)
+            elif isinstance(widget, Input):
+                values[key] = widget.value
+        return values
+
+    async def _save_extension(self) -> None:
+        if not self._extset:
+            self._extset_say("Choose an extension first.")
+            return
+        name = self._extset["name"]
+        result = await asyncio.to_thread(
+            self._settings_api().save_extension_settings,
+            name,
+            self._collect_extension_values(),
+        )
+        if result.get("error"):
+            self._extset_say(result["error"])
+            return
+        await self._show_extension(name)
+        self._extset_say(f"Saved settings for {result.get('display_name') or name}.")
+
+    async def _reset_extension(self) -> None:
+        if not self._extset:
+            self._extset_say("Choose an extension first.")
+            return
+        name = self._extset["name"]
+        result = await asyncio.to_thread(
+            self._settings_api().reset_extension_settings, name
+        )
+        if result.get("error"):
+            self._extset_say(result["error"])
+            return
+        await self._show_extension(name)
+        self._extset_say(f"Settings of {name} reset to their defaults.")
+
+    async def _run_extension_action(self, key: str) -> None:
+        if not self._extset:
+            return
+        result = await asyncio.to_thread(
+            self._settings_api().run_extension_setting_action,
+            self._extset["name"],
+            key,
+        )
+        self._extset_say(result.get("error") or "Done.")
+
+    def on_select_changed(self, event: Select.Changed) -> None:
+        if event.select.id != "extset-picker":
+            return
+        if isinstance(event.value, str) and event.value:
+            self.run_worker(self._show_extension(event.value), exclusive=True)
 
     # ------------------------------------------------------------------
 
@@ -104,6 +273,19 @@ class ExtensionsPanel(VerticalScroll):
     # ------------------------------------------------------------------
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
+        button_id = event.button.id or ""
+        if button_id == "extset-save":
+            self.run_worker(self._save_extension(), exclusive=True)
+            return
+        if button_id == "extset-reset":
+            self.run_worker(self._reset_extension(), exclusive=True)
+            return
+        if button_id in getattr(self, "_extset_widgets", {}):
+            self.run_worker(
+                self._run_extension_action(self._extset_widgets[button_id]),
+                exclusive=True,
+            )
+            return
         if self._busy:
             return
         if event.button.id == "registry-add":

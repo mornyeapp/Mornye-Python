@@ -24,8 +24,10 @@ import webview
 from .api_mixins.covers_lyrics import CoversLyricsMixin
 from .api_mixins.csv_import import CsvImportMixin
 from .api_mixins.dedup import DedupMixin
+from .api_mixins.queue_history import QueueHistoryMixin
 from .api_mixins.discovery import DiscoveryMixin
 from .api_mixins.extension_health import ExtensionHealthMixin
+from .api_mixins.extension_settings import ExtensionSettingsMixin
 from .api_mixins.failed_tracks import FailedTracksMixin
 from .api_mixins.local_tagging import LocalTaggingMixin
 from .api_mixins.search import SearchMixin
@@ -77,7 +79,7 @@ def _post_command_allowed() -> bool:
     can already type a shell command into their own shell gains nothing by
     typing it into ours.
     """
-    return env_value(POST_COMMAND_ENV, "").strip().lower() in (
+    return (env_value(POST_COMMAND_ENV, "") or "").strip().lower() in (
         "1",
         "true",
         "yes",
@@ -178,10 +180,12 @@ class MornyeAPI(
     TrustMixin,
     SubscriptionsMixin,
     ExtensionHealthMixin,
+    ExtensionSettingsMixin,
     CsvImportMixin,
     StatsMixin,
     FailedTracksMixin,
     SignedSessionsMixin,
+    QueueHistoryMixin,
 ):
     """pywebview/`--web` bridge — every method here (plus the two mixins
     above) becomes a callable the frontend invokes as `pywebview.api.<name>`
@@ -216,6 +220,12 @@ class MornyeAPI(
         # Tells this process's own download jobs from ones a queue restored
         # from an earlier process — see run_download_job().
         self._session_id = uuid.uuid4().hex
+        # A staged-queue item left "running" by a process that died is put
+        # back to pending, so Start picks it up again instead of it hanging.
+        with contextlib.suppress(Exception):
+            from .core import staged_queue
+
+            staged_queue.recover_interrupted()
         # Optional callable set by webapp.py in web mode: fn(event_name, args_list).
         # Desktop (pywebview) mode never sets this and is completely unaffected.
         self._ws_broadcast = None
@@ -234,6 +244,7 @@ class MornyeAPI(
         except Exception:
             v = "unknown"
             try:
+                tomllib: Any
                 try:
                     import tomllib
                 except Exception:
@@ -290,13 +301,8 @@ class MornyeAPI(
         self._check_ffmpeg_startup()
         self._check_node_startup()
         try:
-            from .extensions.manager import ExtensionManager
-
             self.log("Download extension...", "debug")
-            threading.Thread(
-                target=lambda: ExtensionManager(auto_install_downloads=True),
-                daemon=True,
-            ).start()
+            self._install_download_extensions()
         except Exception as e:
             self.log(f"Error starting extensions: {e}", "warn")
         try:
@@ -339,6 +345,33 @@ class MornyeAPI(
                 }
             except Exception:
                 return {"latest_version": "", "published_at": ""}
+
+        return run_sync(_inner())
+
+    #: The project's PyPI name; the version shown in the window is the one
+    #: published there (get_pypi_version), so it matches what pip installs.
+    PYPI_PROJECT = "mornye"
+
+    def get_pypi_version(self) -> dict:
+        """Latest released version on PyPI, or "" when it cannot be reached."""
+
+        async def _inner():
+            try:
+                client = AsyncHttpClient("pypi", timeout_s=10)
+                resp = await client.get(
+                    f"https://pypi.org/pypi/{self.PYPI_PROJECT}/json",
+                    headers={
+                        "Accept": "application/json",
+                        "User-Agent": "Mornye-Desktop",
+                    },
+                    timeout=10,
+                )
+                if resp.status_code != 200:
+                    return {"version": ""}
+                info = (resp.json() or {}).get("info") or {}
+                return {"version": str(info.get("version", "") or "").strip()}
+            except Exception:
+                return {"version": ""}
 
         return run_sync(_inner())
 
@@ -594,16 +627,30 @@ class MornyeAPI(
     #: Accents the frontend has an --accent-* block for (styles.css). Kept
     #: here as well so an unknown value can't be written to disk and then
     #: applied at boot as a data-accent nothing styles.
-    ACCENTS = ("green", "blue", "purple", "pink", "orange", "red", "cyan", "amber")
+    ACCENTS = (
+        "teal",
+        "green",
+        "blue",
+        "purple",
+        "pink",
+        "orange",
+        "red",
+        "cyan",
+        "amber",
+    )
+    #: Matches BRAND_VERSION in frontend/app.js: stored next to the accent so
+    #: the one-off green -> teal migration there runs once per install.
+    BRAND_VERSION = 2
 
     def save_accent(self, accent: str) -> dict:
         """Persists the accent colour, same reasoning as save_theme()."""
-        accent = str(accent or "green")
+        accent = str(accent or "teal")
         if accent not in self.ACCENTS:
             return {"ok": False, "error": f"unknown accent: {accent}"}
         try:
             cfg = self.load_settings() or {}
             cfg["accent"] = accent
+            cfg["brand"] = self.BRAND_VERSION
             self.save_settings(cfg)
             return {"ok": True, "accent": accent}
         except Exception as e:
@@ -630,6 +677,12 @@ class MornyeAPI(
                 settings.setdefault("animated_artwork_api_url", artwork_api_url())
                 settings.setdefault("sound_enabled", True)
                 settings.setdefault("notification_sound", True)
+                # MORNYE_<SETTING> environment variables (core/env_settings):
+                # the page shows them until something is saved from it.
+                from .core.env_settings import gui_env_defaults
+
+                for key, value in gui_env_defaults().items():
+                    settings.setdefault(key, value)
                 return settings
         except Exception as e:
             self.log(f"Failed to load settings: {e}", "error")
@@ -702,6 +755,27 @@ class MornyeAPI(
 
     # ── Extension Registry API ─────────────────────────────────────────────
 
+    def _install_download_extensions(self) -> None:
+        """Install the registries' download extensions in the background,
+        then tell the page so it re-reads the provider list.
+
+        Before, this ran only at startup and said nothing when it finished:
+        a first launch, or a registry added later, left Settings with an
+        empty provider list until the next restart.
+        """
+
+        def run() -> None:
+            try:
+                from .extensions.manager import ExtensionManager
+
+                ExtensionManager(auto_install_downloads=True)
+            except Exception as e:
+                self.log(f"Could not install download extensions: {e}", "warn")
+            with contextlib.suppress(Exception):
+                self._push("app_extensions_changed")
+
+        threading.Thread(target=run, daemon=True).start()
+
     def get_registries(self) -> list | dict:
         """Returns every known extension-registry URL with its origin
         (environment variable, .env file, or added from the GUI) and
@@ -720,6 +794,10 @@ class MornyeAPI(
 
             registries = registry_config.add_registry(url)
             self.log(f"Registry added: {url}", "debug")
+            # A registry is only a list until its extensions are installed:
+            # install the download ones now, the same way startup does, so the
+            # provider list fills without a restart.
+            self._install_download_extensions()
             return {"ok": True, "registries": registries}
         except Exception as e:
             self.log(f"Failed to add registry: {e}", "error")
@@ -839,11 +917,9 @@ class MornyeAPI(
             self.log(f"Failed to delete profile: {e}", "error")
             return False
 
-    def check_qobuz_api(self, url):
-        return self._check_api_endpoint_sync(url)
-
-    def check_tidal_api(self, url):
-        return self._check_api_endpoint_sync(url)
+    # The Qobuz/Tidal custom-API checks are gone with the options they
+    # checked: the provider APIs are now each JS extension's own settings
+    # (see api_mixins/extension_settings.py).
 
     def check_animated_artwork_api(self, url):
         return self._check_api_endpoint_sync(url)
@@ -965,8 +1041,22 @@ class MornyeAPI(
         """Return the user's home dir for desktop and browser folder pickers."""
         return str(Path.home())
 
+    def get_network_shares(self) -> dict:
+        """Network shares this machine has mounted, for the library pickers."""
+        from .core.network_paths import describe_shares
+
+        try:
+            return {"ok": True, "shares": describe_shares()}
+        except Exception as e:
+            return {"ok": False, "shares": [], "error": str(e)}
+
     def browse_folder(self, path: str | None = None) -> dict:
         """List subdirectories and files for a folder, matching the web-mode /api/browse-folder payload."""
+        if path:
+            from .core.network_paths import resolve_library_path
+
+            mapped, _error = resolve_library_path(path)
+            path = mapped or path
         base = Path(path).expanduser() if path else Path.home()
         try:
             base = base.resolve()
@@ -1003,6 +1093,40 @@ class MornyeAPI(
             "directories": directories,
             "files": files,
         }
+
+    def _notify_target_for_run(self):
+        """(target, report) for this run's environment-configured notifier.
+
+        `report` is a RunReport to install as a hook when the notifier wants
+        one message per run ("summary"), else None. (None, None) when
+        MORNYE_NOTIFY is unset; a misconfigured one is logged, not raised —
+        a broken notifier must not cost the download.
+        """
+        try:
+            from .core.notifiers import target_from_env
+
+            target = target_from_env()
+        except Exception as exc:
+            self.log(f"Notifications are misconfigured: {exc}", "warn")
+            return None, None
+        if target is None:
+            return None, None
+        if target.on == "summary":
+            from .core.report import RunReport
+
+            return target, RunReport()
+        return target, None
+
+    def get_download_dir(self) -> dict:
+        """The folder downloads go to right now.
+
+        The page used to show a "~/Music/Mornye" written into its HTML until
+        the folder was changed, so a container started with
+        MORNYE_DOWNLOAD_DIR (or a per-account folder in multi-user mode)
+        displayed a path nothing was saved to (issue #254). The page asks
+        for the real one at start-up.
+        """
+        return {"download_dir": self.download_dir}
 
     def set_download_dir(self, path: str) -> dict:
         """Web-mode equivalent of choose_folder(): sets the download
@@ -1498,6 +1622,13 @@ class MornyeAPI(
         """
         self._await_download_slot(selected_indices)
         try:
+            # Settings the page does not send (timeout_s, save_lrc, …) come
+            # from MORNYE_<SETTING> when the container sets them; whatever
+            # the page did send wins (core/env_settings.py).
+            if isinstance(config, dict):
+                from .core.env_settings import gui_env_defaults
+
+                config = {**gui_env_defaults(), **config}
             self._run_download_batch(selected_indices, config, **batch)
         finally:
             self._download_lock.release()
@@ -1735,8 +1866,16 @@ class MornyeAPI(
                 )
                 post_download_action = "none"
                 post_download_command = ""
-            qobuz_local_api_url = config.get("qobuz_local_api_url") or None
-            tidal_custom_api = config.get("tidal_custom_api") or None
+            # Per-service quality ids from the extensions' qualityOptions.
+            # (qobuz_local_api_url / tidal_custom_api from older settings
+            # files are ignored: they never reached a provider, and the
+            # provider APIs are now each extension's own settings.)
+            raw_extension_quality = config.get("extension_quality") or {}
+            extension_quality = (
+                {str(k): str(v) for k, v in raw_extension_quality.items() if k and v}
+                if isinstance(raw_extension_quality, dict)
+                else {}
+            )
             resume = config.get("resume", True)
             timeout_s = config.get("timeout_s")
             loop_val = config.get("loop", None)
@@ -1853,6 +1992,17 @@ class MornyeAPI(
             failed_hook = failed_tracks.hook(self.owner, collection_url)
             deferred_download_hooks: list[tuple[Any, Any]] = []
             post_delivery_hooks = [log_hook, failed_hook]
+            # Notifications configured by the environment (MORNYE_NOTIFY and
+            # friends): a GUI or --web download has no --notify flag, and a
+            # container is exactly where nobody watches the run (issue #254).
+            notify_target, notify_report = self._notify_target_for_run()
+            if notify_target is not None:
+                if notify_report is not None:
+                    post_delivery_hooks.append(notify_report)
+                else:
+                    from .core.notifiers import notify_hook
+
+                    post_delivery_hooks.append(notify_hook(notify_target))
             if destination_id:
 
                 async def defer_download_hook(result: Any, metadata: Any) -> None:
@@ -1889,8 +2039,7 @@ class MornyeAPI(
                 canvas_providers=canvas_providers,
                 enrich_metadata=enrich_metadata,
                 enrich_providers=enrich_providers,
-                qobuz_local_api_url=qobuz_local_api_url,
-                tidal_custom_api=tidal_custom_api,
+                extension_quality=extension_quality,
                 transcode_to=transcode_to,
                 transcode_bitrate=transcode_bitrate,
                 transcode_keep_original=transcode_keep_original,
@@ -1906,10 +2055,19 @@ class MornyeAPI(
                 redownload_fake_hires=redownload_fake_hires,
                 timeout_s=timeout_s,
             )
+            from .application.metadata_service import MetadataService
+
             service = DownloadService(
                 provider_executor=LegacyDownloadAdapter.from_options(
                     legacy_opts,
                     prefetched=prefetched or None,
+                ),
+                # The real resolver. Left to its default, MetadataService
+                # answers a spotify:track: link with its compatibility stub
+                # ("Example Artist — Example Track"), and every provider was
+                # then asked for a song that does not exist.
+                metadata_service=MetadataService(
+                    timeout_s=int(timeout_s or 10), compatibility_fallback=False
                 ),
             )
             report = asyncio.run(
@@ -2001,6 +2159,36 @@ class MornyeAPI(
                 self._push_download_stats()
 
             self._push_download_stats()
+            if notify_target is not None and notify_report is not None:
+                try:
+                    from .core.notifiers import notify_run_summary
+
+                    run_sync(notify_run_summary(notify_target, notify_report))
+                except Exception as exc:
+                    self.log(
+                        f"Could not send the run notification: {exc}", "warn-quiet"
+                    )
+            nothing_saved = (
+                report is not None
+                and report.success_count == 0
+                and (report.failed or report.total == 0)
+            )
+            if nothing_saved:
+                # Say so: "All tracks saved" after zero downloads read as
+                # success while the folder stayed empty.
+                reason = (
+                    report.failed[0].reason
+                    if report.failed
+                    else "no provider returned the track"
+                )
+                self.set_progress("Nothing downloaded.")
+                self.log(f"Nothing was downloaded — {reason}", "error")
+                with contextlib.suppress(Exception):
+                    if announce:
+                        self._push(
+                            "app_download_finished", False, list(selected_indices)
+                        )
+                return
             self.set_progress("Complete!")
             self.log(f"All tracks saved to: {self.download_dir}", "ok")
             try:
