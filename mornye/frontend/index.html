@@ -1182,11 +1182,15 @@
             <div class="s-row">
               <span class="s-label">Tidal endpoint<small id="ce-tidal-note">tidal-web</small></span>
               <input type="text" class="full" id="ce-tidal" placeholder="http://192.168.1.10:8000" style="flex:1 1 220px;min-width:180px;max-width:320px;">
+              <button class="act-btn secondary" type="button" id="ce-tidal-test" onclick="testCustomEndpoint('tidal')" style="padding:6px 14px;font-size:12px;">Test</button>
             </div>
+            <div class="ce-result" id="ce-tidal-result" role="status" aria-live="polite" hidden></div>
             <div class="s-row">
               <span class="s-label">Qobuz endpoint<small id="ce-qobuz-note">qobuz-web</small></span>
               <input type="text" class="full" id="ce-qobuz" placeholder="http://127.0.0.1:8000" style="flex:1 1 220px;min-width:180px;max-width:320px;">
+              <button class="act-btn secondary" type="button" id="ce-qobuz-test" onclick="testCustomEndpoint('qobuz')" style="padding:6px 14px;font-size:12px;">Test</button>
             </div>
+            <div class="ce-result" id="ce-qobuz-result" role="status" aria-live="polite" hidden></div>
             <div class="s-row">
               <span class="s-label">Qobuz API key<small>Sent as X-API-Key; leave empty to keep the saved one</small></span>
               <input type="password" class="full" id="ce-qobuz-key" autocomplete="off" placeholder="Not set" style="flex:1 1 220px;min-width:180px;max-width:320px;">

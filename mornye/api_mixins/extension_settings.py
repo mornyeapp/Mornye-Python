@@ -125,6 +125,38 @@ class ExtensionSettingsMixin:
         except Exception as e:
             return {"error": str(e)}
 
+    def test_custom_endpoint(
+        self, service: str, url: str = "", api_key: str = ""
+    ) -> dict:
+        """Probe a self-hosted download endpoint (core/endpoint_check.py).
+
+        ``service`` is "tidal" or "qobuz". An empty ``url`` or ``api_key``
+        falls back to what tidal-web / qobuz-web have saved, so a stored
+        secret can be tested without the frontend ever holding it.
+        """
+        from ..core.endpoint_check import check_custom_endpoint
+
+        service = str(service or "").strip().lower()
+        ext_name = {"tidal": "tidal-web", "qobuz": "qobuz-web"}.get(service)
+        if ext_name is None:
+            return {"ok": False, "message": f"Unknown service '{service}'."}
+        url = str(url or "").strip()
+        api_key = str(api_key or "").strip()
+        if not url or (service == "qobuz" and not api_key):
+            try:
+                manager = _manager()
+                saved = (
+                    manager.load_settings(ext_name)
+                    if manager.get_installed(ext_name) is not None
+                    else {}
+                )
+            except Exception:
+                saved = {}
+            url = url or str(saved.get("customEndpoint") or "")
+            if service == "qobuz":
+                api_key = api_key or str(saved.get("customEndpointApiKey") or "")
+        return check_custom_endpoint(service, url, api_key)
+
     def run_extension_setting_action(self, name: str, key: str) -> dict:
         """Run a ``button`` setting: the function its manifest names.
 

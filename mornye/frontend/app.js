@@ -7466,6 +7466,39 @@ async function loadCustomEndpoints() {
   }
 }
 
+// The Test buttons: api_mixins/extension_settings.py test_custom_endpoint,
+// which checks the server's status route and one call that needs its
+// upstream account. An empty field tests the saved value.
+async function testCustomEndpoint(service) {
+  const api = window.pywebview?.api;
+  const item = CUSTOM_ENDPOINTS.find((e) => e.ext === `${service}-web`);
+  const out = $(`ce-${service}-result`);
+  const btn = $(`ce-${service}-test`);
+  if (!item || !out) return;
+  if (!api?.test_custom_endpoint) {
+    out.hidden = false;
+    out.className = 'ce-result bad';
+    out.textContent = 'Testing endpoints is unavailable in this build.';
+    return;
+  }
+  const url = $(item.input).value.trim();
+  const key = item.secret ? $(item.secret.input).value.trim() : '';
+  btn.disabled = true;
+  out.hidden = false;
+  out.className = 'ce-result';
+  out.textContent = 'Testing…';
+  try {
+    const res = await api.test_custom_endpoint(service, url, key);
+    out.className = `ce-result ${res?.ok ? 'good' : 'bad'}`;
+    out.textContent = res?.message || (res?.ok ? 'It works.' : 'The test failed.');
+  } catch (e) {
+    out.className = 'ce-result bad';
+    out.textContent = 'The test could not run.';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 async function saveCustomEndpoints() {
   const api = window.pywebview?.api;
   if (!api?.save_extension_settings) return;

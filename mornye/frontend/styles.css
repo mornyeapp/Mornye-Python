@@ -4629,3 +4629,8 @@ textarea {
     transform: none;
   }
 }
+
+/* Result line under a self-hosted endpoint's Test button (Settings → Extensions). */
+.ce-result { font-size: 12px; line-height: 1.5; color: var(--muted); padding: 0 0 10px; }
+.ce-result.good { color: var(--accent); }
+.ce-result.bad { color: var(--red); }
