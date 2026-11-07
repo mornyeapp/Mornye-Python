@@ -162,7 +162,14 @@ class LegacyDownloadAdapter(ProviderExecutor):
         self._last_result = None
         downloader = self._provider_downloader(provider)
         batch_runner = getattr(downloader, "run_tracks_async", None)
-        if self._prefetched and callable(batch_runner):
+        # Only a source that *is* one of the prefetched tracks goes through the
+        # track runner. A whole album/playlist link arrives here alongside the
+        # metadata of every track in it (DownloadService resolves the request
+        # up front), and run_tracks_async() downloads whatever it is handed as
+        # loose tracks — so the playlist subfolder was never created and the
+        # files landed straight in the download folder (issue #265). The
+        # collection link needs run_async(), which knows it is a playlist.
+        if source in self._prefetched and callable(batch_runner):
             result = await batch_runner([source], prefetched=self._prefetched)
             if isinstance(result, DownloadResult):
                 self._last_result = result
