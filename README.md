@@ -60,7 +60,7 @@ If you just want a GUI for personal use, with no code involved, the [Mobile](htt
 - Modular JavaScript and Python Extension system (bring-your-own registry — nothing bundled)
 - Automatic fallback among the extensions *you* have installed
 - Built-in GUI, as a native window or served locally in a browser (`--gui` / `--web`)
-- Guided terminal UI (`--tui`), with the download queue live on screen
+- Guided terminal UI (`--tui`) with catalogue search, staged and live queues, download history, network-library tools, and extension management
 - Docker support
 - Configuration Profiles
 - MusicBrainz metadata enrichment
@@ -71,6 +71,7 @@ If you just want a GUI for personal use, with no code involved, the [Mobile](htt
 - Watch mode: re-sync a playlist/album/artist/URL on an interval, indefinitely
 - Optional shared-secret or per-account authentication for `--web`, plus a queued, per-user download history in multi-user mode
 - Extension discovery directories, and optional Ed25519 signature verification on top of registry checksums
+- Per-extension quality choices and settings, plus metadata fallback and field-by-field merging for Spotify, Apple Music, and Tidal links
 - Local-library duplicate detection by acoustic fingerprint, independent of tags/ISRC
 - Extension scaffolding + dry-run validation for developing your own
 - Installable as a PWA in `--web` mode (Add to Home Screen / standalone window)
@@ -80,7 +81,7 @@ If you just want a GUI for personal use, with no code involved, the [Mobile](htt
 - **Versioned REST API** at `/api/v1`, with an OpenAPI document at `/docs`
 - **CSV input** — hand it a playlist export (Exportify, Soundiiz, a bare list of links) and it downloads what the file lists, matching rows that carry no link and reporting the ones it cannot
 - **Dashboard** — what you have actually downloaded, as numbers: top artists, genres, decades, providers, listening time, activity by weekday and streaks (`--stats`, or the Stats screen)
-- **Durable queue and download log** (SQLite): a restart no longer loses queued work
+- **Persistent staged download queue** (JSON) and **download log/history** (SQLite): queued work survives a restart, and completed downloads remain recorded
 - **Network destinations** — use OS-mounted folders, SMB2/SMB3, or WebDAV, with staged and verified remote delivery
 - **Per-account quotas and an admin role** in `--web-multiuser`
 - **Extension health panel** — success rate, latency and last error per provider

@@ -1,7 +1,7 @@
 # Terminal UI (`--tui`)
 
-The guided mode. One screen instead of fifteen questions, and the download
-queue live in front of you while it runs.
+The guided mode. One screen instead of fifteen questions, with staged work,
+live download progress, history and library tools in the same interface.
 
 ```bash
 mornye --tui
@@ -24,10 +24,14 @@ A sidebar on the left picks the panel; everything else is that panel.
 | **Download** | Every setting, all editable, in whatever order you like |
 | **Search** | Find something in the catalogue and make it the URL |
 | **Tracks** | What is behind the link, and which of it you want |
-| **Queue** | The live run: one bar per track, plus the totals |
+| **Queue** | Work staged to download later; start one item or the whole list |
+| **Live** | The current run: one bar per track, plus the totals |
+| **History** | Downloaded tracks and previously fetched links |
 | **Session** | Recent URLs and saved profiles |
-| **Extensions** | The registry links providers are installed from |
+| **Library** | Saved SMB/WebDAV destinations and read-only library scans |
+| **Extensions** | Registry links, installed providers and extension settings |
 | **Health** | Whether the lyrics providers are reachable |
+| **Signed** | Stored signed sessions and their status |
 | **Command** | The equivalent `mornye …` command, rebuilt as you type |
 
 The log appears when a run starts (`Ctrl+L` toggles it): a column beside the
