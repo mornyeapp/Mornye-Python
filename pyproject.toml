@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mornye"
-version = "2.0.0"
+version = "2.0.1"
 description = "A Python module for metadata and user-configured music-provider extensions."
 readme = "README.md"
 # 3.11 is the floor because Pillow 13+ now requires it. This aligns the
@@ -117,6 +117,7 @@ dev = [
     "pytest>=9.0.3",
     "pytest-httpx>=0.21",
     "httpx>=0.27",
+    "httpx2>=2.16.0",
     "pytest-cov>=5.0",
     "ruff>=0.12.0",
     "black>=26.10.1",
