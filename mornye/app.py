@@ -1880,8 +1880,8 @@ class MornyeAPI(
                 post_download_command = ""
             # Per-service quality ids from the extensions' qualityOptions.
             # (qobuz_local_api_url / tidal_custom_api from older settings
-            # files are ignored: they never reached a provider, and the
-            # provider APIs are now each extension's own settings.)
+            # files are ignored here: the page edits the extensions'
+            # customEndpoint setting directly.)
             raw_extension_quality = config.get("extension_quality") or {}
             extension_quality = (
                 {str(k): str(v) for k, v in raw_extension_quality.items() if k and v}

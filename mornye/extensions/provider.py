@@ -41,6 +41,7 @@ from mornye.core.text_match import track_identity_mismatch
 from mornye.core.signed_session_mobile import SignedSessionClient
 
 from .manager import ExtensionManager, InstalledExtension
+from .sandbox import network_grants
 from .runtime import ExtensionRuntimeError, JSRuntime
 from .runtime_features import signed_fetch, signed_session_client
 
@@ -54,6 +55,40 @@ def _human_bytes(size: float) -> str:
             return f"{value:.0f} {unit}" if unit == "B" else f"{value:.1f} {unit}"
         value /= 1024
     return f"{value:.1f} GB"
+
+
+#: Setting values applied on top of what is saved for an extension, for
+#: the running process only. Filled from the legacy ``--tidal-api`` /
+#: ``--qobuz-local-api`` options by ``apply_legacy_endpoint_options``.
+_SETTING_OVERRIDES: dict[str, dict[str, Any]] = {}
+
+#: Legacy download option -> (extension, setting) it now stands for.
+LEGACY_ENDPOINT_SETTINGS: dict[str, tuple[str, str]] = {
+    "tidal_custom_api": ("tidal-web", "customEndpoint"),
+    "qobuz_local_api_url": ("qobuz-web", "customEndpoint"),
+}
+
+
+def set_setting_override(ext_name: str, key: str, value: Any) -> None:
+    """Override one setting of ``ext_name`` for this process; ``None`` or an
+    empty string removes the override."""
+    overrides = _SETTING_OVERRIDES.setdefault(ext_name, {})
+    if value is None or (isinstance(value, str) and not value.strip()):
+        overrides.pop(key, None)
+    else:
+        overrides[key] = value.strip() if isinstance(value, str) else value
+
+
+def apply_legacy_endpoint_options(options: object) -> None:
+    """Point tidal-web / qobuz-web at the endpoints in the legacy options.
+
+    ``tidal_custom_api`` and ``qobuz_local_api_url`` used to configure
+    built-in providers. They now set the extensions' ``customEndpoint``
+    setting for this process, without touching the saved settings; an
+    empty value removes the override again.
+    """
+    for attr, (ext_name, key) in LEGACY_ENDPOINT_SETTINGS.items():
+        set_setting_override(ext_name, key, str(getattr(options, attr, None) or ""))
 
 
 class _TransferProgress:
@@ -146,6 +181,7 @@ class JSExtensionProvider(BaseProvider):
             self._settings.update(settings)
         disk_settings = self._mgr.load_settings(ext_id)
         self._settings.update(disk_settings)
+        self._settings.update(_SETTING_OVERRIDES.get(self._ext.name, {}))
         if settings:
             self._settings.update(settings)
 
@@ -249,6 +285,7 @@ class JSExtensionProvider(BaseProvider):
             ),
             cancelled_probe=self._stop_requested,
             ext_name=self._ext.name,
+            granted_hosts=network_grants(self._ext.manifest, self._settings),
         )
         rt.start()
         return rt

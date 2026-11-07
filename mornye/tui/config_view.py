@@ -612,9 +612,29 @@ class ConfigPanel(VerticalScroll):
                 hint="forever",
             )
 
-        # The provider APIs (Tidal's download API, Qobuz app ID…) are each
-        # extension's own settings now — the Extensions panel edits them.
+        # Self-hosted download endpoints: for each run they set tidal-web's /
+        # qobuz-web's "customEndpoint" setting (extensions/provider.py,
+        # apply_legacy_endpoint_options). The other provider settings, and a
+        # saved endpoint or API key, live in the Extensions panel.
         with Collapsible(title="Advanced", collapsed=True):
+            yield Row(
+                "Tidal custom endpoint",
+                Input(
+                    value=state.tidal_custom_api or "",
+                    placeholder="http://192.168.1.10:8000 (hifi-api)",
+                    id=_field_id("tidal_custom_api"),
+                ),
+                hint="tried first",
+            )
+            yield Row(
+                "Qobuz custom endpoint",
+                Input(
+                    value=state.qobuz_local_api_url or "",
+                    placeholder="http://127.0.0.1:8000 (qobuz-rest-api)",
+                    id=_field_id("qobuz_local_api_url"),
+                ),
+                hint="tried first",
+            )
             yield Row(
                 "Verbose logging",
                 Switch(value=state.verbose, id=_field_id("verbose")),

@@ -7428,7 +7428,73 @@ async function resetExtensionHealth() {
 // manifest. Fields are rendered from the manifest's own types; the backend
 // validates again on save, so this is presentation only.
 
+// ── Self-hosted endpoints ─────────────────────────────────────────────────
+//
+// A shortcut to tidal-web's and qobuz-web's own "customEndpoint" settings
+// (plus qobuz-web's API key): the same values the extension cards below edit.
+
+const CUSTOM_ENDPOINTS = [
+  { ext: 'tidal-web', input: 'ce-tidal', note: 'ce-tidal-note', key: 'customEndpoint' },
+  { ext: 'qobuz-web', input: 'ce-qobuz', note: 'ce-qobuz-note', key: 'customEndpoint',
+    secret: { input: 'ce-qobuz-key', key: 'customEndpointApiKey' } },
+];
+
+function customEndpointSupport(info, key) {
+  if (!info || info.error) return 'not installed';
+  if (!(info.settings || []).some((s) => s.key === key)) return `v${info.version} — update the extension to use this`;
+  return '';
+}
+
+async function loadCustomEndpoints() {
+  const api = window.pywebview?.api;
+  if (!api?.get_extension_settings || !$('custom-endpoints')) return;
+  for (const item of CUSTOM_ENDPOINTS) {
+    let info = null;
+    try { info = await api.get_extension_settings(item.ext); } catch (e) { info = null; }
+    const problem = customEndpointSupport(info, item.key);
+    const input = $(item.input);
+    input.disabled = !!problem;
+    input.value = problem ? '' : (info.values?.[item.key] ?? '');
+    $(item.note).textContent = problem ? `${item.ext}: ${problem}` : `${item.ext} v${info.version}`;
+    if (item.secret) {
+      const secret = $(item.secret.input);
+      const supported = !problem && (info.settings || []).some((s) => s.key === item.secret.key);
+      secret.disabled = !supported;
+      secret.value = '';
+      secret.placeholder = (info?.secrets_set || []).includes(item.secret.key) ? 'Saved — leave empty to keep it' : 'Not set';
+    }
+  }
+}
+
+async function saveCustomEndpoints() {
+  const api = window.pywebview?.api;
+  if (!api?.save_extension_settings) return;
+  let saved = 0;
+  for (const item of CUSTOM_ENDPOINTS) {
+    const input = $(item.input);
+    if (input.disabled) continue;
+    const value = input.value.trim();
+    if (value && !/^https?:\/\/[^\/?#\s]+/i.test(value)) {
+      showToast(`${item.ext}: the endpoint must start with http:// or https://`, 'error');
+      return;
+    }
+    const values = { [item.key]: value };
+    if (item.secret && !$(item.secret.input).disabled) values[item.secret.key] = $(item.secret.input).value.trim();
+    try {
+      const res = await api.save_extension_settings(item.ext, values);
+      if (res?.error) { showToast(`${item.ext}: ${res.error}`, 'error'); return; }
+      saved++;
+    } catch (e) {
+      showToast(`Could not save the ${item.ext} endpoint.`, 'error');
+      return;
+    }
+  }
+  showToast(saved ? 'Endpoints saved.' : 'No extension supports custom endpoints yet.', saved ? 'success' : 'error');
+  loadExtensionSettings();
+}
+
 async function loadExtensionSettings() {
+  loadCustomEndpoints();
   const list = $('ext-settings-list');
   if (!list) return;
   if (!window.pywebview?.api?.list_extension_settings) {

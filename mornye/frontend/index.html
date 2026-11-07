@@ -1168,6 +1168,34 @@
         </div>
 
         <div class="tc" id="tc-extensions" data-title="Extensions">
+          <div class="s-section" id="custom-endpoints">
+            <div class="s-title">Self-hosted Endpoints</div>
+            <p style="font-size:12px;color:var(--muted);margin:-4px 0 12px;line-height:1.6;">
+              Download through your own server. It is tried first; if it fails the
+              extension falls back to its default API. Tidal expects a
+              <a href="https://github.com/binimum/hifi-api" target="_blank" rel="noopener" style="color:var(--accent);">hifi-api</a>
+              compatible server, Qobuz a
+              <a href="https://github.com/BartolomeoRusso9/qobuz-rest-api" target="_blank" rel="noopener" style="color:var(--accent);">qobuz-rest-api</a>
+              compatible one. A server on this machine or your LAN
+              (<code>http://192.168.1.10:8000</code>) is allowed for that address only.
+            </p>
+            <div class="s-row">
+              <span class="s-label">Tidal endpoint<small id="ce-tidal-note">tidal-web</small></span>
+              <input type="text" class="full" id="ce-tidal" placeholder="http://192.168.1.10:8000" style="flex:1 1 220px;min-width:180px;max-width:320px;">
+            </div>
+            <div class="s-row">
+              <span class="s-label">Qobuz endpoint<small id="ce-qobuz-note">qobuz-web</small></span>
+              <input type="text" class="full" id="ce-qobuz" placeholder="http://127.0.0.1:8000" style="flex:1 1 220px;min-width:180px;max-width:320px;">
+            </div>
+            <div class="s-row">
+              <span class="s-label">Qobuz API key<small>Sent as X-API-Key; leave empty to keep the saved one</small></span>
+              <input type="password" class="full" id="ce-qobuz-key" autocomplete="off" placeholder="Not set" style="flex:1 1 220px;min-width:180px;max-width:320px;">
+            </div>
+            <div class="s-row" style="align-items:stretch;gap:8px;">
+              <button class="act-btn" type="button" id="ce-save" onclick="saveCustomEndpoints()" style="padding:8px 16px;font-size:12px;">Save endpoints</button>
+            </div>
+          </div>
+
           <div class="s-section">
             <div class="s-title">Extension Settings</div>
             <p style="font-size:12px;color:var(--muted);margin:-4px 0 12px;line-height:1.6;">

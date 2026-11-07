@@ -120,7 +120,9 @@ class LegacyDownloadAdapter(ProviderExecutor):
         forward_metadata: bool = True,
     ) -> "LegacyDownloadAdapter":
         from mornye.downloader import MornyeDownloader
+        from mornye.extensions.provider import apply_legacy_endpoint_options
 
+        apply_legacy_endpoint_options(options)
         return cls(
             MornyeDownloader(cast("DownloadOptions", options)),
             prefetched=prefetched,

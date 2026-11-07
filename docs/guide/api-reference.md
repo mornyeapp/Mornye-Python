@@ -27,7 +27,7 @@
 | `artist_separator` | `str` | `None` | Custom separator (e.g. `", "` or `" / "`) to join multiple artists into a single string in tags, instead of using standard multi-value fields. Useful for players like Rekordbox. |
 | `include_featuring` | `bool` | `False` | When downloading an artist discography, also includes tracks where the artist appears as a featured artist. |
 | `max_concurrent_downloads` | `int` | `2` | How many tracks to download in parallel. |
-| `tidal_custom_api` | `str` | `None` | Optional setting forwarded to the installed `tidal-web`-family extension, if it supports it. Has no effect on its own — see [Passing Settings to an Extension](configuration.md#passing-settings-to-an-extension-eg-a-self-hosted-api-instance). |
+| `tidal_custom_api` | `str` | `None` | Sets `tidal-web`'s `customEndpoint` (a hifi-api compatible server) for this run — see [Passing Settings to an Extension](configuration.md#passing-settings-to-an-extension-eg-a-self-hosted-api-instance). |
 | `timeout_s` | `int` | `None` | Per-track download timeout in seconds. If a single track download does not complete within this time, the process is terminated and the track is marked as failed. Mornye then moves on to the next extension or retry. Set to `None` (default) to disable the timeout. |
 | `loop` | `int` | `None` | Duration in minutes to keep retrying permanently failed tracks after a full session completes. |
 | `track_max_retries` | `int` | `0` | Extra download attempts per track when all extensions fail on the first try. Each retry cycles through all configured extensions again with exponential backoff (2 s → 4 s → 8 s …, capped at 30 s). |
@@ -45,7 +45,7 @@
 | `enrich_metadata` | `bool` | `True` | Enables multi-provider metadata enrichment (HD covers, BPM, labels, etc.). |
 | `enrich_providers` | `list` | `["deezer", "apple", "qobuz", "tidal"]` | Priority order of metadata providers to attempt. `soundcloud` is also accepted but isn't on by default. |
 | `qobuz_token` | `str` | `None` | Optional setting forwarded to the installed Qobuz extension, if it supports it. Has no built-in behavior of its own. |
-| `qobuz_local_api_url` | `str` | `None` | Optional setting forwarded to the installed `qobuz-web`-family extension, if it supports it. Has no effect on its own — see [Passing Settings to an Extension](configuration.md#passing-settings-to-an-extension-eg-a-self-hosted-api-instance). |
+| `qobuz_local_api_url` | `str` | `None` | Sets `qobuz-web`'s `customEndpoint` (a qobuz-rest-api compatible server) for this run — see [Passing Settings to an Extension](configuration.md#passing-settings-to-an-extension-eg-a-self-hosted-api-instance). |
 | `use_extensions_fallback` | `bool` | `True` | Whether to automatically fall back to another installed extension for the same alias if one fails. Set to `False` to use only the extensions explicitly listed in `services`. |
 | `transcode_to` | `str` | `None` | Converts every finished track to this format: `"flac"`, `"alac"` (`.m4a`), `"wav"`, `"aiff"`, `"wavpack"` (`.wv`), `"tta"` or `"mp3"` (see [Transcoding](configuration.md#transcoding)). The lossless targets keep the sample rate and bit depth of the source. `None` keeps the extension's original format. Requires `ffmpeg`. |
 | `transcode_bitrate` | `str` | `"320k"` | Bitrate used by the lossy `transcode_to` targets, e.g. `"320k"`, `"256k"`, `"192k"`. Ignored by the lossless ones. |
@@ -162,8 +162,9 @@ Mornye(
 | `--first-artist-only` | | `False` | Use only the first artist in tags and filename. |
 | `--artist-separator` | | `None` | Custom separator for joining multiple artists in tags (e.g. `", "` or `" / "`). Useful for Rekordbox. |
 | `--include-featuring` | | `False` | Include tracks where the artist appears as a featured artist. Only applies to artist/discography URLs. |
-| `--qobuz-local-api` | | `None` | Optional setting forwarded to the installed Qobuz extension, if it supports it. |
-| `--tidal-api` | | `None` | Optional setting forwarded to the installed Tidal extension, if it supports it. |
+| `--qobuz-local-api` | | `None` | Sets `qobuz-web`'s `customEndpoint` for this run. |
+| `--tidal-api` | | `None` | Sets `tidal-web`'s `customEndpoint` for this run. |
+| `--qobuz-api-key` | | `None` | Sets `qobuz-web`'s `customEndpointApiKey` (sent as `X-API-Key` to the custom endpoint) for this run. |
 | `--timeout` | | `180` | Maximum seconds allowed for each provider attempt. If a track download stalls or takes longer than this limit, it is forcibly terminated and marked as failed, then Mornye moves to the next extension or retry. |
 | `--loop` | `-l` | `None` | Keep retrying permanently failed tracks every N minutes. |
 | `--watch` | | `None` | Re-run this exact command every N minutes, forever, instead of exiting after one pass. See [Watch Mode](configuration.md#watch-mode-keep-syncing-on-an-interval). |

@@ -19,7 +19,7 @@ import shutil
 import subprocess
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -28,7 +28,7 @@ from typing_extensions import Self
 if TYPE_CHECKING:
     from collections.abc import Awaitable
 
-from .sandbox import build_env, describe
+from .sandbox import GRANTED_HOSTS_ENV, build_env, describe
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +89,7 @@ class JSRuntime:
         session_handler: Callable[[str, str, Any, dict], Awaitable[dict]] | None = None,
         cancelled_probe: Callable[[], bool] | None = None,
         ext_name: str = "",
+        granted_hosts: Sequence[str] = (),
     ) -> None:
         self.ext_path = Path(ext_path)
         self.settings = settings or {}
@@ -106,6 +107,9 @@ class JSRuntime:
         # then (core/provider_cooldown.py). Unnamed — a bare JSRuntime in a
         # test — they stay on this module's logger, as they always were.
         self.ext_name = ext_name
+        # Hosts from the extension's "grantsNetwork" settings: _netguard.js
+        # lets these through even when they are private or local.
+        self.granted_hosts = tuple(granted_hosts)
         self._ext_logger = (
             logging.getLogger(f"{__name__}.{ext_name}") if ext_name else logger
         )
@@ -201,7 +205,10 @@ class JSRuntime:
                     f"{node_options} --require {quote_node_option(guard)}".strip()
                 )
 
-        env = build_env({"NODE_OPTIONS": node_options} if node_options else None)
+        extra_env = {GRANTED_HOSTS_ENV: ",".join(self.granted_hosts)}
+        if node_options:
+            extra_env["NODE_OPTIONS"] = node_options
+        env = build_env(extra_env)
         logger.debug("[ExtRuntime] %s", describe())
 
         self._proc = subprocess.Popen(

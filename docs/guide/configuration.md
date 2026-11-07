@@ -546,7 +546,11 @@ Mornye(
 
 ### Passing Settings to an Extension (e.g. a self-hosted API instance)
 
-`qobuz_local_api_url` and `tidal_custom_api` (and equivalents you'll find documented by other extensions) are **not** built-in behaviors of the core — they are optional settings forwarded to whichever extension you have installed for that service, if that extension supports them. Whether they do anything at all, what they connect to, and what account or credentials they expect depends entirely on the specific extension's own documentation and implementation, which the maintainer of this repository does not control or vouch for.
+`tidal_custom_api` and `qobuz_local_api_url` are **not** built-in behaviors of the core. For the current run they set the `customEndpoint` setting of the installed `tidal-web` (1.2.14+) and `qobuz-web` (1.2.27+) extensions, without saving it. `tidal-web` expects a [hifi-api](https://github.com/binimum/hifi-api) compatible server, `qobuz-web` a [qobuz-rest-api](https://github.com/BartolomeoRusso9/qobuz-rest-api) compatible one. The endpoint is tried first, and the extension falls back to its default API if it fails. Older extension versions ignore the setting. What a given server connects to, and what account or credentials it expects, is up to that server, which the maintainer of this repository does not control or vouch for.
+
+To keep the endpoint for every run (and in the GUI), save it as an extension setting instead: `--ext-set tidal-web.customEndpoint=URL`, `--ext-set qobuz-web.customEndpoint=URL`, plus `--ext-set qobuz-web.customEndpointApiKey=KEY` if your server needs an `X-API-Key`.
+
+**Local servers.** Extensions are normally blocked from private and local addresses (see `_netguard.js`). The host in `customEndpoint` is the exception: because the setting is marked `"grantsNetwork": true`, `http://127.0.0.1:8000` or `http://192.168.1.10:8000` works there without `MORNYE_EXT_ALLOW_PRIVATE_NETWORK=1`, while the rest of the local network stays blocked.
 
 ```python
 from mornye import Mornye

@@ -628,16 +628,26 @@ def parse_args(profile_defaults: dict | None = None) -> argparse.Namespace:
         default=pd.get("qobuz_local_api_url", None),
         dest="qobuz_local_api_url",
         metavar="URL",
-        help="Deprecated, has no effect. Provider APIs are each extension's "
-        "own settings: see --ext-settings qobuz-web.",
+        help="Custom Qobuz download endpoint (qobuz-rest-api compatible) for "
+        "this run: sets qobuz-web's customEndpoint without saving it. Use "
+        "--ext-set qobuz-web.customEndpoint=URL to save it.",
     )
     parser.add_argument(
         "--tidal-api",
         default=pd.get("tidal_custom_api", None),
         dest="tidal_custom_api",
         metavar="URL",
-        help="Deprecated, has no effect. Set the Tidal download API with "
-        "--ext-set tidal-web.downloadApiUrl=URL instead.",
+        help="Custom Tidal download endpoint (hifi-api compatible) for this "
+        "run: sets tidal-web's customEndpoint without saving it. Use "
+        "--ext-set tidal-web.customEndpoint=URL to save it.",
+    )
+    parser.add_argument(
+        "--qobuz-api-key",
+        default=None,
+        dest="qobuz_api_key",
+        metavar="KEY",
+        help="X-API-Key for the custom Qobuz endpoint (--qobuz-local-api) for "
+        "this run. Use --ext-set qobuz-web.customEndpointApiKey=KEY to save it.",
     )
     parser.add_argument(
         "--ext-quality",
@@ -3017,20 +3027,10 @@ async def amain() -> None:
         "qobuz_local_api_url",
     )
     tidal_custom_api = args.tidal_custom_api or merged_defaults.get("tidal_custom_api")
-    for flag, value, hint in (
-        (
-            "--tidal-api",
-            args.tidal_custom_api,
-            "--ext-set tidal-web.downloadApiUrl=URL",
-        ),
-        ("--qobuz-local-api", args.qobuz_local_api_url, "--ext-settings qobuz-web"),
-    ):
-        if value:
-            print(
-                f"Warning: {flag} is deprecated and has no effect; the provider "
-                f"APIs are each extension's own settings ({hint}).",
-                file=sys.stderr,
-            )
+    if args.qobuz_api_key:
+        from .extensions.provider import set_setting_override
+
+        set_setting_override("qobuz-web", "customEndpointApiKey", args.qobuz_api_key)
     extension_quality = _parse_ext_quality(args.ext_quality) or dict(
         merged_defaults.get("extension_quality") or {}
     )

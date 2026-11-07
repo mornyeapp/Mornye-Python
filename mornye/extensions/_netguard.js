@@ -23,9 +23,11 @@
 // boundary against hostile code. Real containment needs the OS (a network
 // namespace, or sandbox-exec) and is a separate job.
 //
-// Set MORNYE_EXT_ALLOW_PRIVATE_NETWORK=1 to switch it off, which is
-// wanted when an extension is deliberately pointed at a self-hosted API on
-// the LAN (a local Qobuz mirror, say).
+// A host the user typed into one of the extension's "grantsNetwork"
+// settings (MORNYE_EXT_GRANTED_HOSTS, see sandbox.network_grants) is let
+// through even when it is private: that is how an extension is pointed at
+// a self-hosted API on the LAN (a local Qobuz mirror, say). Set
+// MORNYE_EXT_ALLOW_PRIVATE_NETWORK=1 to switch the guard off entirely.
 
 'use strict';
 
@@ -80,10 +82,28 @@ function isBlocked(address) {
   return address.includes(':') ? v6Blocked(address) : v4Blocked(address);
 }
 
+// Hosts the user typed into one of this extension's "grantsNetwork"
+// settings (e.g. a self-hosted download endpoint), set by runtime.py.
+// Only these may be — or resolve to — a private address; the rest of the
+// local network stays blocked.
+function normalizeHost(host) {
+  return typeof host === 'string' ? host.trim().toLowerCase().replace(/^\[|\]$/g, '') : '';
+}
+const GRANTED = new Set(
+  String(process.env.MORNYE_EXT_GRANTED_HOSTS || '')
+    .split(',')
+    .map(normalizeHost)
+    .filter(Boolean)
+);
+function isGranted(host) {
+  return GRANTED.size > 0 && GRANTED.has(normalizeHost(host));
+}
+
 function refuse(address) {
   const err = new Error(
     `[netguard] blocked connection to a private/local address (${address}). ` +
-      'Set MORNYE_EXT_ALLOW_PRIVATE_NETWORK=1 if this extension is meant ' +
+      'Put it in the extension\'s custom endpoint setting, or set ' +
+      'MORNYE_EXT_ALLOW_PRIVATE_NETWORK=1, if this extension is meant ' +
       'to reach a self-hosted service.'
   );
   err.code = 'EACCES';
@@ -98,6 +118,7 @@ function guardLookup(original) {
   return function lookup(hostname, options, callback) {
     const cb = typeof options === 'function' ? options : callback;
     const opts = typeof options === 'function' ? {} : options;
+    if (isGranted(hostname)) return original.call(dns, hostname, opts, cb);
     const wrapped = (err, address, family) => {
       if (!err) {
         if (Array.isArray(address)) {
@@ -120,6 +141,7 @@ if (dns.promises && dns.promises.lookup) {
   const originalPromisesLookup = dns.promises.lookup.bind(dns.promises);
   dns.promises.lookup = async function lookup(hostname, options) {
     const result = await originalPromisesLookup(hostname, options);
+    if (isGranted(hostname)) return result;
     if (Array.isArray(result)) {
       const allowed = result.filter((entry) => !isBlocked(entry.address));
       if (allowed.length === 0 && result.length > 0) throw refuse(result[0].address);
@@ -162,7 +184,7 @@ function hostFromConnectArgs(args) {
 const originalConnect = net.Socket.prototype.connect;
 net.Socket.prototype.connect = function connect(...args) {
   const host = hostFromConnectArgs(args);
-  if (isBlocked(host)) {
+  if (isBlocked(host) && !isGranted(host)) {
     const err = refuse(host);
     // Match Node's own asynchronous error delivery rather than throwing
     // from connect(), which callers do not expect.
