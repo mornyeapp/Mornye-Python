@@ -189,6 +189,8 @@
     'list_extension_settings', 'get_extension_settings',
     'save_extension_settings', 'reset_extension_settings',
     'run_extension_setting_action',
+    // The Test buttons next to the self-hosted endpoints (admin-only).
+    'test_custom_endpoint',
   ];
 
   // Deliberately NOT here (and not in webapp.py's ALLOWED_METHODS):

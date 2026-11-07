@@ -133,8 +133,9 @@ def test_the_api_falls_back_to_the_saved_endpoint_and_key(monkeypatch) -> None:
     monkeypatch.setattr(extension_settings, "_manager", lambda: Manager())
     monkeypatch.setattr(
         "mornye.core.endpoint_check.check_custom_endpoint",
-        lambda service, url, api_key="": calls.append((service, url, api_key))
-        or {"ok": True},
+        lambda service, url, api_key="": (
+            calls.append((service, url, api_key)) or {"ok": True}
+        ),
     )
     api = extension_settings.ExtensionSettingsMixin()
     api.test_custom_endpoint("qobuz")
