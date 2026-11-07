@@ -46,6 +46,7 @@ class ExtensionsPanel(VerticalScroll):
         self._min_trust_tier = min_trust_tier
         self._urls: list[str] = []
         self._busy = False
+        self._extension_list_started = False
 
     def compose(self) -> ComposeResult:
         yield Label(
@@ -84,9 +85,12 @@ class ExtensionsPanel(VerticalScroll):
         self.run_worker(self.reload(), exclusive=False)
         self._extset: dict | None = None
         self._extset_widgets: dict[str, str] = {}
-        self.call_after_refresh(
-            lambda: self.run_worker(self._load_extension_list(), exclusive=False)
-        )
+
+    def on_show(self) -> None:
+        if self._extension_list_started:
+            return
+        self._extension_list_started = True
+        self.run_worker(self._load_extension_list(), exclusive=False)
 
     # ── Extension settings ────────────────────────────────────────────────
 
