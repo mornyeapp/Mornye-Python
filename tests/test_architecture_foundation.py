@@ -2350,3 +2350,40 @@ def test_v1_router_uses_application_adapter_for_download_submission():
     assert response.status_code == 202
     assert response.json()["status"] == "queued"
     assert response.json()["payload"]["provider_order"][0] == "tidal"
+
+
+def test_legacy_adapter_keeps_collection_links_on_collection_runner():
+    # Issue #265: a whole playlist is downloaded by its own link, with the
+    # metadata of its tracks resolved up front. Routing that link through the
+    # track runner downloaded the playlist as loose tracks, without the
+    # playlist subfolder.
+    calls = []
+
+    class FakeDownloader:
+        async def run_tracks_async(self, sources, *, prefetched=None):
+            raise AssertionError("a collection link must not use the track runner")
+
+        async def run_async(self, source):
+            calls.append(source)
+            return DownloadResult.ok("legacy", "/music/My Playlist/a.flac", source=source)
+
+    track = TrackMetadata(
+        id="in-playlist",
+        title="In Playlist",
+        artists="Artist",
+        album="Album",
+        album_artist="Artist",
+        external_url="https://open.spotify.com/track/in-playlist",
+    )
+    adapter = LegacyDownloadAdapter(
+        FakeDownloader(),
+        prefetched={
+            track.external_url: track,
+            "spotify:track:in-playlist": track,
+        },
+    )
+    playlist = "https://open.spotify.com/playlist/abc"
+
+    asyncio.run(adapter.execute("legacy", playlist))
+
+    assert calls == [playlist]
