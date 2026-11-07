@@ -83,6 +83,8 @@ def test_a_scheduled_check_queues_only_the_added_tracks(playlist):
     assert job["source_url"] == PLAYLIST_URL
     assert job["whole"] is False
     assert job["config"] == {"quality": "LOSSLESS"}
+    # So the added tracks land in the playlist's own subfolder (issue #263).
+    assert job["playlist_name"] == "My Playlist"
     fn_name, (payload,) = api.pushed[-1]
     assert fn_name == "subscriptionsChecked"
     assert payload["scheduled"] is True and payload["new"] == 1

@@ -250,7 +250,11 @@ class SubscriptionsMixin:
             settings = dict(config or sub.download_config or {})
             if result.new_tracks:
                 self._queue_subscription_tracks(
-                    result.new_tracks, sub.url, settings, whole=False
+                    result.new_tracks,
+                    sub.url,
+                    settings,
+                    whole=False,
+                    playlist_name=result.artist_name or sub.name or "",
                 )
                 continue
             for release in result.new:
@@ -280,7 +284,13 @@ class SubscriptionsMixin:
         return list(result[1] or [])
 
     def _queue_subscription_tracks(
-        self, tracks: list, source_url: str, config: dict, *, whole: bool
+        self,
+        tracks: list,
+        source_url: str,
+        config: dict,
+        *,
+        whole: bool,
+        playlist_name: str = "",
     ) -> None:
         # A self-contained job (see MornyeAPI.run_download_job): queued in
         # --web mode, where it survives a restart, and run right away
@@ -293,6 +303,12 @@ class SubscriptionsMixin:
             "whole": whole,
             "config": dict(config),
         }
+        if playlist_name:
+            # Only the added tracks are downloaded, so the batch runs as
+            # loose tracks and never learns it came from a playlist: the
+            # name rides along so they land in the same playlist subfolder
+            # a full download of it would have made (issue #263).
+            payload["playlist_name"] = playlist_name
         queue = getattr(self, "_subscription_download_queue", None)
         if queue is None:
             self._start_download_job(payload)

@@ -1581,6 +1581,7 @@ class MornyeAPI(
             tracks_by_index=tracks,
             source_url=str(payload.get("source_url") or ""),
             whole=bool(payload.get("whole")),
+            playlist_name=str(payload.get("playlist_name") or ""),
             announce=payload.get("session") == self._session_id,
         )
         return {"tracks": len(indices)}
@@ -1684,6 +1685,7 @@ class MornyeAPI(
         tracks_by_index: dict | None = None,
         source_url: str | None = None,
         whole: bool | None = None,
+        playlist_name: str = "",
         announce: bool = True,
     ) -> None:
         """One batch, start to finish.
@@ -1790,6 +1792,16 @@ class MornyeAPI(
             # so client.Mornye's own False default applied and every
             # playlist landed loose in the download folder.
             create_playlist_subfolders = config.get("create_playlist_subfolders", True)
+            if playlist_name.strip() and create_playlist_subfolders and not output_path:
+                # Tracks picked out of a playlist (a followed playlist's
+                # new ones) download as loose tracks; put them in the
+                # folder the whole playlist would have gone into. Same
+                # sanitising as download_engine._resolve_output_dir_async.
+                download_output_dir = os.path.join(
+                    download_output_dir,
+                    re.sub(r'[<>:"/\\|?*]', "_", playlist_name.strip()),
+                )
+                os.makedirs(download_output_dir, exist_ok=True)
             first_artist_only = config.get("first_artist_only", False)
             artist_separator = config.get("artist_separator") or None
             lyrics_providers = config.get("lyrics_providers") or [
