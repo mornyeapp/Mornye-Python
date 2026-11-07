@@ -117,7 +117,7 @@ function switchView(name) {
   $('view-' + name)?.classList.add('active');
   $('nav-' + name)?.classList.add('active');
   if (name === 'local') loadNetworkShares();
-  if (name === 'queue') loadStaged();
+  if (name === 'queue') { loadStaged(); window.dismissDownloadToast?.(); }
   if (name === 'history') loadHistory();
 }
 
@@ -1529,6 +1529,12 @@ window.updateFolderLabel = (path) => {
   $('folder-path').textContent = path; $('folder-path').title = path;
 };
     let currentDownloadToastId = null;
+    let downloadToastMuted = false;
+    // Hidden quietly: no "closed by the user" mute when the app removes it.
+    window.dismissDownloadToast = () => {
+      if (currentDownloadToastId) toastMgr.dismiss(currentDownloadToastId);
+      currentDownloadToastId = null;
+    };
 
     window.app_update_download_stats = (payload) => {
       try {
@@ -1542,7 +1548,16 @@ window.updateFolderLabel = (path) => {
         queueStats.speed = `${Number(data.current_speed || 0).toFixed(1)} MB/s`;
         queueStats.eta = formatEta(data.eta_seconds);
 
-        if (isDownloading) {
+        // The Queue page already shows all of this (live card + bottom bar),
+        // so the toast would only cover the list there. Elsewhere it stays,
+        // but the user can close it and it stays closed for this run.
+        const onQueuePage = $('view-queue')?.classList.contains('active');
+        if (currentDownloadToastId && !document.getElementById(currentDownloadToastId)) {
+          currentDownloadToastId = null;
+          downloadToastMuted = true;
+        }
+        if (onQueuePage && currentDownloadToastId) dismissDownloadToast();
+        if (isDownloading && !onQueuePage && !downloadToastMuted) {
           const activeItem = queue.find(q => q.status === 'active');
           if (activeItem) {
             // Plain text, not an HTML fragment: toastMgr's rendering path
@@ -1553,7 +1568,9 @@ window.updateFolderLabel = (path) => {
               + (queueStats.eta ? ` · ${queueStats.eta} left` : '');
 
             if (!currentDownloadToastId) {
-              currentDownloadToastId = toastMgr.loading(msg, { title: 'Downloading Tracks...' });
+              currentDownloadToastId = toastMgr.loading(msg, {
+                title: 'Downloading Tracks...', dismissible: true, className: 'toast-compact',
+              });
             } else {
               // Update il testo del toast esistente
               const toastEl = document.getElementById(currentDownloadToastId);
@@ -1632,15 +1649,13 @@ window.app_download_finished = (success = true, indices = null) => {
     activeItems.forEach(qi => updateQueueItem(qi, success ? 'done' : 'error', success ? 100 : 0));
   }
 
-  if (currentDownloadToastId) {
-     toastMgr.dismiss(currentDownloadToastId);
-     currentDownloadToastId = null;
-  }
+  dismissDownloadToast();
   
   // Check if there are still any downloads running concurrently
   const stillActive = queue.some(q => q.status === 'active');
   if (!stillActive) {
     isDownloading = false;
+    downloadToastMuted = false;
     resetQueueDuration();
     setStatus(success ? 'Download complete! ✓' : 'Error during download.');
     logMessage(success ? 'All downloads finished.' : 'Download failed.', success ? 'ok' : 'error');
@@ -4050,9 +4065,13 @@ function renderQueueNow() {
   $('queue-clear-filters')?.classList.toggle('hidden', !queueFilterStatus && !queueSearch);
 
   const dock = $('queue-dock');
+  // Something in the live list: the empty staged-queue placeholder above it
+  // shrinks to one line so "Downloading now" sits near the top.
+  $('view-queue')?.classList.toggle('has-live', queue.length > 0);
   if (queue.length === 0) {
     queueStats = { downloaded:'0.00 MB', speed:'0.0 MB/s', eta:'' };
     if (dock) dock.classList.remove('visible');
+    document.body.classList.remove('has-dock');
     $('queue-drawer')?.classList.remove('open');
 
     empty.style.display = 'flex';
@@ -4080,6 +4099,8 @@ function renderQueueNow() {
 
   empty.style.display = 'none';
   if (dock) dock.classList.add('visible');
+  // Drives the bottom padding of #content (styles.css) under the bar.
+  document.body.classList.add('has-dock');
 
   // Filtering happens here, not over the rendered nodes: the counts above
   // must keep describing the whole queue (that is what makes them useful as
@@ -4273,6 +4294,7 @@ function renderStaged() {
   const list = $('sq-list');
   if (!list) return;
   const shown = visibleStaged();
+  list.classList.toggle('is-empty', !items.length);
   if (!shown.length) {
     list.innerHTML = items.length
       ? emptyState('disc', 'Nothing matches', 'Try another type, status or search.')
@@ -4603,7 +4625,7 @@ function updateQueueItem(qi, status, progress) {
 }
 
 function clearQueue() {
-  queue = []; isDownloading = false;
+  queue = []; isDownloading = false; downloadToastMuted = false;
   queueStats = { downloaded:'0.00 MB', speed:'0.0 MB/s', eta:'' };
   resetQueueDuration();
   renderQueue();

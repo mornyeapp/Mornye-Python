@@ -179,7 +179,7 @@ class ToastManager {
     const toast = document.createElement('div');
     // Determiniamo l'animazione in base alla posizione
     const animationClass = opts.position.includes('left') ? 'slideInLeft' : 'slideInRight';
-    toast.className = `toast ${opts.type} ${animationClass}`;
+    toast.className = `toast ${opts.type} ${animationClass}${opts.className ? ' ' + opts.className : ''}`;
     toast.id = id;
     toast.setAttribute('role', 'alert');
 
@@ -229,7 +229,7 @@ class ToastManager {
   error(message, options = {}) { return this.show(message, { ...options, type: 'error' }); }
   warning(message, options = {}) { return this.show(message, { ...options, type: 'warning' }); }
   info(message, options = {}) { return this.show(message, { ...options, type: 'info' }); }
-  loading(message, options = {}) { return this.show(message, { ...options, type: 'loading', dismissible: false }); }
+  loading(message, options = {}) { return this.show(message, { dismissible: false, ...options, type: 'loading' }); }
 
   dismiss(id) {
     const toast = document.getElementById(id);
