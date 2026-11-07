@@ -141,6 +141,46 @@ def _passthrough_names() -> tuple[str, ...]:
     return tuple(name.strip() for name in raw.split(",") if name.strip())
 
 
+#: Comma-separated hosts the extension's "grantsNetwork" settings point at.
+#: runtime.py sets it for every extension process; _netguard.js reads it.
+GRANTED_HOSTS_ENV = "MORNYE_EXT_GRANTED_HOSTS"
+
+
+def network_grants(manifest: dict, settings: dict) -> list[str]:
+    """Hosts of the URLs the user typed into ``grantsNetwork`` settings.
+
+    Mirrors the Mornye app: only ``string`` settings marked
+    ``"grantsNetwork": true`` count, an empty value falls back to the
+    setting's default, and anything that is not an ``http(s)`` URL with a
+    host and no credentials is ignored.
+    """
+    hosts: list[str] = []
+    schema = manifest.get("settings") if isinstance(manifest, dict) else None
+    for entry in schema if isinstance(schema, list) else []:
+        if not isinstance(entry, dict) or entry.get("grantsNetwork") is not True:
+            continue
+        if entry.get("type") != "string":
+            continue
+        key = entry.get("key")
+        value = settings.get(key) if isinstance(settings, dict) else None
+        if not isinstance(value, str) or not value.strip():
+            value = entry.get("default")
+        if not isinstance(value, str):
+            continue
+        try:
+            parsed = urlparse(value.strip())
+            host = parsed.hostname
+        except ValueError:
+            continue
+        if parsed.scheme not in ("http", "https") or not host:
+            continue
+        if parsed.username or parsed.password:
+            continue
+        if host not in hosts:
+            hosts.append(host)
+    return hosts
+
+
 def build_env(extra: dict[str, str] | None = None) -> dict[str, str]:
     """The environment to start an extension process with.
 

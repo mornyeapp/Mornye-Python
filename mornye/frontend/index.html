@@ -36,7 +36,7 @@
        be there. The artwork already ships. -->
   <link rel="icon" type="image/png" sizes="192x192" href="assets/icons/logo-192.png">
   <!-- Fonts ship in assets/fonts/ (see the @font-face block in styles.css). -->
-  <link rel="stylesheet" href="styles.css?v=20261106-warm-rebrand">
+  <link rel="stylesheet" href="styles.css?v=20261107-select-pad">
   <script>
     // Theme, applied before the first paint. app.js used to do this only from
     // its 'pywebviewready' handler, which meant the window painted light and
@@ -1168,6 +1168,38 @@
         </div>
 
         <div class="tc" id="tc-extensions" data-title="Extensions">
+          <div class="s-section" id="custom-endpoints">
+            <div class="s-title">Self-hosted Endpoints</div>
+            <p style="font-size:12px;color:var(--muted);margin:-4px 0 12px;line-height:1.6;">
+              Download through your own server. It is tried first; if it fails the
+              extension falls back to its default API. Tidal expects a
+              <a href="https://github.com/binimum/hifi-api" target="_blank" rel="noopener" style="color:var(--accent);">hifi-api</a>
+              compatible server, Qobuz a
+              <a href="https://github.com/BartolomeoRusso9/qobuz-rest-api" target="_blank" rel="noopener" style="color:var(--accent);">qobuz-rest-api</a>
+              compatible one. A server on this machine or your LAN
+              (<code>http://192.168.1.10:8000</code>) is allowed for that address only.
+            </p>
+            <div class="s-row">
+              <span class="s-label">Tidal endpoint<small id="ce-tidal-note">tidal-web</small></span>
+              <input type="text" class="full" id="ce-tidal" placeholder="http://192.168.1.10:8000" style="flex:1 1 220px;min-width:180px;max-width:320px;">
+              <button class="act-btn secondary" type="button" id="ce-tidal-test" onclick="testCustomEndpoint('tidal')" style="padding:6px 14px;font-size:12px;">Test</button>
+            </div>
+            <div class="ce-result" id="ce-tidal-result" role="status" aria-live="polite" hidden></div>
+            <div class="s-row">
+              <span class="s-label">Qobuz endpoint<small id="ce-qobuz-note">qobuz-web</small></span>
+              <input type="text" class="full" id="ce-qobuz" placeholder="http://127.0.0.1:8000" style="flex:1 1 220px;min-width:180px;max-width:320px;">
+              <button class="act-btn secondary" type="button" id="ce-qobuz-test" onclick="testCustomEndpoint('qobuz')" style="padding:6px 14px;font-size:12px;">Test</button>
+            </div>
+            <div class="ce-result" id="ce-qobuz-result" role="status" aria-live="polite" hidden></div>
+            <div class="s-row">
+              <span class="s-label">Qobuz API key<small>Sent as X-API-Key; leave empty to keep the saved one</small></span>
+              <input type="password" class="full" id="ce-qobuz-key" autocomplete="off" placeholder="Not set" style="flex:1 1 220px;min-width:180px;max-width:320px;">
+            </div>
+            <div class="s-row" style="align-items:stretch;gap:8px;">
+              <button class="act-btn" type="button" id="ce-save" onclick="saveCustomEndpoints()" style="padding:8px 16px;font-size:12px;">Save endpoints</button>
+            </div>
+          </div>
+
           <div class="s-section">
             <div class="s-title">Extension Settings</div>
             <p style="font-size:12px;color:var(--muted);margin:-4px 0 12px;line-height:1.6;">
@@ -1483,8 +1515,8 @@
         <div class="qd-chevron">›</div>
         <div class="qd-bar"><i id="qd-bar-fill"></i></div>
       </div>
-  <script src="toast-system.js?v=20261106-pages"></script>
-  <script src="app.js?v=20261106-pages"></script>
+  <script src="toast-system.js?v=20261107-queue-layout"></script>
+  <script src="app.js?v=20261107-queue-layout"></script>
   <script>
     // --web mode only (see sw.js's own comment for what the service worker
     // actually does — installability, not offline caching of live data).

@@ -1860,8 +1860,13 @@
     #queue-dock.visible { display: grid; }
     #queue-dock:hover { background: var(--surface); }
     #queue-dock:hover .qd-chevron { color: var(--accent-text); transform: translateY(-2px); }
-    /* Nothing scrolls underneath the bar: the page ends where it begins. */
-    body:has(#queue-dock.visible) #content { padding-bottom: var(--dock-h); }
+    /* Nothing scrolls underneath the bar: the page ends where it begins.
+       body.has-dock is set by renderQueueNow() alongside #queue-dock.visible. */
+    body.has-dock #content { padding-bottom: var(--dock-h); }
+    /* Pages that scroll with #content (Queue, History) must not shrink to
+       the viewport: a shrunk .view lets its rows overflow past that padding,
+       straight under the bar. */
+    .view:has(> .page-body) { flex: 1 0 auto; }
     /* Toasts and the save notice float above the bar, not behind it. */
     @media (min-width: 701px) {
       body:has(#queue-dock.visible) .toast-container.bottom-right,
@@ -2441,13 +2446,31 @@
     .tb-search { width: 260px; }
     .tb-search input { flex: 1; }
     .tb-grow { flex: 1; width: auto; min-width: 200px; }
-    .tb-select select { padding-right: 18px; background-position: right center; cursor: pointer; }
+    /* .tb-field.tb-select, not .tb-select: the reset above (padding: 0)
+       outranked the plain selector, so the label ran into the chevron. */
+    .tb-field.tb-select select {
+      padding-right: 22px; background-position: right center; background-size: 13px 13px;
+      cursor: pointer;
+    }
 
     .page-list { display: flex; flex-direction: column; gap: var(--sp-2); }
     .page-list > .empty-state, .page-list > .error-state {
       padding: var(--sp-10) var(--sp-6);
       border: 1px dashed var(--border); border-radius: var(--radius-lg);
     }
+    /* Empty staged queue while something is downloading: one quiet line
+       instead of the big placeholder, so "Downloading now" sits near the
+       top and the active row is in view without scrolling. */
+    #view-queue.has-live #sq-list.is-empty > .empty-state {
+      flex-direction: row; justify-content: flex-start; text-align: left;
+      gap: var(--sp-3); padding: var(--sp-3) var(--sp-4);
+    }
+    #view-queue.has-live #sq-list.is-empty > .empty-state .es-icon {
+      width: 28px; height: 28px; margin: 0; border-radius: 9px; flex-shrink: 0;
+    }
+    #view-queue.has-live #sq-list.is-empty > .empty-state .es-icon svg { width: 15px; height: 15px; }
+    #view-queue.has-live #sq-list.is-empty > .empty-state .es-hint { max-width: none; }
+    #view-queue.has-live #sq-list.is-empty + .page-section-title { margin-top: var(--sp-5); }
     .page-row {
       display: grid; grid-template-columns: 52px minmax(0, 1fr) auto auto;
       align-items: center; gap: var(--sp-4);
@@ -3739,6 +3762,15 @@
   transition: color 0.2s;
 }
 
+/* Compact variant (the live download toast): narrower and tighter so it
+   reads as a status chip, not a card over the page. */
+.toast.toast-compact { min-width: 0; width: min(320px, calc(100vw - 32px)); padding: 10px 12px; }
+.toast.toast-compact .toast-icon { width: 16px; height: 16px; margin-right: 10px; }
+.toast.toast-compact .toast-content { gap: 2px; min-width: 0; }
+.toast.toast-compact .toast-title { font-size: 12.5px; }
+.toast.toast-compact .toast-message { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.toast.toast-compact .toast-close { font-size: 17px; margin-left: 8px; }
+
 .toast-close:hover { 
   color: var(--text); 
 }
@@ -4310,7 +4342,13 @@
     padding: 0 var(--sp-4);
     gap: 10px;
   }
-  body.web-mode:has(#queue-dock.visible) #content { padding-bottom: 60px; }
+  body.web-mode.has-dock #content { padding-bottom: 60px; }
+  /* Toasts sit above the dock too, not on top of it. */
+  body.web-mode:has(#queue-dock.visible) .toast-container.bottom-right,
+  body.web-mode:has(#queue-dock.visible) .toast-container.bottom-left,
+  body.web-mode:has(#queue-dock.visible) .toast-container.bottom-center {
+    bottom: calc(var(--nav-total-h) + 60px + var(--sp-3));
+  }
   body.web-mode #queue-dock .qd-chevron::before { content: none; }
 
   /* Same for anything else anchored to the bottom edge. The bottom sheets
@@ -4591,3 +4629,8 @@ textarea {
     transform: none;
   }
 }
+
+/* Result line under a self-hosted endpoint's Test button (Settings → Extensions). */
+.ce-result { font-size: 12px; line-height: 1.5; color: var(--muted); padding: 0 0 10px; }
+.ce-result.good { color: var(--accent); }
+.ce-result.bad { color: var(--red); }

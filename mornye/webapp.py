@@ -225,6 +225,9 @@ ALLOWED_METHODS: set[str] = {
     "save_extension_settings",
     "reset_extension_settings",
     "run_extension_setting_action",
+    # Probes the self-hosted endpoint typed in (or saved) for tidal-web /
+    # qobuz-web: an outbound request to a user-chosen URL, so admin-only.
+    "test_custom_endpoint",
 }
 
 NETWORK_DESTINATION_ADMIN_METHODS = {
@@ -236,6 +239,7 @@ EXTENSION_SETTINGS_ADMIN_METHODS = {
     "save_extension_settings",
     "reset_extension_settings",
     "run_extension_setting_action",
+    "test_custom_endpoint",
 }
 
 # Deliberately absent from ALLOWED_METHODS, even though they exist on the Api

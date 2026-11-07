@@ -16,8 +16,8 @@ lists are comma-separated; ``MORNYE_EXTENSION_QUALITY`` is
 ``service=quality-id`` pairs (``amazon=ac4,tidal=LOSSLESS``). A value that
 does not parse is ignored with a warning rather than failing the start-up.
 
-Deliberately not here: the deprecated ``tidal_custom_api`` and
-``qobuz_local_api_url`` (each extension's own settings replace them), and
+Deliberately not here: ``tidal_custom_api`` and ``qobuz_local_api_url``
+(set tidal-web's / qobuz-web's ``customEndpoint`` setting instead), and
 the post-download *command* still needs ``MORNYE_ALLOW_POST_COMMAND=1`` to
 run from the GUI, exactly as when it is typed into the page.
 """

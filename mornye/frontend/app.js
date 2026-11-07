@@ -117,7 +117,7 @@ function switchView(name) {
   $('view-' + name)?.classList.add('active');
   $('nav-' + name)?.classList.add('active');
   if (name === 'local') loadNetworkShares();
-  if (name === 'queue') loadStaged();
+  if (name === 'queue') { loadStaged(); window.dismissDownloadToast?.(); }
   if (name === 'history') loadHistory();
 }
 
@@ -1529,6 +1529,12 @@ window.updateFolderLabel = (path) => {
   $('folder-path').textContent = path; $('folder-path').title = path;
 };
     let currentDownloadToastId = null;
+    let downloadToastMuted = false;
+    // Hidden quietly: no "closed by the user" mute when the app removes it.
+    window.dismissDownloadToast = () => {
+      if (currentDownloadToastId) toastMgr.dismiss(currentDownloadToastId);
+      currentDownloadToastId = null;
+    };
 
     window.app_update_download_stats = (payload) => {
       try {
@@ -1542,7 +1548,16 @@ window.updateFolderLabel = (path) => {
         queueStats.speed = `${Number(data.current_speed || 0).toFixed(1)} MB/s`;
         queueStats.eta = formatEta(data.eta_seconds);
 
-        if (isDownloading) {
+        // The Queue page already shows all of this (live card + bottom bar),
+        // so the toast would only cover the list there. Elsewhere it stays,
+        // but the user can close it and it stays closed for this run.
+        const onQueuePage = $('view-queue')?.classList.contains('active');
+        if (currentDownloadToastId && !document.getElementById(currentDownloadToastId)) {
+          currentDownloadToastId = null;
+          downloadToastMuted = true;
+        }
+        if (onQueuePage && currentDownloadToastId) dismissDownloadToast();
+        if (isDownloading && !onQueuePage && !downloadToastMuted) {
           const activeItem = queue.find(q => q.status === 'active');
           if (activeItem) {
             // Plain text, not an HTML fragment: toastMgr's rendering path
@@ -1553,7 +1568,9 @@ window.updateFolderLabel = (path) => {
               + (queueStats.eta ? ` · ${queueStats.eta} left` : '');
 
             if (!currentDownloadToastId) {
-              currentDownloadToastId = toastMgr.loading(msg, { title: 'Downloading Tracks...' });
+              currentDownloadToastId = toastMgr.loading(msg, {
+                title: 'Downloading Tracks...', dismissible: true, className: 'toast-compact',
+              });
             } else {
               // Update il testo del toast esistente
               const toastEl = document.getElementById(currentDownloadToastId);
@@ -1632,15 +1649,13 @@ window.app_download_finished = (success = true, indices = null) => {
     activeItems.forEach(qi => updateQueueItem(qi, success ? 'done' : 'error', success ? 100 : 0));
   }
 
-  if (currentDownloadToastId) {
-     toastMgr.dismiss(currentDownloadToastId);
-     currentDownloadToastId = null;
-  }
+  dismissDownloadToast();
   
   // Check if there are still any downloads running concurrently
   const stillActive = queue.some(q => q.status === 'active');
   if (!stillActive) {
     isDownloading = false;
+    downloadToastMuted = false;
     resetQueueDuration();
     setStatus(success ? 'Download complete! ✓' : 'Error during download.');
     logMessage(success ? 'All downloads finished.' : 'Download failed.', success ? 'ok' : 'error');
@@ -4050,9 +4065,13 @@ function renderQueueNow() {
   $('queue-clear-filters')?.classList.toggle('hidden', !queueFilterStatus && !queueSearch);
 
   const dock = $('queue-dock');
+  // Something in the live list: the empty staged-queue placeholder above it
+  // shrinks to one line so "Downloading now" sits near the top.
+  $('view-queue')?.classList.toggle('has-live', queue.length > 0);
   if (queue.length === 0) {
     queueStats = { downloaded:'0.00 MB', speed:'0.0 MB/s', eta:'' };
     if (dock) dock.classList.remove('visible');
+    document.body.classList.remove('has-dock');
     $('queue-drawer')?.classList.remove('open');
 
     empty.style.display = 'flex';
@@ -4080,6 +4099,8 @@ function renderQueueNow() {
 
   empty.style.display = 'none';
   if (dock) dock.classList.add('visible');
+  // Drives the bottom padding of #content (styles.css) under the bar.
+  document.body.classList.add('has-dock');
 
   // Filtering happens here, not over the rendered nodes: the counts above
   // must keep describing the whole queue (that is what makes them useful as
@@ -4273,6 +4294,7 @@ function renderStaged() {
   const list = $('sq-list');
   if (!list) return;
   const shown = visibleStaged();
+  list.classList.toggle('is-empty', !items.length);
   if (!shown.length) {
     list.innerHTML = items.length
       ? emptyState('disc', 'Nothing matches', 'Try another type, status or search.')
@@ -4603,7 +4625,7 @@ function updateQueueItem(qi, status, progress) {
 }
 
 function clearQueue() {
-  queue = []; isDownloading = false;
+  queue = []; isDownloading = false; downloadToastMuted = false;
   queueStats = { downloaded:'0.00 MB', speed:'0.0 MB/s', eta:'' };
   resetQueueDuration();
   renderQueue();
@@ -7406,7 +7428,106 @@ async function resetExtensionHealth() {
 // manifest. Fields are rendered from the manifest's own types; the backend
 // validates again on save, so this is presentation only.
 
+// ── Self-hosted endpoints ─────────────────────────────────────────────────
+//
+// A shortcut to tidal-web's and qobuz-web's own "customEndpoint" settings
+// (plus qobuz-web's API key): the same values the extension cards below edit.
+
+const CUSTOM_ENDPOINTS = [
+  { ext: 'tidal-web', input: 'ce-tidal', note: 'ce-tidal-note', key: 'customEndpoint' },
+  { ext: 'qobuz-web', input: 'ce-qobuz', note: 'ce-qobuz-note', key: 'customEndpoint',
+    secret: { input: 'ce-qobuz-key', key: 'customEndpointApiKey' } },
+];
+
+function customEndpointSupport(info, key) {
+  if (!info || info.error) return 'not installed';
+  if (!(info.settings || []).some((s) => s.key === key)) return `v${info.version} — update the extension to use this`;
+  return '';
+}
+
+async function loadCustomEndpoints() {
+  const api = window.pywebview?.api;
+  if (!api?.get_extension_settings || !$('custom-endpoints')) return;
+  for (const item of CUSTOM_ENDPOINTS) {
+    let info = null;
+    try { info = await api.get_extension_settings(item.ext); } catch (e) { info = null; }
+    const problem = customEndpointSupport(info, item.key);
+    const input = $(item.input);
+    input.disabled = !!problem;
+    input.value = problem ? '' : (info.values?.[item.key] ?? '');
+    $(item.note).textContent = problem ? `${item.ext}: ${problem}` : `${item.ext} v${info.version}`;
+    if (item.secret) {
+      const secret = $(item.secret.input);
+      const supported = !problem && (info.settings || []).some((s) => s.key === item.secret.key);
+      secret.disabled = !supported;
+      secret.value = '';
+      secret.placeholder = (info?.secrets_set || []).includes(item.secret.key) ? 'Saved — leave empty to keep it' : 'Not set';
+    }
+  }
+}
+
+// The Test buttons: api_mixins/extension_settings.py test_custom_endpoint,
+// which checks the server's status route and one call that needs its
+// upstream account. An empty field tests the saved value.
+async function testCustomEndpoint(service) {
+  const api = window.pywebview?.api;
+  const item = CUSTOM_ENDPOINTS.find((e) => e.ext === `${service}-web`);
+  const out = $(`ce-${service}-result`);
+  const btn = $(`ce-${service}-test`);
+  if (!item || !out) return;
+  if (!api?.test_custom_endpoint) {
+    out.hidden = false;
+    out.className = 'ce-result bad';
+    out.textContent = 'Testing endpoints is unavailable in this build.';
+    return;
+  }
+  const url = $(item.input).value.trim();
+  const key = item.secret ? $(item.secret.input).value.trim() : '';
+  btn.disabled = true;
+  out.hidden = false;
+  out.className = 'ce-result';
+  out.textContent = 'Testing…';
+  try {
+    const res = await api.test_custom_endpoint(service, url, key);
+    out.className = `ce-result ${res?.ok ? 'good' : 'bad'}`;
+    out.textContent = res?.message || (res?.ok ? 'It works.' : 'The test failed.');
+  } catch (e) {
+    out.className = 'ce-result bad';
+    out.textContent = 'The test could not run.';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function saveCustomEndpoints() {
+  const api = window.pywebview?.api;
+  if (!api?.save_extension_settings) return;
+  let saved = 0;
+  for (const item of CUSTOM_ENDPOINTS) {
+    const input = $(item.input);
+    if (input.disabled) continue;
+    const value = input.value.trim();
+    if (value && !/^https?:\/\/[^\/?#\s]+/i.test(value)) {
+      showToast(`${item.ext}: the endpoint must start with http:// or https://`, 'error');
+      return;
+    }
+    const values = { [item.key]: value };
+    if (item.secret && !$(item.secret.input).disabled) values[item.secret.key] = $(item.secret.input).value.trim();
+    try {
+      const res = await api.save_extension_settings(item.ext, values);
+      if (res?.error) { showToast(`${item.ext}: ${res.error}`, 'error'); return; }
+      saved++;
+    } catch (e) {
+      showToast(`Could not save the ${item.ext} endpoint.`, 'error');
+      return;
+    }
+  }
+  showToast(saved ? 'Endpoints saved.' : 'No extension supports custom endpoints yet.', saved ? 'success' : 'error');
+  loadExtensionSettings();
+}
+
 async function loadExtensionSettings() {
+  loadCustomEndpoints();
   const list = $('ext-settings-list');
   if (!list) return;
   if (!window.pywebview?.api?.list_extension_settings) {

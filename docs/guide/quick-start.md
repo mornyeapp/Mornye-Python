@@ -78,34 +78,21 @@ mornye --tui
 
 *(Or `python launcher.py --tui` if running from source)*
 
-A sidebar picks the panel — **Download** for the settings, **Queue** for the
-run, **Session** for recent URLs and saved profiles, **Command** for the
-equivalent `mornye …` invocation, rebuilt as you type. `Ctrl+R` starts the
-download, `Ctrl+L` shows the log, `q` quits.
+A sidebar gives you **Search** and **Tracks**, a **Queue** for work staged to
+start later, and **Live** for the run in progress. **History** keeps downloaded
+tracks and fetched links; **Library** manages saved SMB/WebDAV destinations;
+**Extensions** manages registry links and extension settings. **Session** holds
+recent URLs and saved profiles; **Health** checks lyric-provider availability;
+**Signed** shows stored signed-session status. **Command** shows the equivalent
+`mornye …` invocation. `Ctrl+R` starts a download, `Ctrl+L` shows the log,
+and `q` quits.
 
 The [Terminal UI page](tui.md) covers it in full.
 
 > **`--interactive` is deprecated.** It still works and opens the same
-> screen, with a warning, and it will be removed in a future release. The
-> notes below describe the wizard it used to open; see
+> screen, with a warning. The wizard it used to open is gone; use `--tui`
+> for the current guided workflow. See
 > [Coming from the wizard](tui.md#coming-from-the-wizard) for what changed.
-
-**What the wizard does at startup:**
-
-- **Lyrics Provider Health Check** — probes the configured lyric endpoints and shows availability inline (✅ / ❌) before asking anything
-- **URL History** — shows your last 8 downloads so you can re-run one with a single keypress
-- **Folder Memory** — remembers your last output directory and offers it as the default
-- **Profile Load** — optionally restores a full saved configuration
-
-**Smart URL Detection:** If you input an Artist URL, it will ask if you want to download "Featuring" tracks. It skips this question for albums or playlists.
-
-**Smart File Paths:** If you input a Single Track URL, it will ask if you want to set a specific `.flac` output path. If you do, it intelligently skips all questions about filename formatting and subfolder organization.
-
-**Unified Quality Profiles:** Choose `HI_RES_LOSSLESS` for the best available lossless tier or `LOSSLESS` for standard lossless audio. Mornye translates either profile into each provider's native quality token; lossy-only services use their best available audio. If Tidal is your only configured service, the wizard also offers `DOLBY_ATMOS` — it's Tidal-exclusive, so it isn't offered when other providers are involved (they'd just fall back to `HI_RES_LOSSLESS`).
-
-**CLI Generator:** At the end of the configuration, it generates and prints the exact CLI command for your specific setup, so you can copy and reuse it in your automated scripts.
-
-**Profile Save:** After confirming the download, you can save the entire configuration as a named profile to reuse later.
 
 ### Python API (Synchronous)
 

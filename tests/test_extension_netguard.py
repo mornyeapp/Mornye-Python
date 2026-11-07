@@ -117,3 +117,34 @@ def test_the_opt_out_survives_the_environment_sandbox() -> None:
 
     env = build_env({"MORNYE_EXT_ALLOW_PRIVATE_NETWORK": "1"})
     assert env.get("MORNYE_EXT_ALLOW_PRIVATE_NETWORK") == "1"
+
+
+def test_a_granted_host_is_let_through_and_nothing_else() -> None:
+    """A custom endpoint on the LAN works without opening the whole LAN:
+    only the host from the extension's "grantsNetwork" setting passes.
+    """
+    import os
+
+    env = {**os.environ, "MORNYE_EXT_GRANTED_HOSTS": "127.0.0.1,[::1]"}
+    env.pop("MORNYE_EXT_ALLOW_PRIVATE_NETWORK", None)
+    assert _attempt("127.0.0.1", env=env).startswith("reached")
+    assert _attempt("::1", env=env).startswith("reached")
+    assert _attempt("192.168.1.1", env=env) == "blocked"
+    assert _attempt("169.254.169.254", env=env) == "blocked"
+
+
+def test_a_granted_name_may_resolve_to_a_private_address() -> None:
+    import os
+
+    env = {**os.environ, "MORNYE_EXT_GRANTED_HOSTS": "localtest.me"}
+    env.pop("MORNYE_EXT_ALLOW_PRIVATE_NETWORK", None)
+    assert _attempt("localtest.me", 80, env=env).startswith("reached")
+    env["MORNYE_EXT_GRANTED_HOSTS"] = "other.example"
+    assert _attempt("localtest.me", 80, env=env) == "blocked"
+
+
+def test_granted_hosts_survive_the_environment_sandbox() -> None:
+    from mornye.extensions.sandbox import GRANTED_HOSTS_ENV, build_env
+
+    env = build_env({GRANTED_HOSTS_ENV: "127.0.0.1"})
+    assert env.get(GRANTED_HOSTS_ENV) == "127.0.0.1"
