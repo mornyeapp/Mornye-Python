@@ -139,7 +139,7 @@ class QueueHistoryMixin:
         from ..core import staged_queue
 
         while True:
-            wanted = getattr(self, "_staged_wanted", set())
+            wanted: set[str] = getattr(self, "_staged_wanted", set())
             item = next(
                 (
                     i

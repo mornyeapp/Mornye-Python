@@ -364,7 +364,7 @@ async def get_url_with_fallback(
             **kwargs,
         )
 
-    from ..downloader import _call_metadata_get_url
+    from ..application.download_engine import _call_metadata_get_url
     from .metadata_merge import merge_url_results
 
     async def _builtin() -> Any:
@@ -372,6 +372,8 @@ async def get_url_with_fallback(
         return await _call_metadata_get_url(client, url, **kwargs)
 
     extension = ExtensionUrlClient(ext_name, service, provider_factory=provider_factory)
+    base: Any
+    other: Any
     base, other = await asyncio.gather(
         _builtin(), extension.get_url_async(url), return_exceptions=True
     )
@@ -431,7 +433,7 @@ async def _fallback_only(
     **kwargs: Any,
 ):
     """The built-in client's answer, or an extension's when it fails."""
-    from ..downloader import _call_metadata_get_url
+    from ..application.download_engine import _call_metadata_get_url
 
     failure: BaseException | None = None
     result: Any = None

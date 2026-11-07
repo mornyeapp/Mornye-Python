@@ -79,7 +79,7 @@ def _post_command_allowed() -> bool:
     can already type a shell command into their own shell gains nothing by
     typing it into ours.
     """
-    return env_value(POST_COMMAND_ENV, "").strip().lower() in (
+    return (env_value(POST_COMMAND_ENV, "") or "").strip().lower() in (
         "1",
         "true",
         "yes",
@@ -244,6 +244,7 @@ class MornyeAPI(
         except Exception:
             v = "unknown"
             try:
+                tomllib: Any
                 try:
                     import tomllib
                 except Exception:

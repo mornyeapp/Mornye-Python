@@ -64,7 +64,7 @@ _LIST_TTL_S = 60.0
 
 
 def extension_enrichment_enabled() -> bool:
-    return env_value(ENABLE_ENV, "1").strip().lower() not in {
+    return (env_value(ENABLE_ENV, "1") or "").strip().lower() not in {
         "0",
         "false",
         "no",

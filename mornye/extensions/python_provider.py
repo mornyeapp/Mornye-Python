@@ -184,5 +184,5 @@ class PythonExtensionProvider(BaseProvider):
             adapted = await _metadata_with_provider_hint(provider, metadata)
             return await original_download(adapted, output_dir, **download_kwargs)
 
-        provider.download_track_async = download_with_provider_hint
+        setattr(provider, "download_track_async", download_with_provider_hint)
         return provider

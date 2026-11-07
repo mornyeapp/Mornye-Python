@@ -83,7 +83,7 @@ def install_log_redaction(force: bool = False) -> bool:
     is attached afterwards.
     """
     global _redaction_filter
-    if not force and env_value(REDACTION_DISABLE_ENV, "").strip().lower() in (
+    if not force and (env_value(REDACTION_DISABLE_ENV, "") or "").strip().lower() in (
         "1",
         "true",
         "yes",

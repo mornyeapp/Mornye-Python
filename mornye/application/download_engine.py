@@ -20,7 +20,7 @@ import shutil
 import sys
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -41,7 +41,7 @@ from ..core.animated_artwork import (
     animated_artworks_enabled_by_default,
 )
 from ..core.errors import ErrorKind, MornyeError
-from ..core.hooks import load_hooks, run_hooks
+from ..core.hooks import Hook, load_hooks, run_hooks
 from ..core.http import AsyncHttpClient
 from ..core.isrc_helper import IsrcHelper
 from ..core.models import DownloadResult, TrackMetadata, build_filename, sanitize
@@ -249,7 +249,7 @@ class DownloadOptions:
     # the DownloadResult and TrackMetadata as typed objects. The safe,
     # structured counterpart to post_download_action="command" — see
     # core/hooks.py for why a shell string is a poor interface for this.
-    post_download_hooks: list[str] = field(default_factory=list)
+    post_download_hooks: Sequence[str | Hook] = field(default_factory=list)
 
     # Optional post-download QA check: flags files that declare a high
     # sample rate but whose actual spectral content stops at, or just

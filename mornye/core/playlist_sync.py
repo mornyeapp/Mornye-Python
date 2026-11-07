@@ -29,7 +29,7 @@ from .transcode import extension_for
 AudioIndex = dict[str, list[Path] | dict[str, list[Path]]]
 
 if TYPE_CHECKING:
-    from ..downloader import DownloadOptions
+    from ..application.download_engine import DownloadOptions
     from .models import TrackMetadata
 
 # Formats a track may already be on disk with. Ordered by preference: when the

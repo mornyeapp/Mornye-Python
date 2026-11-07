@@ -78,7 +78,7 @@ DEFAULT_REGISTRY_RECHECK_SECONDS = 3600
 
 def registry_recheck_interval() -> float:
     """Seconds between registry checks in one process; 0 or less means once."""
-    raw = env_value(REGISTRY_RECHECK_ENV_KEY, "").strip()
+    raw = (env_value(REGISTRY_RECHECK_ENV_KEY, "") or "").strip()
     if not raw:
         return float(DEFAULT_REGISTRY_RECHECK_SECONDS)
     try:

@@ -274,7 +274,7 @@ class SubscriptionsMixin:
 
     def _release_tracks(self, url: str) -> list:
         from ..core.tracklist import metadata_client_for
-        from ..downloader import _call_metadata_get_url
+        from ..application.download_engine import _call_metadata_get_url
 
         result = run_sync(_call_metadata_get_url(metadata_client_for(url), url))
         return list(result[1] or [])

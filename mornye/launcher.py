@@ -1695,13 +1695,13 @@ def _ext_settings_command(show: str | None, assignments: list[str]) -> int:
         if entry["type"] == "button":
             print(f"  {entry['key']}  [action: {entry.get('action') or '-'}]")
             continue
-        value = values.get(entry["key"], entry.get("default"))
-        if entry.get("secret") and value:
-            value = "(set)"
+        setting_value: Any = values.get(entry["key"], entry.get("default"))
+        if entry.get("secret") and setting_value:
+            setting_value = "(set)"
         choices = ""
         if entry["options"]:
             choices = "  {" + ", ".join(o["value"] for o in entry["options"]) + "}"
-        print(f"  {entry['key']} = {value!r}  ({entry['type']}){choices}")
+        print(f"  {entry['key']} = {setting_value!r}  ({entry['type']}){choices}")
         if entry.get("description"):
             print(f"      {entry['description']}")
     if ext.quality_options:
@@ -2938,6 +2938,7 @@ async def amain() -> None:
                     smb_profile.id,
                     getpass("Destination password (session-only): "),
                 )
+    output_dir: str | None
     if args.smb_destination and args.url and not args.output_dir:
         from .core.paths import default_download_dir
 
@@ -3042,6 +3043,7 @@ async def amain() -> None:
         else merged_defaults.get("track_max_retries", 0)
     )
 
+    output_dir = output_dir or default_download_dir()
     log_level = _resolve_log_level(args.verbose, args.log_level, args.profile_log_level)
     log_format = (
         "%(levelname)s:%(name)s: %(message)s"

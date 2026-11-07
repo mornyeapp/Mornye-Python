@@ -504,7 +504,7 @@ class MornyeTui(App[None]):
                 cfg["url"] = staged_queue.download_target(item)
                 cfg["csv_path"] = ""
                 outcome = await self._consume_run(cfg)
-                if outcome is not None and getattr(outcome, "error", ""):
+                if outcome is not None and bool(getattr(outcome, "error", "")):
                     staged_queue.set_status(item["id"], "failed", str(outcome.error))
                 else:
                     staged_queue.set_status(item["id"], "done")

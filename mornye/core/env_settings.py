@@ -93,10 +93,10 @@ def _parse(kind: str, raw: str) -> Any:
             return False
         raise ValueError("expected true or false")
     if kind == "int":
-        value = int(text)
-        if value < 0:
+        numeric_value = int(text)
+        if numeric_value < 0:
             raise ValueError("expected a number of 0 or more")
-        return value
+        return numeric_value
     if kind == "list":
         return [part.strip() for part in text.split(",") if part.strip()]
     if kind == "map":
@@ -104,10 +104,10 @@ def _parse(kind: str, raw: str) -> Any:
         for item in text.split(","):
             if not item.strip():
                 continue
-            key, sep, value = item.partition("=")
-            if not sep or not key.strip() or not value.strip():
+            key, sep, parsed_value = item.partition("=")
+            if not sep or not key.strip() or not parsed_value.strip():
                 raise ValueError("expected service=id pairs")
-            pairs[key.strip()] = value.strip()
+            pairs[key.strip()] = parsed_value.strip()
         return pairs
     return text
 

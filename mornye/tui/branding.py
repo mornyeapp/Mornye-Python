@@ -48,7 +48,7 @@ def plain_terminal() -> bool:
     Windows session to ASCII, block letterform and all, on terminals that
     draw the fancy form perfectly well.
     """
-    if env_value("MORNYE_PLAIN_TUI", "").strip().lower() in {
+    if (env_value("MORNYE_PLAIN_TUI", "") or "").strip().lower() in {
         "1",
         "true",
         "yes",

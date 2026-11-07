@@ -14,9 +14,14 @@ own — never a view of everybody's downloads.
 from __future__ import annotations
 
 import threading
+from typing import TYPE_CHECKING, Any
 
 
 class StatsMixin:
+    if TYPE_CHECKING:
+        log: Any
+        _push: Any
+
     def get_stats(
         self,
         year: int | None = None,

@@ -28,7 +28,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -109,7 +109,7 @@ class DownloadRunner:
     # Consuming
     # ------------------------------------------------------------------
 
-    async def events(self) -> AsyncIterator[Event]:
+    async def events(self) -> AsyncGenerator[Event, None]:
         """Runs the download, yielding UI events until it ends.
 
         An async generator rather than callbacks because the consumer is a

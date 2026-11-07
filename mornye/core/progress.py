@@ -674,7 +674,9 @@ class DownloadManager:
                 elif i.status == DownloadStatus.SKIPPED:
                     skipped += 1
 
-            completed_items.sort(key=lambda x: x["end_time"], reverse=True)
+            completed_items.sort(
+                key=lambda item: float(item["end_time"] or 0.0), reverse=True
+            )
             latest_completed = completed_items[:20]
 
             # What is downloading now, at the combined speed. Not the tracks

@@ -77,10 +77,14 @@ def _services_with_quality_choices() -> list[dict]:
     try:
         from ..extensions.catalog import installed_download_services
 
+        def has_multiple_quality_options(row: dict) -> bool:
+            options = row.get("quality_options")
+            return isinstance(options, list) and len(options) > 1
+
         return [
             row
             for row in installed_download_services()
-            if len(row.get("quality_options") or []) > 1
+            if has_multiple_quality_options(row)
         ]
     except Exception:
         return []

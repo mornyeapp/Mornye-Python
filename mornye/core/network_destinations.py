@@ -643,8 +643,12 @@ class SMBBackend:
         found: list[dict[str, Any]] = []
         while pending:
             directory = pending.pop()
+
+            def list_directory(directory: str = directory) -> list[Any]:
+                return list(client.scandir(directory))
+
             entries = self._remote_call(
-                lambda directory=directory: list(client.scandir(directory)),
+                list_directory,
                 writing=False,
             )
             for entry in entries:
@@ -656,8 +660,12 @@ class SMBBackend:
                 ):
                     continue
                 path = ntpath.join(directory, name)
+
+                def stat_entry(entry: Any = entry) -> Any:
+                    return entry.stat(follow_symlinks=False)
+
                 info = self._remote_call(
-                    lambda entry=entry: entry.stat(follow_symlinks=False),
+                    stat_entry,
                     writing=False,
                 )
                 if _is_directory(info):
