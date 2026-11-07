@@ -2365,7 +2365,9 @@ def test_legacy_adapter_keeps_collection_links_on_collection_runner():
 
         async def run_async(self, source):
             calls.append(source)
-            return DownloadResult.ok("legacy", "/music/My Playlist/a.flac", source=source)
+            return DownloadResult.ok(
+                "legacy", "/music/My Playlist/a.flac", source=source
+            )
 
     track = TrackMetadata(
         id="in-playlist",
