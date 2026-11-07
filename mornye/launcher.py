@@ -551,14 +551,16 @@ def parse_args(profile_defaults: dict | None = None) -> argparse.Namespace:
         dest="allow_fallback",
         default=pd.get("allow_fallback", True),
         help="Let a provider serve a lower tier when the requested --quality "
-        "is unavailable for a track (default: enabled).",
+        "is unavailable for a track; a Dolby Atmos HTTP 502 also tries "
+        "HI_RES_LOSSLESS, then LOSSLESS (default: enabled).",
     )
     parser.add_argument(
         "--no-fallback",
         action="store_false",
         dest="allow_fallback",
         help="Fail a track outright when the requested --quality is not "
-        "available, instead of accepting a lower tier.",
+        "available, instead of accepting a lower tier. A Dolby Atmos HTTP "
+        "502 fails the track as unavailable.",
     )
     parser.add_argument(
         "--use-track-numbers",

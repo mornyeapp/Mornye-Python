@@ -32,7 +32,7 @@
 | `loop` | `int` | `None` | Duration in minutes to keep retrying permanently failed tracks after a full session completes. |
 | `track_max_retries` | `int` | `0` | Extra download attempts per track when all extensions fail on the first try. Each retry cycles through all configured extensions again with exponential backoff (2 s → 4 s → 8 s …, capped at 30 s). |
 | `quality` | `str` | `"LOSSLESS"` | Requested profile: `LOSSLESS` or `HI_RES_LOSSLESS`. `DOLBY_ATMOS` is also accepted but is Tidal-exclusive — any other provider falls back to `HI_RES_LOSSLESS` instead. Legacy provider-specific values are accepted and normalized. |
-| `allow_fallback` | `bool` | `True` | For `HI_RES_LOSSLESS`, allows fallback to `LOSSLESS` when the higher-resolution tier is unavailable. It never downgrades lossless requests to compressed audio. |
+| `allow_fallback` | `bool` | `True` | Allows a provider to serve a lower quality tier when the requested tier is unavailable. For a `DOLBY_ATMOS` request that returns HTTP 502, Mornye tries `HI_RES_LOSSLESS` and then `LOSSLESS`; with fallback disabled, that track fails with a Dolby Atmos availability error. It never downgrades lossless requests to compressed audio. |
 | `log_level` | `int` | `logging.WARNING` | Python logging level. |
 | `embed_lyrics` | `bool` | `True` | Whether to fetch and embed synchronized lyrics (LRC) into the audio file. |
 | `lyrics_providers` | `list` | `["apple", "binilyrics", "lrclib"]` | Priority order of lyrics providers. All are queried at once; the answers are read back in this order, so the first entry that has lyrics wins. Put `apple` first for word-by-word timing. |
@@ -151,8 +151,8 @@ Mornye(
 | `--filename-format` | `-f` | `{title} - {artist}` | Filename template with placeholders. |
 | `--output-path` | `-o` | `None` | Exact output file path for single track downloads. Ignored for albums, playlists and discographies. |
 | `--quality` | `-q` | `LOSSLESS` | Requested profile: `LOSSLESS` or `HI_RES_LOSSLESS`. `DOLBY_ATMOS` is also accepted but is Tidal-exclusive — any other provider falls back to `HI_RES_LOSSLESS` instead. Legacy provider-specific values are accepted and normalized. |
-| `--fallback` | | `True` | Let a provider serve a lower tier when the requested `--quality` is unavailable for a track. Enabled by default; the flag exists to override a profile that disabled it. |
-| `--no-fallback` | | | Fail a track outright when the requested `--quality` is not available, instead of accepting a lower tier. |
+| `--fallback` | | `True` | Let a provider serve a lower tier when the requested `--quality` is unavailable for a track. A Dolby Atmos HTTP 502 also tries `HI_RES_LOSSLESS`, then `LOSSLESS`. Enabled by default; the flag exists to override a profile that disabled it. |
+| `--no-fallback` | | | Fail a track outright when the requested `--quality` is not available, instead of accepting a lower tier. A Dolby Atmos HTTP 502 fails the track with an availability error. |
 | `--use-track-numbers` | | `False` | Prefix filenames with track numbers. |
 | `--use-album-track-numbers` | | `False` | Use the track's original album number instead of queue position. |
 | `--use-artist-subfolders` | | `False` | Organize files into per-artist subfolders. |

@@ -35,6 +35,7 @@ from ..core.console import (
     print_track_done,
     print_track_header,
     print_track_skipped,
+    print_quality_fallback,
 )
 from ..core.animated_artwork import (
     artwork_api_url,
@@ -66,7 +67,11 @@ from ..core.progress import (
     safe_tqdm_write,
     uninstall_console_interception,
 )
-from ..core.quality import normalize_quality, quality_for_provider
+from ..core.quality import (
+    normalize_quality,
+    quality_fallback_chain,
+    quality_for_provider,
+)
 from ..core.recording_guard import wrong_recording_reason_async
 from ..core.transcode import (
     DEFAULT_MP3_BITRATE,
@@ -111,6 +116,24 @@ def _provider_quality(provider: Any, opts: Any) -> str:
     return quality_for_provider(provider.name, canonical)
 
 
+def _quality_for_provider_tier(
+    provider: Any,
+    opts: Any,
+    tier: str,
+    *,
+    use_extension_override: bool,
+) -> str:
+    """Translate a canonical fallback tier into the provider's quality token."""
+    if hasattr(provider, "select_quality"):
+        override = (
+            _extension_quality_override(provider, opts)
+            if use_extension_override
+            else None
+        )
+        return provider.select_quality(tier, override)
+    return quality_for_provider(provider.name, tier)
+
+
 def _extension_quality_override(provider: Any, opts: Any) -> str | None:
     """The user's per-service quality for a JS provider, if any."""
     choices = getattr(opts, "extension_quality", None) or {}
@@ -123,6 +146,10 @@ def _extension_quality_override(provider: Any, opts: Any) -> str | None:
         if key and choices.get(key):
             return str(choices[key])
     return None
+
+
+def _is_http_502(error: str | None) -> bool:
+    return bool(re.search(r"(?<!\d)502(?!\d)", str(error or "")))
 
 
 def _adapt_js_metadata_response(response):
@@ -1098,6 +1125,7 @@ async def _download_one_pass_async(
                 with contextlib.suppress(Exception):
                     provider.set_stop_event_async(stop_event)
 
+            stop_after_atmos_error = False
             try:
                 # The timeout applies to each provider attempt. A JS provider
                 # may spend time obtaining a ticket before the audio transfer
@@ -1159,6 +1187,98 @@ async def _download_one_pass_async(
                     )
                 else:
                     result = await download_task
+
+                if (
+                    normalize_quality(opts.quality) == "DOLBY_ATMOS"
+                    and not result.success
+                    and _is_http_502(result.error)
+                ):
+                    if not opts.allow_fallback:
+                        stop_after_atmos_error = True
+                        result = DownloadResult.fail(
+                            provider.name,
+                            "Dolby Atmos is unavailable (HTTP 502 Bad Gateway)",
+                        )
+                    else:
+                        attempted_qualities = {
+                            _quality_for_provider_tier(
+                                provider,
+                                opts,
+                                "DOLBY_ATMOS",
+                                use_extension_override=True,
+                            )
+                        }
+                        current_tier = "DOLBY_ATMOS"
+                        for fallback_tier in quality_fallback_chain(opts.quality)[1:]:
+                            fallback_quality = _quality_for_provider_tier(
+                                provider,
+                                opts,
+                                fallback_tier,
+                                use_extension_override=False,
+                            )
+                            if fallback_quality in attempted_qualities:
+                                continue
+                            attempted_qualities.add(fallback_quality)
+                            print_quality_fallback(
+                                provider.name,
+                                current_tier,
+                                fallback_tier,
+                            )
+                            fallback_kwargs = dict(download_kwargs)
+                            fallback_kwargs["quality"] = (
+                                fallback_tier
+                                if hasattr(provider, "select_quality")
+                                else fallback_quality
+                            )
+                            fallback_kwargs.pop("extension_quality", None)
+                            try:
+                                fallback_task = provider.download_track_async(
+                                    metadata,
+                                    output_dir,
+                                    **fallback_kwargs,
+                                )
+                                if opts.timeout_s:
+                                    result = await asyncio.wait_for(
+                                        fallback_task,
+                                        timeout=opts.timeout_s,
+                                    )
+                                else:
+                                    result = await fallback_task
+                            except asyncio.CancelledError:
+                                raise
+                            except asyncio.TimeoutError:
+                                wait_for_idle = getattr(
+                                    provider,
+                                    "wait_for_idle_async",
+                                    None,
+                                )
+                                if callable(wait_for_idle):
+                                    await wait_for_idle(5.0)
+                                logger.warning(
+                                    "[downloader] provider '%s' timed out at "
+                                    "fallback quality %s for track '%s'",
+                                    provider.name,
+                                    fallback_tier,
+                                    metadata.title,
+                                )
+                                result = DownloadResult.fail(
+                                    provider.name,
+                                    f"Provider timed out after {opts.timeout_s}s",
+                                )
+                            except Exception as exc:
+                                logger.warning(
+                                    "[%s] fallback quality %s raised: %s",
+                                    provider.name,
+                                    fallback_tier,
+                                    exc,
+                                )
+                                result = DownloadResult.fail(
+                                    provider.name,
+                                    str(exc) or type(exc).__name__,
+                                )
+                            if result.success:
+                                break
+                            current_tier = fallback_tier
 
             except asyncio.CancelledError:
                 # The only thing that ever raises this event. It is handed to
@@ -1293,6 +1413,8 @@ async def _download_one_pass_async(
                 file=sys.stderr,
             )
             logger.debug("[%s] ✗ %s", provider.name, result.error)
+            if stop_after_atmos_error:
+                return result
 
     attempts_str = f"{opts.track_max_retries + 1} attempt(s)"
     summary = "; ".join(f"{k}: {v}" for k, v in errors.items())
