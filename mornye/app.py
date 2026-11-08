@@ -1792,7 +1792,13 @@ class MornyeAPI(
             # so client.Mornye's own False default applied and every
             # playlist landed loose in the download folder.
             create_playlist_subfolders = config.get("create_playlist_subfolders", True)
+            library_dir: str | None = None
             if playlist_name.strip() and create_playlist_subfolders and not output_path:
+                # The folder above is the whole library: these tracks are
+                # looked up across every playlist folder in it first, so one
+                # another playlist already has is linked from this one's M3U
+                # rather than downloaded again (issue #267).
+                library_dir = download_output_dir
                 # Tracks picked out of a playlist (a followed playlist's
                 # new ones) download as loose tracks; put them in the
                 # folder the whole playlist would have gone into. Same
@@ -2035,6 +2041,8 @@ class MornyeAPI(
                 use_artist_subfolders=use_artist_subfolders,
                 use_album_subfolders=use_album_subfolders,
                 create_playlist_subfolders=create_playlist_subfolders,
+                m3u_format=str(config.get("m3u_format") or "m3u8"),
+                library_dir=library_dir,
                 first_artist_only=first_artist_only,
                 include_featuring=include_featuring,
                 artist_separator=artist_separator,
