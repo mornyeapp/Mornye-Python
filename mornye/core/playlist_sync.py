@@ -418,7 +418,9 @@ def render_m3u(entries: list[M3UEntry], playlist_path: Path | str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def append_m3u(existing: str, entries: list[M3UEntry], playlist_path: Path | str) -> str:
+def append_m3u(
+    existing: str, entries: list[M3UEntry], playlist_path: Path | str
+) -> str:
     """Adds `entries` to an existing M3U, skipping paths it already lists.
 
     Used when only part of a playlist was downloaded (a followed playlist's

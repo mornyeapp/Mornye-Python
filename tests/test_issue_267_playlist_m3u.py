@@ -76,9 +76,7 @@ def test_whole_playlist_rewrites_m3u_with_cross_folder_paths(tmp_path: Path) -> 
     shared = tmp_path / "Playlist1" / "Shared - Artist.flac"
     own = tmp_path / "Playlist2" / "Own - Artist.flac"
     tracks = [_track("t1", "Shared"), _track("t2", "Own"), _track("t3", "Failed")]
-    worker = _FakeWorker(
-        tmp_path / "Playlist2", {"t1": str(shared), "t2": str(own)}
-    )
+    worker = _FakeWorker(tmp_path / "Playlist2", {"t1": str(shared), "t2": str(own)})
 
     asyncio.run(
         MornyeDownloader._write_run_playlist_file_async(
@@ -169,7 +167,9 @@ def test_library_lookup_is_off_without_library_dir(tmp_path: Path) -> None:
     (tmp_path / "Shared - Artist.flac").write_bytes(b"x")
     downloader = MornyeDownloader(DownloadOptions(output_dir=str(tmp_path)))
 
-    assert asyncio.run(downloader._library_matches_async([_track("t1", "Shared")])) == {}
+    assert (
+        asyncio.run(downloader._library_matches_async([_track("t1", "Shared")])) == {}
+    )
 
 
 # ---------------------------------------------------------------------------
