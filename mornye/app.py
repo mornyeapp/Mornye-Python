@@ -2446,6 +2446,12 @@ def _purge_webview_http_cache() -> None:
 
 def run_gui() -> None:
     configure_console_logging(saved_log_level())
+    # Before pywebview creates the native app: from source the process is the
+    # Python interpreter, so without this every OS shows Python's icon (and
+    # on macOS its name) for the window. See desktop_branding.
+    from .desktop_branding import apply_desktop_branding
+
+    window_icon = apply_desktop_branding()
     _purge_webview_http_cache()
     api = MornyeAPI()
 
@@ -2545,6 +2551,7 @@ def run_gui() -> None:
         http_port=_pick_gui_port(),
         private_mode=False,
         storage_path=storage_path,
+        icon=window_icon,
     )
 
 
