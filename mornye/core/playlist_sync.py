@@ -418,6 +418,30 @@ def render_m3u(entries: list[M3UEntry], playlist_path: Path | str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def append_m3u(
+    existing: str, entries: list[M3UEntry], playlist_path: Path | str
+) -> str:
+    """Adds `entries` to an existing M3U, skipping paths it already lists.
+
+    Used when only part of a playlist was downloaded (a followed playlist's
+    new tracks): the tracks already listed keep their place, the new ones go
+    at the end. An empty or missing file starts a fresh one.
+    """
+    base = Path(playlist_path).parent
+    lines = [line for line in existing.splitlines() if line.strip()]
+    if not lines or lines[0].strip() != "#EXTM3U":
+        lines.insert(0, "#EXTM3U")
+    listed = {line.strip() for line in lines if not line.startswith("#")}
+    for entry in entries:
+        relative = _relative_to(entry.path, base)
+        if relative in listed:
+            continue
+        listed.add(relative)
+        lines.append(f"#EXTINF:{entry.duration_s},{entry.artists} - {entry.title}")
+        lines.append(relative)
+    return "\n".join(lines) + "\n"
+
+
 async def write_if_changed_async(path: Path, content: str) -> bool:
     """Writes `content` to `path` only when it differs. True when it changed."""
 

@@ -47,9 +47,11 @@ from ..core.http import AsyncHttpClient
 from ..core.isrc_helper import IsrcHelper
 from ..core.models import DownloadResult, TrackMetadata, build_filename, sanitize
 from ..core.playlist_sync import (
+    M3U_FORMATS,
     AudioIndex,
     PlaylistSource,
     SyncPlan,
+    append_m3u,
     build_plan,
     entry_for,
     find_existing_track,
@@ -298,6 +300,18 @@ class DownloadOptions:
     # (-q HI_RES / HI_RES_LOSSLESS): asking for LOSSLESS and getting
     # standard-definition audio is not a fake, it is the request.
     redownload_fake_hires: bool = False
+
+    # Playlist file written next to a playlist download ("m3u8", "m3u", or
+    # "none"). A whole-playlist run rewrites it in playlist order; a run of
+    # loose tracks that belong to a playlist folder (a followed playlist's
+    # new tracks, see `library_dir`) appends to it. Issue #267.
+    m3u_format: str = "m3u8"
+
+    # The library root when `output_dir` is one playlist's subfolder inside
+    # it. Loose tracks are then looked up across the whole library first: a
+    # track another playlist already downloaded is linked from this one's
+    # M3U instead of being downloaded a second time (issue #267).
+    library_dir: str | None = None
     save_animated_artwork: bool = field(
         default_factory=animated_artworks_enabled_by_default,
     )
@@ -1712,6 +1726,7 @@ class LegacyDownloadWorker:
         self._completed: dict[str, str] = {}
         self._results: dict[str, DownloadResult] = {}
         self._providers: list[BaseProvider] = self._build_providers()
+        self._base_out: str | None = None
 
     @property
     def completed_paths(self) -> dict[str, str]:
@@ -1727,6 +1742,11 @@ class LegacyDownloadWorker:
     def results(self) -> dict[str, DownloadResult]:
         """Return the typed result for every track processed by this worker."""
         return dict(self._results)
+
+    @property
+    def output_dir(self) -> str | None:
+        """The folder this run wrote into (the playlist subfolder, if any)."""
+        return self._base_out
 
     def _build_providers(self) -> list[BaseProvider]:
         result = []
@@ -1769,6 +1789,7 @@ class LegacyDownloadWorker:
 
             # Native async folder I/O delegation
             base_out = await self._resolve_output_dir_async()
+            self._base_out = base_out
 
             print_run_header(
                 total,
@@ -2049,15 +2070,53 @@ class MornyeDownloader:
             return
 
         pending = await self._resolve_isrc_bulk_async(tracks)
+        existing_paths = await self._library_matches_async(pending)
+        playlist_file = "append" if self._opts.library_dir else None
         try:
             while True:
-                failed = await self._run_worker_async(pending, "", {}, False, False)
+                failed = await self._run_worker_async(
+                    pending,
+                    "",
+                    {},
+                    False,
+                    False,
+                    existing_paths=existing_paths,
+                    playlist_file=playlist_file,
+                )
                 if not loop_minutes or loop_minutes <= 0 or not failed:
                     break
                 await asyncio.sleep(loop_minutes * 60)
                 pending = failed
         finally:
             await _close_shared_browser_sessions()
+
+    async def _library_matches_async(
+        self, tracks: list[TrackMetadata]
+    ) -> dict[str, Path]:
+        """Tracks already somewhere in `opts.library_dir`, by track id.
+
+        Only set when `output_dir` is one playlist's folder inside a bigger
+        library: a followed playlist's new tracks are looked up across every
+        playlist folder, so one that another playlist already has is linked
+        from the M3U instead of downloaded twice (issue #267).
+        """
+        library_dir = self._opts.library_dir
+        if not library_dir or not await asyncio.to_thread(os.path.isdir, library_dir):
+            return {}
+        index = await asyncio.to_thread(index_audio_files, library_dir)
+        matches: dict[str, Path] = {}
+        for position, track in enumerate(tracks, 1):
+            if not track.id:
+                continue
+            existing = find_existing_track(
+                index,
+                track,
+                track_stem(track, self._opts, position),
+                self._opts.transcode_to,
+            )
+            if existing is not None:
+                matches[track.id] = existing
+        return matches
 
     async def _resolve_track_list_async(
         self,
@@ -2940,7 +2999,14 @@ class MornyeDownloader:
         is_playlist: bool,
         opts: DownloadOptions | None = None,
         existing_paths: dict[str, Path] | None = None,
+        playlist_file: str | None = None,
     ) -> list[TrackMetadata]:
+        """Runs one worker over `tracks`.
+
+        `playlist_file` is "rewrite" for a whole playlist (its M3U is written
+        afresh in playlist order) or "append" for loose tracks that belong to
+        a playlist folder (they are added to the M3U already there).
+        """
         effective = opts if opts is not None else self._opts
         updated_tracks = await self._register_queue_async(tracks)
 
@@ -2955,8 +3021,60 @@ class MornyeDownloader:
 
         failed_tuples = await worker.run_async()
         self._last_results = worker.results
+        if playlist_file is not None:
+            await self._write_run_playlist_file_async(
+                effective,
+                playlist_file,
+                collection_name,
+                updated_tracks,
+                worker,
+            )
         failed_ids = {f[0] for f in failed_tuples}
         return [t for t in updated_tracks if t.id in failed_ids]
+
+    @staticmethod
+    async def _write_run_playlist_file_async(
+        opts: DownloadOptions,
+        mode: str,
+        collection_name: str,
+        tracks: list[TrackMetadata],
+        worker: LegacyDownloadWorker,
+    ) -> None:
+        """Writes the M3U for a playlist run. Never fails the download.
+
+        Paths are relative to the playlist file, so a track that is already
+        in another playlist's folder is listed as ``../Other/Track.flac``
+        rather than downloaded again (issue #267).
+        """
+        fmt = (opts.m3u_format or "").lower()
+        base_out = worker.output_dir
+        if fmt not in M3U_FORMATS or opts.output_path or not base_out:
+            return
+        completed = worker.completed_paths
+        entries = [
+            entry_for(track, Path(completed[track.id]))
+            for track in tracks
+            if completed.get(track.id)
+        ]
+        if not entries and mode != "rewrite":
+            return
+        name = collection_name.strip() or Path(base_out).name
+        safe_name = re.sub(r'[<>:"/\\|?*]', "_", name).strip() or "playlist"
+        target = Path(base_out) / f"{safe_name}.{fmt}"
+        try:
+            if mode == "append":
+                existing = ""
+                if await asyncio.to_thread(target.is_file):
+                    existing = await asyncio.to_thread(
+                        target.read_text, encoding="utf-8"
+                    )
+                content = append_m3u(existing, entries, target)
+            else:
+                content = render_m3u(entries, target)
+            if await write_if_changed_async(target, content):
+                logger.info("[m3u] Wrote %d track(s) to %s", len(entries), target)
+        except (OSError, UnicodeDecodeError) as exc:
+            logger.warning("[m3u] Could not write %s: %s", target, exc)
 
     async def _run_once_async(
         self,
@@ -3050,6 +3168,7 @@ class MornyeDownloader:
             is_playlist,
             opts=effective_opts,
             existing_paths=existing_paths,
+            playlist_file="rewrite" if is_playlist else None,
         )
 
     @staticmethod

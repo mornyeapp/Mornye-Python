@@ -35,6 +35,7 @@ from .api_mixins.signed_sessions import SignedSessionsMixin
 from .api_mixins.stats import StatsMixin
 from .api_mixins.subscriptions import SubscriptionsMixin
 from .api_mixins.trust import TrustMixin
+from .core.atomic_io import write_json_atomic
 from .core.http import AsyncHttpClient
 from .core.loop_runner import run_sync
 from .core.output_sink import CallbackLogHandler
@@ -92,6 +93,29 @@ def _post_command_allowed() -> bool:
 #: terminal reads exactly like `mornye <url>` does.
 _CONSOLE_LOG_FORMAT = "%(levelname)s: %(message)s"
 _VERBOSE_CONSOLE_LOG_FORMAT = "%(levelname)s:%(name)s: %(message)s"
+
+
+#: Serialises every read and write of gui-settings.json. pywebview runs each
+#: js_api call on its own thread, so at startup load_settings() and
+#: save_theme()/save_accent() routinely overlap; together with the atomic
+#: write in save_settings() this is what stops a reader from ever seeing a
+#: half-written file ("Expecting value: line 1 column 1 (char 0)").
+_SETTINGS_LOCK = threading.RLock()
+
+
+def _settings_file() -> Path:
+    return cache_path("gui-settings.json")
+
+
+def _read_settings_file() -> dict:
+    """gui-settings.json as stored ({} if absent). Raises if it is unreadable."""
+    path = _settings_file()
+    if not path.exists():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"expected a JSON object, got {type(data).__name__}")
+    return data
 
 
 def saved_log_level() -> int:
@@ -593,11 +617,40 @@ class MornyeAPI(
 
     def save_settings(self, cfg: dict) -> None:
         try:
-            settings_file = cache_path("gui-settings.json")
-            settings_file.parent.mkdir(parents=True, exist_ok=True)
-            settings_file.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+            with _SETTINGS_LOCK:
+                write_json_atomic(_settings_file(), cfg)
         except Exception as e:
             self.log(f"Failed to save settings: {e}", "error")
+
+    def _update_settings(self, changes: dict) -> None:
+        """Merges `changes` into gui-settings.json as one locked step.
+
+        Merges into the file as it is on disk, not into load_settings()'s
+        view of it: that one carries defaults and MORNYE_* environment
+        values that are meant to stay out of the file until the user saves
+        the Settings form.
+
+        A file that exists but can't be parsed is set aside as
+        gui-settings.json.corrupt before being replaced, never silently
+        overwritten: the old read-modify-write turned any failed read into
+        `{}` and then wrote back only the one changed key, wiping every
+        other setting.
+        """
+        with _SETTINGS_LOCK:
+            try:
+                cfg = _read_settings_file()
+            except (ValueError, OSError) as e:
+                path = _settings_file()
+                backup = path.with_name(path.name + ".corrupt")
+                with contextlib.suppress(OSError):
+                    shutil.copy2(path, backup)
+                self.log(
+                    f"gui-settings.json was unreadable ({e}); kept a copy at {backup}",
+                    "error",
+                )
+                cfg = {}
+            cfg.update(changes)
+            write_json_atomic(_settings_file(), cfg)
 
     def save_theme(self, mode: str) -> dict:
         """Persists just the colour mode, without touching anything else.
@@ -616,9 +669,7 @@ class MornyeAPI(
         if mode not in ("auto", "light", "dark"):
             return {"ok": False, "error": f"unknown theme mode: {mode}"}
         try:
-            cfg = self.load_settings() or {}
-            cfg["theme"] = mode
-            self.save_settings(cfg)
+            self._update_settings({"theme": mode})
             return {"ok": True, "theme": mode}
         except Exception as e:
             self.log(f"Failed to save theme: {e}", "error")
@@ -648,10 +699,7 @@ class MornyeAPI(
         if accent not in self.ACCENTS:
             return {"ok": False, "error": f"unknown accent: {accent}"}
         try:
-            cfg = self.load_settings() or {}
-            cfg["accent"] = accent
-            cfg["brand"] = self.BRAND_VERSION
-            self.save_settings(cfg)
+            self._update_settings({"accent": accent, "brand": self.BRAND_VERSION})
             return {"ok": True, "accent": accent}
         except Exception as e:
             self.log(f"Failed to save accent: {e}", "error")
@@ -659,11 +707,8 @@ class MornyeAPI(
 
     def load_settings(self) -> dict:
         try:
-            settings_file = cache_path("gui-settings.json")
-            if settings_file.exists():
-                settings = json.loads(settings_file.read_text(encoding="utf-8"))
-            else:
-                settings = {}
+            with _SETTINGS_LOCK:
+                settings = _read_settings_file()
             if isinstance(settings, dict):
                 from .core.animated_artwork import (
                     artwork_api_url,
@@ -1792,7 +1837,13 @@ class MornyeAPI(
             # so client.Mornye's own False default applied and every
             # playlist landed loose in the download folder.
             create_playlist_subfolders = config.get("create_playlist_subfolders", True)
+            library_dir: str | None = None
             if playlist_name.strip() and create_playlist_subfolders and not output_path:
+                # The folder above is the whole library: these tracks are
+                # looked up across every playlist folder in it first, so one
+                # another playlist already has is linked from this one's M3U
+                # rather than downloaded again (issue #267).
+                library_dir = download_output_dir
                 # Tracks picked out of a playlist (a followed playlist's
                 # new ones) download as loose tracks; put them in the
                 # folder the whole playlist would have gone into. Same
@@ -2035,6 +2086,8 @@ class MornyeAPI(
                 use_artist_subfolders=use_artist_subfolders,
                 use_album_subfolders=use_album_subfolders,
                 create_playlist_subfolders=create_playlist_subfolders,
+                m3u_format=str(config.get("m3u_format") or "m3u8"),
+                library_dir=library_dir,
                 first_artist_only=first_artist_only,
                 include_featuring=include_featuring,
                 artist_separator=artist_separator,
@@ -2393,6 +2446,12 @@ def _purge_webview_http_cache() -> None:
 
 def run_gui() -> None:
     configure_console_logging(saved_log_level())
+    # Before pywebview creates the native app: from source the process is the
+    # Python interpreter, so without this every OS shows Python's icon (and
+    # on macOS its name) for the window. See desktop_branding.
+    from .desktop_branding import apply_desktop_branding
+
+    window_icon = apply_desktop_branding()
     _purge_webview_http_cache()
     api = MornyeAPI()
 
@@ -2492,6 +2551,7 @@ def run_gui() -> None:
         http_port=_pick_gui_port(),
         private_mode=False,
         storage_path=storage_path,
+        icon=window_icon,
     )
 
 
