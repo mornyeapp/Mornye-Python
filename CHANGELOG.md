@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Direct lyrics sources**: `kugou`, `qq` and `genius` in `--lyrics-providers` now actually fetch lyrics, straight from the services. They had been offered by the CLI and the TUI without anything answering to those names. KuGou and QQ Music return line-synced LRC; Genius returns plain lyrics with every verse and chorus container kept, and uses the official API when `MORNYE_GENIUS_TOKEN` is set. All three are opt-in and also appear in the web GUI and the health check.
 - **Persistent extension storage**: what a JavaScript extension saves with `storage.set` (tokens, sessions, device ids) now survives restarts. It is encrypted per extension under `~/.mornye/extension_storage`, with the key in the OS credential store when available (otherwise a 0600 key file). Several runtimes of the same extension add their own keys without overwriting each other's.
 
 ### Fixed

@@ -15,6 +15,7 @@ from . import get_amazon_endpoint
 from .cross_loop_lock import CrossLoopLock
 from .env import env_value
 from .http import NetworkManager
+from .lyrics_direct import fetch_genius_async, fetch_kugou_async, fetch_qq_async
 from .response_cache import get as get_cached_response
 from .response_cache import put as put_cached_response
 
@@ -1227,6 +1228,22 @@ _PROVIDER_MAP = {
         ctx.clean_track,
         ctx.clean_artist,
         ctx.duration_s,
+    ),
+    # Offered by the CLI and the TUI long before anything answered to these
+    # names — see core/lyrics_direct.py.
+    "kugou": lambda ctx: fetch_kugou_async(
+        ctx.clean_track,
+        ctx.clean_artist,
+        ctx.duration_s,
+    ),
+    "qq": lambda ctx: fetch_qq_async(
+        ctx.clean_track,
+        ctx.clean_artist,
+        ctx.duration_s,
+    ),
+    "genius": lambda ctx: fetch_genius_async(
+        ctx.clean_track,
+        ctx.clean_artist,
     ),
 }
 

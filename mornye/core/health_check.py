@@ -24,6 +24,10 @@ _SERVERS = {
     # "Tum Hi Ho" (id aRZbUYD7): one of the has_lyrics:true results, so this
     # actually exercises the lyrics.getLyrics call, not just search.
     "jiosaavn": "https://www.jiosaavn.com/api.php?__call=lyrics.getLyrics&_format=json&_marker=0&api_version=4&ctx=web6dot0&lyrics_id=aRZbUYD7",
+    # core/lyrics_direct.py: each provider's first (search) step.
+    "kugou": "https://mobilecdn.kugou.com/api/v3/search/song?format=json&keyword=Queen%20Bohemian%20Rhapsody&page=1&pagesize=1",
+    "qq": "https://c.y.qq.com/soso/fcgi-bin/client_search_cp?w=Bohemian%20Rhapsody%20Queen&format=json&p=1&n=1&new_json=1",
+    "genius": "https://genius.com/api/search/song?q=Bohemian%20Rhapsody%20Queen&per_page=1",
 }
 
 
