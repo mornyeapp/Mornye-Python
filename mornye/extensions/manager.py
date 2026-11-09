@@ -1155,11 +1155,15 @@ class ExtensionManager:
         """Returns the first installed extension whose urlHandler
         matches the provided URL.
         """
-        url_lower = url.lower()
+        # Anchored to the URL's host (extensions/url_match.py): a bare
+        # substring test let `tidal.com` claim `nottidal.com`, and let the
+        # alphabetically first extension with a broad pattern take links
+        # meant for another.
+        from .url_match import handler_matches
+
         for ext in self.list_installed():
-            for pattern in ext.url_patterns:
-                if pattern.lower() in url_lower:
-                    return ext
+            if handler_matches(ext.manifest, url):
+                return ext
         return None
 
     # ── Helpers ─────────────────────────────────────────────
