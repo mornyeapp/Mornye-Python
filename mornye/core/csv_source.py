@@ -402,6 +402,13 @@ def read_text(
     if not text.strip():
         raise MornyeError(ErrorKind.PARSE_ERROR, f"{label} is empty.")
 
+    # An M3U/M3U8 playlist yields the same rows a CSV does, so every caller
+    # of this (--csv, the GUI import, the REST endpoint) takes one too.
+    from .m3u_source import looks_like_m3u, read_m3u_text
+
+    if looks_like_m3u(text, name):
+        return read_m3u_text(text, name=name)
+
     sample = "\n".join(text.splitlines()[:20])
     used_delimiter = delimiter or _sniff_delimiter(sample)
 

@@ -435,7 +435,9 @@ def parse_args(profile_defaults: dict | None = None) -> argparse.Namespace:
         "ISRC — are matched against the catalogue. Exports from Exportify, "
         "Soundiiz, TuneMyMusic and a plain one-link-per-line file are all "
         "understood without configuration: the delimiter is detected and the "
-        "columns are matched by name. The whole file is treated as one "
+        "columns are matched by name. An M3U/M3U8 playlist works too: links "
+        "are kept, local files are identified by their tags, and other "
+        "entries by their #EXTINF line or file name. The whole file is treated as one "
         "playlist (see --playlist): duplicated rows are downloaded once, "
         "tracks already in DEST are skipped, and an M3U named after the file "
         "is written next to them (--m3u none disables it).",
