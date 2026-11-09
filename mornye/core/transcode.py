@@ -27,6 +27,7 @@ from __future__ import annotations
 import asyncio
 import asyncio.subprocess as _subproc
 import contextlib
+import functools
 import logging
 import os
 import subprocess
@@ -46,6 +47,8 @@ WAV = "wav"
 AIFF = "aiff"
 WAVPACK = "wavpack"
 TTA = "tta"
+AAC = "aac"
+OPUS = "opus"
 
 DEFAULT_MP3_BITRATE = "320k"
 
@@ -53,7 +56,7 @@ DEFAULT_MP3_BITRATE = "320k"
 #: the choice. Spelled out rather than generated from SUPPORTED_FORMATS so a
 #: menu can say what each format is actually *for*; the extensions still come
 #: from `extension_for()`. It lives here rather than in one frontend because
-#: the wizard, the TUI and the GUI have to offer the same seven targets, and
+#: the wizard, the TUI and the GUI have to offer the same targets, and
 #: the only way to be sure of that is for them to read the same tuple.
 TRANSCODE_CHOICES: tuple[tuple[str, str | None], ...] = (
     ("Keep the provider's format (no conversion)", None),
@@ -63,6 +66,8 @@ TRANSCODE_CHOICES: tuple[tuple[str, str | None], ...] = (
     ("TTA (.tta) — lossless, fast to decode", "tta"),
     ("WAV — uncompressed PCM, for DJ software and editors", "wav"),
     ("AIFF — uncompressed PCM, the Apple flavour", "aiff"),
+    ("AAC (.m4a) — lossy, better than MP3 at the same bitrate", "aac"),
+    ("Opus — lossy, the most efficient; not every player reads it", "opus"),
     ("MP3 — lossy, for players that read nothing else", "mp3"),
 )
 
@@ -172,6 +177,24 @@ _FORMAT_SPECS: tuple[FormatSpec, ...] = (
         muxer="tta",
         encoder="tta",
         aliases=("trueaudio", "true audio"),
+    ),
+    FormatSpec(
+        # Same MPEG-4 container as ALAC, so the codec — not the extension —
+        # tells the two apart (see _already_in_target_format).
+        name=AAC,
+        extension=".m4a",
+        lossless=False,
+        muxer="ipod",
+        encoder="aac",
+        aliases=("aac-lc", "m4a-aac", "mp4a"),
+    ),
+    FormatSpec(
+        name=OPUS,
+        extension=".opus",
+        lossless=False,
+        muxer="opus",
+        encoder="libopus",
+        aliases=("ogg-opus",),
     ),
 )
 
@@ -440,6 +463,128 @@ def _probe_source(src: Path) -> tuple[int, bool]:
     return 16, False
 
 
+#: libmp3lame stops at 48 kHz. A Hi-Res source has to be resampled for MP3,
+#: and the ratio is clean only within a rate family: 88.2/176.4 kHz → 44.1,
+#: 96/192 kHz → 48.
+MP3_MAX_SAMPLE_RATE = 48_000
+#: SoX resampler precision, in bits. 28 is SoX's "very high quality".
+SOXR_PRECISION = 28
+
+
+def _family_rate_at_most(source_rate: int, ceiling: int) -> int:
+    """The highest rate <= `ceiling` in `source_rate`'s family (44.1k/48k
+    multiples), so the resampling ratio stays an integer when it can."""
+    base = 44_100 if source_rate % 44_100 == 0 else 48_000
+    best = 0
+    multiple = base
+    while multiple <= ceiling:
+        best = multiple
+        multiple *= 2
+    return best or ceiling
+
+
+def mp3_target_sample_rate(source_rate: int) -> int | None:
+    """The rate to resample a source to for MP3, or None to leave it."""
+    if not source_rate or source_rate <= MP3_MAX_SAMPLE_RATE:
+        return None
+    return _family_rate_at_most(source_rate, MP3_MAX_SAMPLE_RATE)
+
+
+#: Bit depths a lossless conversion can be capped to.
+CAPPABLE_BIT_DEPTHS = (16, 24)
+
+#: Sample formats per encoder, for a capped bit depth. 24-bit audio travels
+#: in 32-bit containers with bits_per_raw_sample telling the encoder the
+#: real width.
+_SAMPLE_FMT: Mapping[str, Mapping[int, str]] = {
+    "flac": {16: "s16", 24: "s32"},
+    "alac": {16: "s16p", 24: "s32p"},
+    "wavpack": {16: "s16p", 24: "s32p"},
+    "tta": {16: "s16", 24: "s32"},
+}
+
+
+def plan_resample(
+    spec: FormatSpec,
+    source_rate: int,
+    source_depth: int,
+    *,
+    max_sample_rate: int = 0,
+    max_bit_depth: int = 0,
+) -> tuple[int | None, int | None]:
+    """(target rate, target bit depth); None for each left untouched.
+
+    The target format sets the first limit (lame and AAC stop at 48 kHz,
+    Opus only runs at 48 kHz); the user's caps set the second. A lossless
+    target is never touched unless a cap asks for it.
+    """
+    rate: int | None = None
+    if spec.name in (MP3, AAC):
+        rate = mp3_target_sample_rate(source_rate)
+    elif spec.name == OPUS and source_rate and source_rate != 48_000:
+        rate = 48_000
+    effective = rate or source_rate
+    if max_sample_rate and effective and effective > max_sample_rate:
+        rate = _family_rate_at_most(source_rate or effective, max_sample_rate)
+
+    depth: int | None = None
+    if (
+        spec.lossless
+        and max_bit_depth
+        and source_depth
+        and source_depth > max_bit_depth
+    ):
+        depth = max_bit_depth
+    return rate, depth
+
+
+def exceeds_caps(
+    src: Path | str, *, max_sample_rate: int = 0, max_bit_depth: int = 0
+) -> bool:
+    """Whether `src` is above either cap — and so needs converting even
+    when it is already in the target format."""
+    if not (max_sample_rate or max_bit_depth):
+        return False
+    path = Path(src)
+    if max_sample_rate and _probe_sample_rate(path) > max_sample_rate:
+        return True
+    if max_bit_depth:
+        depth, lossless = _probe_source(path)
+        return lossless and depth > max_bit_depth
+    return False
+
+
+@functools.lru_cache(maxsize=1)
+def soxr_available() -> bool:
+    """Whether this ffmpeg was built with libsoxr.
+
+    `ffmpeg -h filter=aresample` lists `soxr` as a choice whether or not
+    the library is compiled in, and asking for it without it fails the
+    whole conversion — so the build configuration is what decides.
+    """
+    try:
+        out = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-buildconf"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return "--enable-libsoxr" in (out.stdout + out.stderr)
+
+
+def _probe_sample_rate(src: Path) -> int:
+    try:
+        from mutagen import File as MutagenFile
+
+        info = getattr(MutagenFile(str(src)), "info", None)
+        return int(getattr(info, "sample_rate", 0) or 0)
+    except Exception:
+        return 0
+
+
 def _audio_codec(src: Path) -> str:
     """The first audio stream's codec, lower-cased; "" when unknown."""
     try:
@@ -481,14 +626,14 @@ def _already_in_target_format(src: Path, spec: FormatSpec) -> bool:
     """
     if src.suffix.lower() != spec.extension:
         return False
-    if spec.name != ALAC:
+    if spec.extension not in _EXT_MP4:
         return True
     codec = _audio_codec(src)
     if not codec:
         # ffprobe had no answer. Fall back to the older, looser test rather
         # than re-encoding a file that may well already be right.
         _, lossless = _probe_source(src)
-        return lossless
+        return lossless == spec.lossless
     return codec == spec.encoder
 
 
@@ -502,13 +647,47 @@ def already_in_target_format(src: Path | str, fmt: str) -> bool:
     return _already_in_target_format(Path(src), format_spec(fmt))
 
 
+#: libopus refuses more than 256 kb/s per channel, and a mono source is one
+#: channel; past ~192k Opus is transparent anyway, so the MP3-oriented
+#: default of 320k is simply lowered rather than failing the conversion.
+OPUS_MAX_BITRATE = 256_000
+
+
+def _bitrate_bps(value: str) -> int:
+    text = (value or "").strip().lower()
+    try:
+        if text.endswith("k"):
+            return int(float(text[:-1]) * 1000)
+        return int(float(text))
+    except ValueError:
+        return 0
+
+
+def _bitrate_for(spec: FormatSpec, bitrate: str) -> str:
+    if spec.name == OPUS and _bitrate_bps(bitrate) > OPUS_MAX_BITRATE:
+        return f"{OPUS_MAX_BITRATE // 1000}k"
+    return bitrate
+
+
 def _encode_command(
     spec: FormatSpec,
     src: Path,
     dest: Path,
     bitrate: str,
     bit_depth: int,
+    *,
+    sample_rate: int = 0,
+    max_sample_rate: int = 0,
+    max_bit_depth: int = 0,
 ) -> list[str]:
+    target_rate, target_depth = plan_resample(
+        spec,
+        sample_rate,
+        bit_depth,
+        max_sample_rate=max_sample_rate,
+        max_bit_depth=max_bit_depth,
+    )
+    encoder = spec.encoder_for(target_depth or bit_depth)
     cmd = [
         "-y",
         "-hide_banner",
@@ -524,16 +703,40 @@ def _encode_command(
         "-map_metadata",
         "0",
         "-c:a",
-        spec.encoder_for(bit_depth),
+        encoder,
     ]
 
+    if not spec.lossless:
+        cmd += ["-b:a", _bitrate_for(spec, bitrate)]
     if spec.name == MP3:
-        cmd += ["-b:a", bitrate, "-id3v2_version", "3", "-write_id3v1", "1"]
+        cmd += ["-id3v2_version", "3", "-write_id3v1", "1"]
     elif spec.name == FLAC:
         cmd += ["-compression_level", str(DEFAULT_FLAC_COMPRESSION)]
 
-    # No -ar / -sample_fmt anywhere: leaving the rate and depth untouched is
-    # what makes the lossless targets actually lossless.
+    # Rate and depth change only when the target format or a user cap asks:
+    # left alone, the lossless targets stay bit-identical to the source.
+    # The rate is chosen explicitly rather than left to ffmpeg, which picks
+    # the nearest rate an encoder supports and so turns 88.2 kHz into 48 kHz.
+    # SoXR when this ffmpeg has it, as the mobile app uses; triangular
+    # dither whenever bits are dropped, so the truncation is noise rather
+    # than distortion.
+    options: list[str] = []
+    if target_rate and soxr_available():
+        options += [str(target_rate), "resampler=soxr", f"precision={SOXR_PRECISION}"]
+    if target_depth:
+        options.append("dither_method=triangular")
+    if options:
+        cmd += ["-af", "aresample=" + ":".join(options)]
+    if target_rate:
+        cmd += ["-ar", str(target_rate)]
+    if target_depth:
+        sample_fmt = _SAMPLE_FMT.get(encoder, {}).get(target_depth)
+        if spec.pcm_codecs is not None:
+            sample_fmt = "s16" if target_depth == 16 else "s32"
+        if sample_fmt:
+            cmd += ["-sample_fmt", sample_fmt]
+        if target_depth == 24 and spec.pcm_codecs is None:
+            cmd += ["-bits_per_raw_sample", "24"]
     cmd += ["-f", spec.muxer, str(dest)]
     return cmd
 
@@ -544,6 +747,8 @@ async def transcode_file_async(
     fmt: str = MP3,
     bitrate: str = DEFAULT_MP3_BITRATE,
     keep_original: bool = False,
+    max_sample_rate: int = 0,
+    max_bit_depth: int = 0,
 ) -> Path:
     """Converts `source` to `fmt`, preserving tags, cover art and lyrics.
 
@@ -563,8 +768,14 @@ async def transcode_file_async(
     spec = format_spec(fmt)
 
     dest = transcoded_path(src, spec.name)
-    if _already_in_target_format(src, spec):
-        # The provider already produced the requested format
+    if _already_in_target_format(src, spec) and not await asyncio.to_thread(
+        exceeds_caps,
+        src,
+        max_sample_rate=max_sample_rate,
+        max_bit_depth=max_bit_depth,
+    ):
+        # The provider already produced the requested format, within the caps.
+        # (One above a cap is re-encoded in place, under the same name.)
         return src
 
     if not await asyncio.to_thread(src.is_file):
@@ -584,7 +795,19 @@ async def transcode_file_async(
         )
 
     tmp = dest.with_name(f".{dest.stem}.mornye-transcode{spec.extension}")
-    rc, stderr = await _run_ffmpeg(*_encode_command(spec, src, tmp, bitrate, bit_depth))
+    sample_rate = await asyncio.to_thread(_probe_sample_rate, src)
+    rc, stderr = await _run_ffmpeg(
+        *_encode_command(
+            spec,
+            src,
+            tmp,
+            bitrate,
+            bit_depth,
+            sample_rate=sample_rate,
+            max_sample_rate=max_sample_rate,
+            max_bit_depth=max_bit_depth,
+        )
+    )
 
     if rc != 0 or not transcoded_file_exists(tmp):
         with contextlib.suppress(OSError):

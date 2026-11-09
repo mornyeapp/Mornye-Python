@@ -247,14 +247,12 @@ def handles_url(ext: Any, url: str) -> bool:
     them (`soundcloud\\.com`). Comparing them as hostnames could never match
     a real pattern, which would silently send every link down the fallback.
     """
+    from ..extensions.url_match import handler_matches
+
+    # Matched against the URL's host, not anywhere in it — see
+    # extensions/url_match.py.
     manifest = getattr(ext, "manifest", None) or {}
-    handler = manifest.get("urlHandler")
-    if not isinstance(handler, dict) or not handler.get("enabled"):
-        return False
-    patterns = handler.get("patterns")
-    if not isinstance(patterns, list):
-        return False
-    return any(re.search(str(p), url) for p in patterns)
+    return handler_matches(manifest, url, require_enabled=True)
 
 
 def catalogue_extensions(manager: Any = None) -> list[tuple[Any, CatalogueSite]]:

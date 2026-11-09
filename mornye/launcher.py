@@ -435,7 +435,9 @@ def parse_args(profile_defaults: dict | None = None) -> argparse.Namespace:
         "ISRC — are matched against the catalogue. Exports from Exportify, "
         "Soundiiz, TuneMyMusic and a plain one-link-per-line file are all "
         "understood without configuration: the delimiter is detected and the "
-        "columns are matched by name. The whole file is treated as one "
+        "columns are matched by name. An M3U/M3U8 playlist works too: links "
+        "are kept, local files are identified by their tags, and other "
+        "entries by their #EXTINF line or file name. The whole file is treated as one "
         "playlist (see --playlist): duplicated rows are downloaded once, "
         "tracks already in DEST are skipped, and an M3U named after the file "
         "is written next to them (--m3u none disables it).",
@@ -1009,6 +1011,27 @@ def parse_args(profile_defaults: dict | None = None) -> argparse.Namespace:
         help="Keep the original downloaded file next to the transcoded one "
         "(default: the source is deleted after a successful conversion)",
     )
+    transcode_grp.add_argument(
+        "--transcode-max-rate",
+        type=int,
+        default=pd.get("transcode_max_sample_rate", 0),
+        dest="transcode_max_sample_rate",
+        metavar="HZ",
+        help="Cap the converted file's sample rate (e.g. 48000 or 44100). "
+        "Higher sources are resampled within their family (192k → 48k, "
+        "176.4k → 44.1k), with SoXR when ffmpeg has it. Applies even when "
+        "the download is already in the --transcode format. Default: no cap.",
+    )
+    transcode_grp.add_argument(
+        "--transcode-max-depth",
+        type=int,
+        choices=[16, 24],
+        default=pd.get("transcode_max_bit_depth", 0) or None,
+        dest="transcode_max_bit_depth",
+        metavar="BITS",
+        help="Cap a lossless conversion's bit depth to 16 or 24, with "
+        "triangular dither. Default: no cap.",
+    )
 
     # ── Quality Verification ────────────────────────────────────────────────
     verify_grp = parser.add_argument_group("Quality Verification")
@@ -1491,6 +1514,8 @@ def _subscription_downloader(profile_defaults: dict, output_dir_override: str | 
             transcode_to=pd.get("transcode_to"),
             transcode_bitrate=pd.get("transcode_bitrate", "320k"),
             transcode_keep_original=pd.get("transcode_keep_original", False),
+            transcode_max_sample_rate=pd.get("transcode_max_sample_rate", 0),
+            transcode_max_bit_depth=pd.get("transcode_max_bit_depth", 0),
             max_concurrent_downloads=pd.get("max_concurrent_downloads", 2),
             verify_hires=pd.get("verify_hires", False),
             redownload_fake_hires=pd.get("redownload_fake_hires", False),
@@ -1757,6 +1782,8 @@ async def _run_download_async(
     transcode_to: str | None = None,
     transcode_bitrate: str = "320k",
     transcode_keep_original: bool = False,
+    transcode_max_sample_rate: int = 0,
+    transcode_max_bit_depth: int = 0,
     playlist_urls: list[str] | None = None,
     csv_path: str | None = None,
     csv_min_score: float = 0.62,
@@ -1916,6 +1943,8 @@ async def _run_download_async(
         transcode_to=transcode_to,
         transcode_bitrate=transcode_bitrate,
         transcode_keep_original=transcode_keep_original,
+        transcode_max_sample_rate=transcode_max_sample_rate,
+        transcode_max_bit_depth=transcode_max_bit_depth,
         max_concurrent_downloads=max(1, max_concurrent_downloads),
         verify_hires=verify_hires,
         redownload_fake_hires=redownload_fake_hires,
@@ -2166,6 +2195,8 @@ async def run_download_from_cfg(cfg: dict, log_level: int) -> None:
             transcode_to=cfg.get("transcode_to"),
             transcode_bitrate=cfg.get("transcode_bitrate", "320k"),
             transcode_keep_original=cfg.get("transcode_keep_original", False),
+            transcode_max_sample_rate=cfg.get("transcode_max_sample_rate", 0),
+            transcode_max_bit_depth=cfg.get("transcode_max_bit_depth", 0),
             max_concurrent_downloads=cfg.get("max_concurrent_downloads", 2),
             extension_quality=dict(cfg.get("extension_quality") or {}),
             verify_hires=cfg.get("verify_hires", False),
@@ -2686,6 +2717,42 @@ async def amain() -> None:
             print(f"signer-{idx}: {name or '(unnamed)'}")
         return
 
+    if _argv_has("--split-cue"):
+        # Single-file album + .cue → one file per track (core/cue_split.py).
+        # The source is never modified; existing outputs are kept unless
+        # --cue-overwrite is given.
+        cue_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+        cue_parser.add_argument("--split-cue", dest="path", required=True)
+        cue_parser.add_argument("--cue-output", dest="output_dir", default=None)
+        cue_parser.add_argument(
+            "--cue-format", dest="fmt", default="flac", choices=["flac", "alac", "wav"]
+        )
+        cue_parser.add_argument("--cue-encoding", dest="encoding", default=None)
+        cue_parser.add_argument(
+            "--cue-overwrite", dest="overwrite", action="store_true"
+        )
+        cue_parser.add_argument("--cue-dry-run", dest="dry_run", action="store_true")
+        cue_parser.add_argument(
+            "--no-recursive", dest="recursive", action="store_false"
+        )
+        cue_parser.add_argument("--json", dest="as_json", action="store_true")
+        cue_args, _ = cue_parser.parse_known_args(sys.argv[1:])
+
+        from .tools.cue_split_cli import run_async as run_cue_split_async
+
+        sys.exit(
+            await run_cue_split_async(
+                cue_args.path,
+                output_dir=cue_args.output_dir,
+                fmt=cue_args.fmt,
+                encoding=cue_args.encoding,
+                overwrite=cue_args.overwrite,
+                dry_run=cue_args.dry_run,
+                recursive=cue_args.recursive,
+                as_json=cue_args.as_json,
+            )
+        )
+
     if _argv_has("--dedup-restore"):
         restore_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
         restore_parser.add_argument("--dedup-restore", dest="manifest", required=True)
@@ -3105,6 +3172,8 @@ async def amain() -> None:
             transcode_to=args.transcode_to,
             transcode_bitrate=args.transcode_bitrate,
             transcode_keep_original=args.transcode_keep_original,
+            transcode_max_sample_rate=args.transcode_max_sample_rate or 0,
+            transcode_max_bit_depth=args.transcode_max_bit_depth or 0,
             playlist_urls=playlist_urls,
             csv_path=args.csv_path,
             csv_min_score=(
@@ -3159,6 +3228,8 @@ async def amain() -> None:
                 "transcode_to": args.transcode_to,
                 "transcode_bitrate": args.transcode_bitrate,
                 "transcode_keep_original": args.transcode_keep_original,
+                "transcode_max_sample_rate": args.transcode_max_sample_rate or 0,
+                "transcode_max_bit_depth": args.transcode_max_bit_depth or 0,
                 "m3u_format": args.m3u_format,
                 "track_max_retries": track_max_retries,
                 "post_download_action": args.post_action,

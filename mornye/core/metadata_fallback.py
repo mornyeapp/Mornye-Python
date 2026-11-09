@@ -71,14 +71,14 @@ def fallback_extension_for(url: str, manager: Any = None) -> str | None:
     except Exception as exc:
         logger.debug("[metadata] could not list extensions: %s", exc)
         return None
-    lowered = (url or "").lower()
+    # Lazy: importing mornye.extensions from core at module load would make
+    # the two packages import each other.
+    from ..extensions.url_match import handler_matches
+
     for ext in installed:
         if "metadata_provider" not in (ext.types or []):
             continue
-        handler = ext.manifest.get("urlHandler")
-        if isinstance(handler, dict) and handler.get("enabled") is False:
-            continue
-        if any(str(p).lower() in lowered for p in ext.url_patterns if p):
+        if handler_matches(ext.manifest, url or ""):
             return ext.name
     return None
 

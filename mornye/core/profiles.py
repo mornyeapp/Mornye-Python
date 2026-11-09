@@ -68,6 +68,8 @@ class ProfileConfig(BaseModel):
     transcode_to: str | None = None
     transcode_bitrate: str = "320k"
     transcode_keep_original: bool = False
+    transcode_max_sample_rate: int = 0
+    transcode_max_bit_depth: int = 0
     m3u_format: str = "m3u8"
     track_max_retries: int = 0
     post_download_action: str = "none"

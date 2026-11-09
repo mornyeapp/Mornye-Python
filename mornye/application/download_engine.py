@@ -45,7 +45,14 @@ from ..core.errors import ErrorKind, MornyeError
 from ..core.hooks import Hook, load_hooks, run_hooks
 from ..core.http import AsyncHttpClient
 from ..core.isrc_helper import IsrcHelper
-from ..core.models import DownloadResult, TrackMetadata, build_filename, sanitize
+from ..core.models import (
+    DownloadResult,
+    TrackMetadata,
+    build_filename,
+    fit_name_bytes,
+    safe_dir_name,
+    sanitize,
+)
 from ..core.playlist_sync import (
     M3U_FORMATS,
     AudioIndex,
@@ -253,6 +260,11 @@ class DownloadOptions:
     transcode_to: str | None = None
     transcode_bitrate: str = DEFAULT_MP3_BITRATE
     transcode_keep_original: bool = False
+    # Caps for the converted file (0 = none): a source above them is brought
+    # down — sample rate within its 44.1k/48k family, bit depth with
+    # dither — even when it is already in the target format.
+    transcode_max_sample_rate: int = 0
+    transcode_max_bit_depth: int = 0
 
     track_max_retries: int = 0
     post_download_action: str = "none"
@@ -323,6 +335,16 @@ class DownloadOptions:
         # through a download batch.
         self.transcode_to = normalize_transcode_format(self.transcode_to)
         self.transcode_bitrate = normalize_bitrate(self.transcode_bitrate)
+        self.transcode_max_sample_rate = max(
+            0, int(self.transcode_max_sample_rate or 0)
+        )
+        self.transcode_max_bit_depth = max(0, int(self.transcode_max_bit_depth or 0))
+        if self.transcode_max_bit_depth and self.transcode_max_bit_depth not in (
+            16,
+            24,
+        ):
+            msg = "transcode_max_bit_depth must be 16 or 24"
+            raise ValueError(msg)
         # Replacing a fake Hi-Res file means first knowing it is one, so
         # asking for the replacement is asking for the check. Resolved here
         # rather than at each entry point (CLI, profile, TUI, API) so no
@@ -554,6 +576,67 @@ def _schedule_hires_check(opts: DownloadOptions, result: DownloadResult) -> None
 
     _hires_check_tasks.add(task)
     task.add_done_callback(_hires_check_tasks.discard)
+
+
+class _TransferActivity:
+    """Wraps a provider progress callback and remembers when bytes last moved.
+
+    `timeout_s` used to be a wall-clock limit on the whole provider attempt,
+    transfer included: a large Hi-Res file on a slow line was cancelled while
+    data was still arriving, and the fallback then started the next provider
+    from zero. This lets `_await_with_stall_timeout` tell a stalled attempt
+    from one that is merely slow. Called from the event loop or from the JS
+    runtime's reader thread; a float assignment is safe from either.
+    """
+
+    def __init__(self, cb: Any) -> None:
+        self._cb = cb
+        self._last_bytes = -1
+        self.last_activity: float | None = None
+
+    def __call__(self, written: int, total: int) -> Any:
+        try:
+            current = int(written or 0)
+        except (TypeError, ValueError):
+            current = 0
+        if current != self._last_bytes:
+            self._last_bytes = current
+            self.last_activity = time.monotonic()
+        return self._cb(written, total)
+
+
+async def _await_with_stall_timeout(
+    awaitable: Any,
+    timeout_s: float,
+    activity: _TransferActivity | None,
+    *,
+    poll_s: float = 0.5,
+) -> Any:
+    """Awaits a provider attempt, bounding stalls rather than total time.
+
+    Until the first byte arrives the attempt has `timeout_s` to resolve its
+    stream (ticket, manifest, signed URL). Once data is flowing, it is
+    cancelled only after `timeout_s` with no progress at all. Raises
+    `asyncio.TimeoutError` like `asyncio.wait_for`, so callers keep their
+    existing handling.
+    """
+    task = asyncio.ensure_future(awaitable)
+    started = time.monotonic()
+    try:
+        while True:
+            done, _ = await asyncio.wait({task}, timeout=min(poll_s, timeout_s))
+            if done:
+                return task.result()
+            last = activity.last_activity if activity is not None else None
+            reference = started if last is None else max(last, started)
+            if time.monotonic() - reference >= timeout_s:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await task
+                raise asyncio.TimeoutError
+    except asyncio.CancelledError:
+        task.cancel()
+        raise
 
 
 async def _await_pending_hires_checks(timeout_s: float = 30.0) -> None:
@@ -808,7 +891,7 @@ async def _write_animated_artwork_sidecar_async(
 
     audio = Path(result.file_path)
     artist = metadata.first_artist if opts.first_artist_only else metadata.artists
-    stem = f"{sanitize(artist)} - {sanitize(metadata.title)}"
+    stem = fit_name_bytes(f"{sanitize(artist)} - {sanitize(metadata.title)}")
 
     def _destinations(suffix: str) -> list[Path]:
         out: list[Path] = []
@@ -1125,8 +1208,10 @@ async def _download_one_pass_async(
                 metadata.artists,
                 metadata.title,
             )
-            cb = ProgressCallback(item_id=metadata.id, track_name=metadata.title)
-            provider.set_progress_callback(cb)
+            transfer_activity = _TransferActivity(
+                ProgressCallback(item_id=metadata.id, track_name=metadata.title),
+            )
+            provider.set_progress_callback(transfer_activity)
             # Per-provider, not per-track: `started_at` above covers the whole
             # track including every provider that failed before this one, and
             # attributing that to whichever provider happened to succeed last
@@ -1144,7 +1229,8 @@ async def _download_one_pass_async(
                 # The timeout applies to each provider attempt. A JS provider
                 # may spend time obtaining a ticket before the audio transfer
                 # starts, and that startup time must not consume another
-                # provider's timeout budget.
+                # provider's timeout budget. Once bytes flow it bounds stalls,
+                # not total duration — see _await_with_stall_timeout.
 
                 # Check if provider supports artist_separator parameter
                 download_kwargs = {
@@ -1195,9 +1281,10 @@ async def _download_one_pass_async(
                 )
 
                 if opts.timeout_s:
-                    result = await asyncio.wait_for(
+                    result = await _await_with_stall_timeout(
                         download_task,
-                        timeout=opts.timeout_s,
+                        opts.timeout_s,
+                        transfer_activity,
                     )
                 else:
                     result = await download_task
@@ -1252,9 +1339,11 @@ async def _download_one_pass_async(
                                     **fallback_kwargs,
                                 )
                                 if opts.timeout_s:
-                                    result = await asyncio.wait_for(
+                                    transfer_activity.last_activity = None
+                                    result = await _await_with_stall_timeout(
                                         fallback_task,
-                                        timeout=opts.timeout_s,
+                                        opts.timeout_s,
+                                        transfer_activity,
                                     )
                                 else:
                                     result = await fallback_task
@@ -1942,8 +2031,7 @@ class LegacyDownloadWorker:
                 and self._collection_name
                 and not self._opts.use_album_subfolders
             ):
-                safe_name = re.sub(r'[<>:"/\\|?*]', "_", self._collection_name.strip())
-                out = os.path.join(out, safe_name)
+                out = os.path.join(out, safe_dir_name(self._collection_name))
 
             os.makedirs(out, exist_ok=True)
             return out
@@ -1956,11 +2044,9 @@ class LegacyDownloadWorker:
         def _do_track_dir():
             out = base
             if self._opts.use_artist_subfolders:
-                folder = re.sub(r'[<>:"/\\|?*]', "_", track.first_artist)
-                out = os.path.join(out, folder)
+                out = os.path.join(out, safe_dir_name(track.first_artist))
             if self._opts.use_album_subfolders:
-                folder = re.sub(r'[<>:"/\\|?*]', "_", track.album)
-                out = os.path.join(out, folder)
+                out = os.path.join(out, safe_dir_name(track.album))
             os.makedirs(out, exist_ok=True)
             return out
 

@@ -172,6 +172,15 @@ def _isolated_extension_dir(request, monkeypatch, tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
+def _isolated_extension_storage(monkeypatch, tmp_path_factory):
+    """Keeps extension `storage.set` (extensions/storage.py) out of ~/.mornye
+    and away from the real OS credential store."""
+    base = tmp_path_factory.mktemp("extension_storage")
+    monkeypatch.setattr("mornye.extensions.storage.storage_dir", lambda: base)
+    monkeypatch.setenv("MORNYE_EXT_STORAGE_NO_KEYRING", "1")
+
+
+@pytest.fixture(autouse=True)
 def _no_extension_enrichment(request, monkeypatch):
     """Keeps tagging from starting Node runtimes and reaching the services.
 

@@ -79,6 +79,8 @@ The order matters because the providers do not return the same thing. Apple retu
 
 LRCLIB returns line-level lyrics. Put `apple` first and you get the first form wherever Apple has it, falling through to the rest where it does not — at no cost in speed, because by the time a first choice comes back empty the others have long since finished.
 
+`kugou` and `qq` (QQ Music) are fetched directly from those services and return line-synced LRC; they are strongest on Chinese-language catalogue. `genius` returns plain, unsynced lyrics — useful as a last entry. Genius may refuse anonymous requests; set `MORNYE_GENIUS_TOKEN` to a client access token from [genius.com/api-clients](https://genius.com/api-clients) to use its official search API instead. None of the three is on by default.
+
 Each provider's own answer is cached separately (7 days for a hit, 6 hours for a miss), so changing the order takes effect immediately rather than being masked by a cached result from a previous ordering.
 
 ### Apple Lyrics: Word-by-Word or Line-Synced

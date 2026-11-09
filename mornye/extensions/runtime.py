@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable
 
 from .sandbox import GRANTED_HOSTS_ENV, build_env, describe
+from .storage import ExtensionStorage
 
 logger = logging.getLogger(__name__)
 
@@ -90,8 +91,13 @@ class JSRuntime:
         cancelled_probe: Callable[[], bool] | None = None,
         ext_name: str = "",
         granted_hosts: Sequence[str] = (),
+        storage: ExtensionStorage | None = None,
     ) -> None:
         self.ext_path = Path(ext_path)
+        # Where `storage.set` lands between runs (extensions/storage.py).
+        # None — a bare runtime in a test — keeps the old memory-only
+        # behaviour.
+        self.storage = storage
         self.settings = settings or {}
         self.node_executable = node_executable
         self.startup_timeout = startup_timeout
@@ -206,6 +212,10 @@ class JSRuntime:
                 )
 
         extra_env = {GRANTED_HOSTS_ENV: ",".join(self.granted_hosts)}
+        if self.storage is not None:
+            saved = self.storage.load()
+            if saved:
+                extra_env["MORNYE_EXT_STORAGE"] = json.dumps(saved)
         if node_options:
             extra_env["NODE_OPTIONS"] = node_options
         env = build_env(extra_env)
@@ -444,6 +454,19 @@ class JSRuntime:
             level = msg.get("level", "info")
             log = self._ext_logger
             getattr(log, level, log.info)("[EXT] %s", msg.get("msg", ""))
+            return
+        if msg.get("type") == "storage_write":
+            if self.storage is not None:
+                try:
+                    self.storage.apply(
+                        str(msg.get("op", "")),
+                        msg.get("key"),
+                        msg.get("value"),
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "[JSRuntime] could not save extension storage: %s", exc
+                    )
             return
         if msg.get("type") == "session_signed_fetch":
             self._handle_session_signed_fetch(msg)

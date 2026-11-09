@@ -109,6 +109,27 @@ folder.
 
 ---
 
+## Splitting CUE sheets
+
+An album ripped as one long file plus a `.cue` sheet is invisible to the other
+library tools as individual songs. `--split-cue` writes one tagged file per
+track next to it (or under `--cue-output`), cutting exactly where the sheet's
+indexes say. The original file is never modified or deleted, and tracks that
+already exist are skipped unless you pass `--cue-overwrite`.
+
+```bash
+# See what would be written.
+mornye --split-cue ~/Music/Album/album.cue --cue-dry-run
+
+# Split every sheet under a folder, as FLAC (default), ALAC or WAV.
+mornye --split-cue ~/Music --cue-output ~/Music/Split --cue-format flac
+```
+
+Needs `ffmpeg` on `PATH`. Sheets that are not UTF-8 are decoded as Shift-JIS,
+GB18030 or Windows-1252 in that order; force one with `--cue-encoding`.
+
+---
+
 ## Upgrading a library
 
 Finds the files in a folder that are below the quality you actually want, and

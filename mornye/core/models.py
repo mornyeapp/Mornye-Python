@@ -218,7 +218,7 @@ class TrackMetadata(BaseModel):
 #: is what extensions/provider._ext_to_fmt() produces. Every value of
 #: core.transcode.extension_for() must appear here or a transcoded download
 #: fails validation; tests/test_transcode_lossless.py enforces that.
-AudioFormat = Literal["flac", "mp3", "m4a", "wav", "aiff", "wv", "tta"]
+AudioFormat = Literal["flac", "mp3", "m4a", "wav", "aiff", "wv", "tta", "opus"]
 
 
 class DownloadResult(BaseModel):
@@ -284,6 +284,42 @@ class DownloadResult(BaseModel):
 
 _UNSAFE_RE = re.compile(r'[\\/*?:"<>|]')
 _WHITESPACE = re.compile(r"\s+")
+
+#: Linux filesystems (ext4, btrfs, xfs — Docker volumes, most NAS shares)
+#: cap a single path component at 255 *bytes*, and a CJK character is three
+#: of them: a long classical or J-pop title failed with "File name too long"
+#: there while working on macOS, which counts characters. Track files stop
+#: well short of 255 because temporary names are longer than the final one
+#: (".part", "."+stem+".mornye-transcode"+ext); folders get nothing appended.
+MAX_FILENAME_BYTES = 200
+MAX_DIRNAME_BYTES = 240
+
+
+def fit_name_bytes(
+    name: str, max_bytes: int = MAX_FILENAME_BYTES, suffix: str = ""
+) -> str:
+    """`name` shortened so `name + suffix` fits in `max_bytes` of UTF-8.
+
+    Cut on a character boundary (never mid-sequence), then trailing spaces,
+    dots and dangling separators are dropped so the result is still a valid,
+    tidy name on every platform. `suffix` (an extension) is kept whole.
+    """
+    budget = max_bytes - len(suffix.encode("utf-8"))
+    encoded = name.encode("utf-8")
+    if len(encoded) <= budget:
+        return name + suffix
+    cut = encoded[: max(budget, 1)].decode("utf-8", errors="ignore")
+    cut = cut.rstrip(" .-_,;([{")
+    return (cut or "Unknown") + suffix
+
+
+def safe_dir_name(value: str, fallback: str = "Unknown") -> str:
+    """One folder name: unsafe characters replaced, length bounded in bytes."""
+    cleaned = re.sub(r'[<>:"/\\|?*]', "_", (value or "").strip())
+    cleaned = cleaned.strip(" .")
+    if not cleaned:
+        return fallback
+    return fit_name_bytes(cleaned, MAX_DIRNAME_BYTES).strip(" .") or fallback
 
 
 def split_credit(value: str, known: list[str] | None = None) -> list[str]:
@@ -408,9 +444,7 @@ def build_filename(
             raise ValueError(msg)
         result = sanitize(result)
         result = _WHITESPACE.sub(" ", result).strip() or "Unknown"
-        if not result.lower().endswith(extension):
-            result += extension
-        return result
+        return _with_extension(result, extension)
 
     artist = sanitize(metadata.first_artist if first_artist_only else metadata.artists)
     album_artist = sanitize(
@@ -460,7 +494,11 @@ def build_filename(
             result = f"{track_number:02d}. {result}"
 
     result = _WHITESPACE.sub(" ", result).strip() or "Unknown"
-    if not result.lower().endswith(extension):
-        result += extension
+    return _with_extension(result, extension)
 
-    return result
+
+def _with_extension(stem: str, extension: str) -> str:
+    """`stem` + `extension`, bounded to MAX_FILENAME_BYTES."""
+    if extension and stem.lower().endswith(extension.lower()):
+        stem = stem[: -len(extension)]
+    return fit_name_bytes(stem, MAX_FILENAME_BYTES, extension)

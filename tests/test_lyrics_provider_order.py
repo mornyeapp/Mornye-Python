@@ -133,14 +133,15 @@ def test_new_catalogues_are_selectable_but_not_default() -> None:
         "paxsenix",
         "musixmatch",
         "deezer",
-        "genius",
         "netease",
-        "qq",
         "youtube",
-        "kugou",
     }
     assert not retired.intersection(L._PROVIDER_MAP)
     assert not {"lyricsplus", "lrcred"}.intersection(L.DEFAULT_LYRICS_PROVIDERS)
+    # Back as direct sources (core/lyrics_direct.py), opt-in like the rest.
+    direct = {"kugou", "qq", "genius"}
+    assert direct.issubset(L._PROVIDER_MAP)
+    assert not direct.intersection(L.DEFAULT_LYRICS_PROVIDERS)
 
 
 def test_timed_token_payload_becomes_enhanced_lrc() -> None:

@@ -7,10 +7,11 @@ from pathlib import Path
 from typing import Any, cast
 
 from mornye.core.models import DownloadResult, TrackMetadata
-from mornye.core.models import sanitize
+from mornye.core.models import fit_name_bytes, sanitize
 from mornye.core.transcode import (
     already_in_target_format,
     result_format_for,
+    exceeds_caps,
     transcode_file_async,
 )
 
@@ -75,7 +76,13 @@ async def _transcode_result(result: DownloadResult, options: Any) -> DownloadRes
     if not isinstance(target_format, str):
         return result
     source = Path(result.file_path)
-    if await asyncio.to_thread(already_in_target_format, source, target_format):
+    max_rate = int(getattr(options, "transcode_max_sample_rate", 0) or 0)
+    max_depth = int(getattr(options, "transcode_max_bit_depth", 0) or 0)
+    if await asyncio.to_thread(
+        already_in_target_format, source, target_format
+    ) and not await asyncio.to_thread(
+        exceeds_caps, source, max_sample_rate=max_rate, max_bit_depth=max_depth
+    ):
         return result
     try:
         destination = await transcode_file_async(
@@ -83,6 +90,8 @@ async def _transcode_result(result: DownloadResult, options: Any) -> DownloadRes
             fmt=target_format,
             bitrate=options.transcode_bitrate,
             keep_original=options.transcode_keep_original,
+            max_sample_rate=max_rate,
+            max_bit_depth=max_depth,
         )
     except Exception as exc:
         logger.warning("[transcode] %s: %s", source.name, exc)
@@ -126,7 +135,9 @@ async def _write_lrc_sidecars(
             )
             library = Path(options.lrc_library_dir).expanduser()
             library.mkdir(parents=True, exist_ok=True)
-            collected = library / f"{sanitize(artist)} - {sanitize(metadata.title)}.lrc"
+            collected = library / fit_name_bytes(
+                f"{sanitize(artist)} - {sanitize(metadata.title)}", suffix=".lrc"
+            )
             collected.write_text(lyrics + "\n", encoding="utf-8")
             written.append(str(collected))
         return written
@@ -153,7 +164,7 @@ async def _write_canvas_sidecars(
 
     audio = Path(result.file_path)
     artist = metadata.first_artist if options.first_artist_only else metadata.artists
-    stem = f"{sanitize(artist)} - {sanitize(metadata.title)}"
+    stem = fit_name_bytes(f"{sanitize(artist)} - {sanitize(metadata.title)}")
 
     def destinations(suffix: str) -> list[Path]:
         output: list[Path] = []

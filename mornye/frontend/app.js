@@ -712,6 +712,9 @@ const ALL_LYRICS = [
   { id:'amazon',     label:'Amazon',     on:false, iconFile:'amzn.png', iconClass:'amazon' },
   { id:'unison',     label:'Unison',     on:false, icon:'UN', iconClass:'unison' },
   { id:'jiosaavn',   label:'JioSaavn',   on:false, icon:'JS', iconClass:'jiosaavn' },
+  { id:'kugou',      label:'KuGou',      on:false, icon:'KG', iconClass:'kugou' },
+  { id:'qq',         label:'QQ Music',   on:false, icon:'QQ', iconClass:'qq' },
+  { id:'genius',     label:'Genius',     on:false, icon:'GE', iconClass:'genius' },
   { id:'spotify',    label:'Spotify',    on:false, iconFile:'spotify.svg', iconClass:'spotify' },
 ];
 const ALL_ENRICH = [

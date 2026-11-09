@@ -1008,7 +1008,26 @@ class ExtensionManager:
             logger.warning("[ExtMgr] Refusing to uninstall '%s': %s", ext_id, exc)
             return False
         if target.exists():
+            # The storage file is keyed by the manifest's name (what
+            # JSExtensionProvider passes), which can differ from the folder.
+            names = {ext_id}
+            with contextlib.suppress(Exception):
+                names.add(self._load_installed(target).name)
             shutil.rmtree(target)
+            # What the extension saved with storage.set — tokens, sessions —
+            # goes with it, as the mobile app does; otherwise a reinstall
+            # would quietly pick up an old login.
+            from .storage import ExtensionStorage
+
+            for name in names:
+                try:
+                    ExtensionStorage(name).clear()
+                except OSError as exc:
+                    logger.warning(
+                        "[ExtMgr] could not remove saved storage of '%s': %s",
+                        name,
+                        exc,
+                    )
             logger.info("[ExtMgr] Uninstalled '%s'", ext_id)
             return True
         logger.warning("[ExtMgr] '%s' not installed", ext_id)
@@ -1155,11 +1174,15 @@ class ExtensionManager:
         """Returns the first installed extension whose urlHandler
         matches the provided URL.
         """
-        url_lower = url.lower()
+        # Anchored to the URL's host (extensions/url_match.py): a bare
+        # substring test let `tidal.com` claim `nottidal.com`, and let the
+        # alphabetically first extension with a broad pattern take links
+        # meant for another.
+        from .url_match import handler_matches
+
         for ext in self.list_installed():
-            for pattern in ext.url_patterns:
-                if pattern.lower() in url_lower:
-                    return ext
+            if handler_matches(ext.manifest, url):
+                return ext
         return None
 
     # ── Helpers ─────────────────────────────────────────────
