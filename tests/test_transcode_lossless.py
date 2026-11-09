@@ -43,7 +43,7 @@ def test_lossless_and_lossy_partition_the_supported_formats():
         transcode.SUPPORTED_FORMATS
     )
     assert not set(transcode.LOSSLESS_FORMATS) & set(transcode.LOSSY_FORMATS)
-    assert transcode.LOSSY_FORMATS == ("mp3",)
+    assert transcode.LOSSY_FORMATS == ("mp3", "aac", "opus")
 
 
 @pytest.mark.parametrize(
@@ -74,9 +74,9 @@ def test_normalize_transcode_format(value, expected):
 
 
 def test_normalize_transcode_format_rejects_lossy_and_unknown_targets():
-    # Deliberately unsupported: adding AAC/Opus/Vorbis output is a separate
-    # decision, and silently accepting the name would produce nothing.
-    for bogus in ("aac", "opus", "vorbis", "dsd", "ape", "tak", "banana"):
+    # AAC and Opus are targets now; Vorbis and the rest are still not, and
+    # silently accepting the name would produce nothing.
+    for bogus in ("vorbis", "dsd", "ape", "tak", "banana"):
         with pytest.raises(ValueError, match="Unsupported transcode format"):
             transcode.normalize_transcode_format(bogus)
 
@@ -121,7 +121,7 @@ def test_transcoded_path_uses_the_container_extension(tmp_path):
 
 def test_format_spec_rejects_unknown_names():
     with pytest.raises(MornyeError):
-        transcode.format_spec("aac")
+        transcode.format_spec("vorbis")
 
 
 def test_is_lossless():

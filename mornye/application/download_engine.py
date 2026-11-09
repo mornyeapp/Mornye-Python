@@ -260,6 +260,11 @@ class DownloadOptions:
     transcode_to: str | None = None
     transcode_bitrate: str = DEFAULT_MP3_BITRATE
     transcode_keep_original: bool = False
+    # Caps for the converted file (0 = none): a source above them is brought
+    # down — sample rate within its 44.1k/48k family, bit depth with
+    # dither — even when it is already in the target format.
+    transcode_max_sample_rate: int = 0
+    transcode_max_bit_depth: int = 0
 
     track_max_retries: int = 0
     post_download_action: str = "none"
@@ -330,6 +335,16 @@ class DownloadOptions:
         # through a download batch.
         self.transcode_to = normalize_transcode_format(self.transcode_to)
         self.transcode_bitrate = normalize_bitrate(self.transcode_bitrate)
+        self.transcode_max_sample_rate = max(
+            0, int(self.transcode_max_sample_rate or 0)
+        )
+        self.transcode_max_bit_depth = max(0, int(self.transcode_max_bit_depth or 0))
+        if self.transcode_max_bit_depth and self.transcode_max_bit_depth not in (
+            16,
+            24,
+        ):
+            msg = "transcode_max_bit_depth must be 16 or 24"
+            raise ValueError(msg)
         # Replacing a fake Hi-Res file means first knowing it is one, so
         # asking for the replacement is asking for the check. Resolved here
         # rather than at each entry point (CLI, profile, TUI, API) so no

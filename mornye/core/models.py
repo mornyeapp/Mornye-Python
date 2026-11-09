@@ -218,7 +218,7 @@ class TrackMetadata(BaseModel):
 #: is what extensions/provider._ext_to_fmt() produces. Every value of
 #: core.transcode.extension_for() must appear here or a transcoded download
 #: fails validation; tests/test_transcode_lossless.py enforces that.
-AudioFormat = Literal["flac", "mp3", "m4a", "wav", "aiff", "wv", "tta"]
+AudioFormat = Literal["flac", "mp3", "m4a", "wav", "aiff", "wv", "tta", "opus"]
 
 
 class DownloadResult(BaseModel):
