@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- **Persistent extension storage**: what a JavaScript extension saves with `storage.set` (tokens, sessions, device ids) now survives restarts. It is encrypted per extension under `~/.mornye/extension_storage`, with the key in the OS credential store when available (otherwise a 0600 key file). Several runtimes of the same extension add their own keys without overwriting each other's.
+
 ### Fixed
 
 - **Download timeout no longer kills transfers that are still progressing**: `timeout_s` used to cap the whole provider attempt, so a large Hi-Res file on a slow connection was cancelled while data was still arriving and the fallback started over on the next provider. It now bounds the time to the first byte and, after that, only stalls with no progress.

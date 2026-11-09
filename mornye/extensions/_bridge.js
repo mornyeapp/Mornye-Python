@@ -37,7 +37,7 @@ const { URL } = require('url');
 //  WORKER THREAD
 // ─────────────────────────────────────────────────────────────
 if (!isMainThread) {
-  const { sharedBuf, extPath, settings } = workerData;
+  const { sharedBuf, extPath, settings, storage: savedStorage } = workerData;
 
   const STATE  = new Int32Array(sharedBuf, 0, 1);   // [0] stato
   const LEN    = new Uint32Array(sharedBuf, 4, 1);  // [0] lunghezza payload
@@ -110,7 +110,20 @@ if (!isMainThread) {
   }
 
   // ── Globals esposti all'estensione ───────────────────────────
-  const _mem = {};
+  // Seeded from what Python saved last time (extensions/storage.py) and
+  // sent back whole on every change, so the extension's tokens and session
+  // state survive a restart. Python owns the file; Node never writes it.
+  const _mem = (savedStorage && typeof savedStorage === 'object') ? savedStorage : {};
+  // One message per change, not the whole object: a provider may run
+  // several of these processes at once, and a full snapshot from one would
+  // erase keys another had just written.
+  const _persistStorage = (op, key, value) => {
+    try {
+      const msg = { type: 'storage_write', op, key: String(key) };
+      if (op === 'set') msg.value = JSON.parse(JSON.stringify(value === undefined ? null : value));
+      parentPort.postMessage(msg);
+    } catch (_) { /* a value JSON cannot carry stays in memory only */ }
+  };
 
   // Headers are passed flat, as the app's own runtime takes them
   // (`http.get(url, {"User-Agent": ...})`). Some extensions written for the
@@ -219,8 +232,14 @@ if (!isMainThread) {
 
   global.storage = {
     get:    (k)    => (_mem[k] !== undefined ? _mem[k] : null),
-    set:    (k, v) => { _mem[k] = v; return true; },
-    delete: (k)    => { delete _mem[k]; return true; },
+    set:    (k, v) => { _mem[k] = v; _persistStorage('set', k, v); return true; },
+    delete: (k)    => {
+      if (Object.prototype.hasOwnProperty.call(_mem, k)) {
+        delete _mem[k];
+        _persistStorage('delete', k);
+      }
+      return true;
+    },
   };
 
   global.file = {
@@ -1158,8 +1177,18 @@ function nodeFileDownloadSegments(urls, outputPath, opts, callId) {
 }
 
 // ── Avvia Worker ────────────────────────────────────────────
+// The saved storage arrives in the environment rather than argv so it does
+// not show in a process listing, and is removed before the worker (and the
+// extension in it) gets a copy of process.env.
+let EXT_STORAGE = {};
+try {
+  const raw = process.env.MORNYE_EXT_STORAGE;
+  if (raw) EXT_STORAGE = JSON.parse(raw) || {};
+} catch (_) { EXT_STORAGE = {}; }
+delete process.env.MORNYE_EXT_STORAGE;
+
 const worker = new Worker(__filename, {
-  workerData: { sharedBuf, extPath: EXT_PATH, settings: EXT_SETTINGS },
+  workerData: { sharedBuf, extPath: EXT_PATH, settings: EXT_SETTINGS, storage: EXT_STORAGE },
 });
 
 worker.on('error', (e) => {
@@ -1182,6 +1211,10 @@ worker.on('message', async (msg) => {
   }
   if (msg.type === 'progress') {
     process.stdout.write(JSON.stringify({ type: 'progress', callId: msg.callId, value: msg.value }) + '\n');
+    return;
+  }
+  if (msg.type === 'storage_write') {
+    process.stdout.write(JSON.stringify({ type: 'storage_write', op: msg.op, key: msg.key, value: msg.value }) + '\n');
     return;
   }
   // Response to a Python command

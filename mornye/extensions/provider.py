@@ -42,6 +42,7 @@ from mornye.core.signed_session_mobile import SignedSessionClient
 
 from .manager import ExtensionManager, InstalledExtension
 from .sandbox import network_grants
+from .storage import ExtensionStorage
 from .runtime import ExtensionRuntimeError, JSRuntime
 from .runtime_features import signed_fetch, signed_session_client
 
@@ -189,6 +190,10 @@ class JSExtensionProvider(BaseProvider):
         self._signed_session: SignedSessionClient | None = None
         self._signed_session = signed_session_client(self._ext.manifest)
 
+        # Shared by every runtime in the pool below: what the extension saved
+        # with storage.set survives restarts, encrypted (extensions/storage.py).
+        self._storage = ExtensionStorage(self._ext.name)
+
         # --- RUNTIME POOL CONFIGURATION ---
         self._max_runtimes = 2
         self._runtimes_created = 0
@@ -286,6 +291,7 @@ class JSExtensionProvider(BaseProvider):
             cancelled_probe=self._stop_requested,
             ext_name=self._ext.name,
             granted_hosts=network_grants(self._ext.manifest, self._settings),
+            storage=self._storage,
         )
         rt.start()
         return rt
