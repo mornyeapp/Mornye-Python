@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from mornye.core.config import OutputConfig
-from mornye.core.models import TrackMetadata, build_filename
+from mornye.core.models import TrackMetadata, build_filename, safe_dir_name
 
 
 class OutputService:
@@ -73,8 +72,8 @@ class OutputService:
 
     @staticmethod
     def _safe_component(value: str) -> str:
-        cleaned = re.sub(r'[<>:"/\\|?*]', "_", value.strip())
-        return cleaned.strip(" .") or "Unknown"
+        # Bounded in bytes too: see MAX_DIRNAME_BYTES in core/models.py.
+        return safe_dir_name(value)
 
     def _confined(self, path: Path) -> Path:
         resolved = path.resolve()

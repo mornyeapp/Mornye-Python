@@ -45,7 +45,14 @@ from ..core.errors import ErrorKind, MornyeError
 from ..core.hooks import Hook, load_hooks, run_hooks
 from ..core.http import AsyncHttpClient
 from ..core.isrc_helper import IsrcHelper
-from ..core.models import DownloadResult, TrackMetadata, build_filename, sanitize
+from ..core.models import (
+    DownloadResult,
+    TrackMetadata,
+    build_filename,
+    fit_name_bytes,
+    safe_dir_name,
+    sanitize,
+)
 from ..core.playlist_sync import (
     M3U_FORMATS,
     AudioIndex,
@@ -869,7 +876,7 @@ async def _write_animated_artwork_sidecar_async(
 
     audio = Path(result.file_path)
     artist = metadata.first_artist if opts.first_artist_only else metadata.artists
-    stem = f"{sanitize(artist)} - {sanitize(metadata.title)}"
+    stem = fit_name_bytes(f"{sanitize(artist)} - {sanitize(metadata.title)}")
 
     def _destinations(suffix: str) -> list[Path]:
         out: list[Path] = []
@@ -2009,8 +2016,7 @@ class LegacyDownloadWorker:
                 and self._collection_name
                 and not self._opts.use_album_subfolders
             ):
-                safe_name = re.sub(r'[<>:"/\\|?*]', "_", self._collection_name.strip())
-                out = os.path.join(out, safe_name)
+                out = os.path.join(out, safe_dir_name(self._collection_name))
 
             os.makedirs(out, exist_ok=True)
             return out
@@ -2023,11 +2029,9 @@ class LegacyDownloadWorker:
         def _do_track_dir():
             out = base
             if self._opts.use_artist_subfolders:
-                folder = re.sub(r'[<>:"/\\|?*]', "_", track.first_artist)
-                out = os.path.join(out, folder)
+                out = os.path.join(out, safe_dir_name(track.first_artist))
             if self._opts.use_album_subfolders:
-                folder = re.sub(r'[<>:"/\\|?*]', "_", track.album)
-                out = os.path.join(out, folder)
+                out = os.path.join(out, safe_dir_name(track.album))
             os.makedirs(out, exist_ok=True)
             return out
 

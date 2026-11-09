@@ -20,6 +20,8 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .models import fit_name_bytes
+
 logger = logging.getLogger(__name__)
 
 FRAMES_PER_SECOND = 75
@@ -168,7 +170,9 @@ _UNSAFE_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
 
 def _safe_filename(value: str) -> str:
     cleaned = _UNSAFE_CHARS.sub("_", value).strip().rstrip(".")
-    return cleaned[:150] or "Track"
+    # Bytes, not characters: 150 CJK characters are 450 bytes, past the
+    # 255-byte limit of Linux filesystems.
+    return fit_name_bytes(cleaned, 180) or "Track"
 
 
 def _resolve_source(cue_path: Path, name: str) -> Path:

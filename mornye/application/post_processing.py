@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from mornye.core.models import DownloadResult, TrackMetadata
-from mornye.core.models import sanitize
+from mornye.core.models import fit_name_bytes, sanitize
 from mornye.core.transcode import (
     already_in_target_format,
     result_format_for,
@@ -126,7 +126,9 @@ async def _write_lrc_sidecars(
             )
             library = Path(options.lrc_library_dir).expanduser()
             library.mkdir(parents=True, exist_ok=True)
-            collected = library / f"{sanitize(artist)} - {sanitize(metadata.title)}.lrc"
+            collected = library / fit_name_bytes(
+                f"{sanitize(artist)} - {sanitize(metadata.title)}", suffix=".lrc"
+            )
             collected.write_text(lyrics + "\n", encoding="utf-8")
             written.append(str(collected))
         return written
@@ -153,7 +155,7 @@ async def _write_canvas_sidecars(
 
     audio = Path(result.file_path)
     artist = metadata.first_artist if options.first_artist_only else metadata.artists
-    stem = f"{sanitize(artist)} - {sanitize(metadata.title)}"
+    stem = fit_name_bytes(f"{sanitize(artist)} - {sanitize(metadata.title)}")
 
     def destinations(suffix: str) -> list[Path]:
         output: list[Path] = []
