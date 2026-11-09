@@ -22,6 +22,7 @@ import html
 import logging
 import re
 from typing import Any
+from urllib.parse import urlsplit
 
 from .env import env_value
 from .http import NetworkManager
@@ -369,7 +370,10 @@ async def fetch_genius_async(
             for hit in (section or {}).get("hits") or []:
                 result = (hit or {}).get("result") or {}
                 url = str(result.get("url") or "")
-                if not url.startswith("https://genius.com/"):
+                # Host and scheme parsed, not a string prefix: only a song
+                # page on genius.com itself is ever fetched.
+                parts = urlsplit(url)
+                if parts.scheme != "https" or parts.hostname != "genius.com":
                     continue
                 candidates.append(
                     {

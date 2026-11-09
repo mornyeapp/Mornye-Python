@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from urllib.parse import urlsplit
 
 import httpx
 import pytest
@@ -184,7 +185,8 @@ def test_genius_without_token_uses_web_search_and_ignores_foreign_urls(monkeypat
         ]
     )
     assert _run(monkeypatch, client, lambda: ld.fetch_genius_async("Song", "Band"))
-    assert not any(c[0].startswith("https://evil.example") for c in client.calls)
+    hosts = {urlsplit(c[0]).hostname for c in client.calls}
+    assert "evil.example" not in hosts
 
 
 @pytest.mark.parametrize("status", [403, 500])
