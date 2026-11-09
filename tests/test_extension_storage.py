@@ -104,3 +104,27 @@ def test_runtime_without_storage_stays_in_memory(tmp_path):
         assert rt.call("run", "storage.get('k')") == 1
     with JSRuntime(ext) as rt:
         assert rt.call("run", "storage.get('k')") is None
+
+
+def test_uninstall_removes_saved_storage(tmp_path):
+    import json
+
+    from mornye.extensions import storage as storage_mod
+    from mornye.extensions.manager import ExtensionManager
+
+    ext_dir = tmp_path / "ext"
+    folder = ext_dir / "tidal-folder"
+    folder.mkdir(parents=True)
+    (folder / "manifest.json").write_text(json.dumps({"name": "tidal-web"}))
+    (folder / "index.js").write_text("")
+
+    keep = ExtensionStorage("other")
+    keep.apply("set", "k", "v")
+    gone = ExtensionStorage("tidal-web")
+    gone.apply("set", "token", "abc")
+    assert gone.path.parent == storage_mod.storage_dir()
+
+    mgr = ExtensionManager(ext_dir=ext_dir, auto_install_downloads=False)
+    assert mgr.uninstall("tidal-folder") is True
+    assert not gone.path.exists()
+    assert keep.load() == {"k": "v"}

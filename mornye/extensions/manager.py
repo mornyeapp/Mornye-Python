@@ -1008,7 +1008,26 @@ class ExtensionManager:
             logger.warning("[ExtMgr] Refusing to uninstall '%s': %s", ext_id, exc)
             return False
         if target.exists():
+            # The storage file is keyed by the manifest's name (what
+            # JSExtensionProvider passes), which can differ from the folder.
+            names = {ext_id}
+            with contextlib.suppress(Exception):
+                names.add(self._load_installed(target).name)
             shutil.rmtree(target)
+            # What the extension saved with storage.set — tokens, sessions —
+            # goes with it, as the mobile app does; otherwise a reinstall
+            # would quietly pick up an old login.
+            from .storage import ExtensionStorage
+
+            for name in names:
+                try:
+                    ExtensionStorage(name).clear()
+                except OSError as exc:
+                    logger.warning(
+                        "[ExtMgr] could not remove saved storage of '%s': %s",
+                        name,
+                        exc,
+                    )
             logger.info("[ExtMgr] Uninstalled '%s'", ext_id)
             return True
         logger.warning("[ExtMgr] '%s' not installed", ext_id)

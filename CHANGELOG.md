@@ -11,6 +11,7 @@
 ### Fixed
 
 - **URL handlers are anchored to the host**: an extension's `urlHandler.patterns` used to match anywhere in a URL, so `tidal.com` claimed `nottidal.com` or `https://example.org/?next=tidal.com`, and the alphabetically first extension with a broad pattern could take links meant for another. Patterns (plain hosts/paths or regexes) now must match the URL's host or a parent domain of it, the same rule everywhere a link is routed. `"enabled": false` is honoured in all three places.
+- **Uninstalling an extension removes its saved storage**, so a reinstall does not quietly pick up an old login.
 - **Download timeout no longer kills transfers that are still progressing**: `timeout_s` used to cap the whole provider attempt, so a large Hi-Res file on a slow connection was cancelled while data was still arriving and the fallback started over on the next provider. It now bounds the time to the first byte and, after that, only stalls with no progress.
 - Translate native Qobuz quality codes to canonical quality IDs when declared by a JavaScript extension, preventing Hi-Res requests from silently selecting CD quality.
 - Restore SoundCloud URL metadata resolution by adapting JavaScript `handleUrl` track, collection, and artist responses to the downloader's `TrackMetadata` contract.
