@@ -2686,6 +2686,42 @@ async def amain() -> None:
             print(f"signer-{idx}: {name or '(unnamed)'}")
         return
 
+    if _argv_has("--split-cue"):
+        # Single-file album + .cue → one file per track (core/cue_split.py).
+        # The source is never modified; existing outputs are kept unless
+        # --cue-overwrite is given.
+        cue_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+        cue_parser.add_argument("--split-cue", dest="path", required=True)
+        cue_parser.add_argument("--cue-output", dest="output_dir", default=None)
+        cue_parser.add_argument(
+            "--cue-format", dest="fmt", default="flac", choices=["flac", "alac", "wav"]
+        )
+        cue_parser.add_argument("--cue-encoding", dest="encoding", default=None)
+        cue_parser.add_argument(
+            "--cue-overwrite", dest="overwrite", action="store_true"
+        )
+        cue_parser.add_argument("--cue-dry-run", dest="dry_run", action="store_true")
+        cue_parser.add_argument(
+            "--no-recursive", dest="recursive", action="store_false"
+        )
+        cue_parser.add_argument("--json", dest="as_json", action="store_true")
+        cue_args, _ = cue_parser.parse_known_args(sys.argv[1:])
+
+        from .tools.cue_split_cli import run_async as run_cue_split_async
+
+        sys.exit(
+            await run_cue_split_async(
+                cue_args.path,
+                output_dir=cue_args.output_dir,
+                fmt=cue_args.fmt,
+                encoding=cue_args.encoding,
+                overwrite=cue_args.overwrite,
+                dry_run=cue_args.dry_run,
+                recursive=cue_args.recursive,
+                as_json=cue_args.as_json,
+            )
+        )
+
     if _argv_has("--dedup-restore"):
         restore_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
         restore_parser.add_argument("--dedup-restore", dest="manifest", required=True)
