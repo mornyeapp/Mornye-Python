@@ -337,8 +337,11 @@ def library_scan_dirs_from(value: object) -> list[str]:
     dirs: list[str] = []
     for part in parts:
         part = part.strip()
-        if part and part not in dirs:
-            dirs.append(os.path.expanduser(part))
+        if not part:
+            continue
+        expanded = os.path.expanduser(part)
+        if expanded not in dirs:
+            dirs.append(expanded)
     return dirs
 
 

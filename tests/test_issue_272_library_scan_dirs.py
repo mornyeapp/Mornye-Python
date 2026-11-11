@@ -49,7 +49,11 @@ def _audio(path: Path) -> Path:
 def test_setting_accepts_text_lists_and_nothing() -> None:
     assert library_scan_dirs_from("/a; /b\n/c;;") == ["/a", "/b", "/c"]
     assert library_scan_dirs_from(["/a", " ", "/a", "/b"]) == ["/a", "/b"]
-    assert library_scan_dirs_from("~/Music") == [str(Path("~/Music").expanduser())]
+    # Compared as paths: on Windows expanduser keeps the "/" the user typed.
+    assert [Path(d) for d in library_scan_dirs_from("~/Music")] == [
+        Path("~/Music").expanduser()
+    ]
+    assert len(library_scan_dirs_from(["~/Music", "~/Music "])) == 1
     assert library_scan_dirs_from(None) == []
     assert library_scan_dirs_from("") == []
     assert library_scan_dirs_from(42) == []
