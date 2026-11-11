@@ -22,4 +22,7 @@
 - **Download timeout no longer kills transfers that are still progressing**: `timeout_s` used to cap the whole provider attempt, so a large Hi-Res file on a slow connection was cancelled while data was still arriving and the fallback started over on the next provider. It now bounds the time to the first byte and, after that, only stalls with no progress.
 - Translate native Qobuz quality codes to canonical quality IDs when declared by a JavaScript extension, preventing Hi-Res requests from silently selecting CD quality.
 - Restore SoundCloud URL metadata resolution by adapting JavaScript `handleUrl` track, collection, and artist responses to the downloader's `TrackMetadata` contract.
+- Preserve a JavaScript extension's native `provider_id` through URL metadata so direct catalogue IDs select the extension's native lookup instead of a lossy title/artist search.
+- Accept `{url, headers}` entries in `file.downloadSegments()` and keep per-segment headers across redirects, restoring SoundCloud and other byte-range HLS downloads.
+- Provide the documented `ffmpeg.convert()` primitive to JavaScript extensions, restoring SoundCloud's segmented-audio remux step.
 - Restore live JavaScript download progress when options follow the callback, safely deliver asynchronous callbacks from the Node reader thread, and preserve received byte counts when the transfer total is unknown.

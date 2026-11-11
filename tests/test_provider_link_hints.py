@@ -111,3 +111,21 @@ def test_foreign_provider_metadata_is_not_fabricated_as_spotify(monkeypatch) -> 
 
     assert "spotify_url" not in options
     assert "qobuz_id" not in options
+
+
+def test_native_source_is_forwarded_only_when_metadata_declares_it() -> None:
+    """Native URL metadata selects direct lookup; Spotify metadata keeps search."""
+    metadata = _metadata("https://soundcloud.com/artist/track")
+    metadata.id = "123456"
+    metadata.extra_info["provider_id"] = "soundcloud"
+
+    options = asyncio.run(_provider("soundcloud")._provider_match_options(metadata))
+
+    assert options["spotify_id"] == "123456"
+    assert options["track"]["provider_id"] == "soundcloud"
+    assert "spotify_url" not in options
+
+    spotify_options = asyncio.run(
+        _provider("soundcloud")._provider_match_options(_metadata())
+    )
+    assert "provider_id" not in spotify_options["track"]

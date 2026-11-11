@@ -21,8 +21,10 @@ extension retries instead of reporting the track as dead.
 from __future__ import annotations
 
 import http.server
+import os
 import shutil
 import threading
+import wave
 from pathlib import Path
 
 import pytest
@@ -44,10 +46,34 @@ SEGMENTS = {
     "/seg4": b"D" * 10,
 }
 EXPECTED = b"".join(SEGMENTS[f"/seg{i}"] for i in range(len(SEGMENTS)))
+RANGED_SEGMENTS = {
+    "/ranged0": ("bytes=0-3", SEGMENTS["/seg0"]),
+    "/ranged-seg2": ("bytes=0-199", SEGMENTS["/seg2"]),
+}
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
+        if self.path == "/moved-ranged":
+            if self.headers.get("Range") != "bytes=0-199":
+                self.send_response(416)
+            else:
+                self.send_response(302)
+                self.send_header("Location", "/ranged-seg2")
+            self.end_headers()
+            return
+        ranged = RANGED_SEGMENTS.get(self.path)
+        if ranged is not None:
+            expected_range, body = ranged
+            if self.headers.get("Range") != expected_range:
+                self.send_response(416)
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if self.path == "/gone":
             self.send_response(410)
             self.end_headers()
@@ -88,6 +114,9 @@ registerExtension({
       persistentCheckpoint: true,
       onProgress: onProgress
     });
+  },
+  probeFfmpeg: function (inputPath, outputPath, codec) {
+    return ffmpeg.convert(inputPath, outputPath, { codec: codec });
   }
 });
 """
@@ -137,6 +166,24 @@ def test_a_redirected_segment_is_followed(runtime, server, tmp_path) -> None:
     result = runtime.call(
         "probe", [f"{server}/seg0", f"{server}/moved"], str(out), 2, None
     )
+
+    assert result["success"] is True, result
+    assert out.read_bytes() == SEGMENTS["/seg0"] + SEGMENTS["/seg2"]
+
+
+def test_object_segments_preserve_ranges_across_redirects(
+    runtime, server, tmp_path
+) -> None:
+    out = tmp_path / "ranged.m4a"
+    segments = [
+        {"url": f"{server}/ranged0", "headers": {"Range": "bytes=0-3"}},
+        {
+            "url": f"{server}/moved-ranged",
+            "headers": {"Range": "bytes=0-199"},
+        },
+    ]
+
+    result = runtime.call("probe", segments, str(out), 2, None)
 
     assert result["success"] is True, result
     assert out.read_bytes() == SEGMENTS["/seg0"] + SEGMENTS["/seg2"]
@@ -203,3 +250,53 @@ def test_the_bridge_reports_bytes_while_the_segments_arrive(
     assert result["success"] is True, result
     assert seen, "no progress reached the host"
     assert seen[-1] == pytest.approx(1.0)
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="needs ffmpeg")
+def test_the_bridge_remuxes_audio_for_extensions(runtime, tmp_path) -> None:
+    source = tmp_path / "source.wav"
+    output = tmp_path / "output.wav"
+    with wave.open(str(source), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(8000)
+        wav.writeframes(b"\0\0" * 800)
+
+    result = runtime.call("probeFfmpeg", str(source), str(output), "copy")
+
+    assert result["success"] is True, result
+    assert output.stat().st_size > 0
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="needs ffmpeg")
+def test_ffmpeg_cannot_write_where_the_extension_may_not(runtime, tmp_path) -> None:
+    """ffmpeg is a child process, so _fsguard.js never sees its writes.
+
+    The bridge checks the output itself; without that, ffmpeg.convert was a
+    way to overwrite any file the user owns.
+    """
+    source = tmp_path / "source.wav"
+    with wave.open(str(source), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(8000)
+        wav.writeframes(b"\0\0" * 80)
+    outside = Path.home() / f".mornye-fsguard-probe-{os.getpid()}.wav"
+    try:
+        result = runtime.call("probeFfmpeg", str(source), str(outside), "copy")
+
+        assert result["success"] is False
+        assert "fsguard" in result["error"]
+        assert not outside.exists()
+    finally:
+        outside.unlink(missing_ok=True)
+
+
+def test_ffmpeg_only_reads_local_files(runtime, tmp_path) -> None:
+    """A URL input would let ffmpeg fetch past _netguard.js."""
+    result = runtime.call(
+        "probeFfmpeg", "http://169.254.169.254/latest", str(tmp_path / "o.wav"), "copy"
+    )
+
+    assert result["success"] is False
+    assert "not a local file" in result["error"]
