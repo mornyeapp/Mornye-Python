@@ -473,6 +473,10 @@ function applySettings(settings = {}) {
   if ($('config-artist-sub')) $('config-artist-sub').checked = cfg.use_artist_subfolders;
   if ($('config-album-sub')) $('config-album-sub').checked = cfg.use_album_subfolders;
   if ($('config-playlist-sub')) $('config-playlist-sub').checked = cfg.create_playlist_subfolders !== false;
+  if ($('config-library-scan-dirs')) {
+    const dirs = cfg.library_scan_dirs;
+    $('config-library-scan-dirs').value = Array.isArray(dirs) ? dirs.join('; ') : (dirs || '');
+  }
   if ($('config-first-artist')) $('config-first-artist').checked = cfg.first_artist_only;
   if ($('config-artist-separator')) $('config-artist-separator').value = cfg.artist_separator || '';
   updateArtistSeparatorState(cfg.first_artist_only);
@@ -745,6 +749,7 @@ const DEFAULT_SETTINGS = {
   use_artist_subfolders: true,
   use_album_subfolders: true,
   create_playlist_subfolders: true,
+  library_scan_dirs: '',
   first_artist_only: false,
   artist_separator: '',
   track_max_retries: 0,
@@ -4967,6 +4972,7 @@ function buildConfig() {
     use_artist_subfolders:  $('config-artist-sub').checked,
     use_album_subfolders:   $('config-album-sub').checked,
     create_playlist_subfolders: $('config-playlist-sub') ? $('config-playlist-sub').checked : true,
+    library_scan_dirs:      $('config-library-scan-dirs')?.value.trim() || '',
     first_artist_only:       $('config-first-artist').checked,
     artist_separator:        $('config-artist-separator')?.value.trim() || null,
     transcode_to:           $('config-transcode')?.value || 'none',

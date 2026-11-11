@@ -114,7 +114,9 @@ class JobQueue:
     DEFAULT_MAX_HISTORY = 500
     #: Queued-but-not-yet-started jobs a single account may have outstanding.
     #: Anyone logged in can call submit-download in a loop; this keeps one
-    #: account from filling the queue for everybody else.
+    #: account from filling the queue for everybody else. ``None`` lifts the
+    #: cap — right for single-user mode, where there is nobody else to crowd
+    #: out (issue #271).
     DEFAULT_MAX_PENDING_PER_OWNER = 50
 
     def __init__(
@@ -123,7 +125,7 @@ class JobQueue:
         *,
         workers: int = 1,
         max_history: int = DEFAULT_MAX_HISTORY,
-        max_pending_per_owner: int = DEFAULT_MAX_PENDING_PER_OWNER,
+        max_pending_per_owner: int | None = DEFAULT_MAX_PENDING_PER_OWNER,
         persist: bool = False,
         quota_check: Callable[[str], None] | None = None,
         kind: str = "",
@@ -278,12 +280,21 @@ class JobQueue:
         except Exception:
             logger.debug("[JobQueue] Could not evict persisted jobs", exc_info=True)
 
-    def submit(self, owner: str, payload: dict) -> Job:
+    def submit(
+        self, owner: str, payload: dict, *, enforce_pending_limit: bool = True
+    ) -> Job:
         """Queues a job for `owner`.
 
         Raises QueueFullError if that owner already has
         `max_pending_per_owner` jobs waiting to start, or whatever
         `quota_check` raises if one was supplied and refuses.
+
+        `enforce_pending_limit=False` skips the pending cap (never the quota
+        check). The cap exists to stop a client from looping on the submit
+        endpoint; a subscription check is not a client, and an artist with
+        sixty new releases queues sixty jobs in one go. Refusing the
+        fifty-first lost it for good — the check had already marked it seen
+        — and logged one error per release (issue #271).
         """
         if self._quota_check is not None:
             # Deliberately outside the lock: the check may read the database,
@@ -298,14 +309,13 @@ class JobQueue:
                 for j in self._jobs.values()
                 if j.owner == owner and j.status is JobStatus.QUEUED
             )
-            if pending >= self._max_pending_per_owner:
+            limit = self._max_pending_per_owner
+            if enforce_pending_limit and limit is not None and pending >= limit:
                 msg = (
                     f"{owner} already has {pending} downloads queued "
-                    f"(limit {self._max_pending_per_owner}); wait for some to finish."
+                    f"(limit {limit}); wait for some to finish."
                 )
-                raise QueueFullError(
-                    msg, pending=pending, limit=self._max_pending_per_owner
-                )
+                raise QueueFullError(msg, pending=pending, limit=limit)
             self._jobs[job.id] = job
             evicted = self._evict_finished_locked()
         with self._persist_lock:

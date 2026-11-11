@@ -62,6 +62,7 @@ def test_track_url_becomes_typed_track_metadata():
     assert isinstance(track, TrackMetadata)
     assert (track.id, track.title, track.artists) == ("123456", "Track", "Artist")
     assert track.external_url == _URL
+    assert track.extra_info["provider_id"] == "soundcloud"
     assert track.publisher == "Label"
     assert track.duration_ms == 123456
 

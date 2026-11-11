@@ -324,6 +324,13 @@ class DownloadOptions:
     # track another playlist already downloaded is linked from this one's
     # M3U instead of being downloaded a second time (issue #267).
     library_dir: str | None = None
+
+    # Folders that already hold music from elsewhere (an older library,
+    # another downloader's output). Playlists and loose tracks are looked up
+    # in them too: a track found there is not downloaded again, and a
+    # playlist's M3U links to it where it is (issue #272). Albums are not —
+    # a release folder with holes in it is not what anyone asked for.
+    library_scan_dirs: list[str] = field(default_factory=list)
     save_animated_artwork: bool = field(
         default_factory=animated_artworks_enabled_by_default,
     )
@@ -2064,6 +2071,53 @@ class LegacyDownloadWorker:
 DownloadWorker = LegacyDownloadWorker
 
 
+async def _match_in_libraries_async(
+    dirs: list[str],
+    tracks: list[TrackMetadata],
+    opts: DownloadOptions,
+    *,
+    exclude: set[str] | None = None,
+) -> dict[str, Path]:
+    """Track id → file already present in one of `dirs`.
+
+    `tracks` is the whole run, in order, so filename stems are numbered as
+    the run numbers them; ids in `exclude` are not looked up. Earlier
+    folders win: a track found in the first is not looked up in the next. A folder that does not exist (an unmounted share, a typo) is
+    skipped with a warning rather than failing the run — the cost is a
+    download that could have been avoided, never a missing one.
+    """
+    matches: dict[str, Path] = {}
+    skip = exclude or set()
+    seen: set[str] = set()
+    for raw in dirs:
+        if not raw:
+            continue
+        folder = os.path.abspath(os.path.expanduser(str(raw)))
+        key = os.path.normcase(folder)
+        if key in seen:
+            continue
+        seen.add(key)
+        if not await asyncio.to_thread(os.path.isdir, folder):
+            logger.warning("[library] Not a folder, skipped: %s", folder)
+            continue
+        wanted = {t.id for t in tracks if t.id} - skip - matches.keys()
+        if not wanted:
+            break
+        index = await asyncio.to_thread(index_audio_files, folder)
+        for position, track in enumerate(tracks, 1):
+            if track.id not in wanted:
+                continue
+            existing = find_existing_track(
+                index,
+                track,
+                track_stem(track, opts, position),
+                opts.transcode_to,
+            )
+            if existing is not None:
+                matches[track.id] = existing
+    return matches
+
+
 # ---------------------------------------------------------------------------
 # MornyeDownloader
 # ---------------------------------------------------------------------------
@@ -2179,30 +2233,17 @@ class MornyeDownloader:
     async def _library_matches_async(
         self, tracks: list[TrackMetadata]
     ) -> dict[str, Path]:
-        """Tracks already somewhere in `opts.library_dir`, by track id.
+        """Tracks already in `opts.library_dir` or a scanned library, by id.
 
-        Only set when `output_dir` is one playlist's folder inside a bigger
-        library: a followed playlist's new tracks are looked up across every
-        playlist folder, so one that another playlist already has is linked
-        from the M3U instead of downloaded twice (issue #267).
+        `library_dir` is only set when `output_dir` is one playlist's folder
+        inside a bigger library: a followed playlist's new tracks are looked
+        up across every playlist folder, so one that another playlist already
+        has is linked from the M3U instead of downloaded twice (issue #267).
+        `library_scan_dirs` are the user's other music folders (issue #272).
         """
-        library_dir = self._opts.library_dir
-        if not library_dir or not await asyncio.to_thread(os.path.isdir, library_dir):
-            return {}
-        index = await asyncio.to_thread(index_audio_files, library_dir)
-        matches: dict[str, Path] = {}
-        for position, track in enumerate(tracks, 1):
-            if not track.id:
-                continue
-            existing = find_existing_track(
-                index,
-                track,
-                track_stem(track, self._opts, position),
-                self._opts.transcode_to,
-            )
-            if existing is not None:
-                matches[track.id] = existing
-        return matches
+        dirs = [self._opts.library_dir] if self._opts.library_dir else []
+        dirs += list(self._opts.library_scan_dirs or [])
+        return await _match_in_libraries_async(dirs, tracks, self._opts)
 
     async def _resolve_track_list_async(
         self,
@@ -3241,6 +3282,18 @@ class MornyeDownloader:
                 resolved = await self._resolve_isrc_bulk_async(pending_isrc)
                 resolved_by_id = {track.id: track for track in resolved}
                 tracks = [resolved_by_id.get(track.id, track) for track in tracks]
+                # Then the user's other music folders (issue #272), for the
+                # tracks the output folder does not already have — after the
+                # ISRC lookup, since a file named some other way is most
+                # reliably recognised by the ISRC in its tags.
+                existing_paths.update(
+                    await _match_in_libraries_async(
+                        list(effective_opts.library_scan_dirs or []),
+                        tracks,
+                        effective_opts,
+                        exclude=set(existing_paths),
+                    )
+                )
             else:
                 tracks = await self._resolve_isrc_bulk_async(tracks)
 

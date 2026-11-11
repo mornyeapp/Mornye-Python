@@ -318,6 +318,30 @@ def find_existing(
     return min(candidates, key=lambda p: (_extension_rank(p), str(p)))
 
 
+def library_scan_dirs_from(value: object) -> list[str]:
+    """The "existing library folders" setting as a list of paths (#272).
+
+    The GUI keeps it as one line of text, folders separated by ``;`` or new
+    lines; profiles and the Python API pass a list; the environment a
+    comma-separated string (see core/env_settings.py, which splits it before
+    it gets here). Blank entries are dropped, ``~`` is expanded.
+    """
+    if not value:
+        return []
+    if isinstance(value, str):
+        parts = re.split(r"[;\n]", value)
+    elif isinstance(value, (list, tuple)):
+        parts = [str(item) for item in value]
+    else:
+        return []
+    dirs: list[str] = []
+    for part in parts:
+        part = part.strip()
+        if part and part not in dirs:
+            dirs.append(os.path.expanduser(part))
+    return dirs
+
+
 def find_existing_track(
     index: AudioIndex,
     track: TrackMetadata,

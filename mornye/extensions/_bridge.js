@@ -32,6 +32,7 @@ const fs     = require('fs');
 const path   = require('path');
 const rl     = require('readline');
 const { URL } = require('url');
+const { spawnSync } = require('child_process');
 
 // ─────────────────────────────────────────────────────────────
 //  WORKER THREAD
@@ -246,11 +247,12 @@ if (!isMainThread) {
     download: (url, outputPath, opts) =>
       bridgeCall('file.download', { url, outputPath, opts: opts || {} }),
 
-    // downloadSegments@1 — one file built from an ordered list of segment
-    // URLs. A DASH/HLS provider cannot express this with download(): the
-    // manifest's init segment plus its media segments only form a playable
-    // stream once concatenated in manifest order. See
-    // nodeFileDownloadSegments in the main thread for the transfer itself.
+    // downloadSegments@1 — one file built from an ordered list of segments.
+    // A segment is a URL string or {url, headers} for byte-range manifests.
+    // A DASH/HLS provider cannot express this with download(): the manifest's
+    // init segment plus its media segments only form a playable stream once
+    // concatenated in manifest order. See nodeFileDownloadSegments in the
+    // main thread for the transfer itself.
     //
     // opts.onProgress is dropped on the way across (JSON.stringify does not
     // carry functions) — deliberately: progress reaches the host from the
@@ -411,6 +413,63 @@ if (!isMainThread) {
         return false;
       }
     }
+  };
+
+  // ffmpeg.convert — the remux step of a segmented download. ffmpeg runs as
+  // a child process, so neither _fsguard.js nor _netguard.js sees what it
+  // opens: with -y it would overwrite any file the user can write (the
+  // trusted-keys file included), and it reads and writes any URL it
+  // understands (http, tcp, concat, ...). Both paths are therefore checked
+  // here the way the guards would check them, and handed to ffmpeg as file:
+  // paths with nothing but the file protocol allowed.
+  global.ffmpeg = {
+    convert: (inputPath, outputPath, opts) => {
+      opts = opts || {};
+      const codec = String(opts.codec || 'copy');
+      if (!/^[A-Za-z0-9_]+$/.test(codec)) {
+        return { success: false, error: `invalid audio codec: ${codec}` };
+      }
+      if (typeof inputPath !== 'string' || !inputPath ||
+          typeof outputPath !== 'string' || !outputPath) {
+        return { success: false, error: 'inputPath and outputPath must be file paths' };
+      }
+      const input = path.resolve(inputPath);
+      const output = path.resolve(outputPath);
+      try {
+        if (!fs.statSync(input).isFile()) throw new Error('not a file');
+      } catch (e) {
+        return { success: false, error: `input is not a local file: ${inputPath}` };
+      }
+      if (input === output) {
+        return { success: false, error: 'inputPath and outputPath must differ' };
+      }
+      // Opening the output through fs is what puts it in front of
+      // _fsguard.js: a path outside the download target, the extension's own
+      // folder and the temp directory is refused exactly as a direct write.
+      try {
+        fs.closeSync(fs.openSync(output, 'w'));
+      } catch (e) {
+        return { success: false, error: e.message };
+      }
+      const result = spawnSync('ffmpeg', [
+        '-hide_banner', '-nostdin', '-y',
+        '-protocol_whitelist', 'file',
+        '-i', `file:${input}`,
+        '-vn', '-c:a', codec,
+        `file:${output}`,
+      ], { encoding: 'utf8', timeout: 30 * 60_000, maxBuffer: 8 * 1024 * 1024 });
+      if (result.error) {
+        return { success: false, error: result.error.message };
+      }
+      if (result.status !== 0) {
+        return {
+          success: false,
+          error: `ffmpeg exited with code ${result.status}: ` +
+            String(result.stderr || '').slice(-2000),
+        };
+      }
+      return { success: true, path: output };
+    },
   };
 
   global.log = {
@@ -974,7 +1033,7 @@ function nodeFileDownload(rawUrl, outputPath, opts, callId) {
 
 /**
  * downloadSegments@1 — writes one file at `outputPath` from an ordered list
- * of segment URLs.
+ * of segments, each a URL string or `{url, headers}`.
  *
  * `file.download` cannot express this: a DASH/HLS track is an init segment
  * plus N media segments, and only their concatenation *in manifest order* is
@@ -994,7 +1053,9 @@ function nodeFileDownloadSegments(urls, outputPath, opts, callId) {
     global.__mornyeAllowWrite(outputPath);
   }
 
-  const list = (urls || []).filter((u) => typeof u === 'string' && u);
+  const list = (urls || []).filter((u) =>
+    (typeof u === 'string' && u) ||
+    (u && typeof u.url === 'string' && u.url));
   if (!list.length) {
     return Promise.resolve({ success: false, error: 'no segment URLs given' });
   }
@@ -1050,7 +1111,9 @@ function nodeFileDownloadSegments(urls, outputPath, opts, callId) {
   const PROGRESS_THRESHOLD = 128 * 1024;
 
   /** One segment to one file, following redirects. */
-  function fetchSegment(rawUrl, dest, depth) {
+  function fetchSegment(segment, dest, depth) {
+    const rawUrl = typeof segment === 'string' ? segment : segment.url;
+    const segmentHeaders = typeof segment === 'string' ? {} : segment.headers || {};
     return new Promise((resolve) => {
       if (depth > 5) { resolve({ ok: false, error: 'too many redirects' }); return; }
       let u;
@@ -1063,13 +1126,13 @@ function nodeFileDownloadSegments(urls, outputPath, opts, callId) {
         port:     u.port || (u.protocol === 'https:' ? 443 : 80),
         path:     u.pathname + u.search,
         method:   'GET',
-        headers:  Object.assign({}, headers),
+        headers:  Object.assign({}, headers, segmentHeaders),
       }, (res) => {
         const status = res.statusCode;
         const loc = res.headers['location'];
         if (status >= 300 && status < 400 && loc) {
           res.resume();
-          fetchSegment(new URL(loc, rawUrl).toString(), dest, depth + 1).then(resolve);
+          fetchSegment({ url: new URL(loc, rawUrl).toString(), headers: segmentHeaders }, dest, depth + 1).then(resolve);
           return;
         }
         if (status >= 400) {

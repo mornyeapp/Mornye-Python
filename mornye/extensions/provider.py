@@ -478,16 +478,22 @@ class JSExtensionProvider(BaseProvider):
         its own ISRC/title/artist fallback, so a resolver outage must never
         make a previously downloadable track unavailable.
         """
+        source = (
+            str((metadata.extra_info or {}).get("provider_id") or "").strip().lower()
+        )
+        track_hint: dict[str, Any] = {
+            "name": metadata.title,
+            "artists": metadata.artists,
+            "album_name": metadata.album,
+            "duration_ms": metadata.duration_ms,
+            "isrc": metadata.isrc,
+        }
+        if source:
+            track_hint["provider_id"] = source
         options: dict[str, Any] = {
             "duration_ms": metadata.duration_ms,
             "spotify_id": metadata.id,
-            "track": {
-                "name": metadata.title,
-                "artists": metadata.artists,
-                "album_name": metadata.album,
-                "duration_ms": metadata.duration_ms,
-                "isrc": metadata.isrc,
-            },
+            "track": track_hint,
         }
         spotify_url = self._spotify_track_url(metadata)
         if not spotify_url:
@@ -575,6 +581,7 @@ class JSExtensionProvider(BaseProvider):
         if from_album:
             album = album or collection.get("name") or ""
         total_tracks = len(collection.get("tracks") or []) if from_album else 0
+        provider_id = str(item.get("provider_id") or "").strip().lower()
         album_artist = item.get("album_artist") or (
             collection.get("artists") if from_album else ""
         )
@@ -602,6 +609,7 @@ class JSExtensionProvider(BaseProvider):
             genre=str(item.get("genre") or ""),
             is_explicit=bool(item.get("explicit")),
             preview_url=str(item.get("preview_url") or ""),
+            extra_info={"provider_id": provider_id} if provider_id else {},
             album_id=str(
                 item.get("album_id")
                 or (collection.get("id") if from_album else "")

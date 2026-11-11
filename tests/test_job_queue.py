@@ -5,7 +5,9 @@ from __future__ import annotations
 import threading
 import time
 
-from mornye.core.job_queue import JobQueue, JobStatus
+import pytest
+
+from mornye.core.job_queue import JobQueue, JobStatus, QueueFullError
 
 
 def _wait_until(predicate, timeout=2.0) -> None:
@@ -129,3 +131,55 @@ def test_multiple_workers_process_concurrently():
 
     _wait_until(lambda: all(q.get(j.id).status == JobStatus.DONE for j in jobs))
     assert concurrent_count["max"] >= 2
+
+
+def _blocked_queue(**kwargs) -> tuple[JobQueue, threading.Event]:
+    """A queue whose single worker is stuck on the first job until released."""
+    release = threading.Event()
+    queue = JobQueue(lambda _payload: release.wait(5), workers=1, **kwargs)
+    return queue, release
+
+
+def test_the_pending_cap_refuses_past_the_limit() -> None:
+    queue, release = _blocked_queue(max_pending_per_owner=2)
+    try:
+        queue.submit("alice", {})  # picked up by the worker
+        _wait_until(lambda: queue.list_all()[0].status is JobStatus.RUNNING)
+        queue.submit("alice", {})
+        queue.submit("alice", {})
+        with pytest.raises(QueueFullError) as exc:
+            queue.submit("alice", {})
+        assert (exc.value.pending, exc.value.limit) == (2, 2)
+    finally:
+        release.set()
+
+
+def test_no_cap_accepts_any_number_of_pending_jobs() -> None:
+    """Issue #271: single-user mode has nobody to crowd out."""
+    queue, release = _blocked_queue(max_pending_per_owner=None)
+    try:
+        for _ in range(120):
+            queue.submit("me", {})
+        assert len(queue.list_all()) == 120
+    finally:
+        release.set()
+
+
+def test_a_submit_can_skip_the_pending_cap_but_not_the_quota() -> None:
+    refused: list[str] = []
+
+    def quota(owner: str) -> None:
+        if owner == "over":
+            refused.append(owner)
+            raise RuntimeError("quota")
+
+    queue, release = _blocked_queue(max_pending_per_owner=1, quota_check=quota)
+    try:
+        for _ in range(5):
+            queue.submit("bob", {}, enforce_pending_limit=False)
+        assert len(queue.list_all()) == 5
+        with pytest.raises(RuntimeError):
+            queue.submit("over", {}, enforce_pending_limit=False)
+        assert refused == ["over"]
+    finally:
+        release.set()

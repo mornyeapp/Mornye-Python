@@ -59,6 +59,7 @@ SETTINGS: dict[str, str] = {
     "use_artist_subfolders": "bool",
     "use_album_subfolders": "bool",
     "create_playlist_subfolders": "bool",
+    "library_scan_dirs": "list",
     "first_artist_only": "bool",
     "artist_separator": "str",
     "include_featuring": "bool",
