@@ -245,25 +245,27 @@ class SubscriptionsMixin:
         own fetch does before a download.
         """
         unfetched = 0
+        unqueued = 0
         for result in results:
             sub = result.subscription
             settings = dict(config or sub.download_config or {})
             if result.new_tracks:
-                self._queue_subscription_tracks(
+                if not self._queue_subscription_tracks(
                     result.new_tracks,
                     sub.url,
                     settings,
                     whole=False,
                     playlist_name=result.artist_name or sub.name or "",
-                )
+                ):
+                    unqueued += 1
                 continue
             for release in result.new:
                 try:
                     tracks = self._release_tracks(release.url)
-                    if tracks:
-                        self._queue_subscription_tracks(
-                            tracks, release.url, settings, whole=True
-                        )
+                    if tracks and not self._queue_subscription_tracks(
+                        tracks, release.url, settings, whole=True
+                    ):
+                        unqueued += 1
                 except Exception as e:
                     # Quiet, then counted: a check that covers many
                     # subscriptions can fail on many releases at once.
@@ -274,6 +276,15 @@ class SubscriptionsMixin:
                 f"{unfetched} new release(s) could not be fetched — "
                 "see the Logs view for which.",
                 "warn",
+            )
+        if unqueued:
+            # One line for the whole check, like `unfetched` above: a large
+            # sync used to log an error per release it could not queue
+            # (issue #271).
+            self.log(
+                f"{unqueued} new release(s) could not be queued for download — "
+                "see the Logs view for why.",
+                "error",
             )
 
     def _release_tracks(self, url: str) -> list:
@@ -291,7 +302,12 @@ class SubscriptionsMixin:
         *,
         whole: bool,
         playlist_name: str = "",
-    ) -> None:
+    ) -> bool:
+        """Queues one batch; False when it could not be queued.
+
+        Failures are logged quietly here and summed up by the caller, so a
+        check that finds many releases reports one line, not one each.
+        """
         # A self-contained job (see MornyeAPI.run_download_job): queued in
         # --web mode, where it survives a restart, and run right away
         # otherwise. No "session", so it finishes as a background download —
@@ -312,7 +328,7 @@ class SubscriptionsMixin:
         queue = getattr(self, "_subscription_download_queue", None)
         if queue is None:
             self._start_download_job(payload)
-            return
+            return True
 
         # Multi-user --web: through the account-aware queue, so a scheduled
         # download is quota-checked and survives a restart like every other
@@ -324,9 +340,16 @@ class SubscriptionsMixin:
         # job set on these instances would re-queue itself forever.
         owner = self._subscription_owner()
         try:
-            queue.submit(owner, {**payload, "owner": owner})
+            # Past the per-owner pending cap, which guards the submit
+            # endpoint against a looping client, not the scheduler: the
+            # account quota still applies (issue #271).
+            queue.submit(
+                owner, {**payload, "owner": owner}, enforce_pending_limit=False
+            )
         except Exception as exc:
             self.log(
                 f"Could not queue {len(tracks)} new track(s) for download: {exc}",
-                "error",
+                "warn-quiet",
             )
+            return False
+        return True

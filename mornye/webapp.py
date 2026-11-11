@@ -578,6 +578,10 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
             workers=1,
             persist=True,
             kind="single-user",
+            # One user, so no one to crowd out: the per-owner cap only
+            # refused (and, for a subscription check, lost) the 51st of a
+            # large batch of new releases (issue #271).
+            max_pending_per_owner=None,
         )
         api._download_queue = download_queue
 

@@ -188,9 +188,13 @@ def test_only_the_owner_can_reset_remove_or_pause(playlist):
 class FakeQueue:
     def __init__(self) -> None:
         self.submitted: list[tuple[str, dict]] = []
+        self.enforced: list[bool] = []
 
-    def submit(self, owner: str, payload: dict) -> None:
+    def submit(
+        self, owner: str, payload: dict, *, enforce_pending_limit: bool = True
+    ) -> None:
         self.submitted.append((owner, payload))
+        self.enforced.append(enforce_pending_limit)
 
 
 def test_multiuser_scheduled_downloads_go_through_the_shared_queue(playlist):
@@ -206,13 +210,16 @@ def test_multiuser_scheduled_downloads_go_through_the_shared_queue(playlist):
     [(owner, payload)] = queue.submitted
     assert owner == "bob" and payload["owner"] == "bob"
     assert [t["id"] for t in payload["tracks"]] == ["t2"]
+    # The scheduler is not a looping client: the pending cap is not its to
+    # hit (issue #271).
+    assert queue.enforced == [False]
 
 
 def test_a_queue_refusal_is_reported_not_raised(playlist):
     api = FakeApi("bob")
 
     class FullQueue:
-        def submit(self, owner, payload):
+        def submit(self, owner, payload, **_kwargs):
             raise RuntimeError("quota exceeded")
 
     api._subscription_download_queue = FullQueue()
@@ -223,3 +230,28 @@ def test_a_queue_refusal_is_reported_not_raised(playlist):
     api._run_scheduled_check(subs.get(sub.id))
 
     assert any("quota exceeded" in message for _level, message in api.logs)
+
+
+def test_many_refused_releases_are_summed_up_in_one_error() -> None:
+    """Issue #271: a big artist sync logged one error per refused release."""
+    api = FakeApi("bob")
+
+    class FullQueue:
+        def submit(self, owner, payload, **_kwargs):
+            raise RuntimeError("quota exceeded")
+
+    api._subscription_download_queue = FullQueue()
+    api.release_tracks = {
+        f"https://open.spotify.com/album/a{i}": [_track(f"t{i}")] for i in range(60)
+    }
+    sub = subs.add(ARTIST_URL, owner="bob")
+    result = subs.CheckResult(
+        subscription=sub,
+        new=[subs.Release(id=f"a{i}", type="album") for i in range(60)],
+    )
+
+    api._download_subscription_results([result])
+
+    errors = [message for level, message in api.logs if level == "error"]
+    assert len(errors) == 1
+    assert errors[0].startswith("60 new release(s) could not be queued")

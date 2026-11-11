@@ -14,6 +14,7 @@
 
 ### Fixed
 
+- **Large subscription syncs no longer stop at 50 queued downloads** (#271): in single-user `--web` mode the download queue refused everything past 50 waiting jobs, and a followed artist's check — which had already marked those releases as seen — lost every release past the 50th while logging one error for each. Single-user mode has no cap any more; in multi-user mode scheduled checks skip the per-account pending cap (the daily quota still applies), and whatever cannot be queued is reported in one line.
 - **URL handlers are anchored to the host**: an extension's `urlHandler.patterns` used to match anywhere in a URL, so `tidal.com` claimed `nottidal.com` or `https://example.org/?next=tidal.com`, and the alphabetically first extension with a broad pattern could take links meant for another. Patterns (plain hosts/paths or regexes) now must match the URL's host or a parent domain of it, the same rule everywhere a link is routed. `"enabled": false` is honoured in all three places.
 - **File and folder names fit Linux filesystems**: names were never shortened, so a long title — three bytes per character in Japanese or Chinese — could exceed the 255-byte limit of ext4/btrfs (Docker volumes, most NAS shares) and fail with "File name too long" while working on macOS. Track files are now bounded to 200 bytes (leaving room for temporary names) and folders to 240, cut on a character boundary.
 - **Uninstalling an extension removes its saved storage**, so a reinstall does not quietly pick up an old login.
