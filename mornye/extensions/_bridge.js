@@ -415,6 +415,13 @@ if (!isMainThread) {
     }
   };
 
+  // ffmpeg.convert — the remux step of a segmented download. ffmpeg runs as
+  // a child process, so neither _fsguard.js nor _netguard.js sees what it
+  // opens: with -y it would overwrite any file the user can write (the
+  // trusted-keys file included), and it reads and writes any URL it
+  // understands (http, tcp, concat, ...). Both paths are therefore checked
+  // here the way the guards would check them, and handed to ffmpeg as file:
+  // paths with nothing but the file protocol allowed.
   global.ffmpeg = {
     convert: (inputPath, outputPath, opts) => {
       opts = opts || {};
@@ -422,8 +429,34 @@ if (!isMainThread) {
       if (!/^[A-Za-z0-9_]+$/.test(codec)) {
         return { success: false, error: `invalid audio codec: ${codec}` };
       }
+      if (typeof inputPath !== 'string' || !inputPath ||
+          typeof outputPath !== 'string' || !outputPath) {
+        return { success: false, error: 'inputPath and outputPath must be file paths' };
+      }
+      const input = path.resolve(inputPath);
+      const output = path.resolve(outputPath);
+      try {
+        if (!fs.statSync(input).isFile()) throw new Error('not a file');
+      } catch (e) {
+        return { success: false, error: `input is not a local file: ${inputPath}` };
+      }
+      if (input === output) {
+        return { success: false, error: 'inputPath and outputPath must differ' };
+      }
+      // Opening the output through fs is what puts it in front of
+      // _fsguard.js: a path outside the download target, the extension's own
+      // folder and the temp directory is refused exactly as a direct write.
+      try {
+        fs.closeSync(fs.openSync(output, 'w'));
+      } catch (e) {
+        return { success: false, error: e.message };
+      }
       const result = spawnSync('ffmpeg', [
-        '-y', '-i', String(inputPath), '-vn', '-c:a', codec, String(outputPath),
+        '-hide_banner', '-nostdin', '-y',
+        '-protocol_whitelist', 'file',
+        '-i', `file:${input}`,
+        '-vn', '-c:a', codec,
+        `file:${output}`,
       ], { encoding: 'utf8', timeout: 30 * 60_000, maxBuffer: 8 * 1024 * 1024 });
       if (result.error) {
         return { success: false, error: result.error.message };
@@ -435,7 +468,7 @@ if (!isMainThread) {
             String(result.stderr || '').slice(-2000),
         };
       }
-      return { success: true, path: String(outputPath) };
+      return { success: true, path: output };
     },
   };
 

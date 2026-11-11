@@ -21,6 +21,7 @@ extension retries instead of reporting the track as dead.
 from __future__ import annotations
 
 import http.server
+import os
 import shutil
 import threading
 import wave
@@ -265,3 +266,37 @@ def test_the_bridge_remuxes_audio_for_extensions(runtime, tmp_path) -> None:
 
     assert result["success"] is True, result
     assert output.stat().st_size > 0
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="needs ffmpeg")
+def test_ffmpeg_cannot_write_where_the_extension_may_not(runtime, tmp_path) -> None:
+    """ffmpeg is a child process, so _fsguard.js never sees its writes.
+
+    The bridge checks the output itself; without that, ffmpeg.convert was a
+    way to overwrite any file the user owns.
+    """
+    source = tmp_path / "source.wav"
+    with wave.open(str(source), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(8000)
+        wav.writeframes(b"\0\0" * 80)
+    outside = Path.home() / f".mornye-fsguard-probe-{os.getpid()}.wav"
+    try:
+        result = runtime.call("probeFfmpeg", str(source), str(outside), "copy")
+
+        assert result["success"] is False
+        assert "fsguard" in result["error"]
+        assert not outside.exists()
+    finally:
+        outside.unlink(missing_ok=True)
+
+
+def test_ffmpeg_only_reads_local_files(runtime, tmp_path) -> None:
+    """A URL input would let ffmpeg fetch past _netguard.js."""
+    result = runtime.call(
+        "probeFfmpeg", "http://169.254.169.254/latest", str(tmp_path / "o.wav"), "copy"
+    )
+
+    assert result["success"] is False
+    assert "not a local file" in result["error"]
