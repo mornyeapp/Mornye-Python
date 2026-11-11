@@ -47,6 +47,7 @@ from .core.notifiers import resolve_chat_id as resolve_notify_chat_id
 from .core.notifiers import resolve_kind as resolve_notify_kind
 from .core.notifiers import resolve_on as resolve_notify_on
 from .core.output_sink import sink_active
+from .core.playlist_sync import library_scan_dirs_from
 from .core.report import RunReport
 from .core.transcode import LOSSLESS_FORMATS, SUPPORTED_FORMATS
 from .downloader import DownloadOptions
@@ -600,6 +601,17 @@ def parse_args(profile_defaults: dict | None = None) -> argparse.Namespace:
         action="store_false",
         dest="create_playlist_subfolders",
         help="Keep playlist downloads in the output directory.",
+    )
+    parser.add_argument(
+        "--library-scan-dir",
+        action="append",
+        dest="library_scan_dirs",
+        default=None,
+        metavar="DIR",
+        help="A folder that already holds music (an older library, another "
+        "downloader's output); repeat for several. Playlist tracks and single "
+        "tracks found there are not downloaded again, and the playlist's M3U "
+        "links to them where they are. Also MORNYE_LIBRARY_SCAN_DIRS.",
     )
     parser.add_argument(
         "--first-artist-only",
@@ -1479,6 +1491,7 @@ def _subscription_downloader(profile_defaults: dict, output_dir_override: str | 
             use_artist_subfolders=pd.get("use_artist_subfolders", False),
             use_album_subfolders=pd.get("use_album_subfolders", False),
             create_playlist_subfolders=pd.get("create_playlist_subfolders", True),
+            library_scan_dirs=library_scan_dirs_from(pd.get("library_scan_dirs")),
             loop=None,
             quality=pd.get("quality", "LOSSLESS"),
             first_artist_only=pd.get("first_artist_only", False),
@@ -1791,6 +1804,7 @@ async def _run_download_async(
     csv_delimiter: str | None = None,
     csv_unresolved: str | None = None,
     m3u_format: str = "m3u8",
+    library_scan_dirs: list[str] | None = None,
     max_concurrent_downloads: int = 2,
     extension_quality: dict[str, str] | None = None,
     verify_hires: bool = False,
@@ -1922,6 +1936,7 @@ async def _run_download_async(
         allow_fallback=allow_fallback,
         use_album_subfolders=use_album_subfolders,
         create_playlist_subfolders=create_playlist_subfolders,
+        library_scan_dirs=library_scan_dirs_from(library_scan_dirs),
         quality=quality,
         extension_quality=dict(extension_quality or {}),
         first_artist_only=first_artist_only,
@@ -2163,6 +2178,7 @@ async def run_download_from_cfg(cfg: dict, log_level: int) -> None:
             use_artist_subfolders=cfg.get("use_artist_subfolders", False),
             use_album_subfolders=cfg.get("use_album_subfolders", False),
             create_playlist_subfolders=cfg.get("create_playlist_subfolders", True),
+            library_scan_dirs=library_scan_dirs_from(cfg.get("library_scan_dirs")),
             quality=cfg.get("quality", "LOSSLESS"),
             first_artist_only=cfg.get("first_artist_only", False),
             artist_separator=cfg.get("artist_separator"),
@@ -3135,6 +3151,11 @@ async def amain() -> None:
             use_artist_subfolders=args.use_artist_subfolders,
             use_album_subfolders=args.use_album_subfolders,
             create_playlist_subfolders=args.create_playlist_subfolders,
+            library_scan_dirs=library_scan_dirs_from(
+                args.library_scan_dirs
+                if args.library_scan_dirs is not None
+                else merged_defaults.get("library_scan_dirs")
+            ),
             loop=args.loop,
             quality=quality,
             first_artist_only=args.first_artist_only,

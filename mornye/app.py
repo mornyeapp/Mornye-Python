@@ -2039,6 +2039,7 @@ class MornyeAPI(
             from .application import DownloadService, LegacyDownloadAdapter
             from .core.config import DownloadRequest, MornyeConfig
             from .core.download_log import record_hook
+            from .core.playlist_sync import library_scan_dirs_from
             from .downloader import DownloadOptions
 
             # The same hook the CLI installs (see launcher._run_download_async).
@@ -2088,6 +2089,9 @@ class MornyeAPI(
                 create_playlist_subfolders=create_playlist_subfolders,
                 m3u_format=str(config.get("m3u_format") or "m3u8"),
                 library_dir=library_dir,
+                library_scan_dirs=library_scan_dirs_from(
+                    config.get("library_scan_dirs")
+                ),
                 first_artist_only=first_artist_only,
                 include_featuring=include_featuring,
                 artist_separator=artist_separator,

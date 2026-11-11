@@ -137,6 +137,9 @@ class ConfigState:
     use_artist_subfolders: bool = False
     use_album_subfolders: bool = False
     create_playlist_subfolders: bool = True
+    # Folders of music already owned (issue #272); set from profiles and
+    # MORNYE_LIBRARY_SCAN_DIRS, not edited in the TUI.
+    library_scan_dirs: list[str] = field(default_factory=list)
     first_artist_only: bool = False
     artist_separator: str | None = None
     include_featuring: bool = True
@@ -322,6 +325,7 @@ class ConfigState:
             lyrics_providers=list(self.lyrics_providers),
             enrich_providers=list(self.enrich_providers),
             post_download_hooks=list(self.post_download_hooks),
+            library_scan_dirs=list(self.library_scan_dirs),
         )
 
         # A track list and a link are alternatives; the CSV wins, because
@@ -433,6 +437,7 @@ class ConfigState:
             "use_artist_subfolders": state.use_artist_subfolders,
             "use_album_subfolders": state.use_album_subfolders,
             "create_playlist_subfolders": state.create_playlist_subfolders,
+            "library_scan_dirs": list(state.library_scan_dirs),
             "first_artist_only": state.first_artist_only,
             "artist_separator": state.artist_separator,
             "include_featuring": state.include_featuring,

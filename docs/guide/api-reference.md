@@ -159,6 +159,7 @@ Mornye(
 | `--use-album-subfolders` | | `False` | Organize files into per-album subfolders. |
 | `--playlist-subfolders` | | `True` | Create a subfolder for playlist downloads (enabled by default). |
 | `--no-playlist-subfolders` | | | Keep playlist downloads directly in the output directory instead of a subfolder. |
+| `--library-scan-dir DIR` | | `None` | A folder that already holds music (repeatable; also `MORNYE_LIBRARY_SCAN_DIRS`, comma-separated). Playlist and single tracks found there are not downloaded again and the playlist's M3U links to them. Albums always download in full. |
 | `--first-artist-only` | | `False` | Use only the first artist in tags and filename. |
 | `--artist-separator` | | `None` | Custom separator for joining multiple artists in tags (e.g. `", "` or `" / "`). Useful for Rekordbox. |
 | `--include-featuring` | | `False` | Include tracks where the artist appears as a featured artist. Only applies to artist/discography URLs. |
