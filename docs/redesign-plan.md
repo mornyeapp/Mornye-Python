@@ -32,12 +32,26 @@ pushati**, uno per voce, senza trailer di co-autore.
 | F8 · strumenti | `2c6759a` | CI su 3.11–3.14 + macOS; hook `black` a 26.10.1 |
 | `fetch()` sincrono per le estensioni | `c9d2d1d` | vedi §8 |
 | Ricerca su sorgenti solo-ricerca | `2842669` | vedi §8 |
-| Jellyfin: lacune piccole | ultimo commit | vedi §9 |
+| Jellyfin: lacune piccole | `a2c6d4c` | vedi §9 |
+| Fase 0 · voce 3: contratto `id`/handler/classi | `6c9011f` | `tests/test_frontend_dom_contract.py` + inventario `tests/frontend_dom_contract.json`; unico orfano noto `hc-summary` |
+| Fase 0 · voce 2: snapshot TUI | `6ad44f5` | `tests/visual/capture_tui.py` → 48 SVG in `tests/visual/baseline/tui` (12 pannelli × 80×24/120×40 × scuro/chiaro), HOME temporanea, deterministico; `--compare` per il confronto |
+| J1 · rete locale per estensione | `f5abb18` | `extensions/local_network.py`, interruttore in Settings → Extensions, API admin `set_extension_local_network` |
+| J2 · testi dalle estensioni | `00b7ac3` | `core/extension_lyrics.py`, provider `ext:<nome>` in GUI/TUI/CLI |
 
 ### Non fatto — da qui si riparte
 
-1. **Fase 0** (rete di sicurezza visiva + test del contratto `id`/classi) —
-   non iniziata. È il prossimo passo.
+1. **J3 (home feed)** — in corso, nessun codice scritto. Trovato: oltre a
+   Jellyfin, 8 estensioni installate hanno `getHomeFeed` (apple-music,
+   amazon, genie, bugs, melon, jiosaavn, ytmusic, spotify-web). Explore oggi
+   chiama solo `get_spotify_home_feed` (`app.py:896`) e `renderHomeSections`
+   (`app.js`) accetta già la stessa forma `{greeting, sections:[{title,
+   items:[{id, uri, type, name, artists, cover_url}]}]}`. Da fare: API
+   `get_extension_home_feed(name)` + elenco sorgenti, un selettore di
+   sorgente in Explore; il clic su una card passa `item.uri` a `onFetch()`
+   — verificare che `jellyfin:album:<id>` venga gestito da `handleUrl`.
+2. **J4** (`skipMetadataEnrichment` / `skipBuiltInFallback`) — non iniziato.
+3. **Fase 0 voce 1** (screenshot GUI) — non iniziata. J1 e J2 toccano la GUI
+   e **non sono stati verificati nel browser**: farlo insieme.
 2. **Fase 1** in poi — non iniziate. Nessun file di `mornye/frontend/` o
    `mornye/tui/` è stato toccato per il look.
 3. **Default della §2 ancora da confermare** dall'utente: segnale ambra,
@@ -47,7 +61,12 @@ pushati**, uno per voce, senza trailer di co-autore.
 5. **F3, resto**: restano ~30 avvisi `ASYNC240`, quasi tutti un singolo
    `exists()`/`getsize()` su disco locale. Lasciati di proposito: da rivedere
    solo se emergono blocchi su percorsi di rete.
-6. **Jellyfin**: le quattro voci aperte della §9.
+6. **Note emerse:** a 80×24 il pannello History della TUI taglia il testo a
+   destra (si vede negli snapshot). `mypy mornye` nella venv locale 3.14
+   si ferma su uno stub di `numpy` (`python_version = "3.11"`); con
+   `--python-version 3.12` resta 1 errore preesistente in
+   `core/hires_check.py:469`. Suite completa dopo i commit Jellyfin:
+   2209 passati, 357 saltati.
 
 ### Da sapere prima di toccare qualcosa
 
