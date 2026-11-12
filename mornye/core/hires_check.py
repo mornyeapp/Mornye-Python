@@ -466,7 +466,7 @@ def _ffmpeg_read_window(
         timeout=_FFMPEG_TIMEOUT_S,
         check=True,
     )
-    raw = np.frombuffer(proc.stdout, dtype="<i4")
+    raw: "np.ndarray" = np.frombuffer(proc.stdout, dtype="<i4")
     if raw.size == 0:
         raise HiResCheckError(f"ffmpeg decoded an empty window from '{path}'")
 
