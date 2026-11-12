@@ -37,6 +37,7 @@ from mornye.core.errors import ErrorKind, MornyeError
 from mornye.core.models import DownloadResult, TrackMetadata
 from mornye.core.output_lock import output_path_lock
 from mornye.core.link_resolver import LinkResolver
+from mornye.core.loop_runner import spawn
 from mornye.core.text_match import track_identity_mismatch
 from mornye.core.signed_session_mobile import SignedSessionClient
 
@@ -390,10 +391,11 @@ class JSExtensionProvider(BaseProvider):
 
         if self._signed_session is not None:
             try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(self._signed_session.aclose())
+                asyncio.get_running_loop()
             except RuntimeError:
                 asyncio.run(self._signed_session.aclose())
+            else:
+                spawn(self._signed_session.aclose())
 
     def __enter__(self) -> Self:
         return self
