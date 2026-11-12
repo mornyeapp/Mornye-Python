@@ -1,0 +1,122 @@
+/* frontend/css/views/queue.css — Queue in the console look (redesign voce 12):
+   the "Downloading now" panel, its metrics and filters, the live items and
+   the panel of tracks still missing. The staged list above it is made of
+   the shared page parts (css/legacy.css).
+
+   Over styles.css until voce 22. Semantic tokens only; ids and handlers
+   untouched. Reference: docs/mocks/queue.html. */
+
+/* The live panel (also the drawer the dock opens): flat, ruled. */
+.queue-panel {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-1);
+  background: var(--surface);
+  box-shadow: var(--elevation-overlay);
+}
+#view-queue .queue-panel { box-shadow: none; }
+
+/* Four readouts in a row, each a label over a value. */
+.live-head { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--rule); }
+.metric { gap: var(--space-1); }
+.metric-label {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+.metric strong {
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The counters are filters: readouts that toggle. */
+.qs-item {
+  height: var(--row-head);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-1);
+  background: transparent;
+  color: var(--text-2);
+  font-family: var(--font);
+  font-size: var(--text-xs);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.qs-item strong { color: var(--text); font-variant-numeric: tabular-nums; }
+.qs-item[aria-pressed="true"] { border-color: var(--signal-strong); background: var(--selected); color: var(--text); }
+.qs-dot { width: 6px; height: 6px; border-radius: 0; }
+
+/* One live download per row. */
+.queue-item {
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.queue-item:hover { background: var(--raised); transform: none; }
+.qi-title { font-size: var(--text-md); font-weight: var(--weight-medium); }
+.qi-artist, .qi-bottom-meta { color: var(--text-muted); font-size: var(--text-sm); }
+.qi-bottom { display: flex; align-items: center; gap: var(--space-3); color: var(--text-2); font-size: var(--text-sm); }
+.queue-item .qi-pill {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.queue-item .qi-pill.waiting,
+.queue-item .qi-pill.skipped { background: transparent; border: 0; color: var(--text-muted); }
+.queue-item .qi-pill.active { background: transparent; border: 0; color: var(--signal-text); }
+.queue-item .qi-pill.done { background: transparent; border: 0; color: var(--ok); font-weight: var(--weight-medium); }
+.queue-item .qi-pill.error { background: transparent; border: 0; color: var(--error); }
+
+/* The segmented meter app.js writes into an active item. */
+.qi-meter { display: inline-flex; gap: 2px; height: 10px; }
+.qi-meter > i { width: 6px; background: var(--rule-strong); }
+.qi-meter > i.on { background: var(--signal-strong); }
+
+/* Tracks still missing: the one place failures are listed. */
+.failed-panel {
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-left: 2px solid var(--error);
+  border-radius: var(--radius-1);
+  background: var(--surface);
+}
+.fp-head { padding: var(--space-3) var(--space-4); }
+#fp-title { color: var(--error); font-size: var(--text-md); font-weight: var(--weight-medium); }
+.fp-sub { color: var(--text-muted); font-size: var(--text-sm); }
+.fp-list { border-top: 1px solid var(--rule); }
+.fp-item {
+  padding: var(--space-2) var(--space-4);
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
+}
+.fp-item:last-child { border-bottom: 0; }
+.fp-name { font-size: var(--text-md); }
+.fp-error { color: var(--text-2); font-size: var(--text-sm); }
+.fp-attempts { color: var(--text-muted); font-size: var(--text-xs); letter-spacing: .06em; text-transform: uppercase; }
+
+#queue-counter { color: var(--text-muted); font-size: var(--text-sm); border-top: 1px solid var(--rule); }
+
+.queue-empty .q-title { font-size: var(--text-md); font-weight: var(--weight-medium); }
+.queue-empty .q-hint { color: var(--text-muted); font-size: var(--text-sm); }
+.queue-empty .q-icon { border-radius: var(--radius-1); background: var(--raised); }
+
+/* Waiting, failed, skipped: the line under the title would only repeat the
+   state word on the right. The active row keeps it — it holds the meter. */
+.queue-item:has(.qi-pill.waiting) .qi-bottom,
+.queue-item:has(.qi-pill.error) .qi-bottom,
+.queue-item:has(.qi-pill.skipped) .qi-bottom { display: none !important; }

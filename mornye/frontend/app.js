@@ -4207,7 +4207,15 @@ function paintQueueItem(el, item, qi) {
   } else {
     p.meta.style.display = 'none';
     p.bottom.style.display = '';
-    p.bottom.textContent = statusText;
+    if (item.status === 'active') {
+      // A segmented meter in whole steps (css/views/queue.css), then the words.
+      const lit = Math.round((Math.max(0, Math.min(100, Number(item.progress) || 0)) / 100) * 20);
+      const steps = Array.from({ length: 20 }, (_, i) => (i < lit ? '<i class="on"></i>' : '<i></i>')).join('');
+      p.bottom.innerHTML = `<span class="qi-meter" aria-hidden="true">${steps}</span><span></span>`;
+      p.bottom.lastChild.textContent = statusText;
+    } else {
+      p.bottom.textContent = statusText;
+    }
   }
 }
 

@@ -49,6 +49,7 @@
   <!-- Old shared controls, then one stylesheet per rebuilt view. -->
   <script>document.write('<link rel="stylesheet" href="css/legacy.css?_=' + Date.now() + '">');</script>
   <script>document.write('<link rel="stylesheet" href="css/views/home.css?_=' + Date.now() + '">');</script>
+  <script>document.write('<link rel="stylesheet" href="css/views/queue.css?_=' + Date.now() + '">');</script>
   <script>
     // Theme, applied before the first paint. app.js used to do this only from
     // its 'pywebviewready' handler, which meant the window painted light and
@@ -1431,7 +1432,7 @@
           <span class="tb-spacer"></span>
           <button class="act-btn secondary" type="button" onclick="clearStaged('finished')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4l10-10a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>Clear finished</button>
           <button class="act-btn danger" type="button" onclick="clearStaged('all')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>Clear all</button>
-          <button class="act-btn primary" type="button" onclick="startStaged(true)" title="Start the waiting items shown here"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg>Start</button>
+          <button class="act-btn secondary" type="button" onclick="startStaged(true)" title="Start the waiting items shown here"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg>Start</button>
         </div>
         <div id="sq-list" class="page-list" aria-live="polite"></div>
 
@@ -1477,7 +1478,7 @@
               <div class="fp-actions">
                 <button type="button" class="act-btn secondary" id="fp-toggle" onclick="toggleFailedList()" aria-expanded="false" aria-controls="fp-list">Show</button>
                 <button type="button" class="act-btn secondary" onclick="clearFailedTracks()">Clear list</button>
-                <button type="button" class="act-btn primary" id="fp-retry" onclick="retryFailedTracks()">Retry all</button>
+                <button type="button" class="act-btn secondary" id="fp-retry" onclick="retryFailedTracks()">Retry all</button>
               </div>
             </div>
             <ul id="fp-list" class="fp-list hidden"></ul>
