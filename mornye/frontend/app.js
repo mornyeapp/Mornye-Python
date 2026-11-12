@@ -9172,7 +9172,7 @@ function extSettingFieldHtml(ext, entry, cardIdx) {
     const isSet = (ext.secrets_set || []).includes(entry.key);
     return `<div class="s-row">${label}
       <input type="password" class="full" autocomplete="off" ${attrs}
-        placeholder="${isSet ? 'Saved — leave empty to keep it' : 'Not set'}" style="flex:1;max-width:320px;">
+        placeholder="${isSet ? 'Saved — leave empty to keep it' : 'Not set'}" style="flex:1;min-width:200px;max-width:320px;">
     </div>`;
   }
   // Free text, optionally with suggestions (e.g. a storefront list).
@@ -9183,7 +9183,7 @@ function extSettingFieldHtml(ext, entry, cardIdx) {
   const type = entry.type === 'number' ? 'number' : 'text';
   return `<div class="s-row">${label}
     <input type="${type}" class="full" ${attrs} ${listId ? `list="${listId}"` : ''}
-      value="${regEscapeHtml(value ?? '')}" placeholder="${regEscapeHtml(entry.default ?? '')}" style="flex:1;max-width:320px;">
+      value="${regEscapeHtml(value ?? '')}" placeholder="${regEscapeHtml(entry.default ?? '')}" style="flex:1;min-width:200px;max-width:320px;">
     ${suggestions}
   </div>`;
 }
