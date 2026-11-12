@@ -503,6 +503,7 @@ function applySettings(settings = {}) {
   }
   lastAppliedServices = Array.isArray(cfg.services) ? cfg.services : lastAppliedServices;
   applyListState('services-list', cfg.services);
+  if (Array.isArray(cfg.lyrics_providers)) lastAppliedLyrics = cfg.lyrics_providers;
   applyListState('lyrics-list', cfg.lyrics_providers);
   applyListState('enrich-list', cfg.enrich_providers);
   updateAllApiConfigDisplays();
@@ -950,11 +951,45 @@ populateList('enrich-list',   ALL_ENRICH.map(x => ({ ...x, badge: null })));
 // registry was added): the provider list and the Extensions page re-read.
 window.app_extensions_changed = function () {
   refreshInstalledServices();
+  refreshLyricsExtensions();
   if ($('tc-extensions')?.classList.contains('active')) {
     loadExtensionSettings?.();
     loadExtensionHealth?.();
   }
 };
+
+// The lyrics providers saved last, so an extension's entry ("ext:jellyfin")
+// keeps its place and tick even though the list is drawn before the backend
+// has said which extensions are installed.
+let lastAppliedLyrics = null;
+
+// Extensions of type lyrics_provider (core/extension_lyrics.py) join the
+// built-in lyrics providers, off by default, ranked like any other.
+async function refreshLyricsExtensions() {
+  const api = window.pywebview?.api;
+  if (typeof api?.get_lyrics_extensions !== 'function' || !$('lyrics-list')) return;
+  let rows;
+  try {
+    rows = (await api.get_lyrics_extensions())?.extensions || [];
+  } catch (e) {
+    return;
+  }
+  const el = $('lyrics-list');
+  const shown = [...el.querySelectorAll('.sort-item')].map((x) => x.dataset.value);
+  const wanted = getChecked('lyrics-list');
+  (lastAppliedLyrics || []).forEach((id, i) => {
+    if (!shown.includes(id) && rows.some((r) => r.id === id)) {
+      wanted.splice(Math.min(i, wanted.length), 0, id);
+    }
+  });
+  const builtIn = ALL_LYRICS.map((x) => ({ ...x, badge: null }));
+  const fromExtensions = rows.map((r) => ({
+    id: r.id, label: escHtml(r.label), on: false, icon: 'EX', iconClass: 'ext',
+    title: `the ${r.label} extension`,
+  }));
+  populateList('lyrics-list', [...builtIn, ...fromExtensions]);
+  applyListState('lyrics-list', wanted);
+}
 
 async function refreshInstalledServices() {
   if (typeof window.pywebview?.api?.get_download_services !== 'function') {
@@ -6494,6 +6529,7 @@ window.addEventListener('pywebviewready', async () => {
   // saved settings yet never calls applySettings() at all, which is exactly
   // the fresh install that most needs to be told what it can download from.
   await refreshInstalledServices();
+  await refreshLyricsExtensions();
   initSettingsTracking();
   updateSearchMode();
   initPasteButton();

@@ -9,7 +9,7 @@ import re
 import unicodedata
 import urllib.parse
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from . import get_amazon_endpoint
 from .cross_loop_lock import CrossLoopLock
@@ -1317,6 +1317,19 @@ async def fetch_lyrics_async(
         fetcher = _PROVIDER_MAP.get(
             provider_name,
         )
+        if fetcher is None and provider_name.startswith("ext:"):
+            # An installed extension of type lyrics_provider
+            # (core/extension_lyrics.py), ranked like any built-in one.
+            from .extension_lyrics import fetch_extension_lyrics
+
+            def fetcher(ctx: LyricsContext) -> Any:
+                return fetch_extension_lyrics(
+                    provider_name,
+                    ctx.clean_track,
+                    ctx.clean_artist,
+                    ctx.album_name,
+                    ctx.duration_s,
+                )
 
         if not fetcher:
             return "", ""

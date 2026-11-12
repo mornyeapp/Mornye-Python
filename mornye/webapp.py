@@ -239,6 +239,8 @@ ALLOWED_METHODS: set[str] = {
     # mode, since one install's extensions serve every account.
     "list_extension_settings",
     "get_extension_settings",
+    # Extensions that supply lyrics (core/extension_lyrics.py): read-only.
+    "get_lyrics_extensions",
     "save_extension_settings",
     "reset_extension_settings",
     "run_extension_setting_action",

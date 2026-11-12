@@ -188,7 +188,7 @@
     // CSV import sends the file's text, read in the browser — never a path.
     'preview_csv', 'fetch_csv',
     // Each JS extension's own settings (api_mixins/extension_settings.py).
-    'list_extension_settings', 'get_extension_settings',
+    'list_extension_settings', 'get_extension_settings', 'get_lyrics_extensions',
     'save_extension_settings', 'reset_extension_settings',
     'run_extension_setting_action', 'set_extension_local_network',
     // The Test buttons next to the self-hosted endpoints (admin-only).

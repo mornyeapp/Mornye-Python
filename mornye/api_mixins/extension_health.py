@@ -121,6 +121,20 @@ class ExtensionHealthMixin:
         except Exception as e:
             return {"services": [], "error": str(e)}
 
+    def get_lyrics_extensions(self) -> dict:
+        """Installed extensions that can supply lyrics, as lyrics providers.
+
+        Shape: {"extensions": [{"id": "ext:<name>", "name", "label"}, ...]}.
+        The ids go in the lyrics-provider list next to the built-in ones
+        (core/extension_lyrics.py).
+        """
+        try:
+            from ..core.extension_lyrics import lyrics_extensions
+
+            return {"extensions": lyrics_extensions()}
+        except Exception as e:
+            return {"extensions": [], "error": str(e)}
+
     def _installed_extension_index(self) -> dict[str, dict]:
         """{"ext:<name>": {"version": ..., "trust_tier": ...}} for what's installed.
 
