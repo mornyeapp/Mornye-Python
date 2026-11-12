@@ -50,6 +50,7 @@
   <script>document.write('<link rel="stylesheet" href="css/legacy.css?_=' + Date.now() + '">');</script>
   <script>document.write('<link rel="stylesheet" href="css/views/home.css?_=' + Date.now() + '">');</script>
   <script>document.write('<link rel="stylesheet" href="css/views/queue.css?_=' + Date.now() + '">');</script>
+  <script>document.write('<link rel="stylesheet" href="css/views/settings.css?_=' + Date.now() + '">');</script>
   <script>
     // Theme, applied before the first paint. app.js used to do this only from
     // its 'pywebviewready' handler, which meant the window painted light and
@@ -871,7 +872,9 @@
                 <span id="preview-volume-value" class="volume-value">100%</span>
               </div>
             </div>
-            <div class="s-row">
+            <!-- One typeface now (redesign §2); kept hidden so app.js's reads of
+                 #config-font keep working. -->
+            <div class="s-row hidden" aria-hidden="true">
               <span class="s-label">App Font<small>Default: Inter</small></span>
               <select id="config-font" onchange="changeFont()">
                 <option value="'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" selected>Inter</option>
@@ -881,9 +884,6 @@
                 <option value="Georgia, serif">Georgia</option>
                 <option value="Arial, sans-serif">Arial</option>
               </select>
-            </div>
-            <div class="s-row">
-              <span class="s-label u-fs-11 u-c-muted">Preview: The quick brown fox jumps over the lazy dog.</span>
             </div>
           </div>
           <div class="s-section hidden" id="account-signout-row">

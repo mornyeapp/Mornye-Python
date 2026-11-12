@@ -1,0 +1,215 @@
+/* frontend/css/views/settings.css — Settings in the console look (redesign
+   voce 14): the category column, sections as flat panels with a small-caps
+   heading, label/control rows on rules, square switches, 32px fields, the
+   provider lists and the status cards. The font picker is gone (one
+   typeface); app.js keeps its hidden element.
+
+   Over styles.css until voce 22. Semantic tokens only; ids and handlers
+   untouched. Selectors match styles.css's where it names the view. */
+
+/* ── Category column: rail-like entries ──────────────────────────────── */
+/* Wide windows only: on a phone styles.css lays the categories out as a
+   horizontal strip, which these would undo. */
+@media (min-width: 701px) {
+  #view-settings.active { grid-template-columns: var(--rail) minmax(0, 1fr); }
+  #view-settings > .tab-bar {
+    gap: 0;
+    padding: var(--space-2) 0 var(--space-5);
+    border-right: 1px solid var(--rule);
+  }
+  .s-search {
+    height: var(--row);
+    margin: 0 var(--space-3) var(--space-2);
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius-1);
+    background: var(--raised);
+    box-shadow: none;
+  }
+  .s-search:focus-within { border-color: var(--signal-strong); box-shadow: none; }
+  .s-search input { font-family: var(--font); font-size: var(--text-sm); }
+  #view-settings > .tab-bar .stab {
+    height: var(--row);
+    padding: 0 var(--space-4);
+    border: 0;
+    border-left: 2px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    color: var(--text-2);
+    font-family: var(--font);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-regular);
+  }
+  #view-settings > .tab-bar .stab svg { width: 14px; height: 14px; color: var(--text-muted); }
+  #view-settings > .tab-bar .stab:hover { background: var(--raised); color: var(--text); }
+  #view-settings > .tab-bar .stab.active {
+    border-left-color: var(--signal-strong);
+    background: var(--raised);
+    color: var(--text);
+    font-weight: var(--weight-medium);
+  }
+  #view-settings > .tab-bar .stab.active svg { color: var(--signal-text); }
+  #view-settings > .s-body { max-width: 880px; padding: var(--space-4) var(--space-5) var(--space-8); }
+}
+
+/* ── Sections: flat panels, heading as a silk-screen label ──────────── */
+.s-section {
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-1);
+  background: var(--surface);
+  box-shadow: none;
+}
+.tc.active .s-section { border-radius: var(--radius-1); box-shadow: none; }
+.s-title {
+  margin-bottom: var(--space-1);
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+/* Rows: a rule between each, the control on the right. */
+.s-section > .s-row { padding: var(--space-2) 0; min-height: 40px; border-top: 1px solid var(--rule); }
+.s-section > .s-title + .s-row { border-top: 0; padding-top: var(--space-1); }
+.s-label { color: var(--text); font-family: var(--font); font-size: var(--text-sm); font-weight: var(--weight-regular); }
+.s-label small { color: var(--text-muted); font-family: var(--font); font-size: var(--text-xs); line-height: var(--leading); }
+
+/* Native fields inside a row: the console's 32px field. */
+#view-settings .s-row select,
+#view-settings .s-row input[type="text"],
+#view-settings .s-row input[type="password"],
+#view-settings .s-row input[type="number"],
+#view-settings input.full {
+  height: var(--row);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background-color: var(--raised);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+  box-shadow: none;
+}
+#view-settings .s-row select:focus,
+#view-settings .s-row input:focus,
+#view-settings input.full:focus { border-color: var(--signal-strong); box-shadow: none; outline: none; }
+#view-settings input[type="range"] { accent-color: var(--signal-strong); }
+.volume-value { color: var(--text-2); font-family: var(--font); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+
+/* ── Switch: a square track, a square knob ───────────────────────────── */
+.toggle { width: 28px; height: 16px; }
+.toggle-sl {
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background: var(--raised);
+  transition: border-color var(--motion) var(--ease);
+}
+.toggle-sl::before {
+  width: 10px; height: 10px; left: 2px;
+  border-radius: 0;
+  background: var(--text-muted);
+  box-shadow: none;
+  transition: transform var(--motion) var(--ease), background var(--motion) var(--ease);
+}
+.toggle input:checked + .toggle-sl { background: var(--raised); border-color: var(--signal-strong); }
+.toggle input:checked + .toggle-sl::before { transform: translateX(12px) translateY(-50%); background: var(--signal-strong); }
+.toggle input:focus-visible + .toggle-sl { outline: 1px solid var(--signal-strong); outline-offset: 2px; }
+
+/* ── Provider lists: ranked rows, neutral glyphs ─────────────────────── */
+.sort-item, #services-list .sort-item {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-1);
+  background: var(--surface);
+  box-shadow: none;
+}
+.sort-item:hover { background: var(--raised); border-color: var(--rule-strong); }
+.sort-item.inactive { opacity: .55; filter: none; }
+.priority-num { color: var(--text-muted); font-family: var(--font); font-size: var(--text-xs); font-weight: var(--weight-medium); }
+.drag-h { color: var(--text-muted); }
+.svc-icon, .svc-icon.icon-image {
+  width: 24px; height: 24px;
+  border-radius: var(--radius-1);
+  background: var(--raised);
+  color: var(--text-2);
+  font-size: var(--text-xs);
+}
+.svc-icon img { height: 14px; }
+.svc-name { font-family: var(--font); font-size: var(--text-sm); }
+.svc-badge {
+  padding: 0 var(--space-1);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-1);
+  background: transparent;
+  color: var(--text-2);
+  font-family: var(--font);
+  font-size: var(--text-xs);
+}
+.sort-item input[type="checkbox"] { accent-color: var(--signal-strong); }
+
+/* ── Status tab ──────────────────────────────────────────────────────── */
+.status-card {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-1);
+  background: var(--surface);
+  box-shadow: none;
+}
+.status-card-name { font-family: var(--font); font-size: var(--text-sm); }
+.status-icon-dot { border-radius: 0; }
+
+/* Every text field and select in the view, wherever its row is (the
+   network destination form lays its own out). :where() keeps the type
+   filter weightless, so the framed-control exception below wins. */
+#view-settings input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"])),
+#view-settings select,
+#view-settings textarea {
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background-color: var(--raised);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+  box-shadow: none;
+}
+#view-settings input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"])):focus,
+#view-settings select:focus,
+#view-settings textarea:focus { border-color: var(--signal-strong); box-shadow: none; outline: none; }
+
+/* The fields above stop at inputs that sit inside a framed control. */
+#view-settings .s-search input,
+#view-settings .tb-field input {
+  border: 0;
+  background: transparent;
+  height: auto;
+}
+
+/* Status tab: the run button and the overall readout. */
+.status-check-all {
+  height: var(--row);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--signal);
+  border-radius: var(--radius-1);
+  background: var(--signal);
+  color: var(--signal-ink);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  box-shadow: none;
+}
+.status-check-all:hover { transform: none; border-color: var(--signal-strong); }
+.status-overall {
+  height: var(--row);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-1);
+  background: transparent;
+  color: var(--text-2);
+  font-family: var(--font);
+  font-size: var(--text-xs);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.status-overall.online { border-color: var(--ok); color: var(--ok); }
+.status-overall.offline { border-color: var(--error); color: var(--error); }
+.status-overall-icon { background: transparent; border-radius: 0; color: inherit; }
