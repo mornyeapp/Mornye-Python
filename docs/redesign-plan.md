@@ -122,7 +122,14 @@ regola (una parola = un elemento).
      sandbox non ha provider che scaricano).
      **Note per la voce 21:** aggiungere alla coda mostra due toast con lo
      stesso messaggio.
-   **Prossimo:** voce 13, History.
+   - **voce 13, History** (commit sotto): nessun foglio proprio, è fatta
+     delle parti condivise di `legacy.css`; aggiunti copertina mancante
+     neutra, filetto rosso sulle righe fallite, totali come lettura.
+     Verificata con le voci vere di "Fetches" e righe di download d'esempio
+     (la sandbox non ne ha), anche a 375px. Lo stato vuoto tratteggiato
+     resta per la voce 21.
+   **Prossimo:** voce 14, Settings (da riorganizzare, non solo ridipingere:
+   via il selettore di carattere, accenti da migrare con la voce 28).
 0. **Fase 2 completa** — sul branch **`redesign`** (creato da `2.0.6` dopo
    i mock, come da §5: dalla Fase 2 in poi un branch dedicato e un rilascio
    unico). Commit locali, non pushati.
