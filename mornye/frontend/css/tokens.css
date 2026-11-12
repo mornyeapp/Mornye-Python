@@ -64,6 +64,18 @@
   --motion-fast: 80ms;
   --motion: 120ms;
   --ease: cubic-bezier(.2, 0, 0, 1);
+  --media-ink: #ffffff;
+  --media-ink-inverse: #222222;
+  --media-bg: #2a1a1a;
+  --media-tint-from: #6b3b3b;
+  --media-tint-to: #3a2323;
+  --paper: #ffffff;
+  --ink: #000000;
+  --on-signal: #ffffff;
+  --player-main-ink: #0a0a0a;
+  --media-ink-rgb: 255, 255, 255;
+  --shade-rgb: 0, 0, 0;
+  --knob-shadow-rgb: 15, 23, 42;
   --ground: var(--grey-0);
   --surface: var(--grey-1);
   --raised: var(--grey-2);

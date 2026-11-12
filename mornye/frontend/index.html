@@ -55,6 +55,7 @@
   <script>document.write('<link rel="stylesheet" href="css/views/following.css?_=' + Date.now() + '">');</script>
   <script>document.write('<link rel="stylesheet" href="css/views/explore.css?_=' + Date.now() + '">');</script>
   <script>document.write('<link rel="stylesheet" href="css/views/stats.css?_=' + Date.now() + '">');</script>
+  <script>document.write('<link rel="stylesheet" href="css/views/player.css?_=' + Date.now() + '">');</script>
   <script>
     // Theme, applied before the first paint. app.js used to do this only from
     // its 'pywebviewready' handler, which meant the window painted light and
@@ -456,7 +457,7 @@
             <input style="flex:1;" type="text" id="player-path-input" class="full" placeholder="Folder with your music — /Users/name/Music, C:\Music"
                    onkeydown="if(event.key==='Enter') scanPlayerLibrary()">
             <button class="act-btn secondary" type="button" onclick="openPlayerFolderBrowser()">Browse</button>
-            <button class="act-btn primary" type="button" onclick="scanPlayerLibrary()" id="player-scan-btn">Open</button>
+            <button class="act-btn secondary" type="button" onclick="scanPlayerLibrary()" id="player-scan-btn">Open</button>
           </div>
           <div id="player-recent" class="share-chips hidden" aria-label="Recent folders"></div>
         </div>

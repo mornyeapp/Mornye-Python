@@ -377,6 +377,10 @@ def v2_tokens_css() -> str:
                 **V2_TYPE,
                 **V2_ELEVATION,
                 **V2_MOTION,
+                # Theme-independent (Now Playing's ink, a barcode's paper):
+                # the same in both themes, so declared once here.
+                **FIXED,
+                **FIXED_CHANNELS,
                 **semantic("dark"),
             },
         ),

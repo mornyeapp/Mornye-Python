@@ -1,0 +1,110 @@
+/* frontend/css/views/player.css — the folder Player and Now Playing in the
+   console look (redesign voce 19).
+
+   The Player page: 32px controls, Play all / Shuffle as one square
+   segmented control, tracks on rules with a signal bar on the one playing.
+   Now Playing keeps its own identity (white ink on the artwork's tint,
+   tokens FIXED in branding_tokens.py) and takes the look's shapes: no
+   pills or circles, a square cover, small-caps readouts.
+
+   Over styles.css until voce 22. Semantic and fixed tokens only; ids and
+   handlers untouched. */
+
+/* ── Player page ─────────────────────────────────────────────────────── */
+#view-player .act-btn,
+#view-player select,
+#view-player input[type="text"],
+#view-player input[type="search"] {
+  height: var(--row);
+  min-height: var(--row);
+  font-size: var(--text-sm);
+}
+#view-player input[type="text"],
+#view-player input[type="search"],
+#view-player select {
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background-color: var(--raised);
+  color: var(--text);
+  font-family: var(--font);
+}
+#view-player input:focus,
+#view-player select:focus { border-color: var(--signal-strong); outline: none; box-shadow: none; }
+
+.player-toolbar { background: var(--ground); border-bottom: 1px solid var(--rule); }
+.pt-group { border-radius: var(--radius-1); box-shadow: none; }
+.pt-btn {
+  height: var(--row);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--control-border);
+  background: var(--raised);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+.pt-btn:hover { background: var(--raised); border-color: var(--text-2); }
+.pt-btn:first-child { border-radius: var(--radius-1) 0 0 var(--radius-1); }
+.pt-btn:last-child { border-radius: 0 var(--radius-1) var(--radius-1) 0; }
+.pt-btn.primary { background: var(--signal); border-color: var(--signal); color: var(--signal-ink); }
+.pt-btn.primary:hover { background: var(--signal); border-color: var(--signal-strong); }
+.pt-clear { border-radius: var(--radius-1); background: var(--raised); }
+.pt-sort {
+  height: var(--row);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background: var(--raised);
+}
+#view-player .pt-sort select { border: 0; height: calc(var(--row) - 2px); min-height: 0; }
+.player-count { color: var(--text-muted); font-size: var(--text-xs); }
+.pt-colhead {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--rule);
+}
+
+.pl-row {
+  padding: var(--space-1) var(--space-3);
+  border-radius: 0;
+  border-bottom: 1px solid var(--rule);
+}
+.pl-row:hover { background: var(--raised); }
+.pl-row.playing { background: var(--selected); box-shadow: inset 2px 0 0 var(--signal-strong); }
+.pl-row.playing .pl-t { color: var(--signal-text); }
+.pl-num { font-family: var(--font); font-size: var(--text-xs); color: var(--text-muted); }
+.pl-num .eq i { background: var(--signal-strong); border-radius: 0; }
+.pl-thumb { width: 32px; height: 32px; border-radius: 0; background: var(--raised); }
+.pl-t { font-size: var(--text-md); }
+.pl-a, .pl-dur { font-family: var(--font); font-size: var(--text-xs); color: var(--text-muted); }
+.pl-fmt {
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-1);
+  color: var(--text-2);
+  font-family: var(--font);
+  font-size: var(--text-xs);
+  letter-spacing: .06em;
+}
+.pl-mode.on { color: var(--signal-text); }
+
+/* ── Now Playing: square shapes on the artwork's tint ────────────────── */
+.np-close, .np-btn, .np-tab { border-radius: var(--radius-1); }
+.np-volume, .np-tabs { border-radius: var(--radius-2); }
+.np-cover-wrap, .np-cover-wrap img, #np-cover { border-radius: 0; }
+/* Artwork without a halo (redesign §2). */
+.np-cover-wrap { box-shadow: none; }
+.np-e { border-radius: var(--radius-1); }
+.np-btn.np-play {
+  border-radius: var(--radius-1);
+  background: var(--media-ink);
+  color: var(--media-ink-inverse);
+}
+#np-tech {
+  font-family: var(--font);
+  font-size: var(--text-xs);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+#np-title { font-family: var(--font); font-weight: var(--weight-bold); letter-spacing: -.01em; }
