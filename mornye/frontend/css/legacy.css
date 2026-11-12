@@ -163,3 +163,15 @@
 .s-actions .act-btn.primary { background: var(--signal); color: var(--signal-ink); border-color: var(--signal); }
 .s-actions .act-btn.primary:hover { background: var(--signal); border-color: var(--signal-strong); }
 @media (max-width: 700px) { .s-actions .act-btn { min-height: 44px; } }
+
+/* A list row whose cover is missing shows the panel, not the logo's petrol;
+   a failed row carries the error rule on its left edge, like a track row. */
+.pr-cover { background: var(--raised); color: var(--text-muted); }
+.page-row.status-failed { box-shadow: inset 2px 0 0 var(--error); }
+.page-row.clickable { cursor: pointer; }
+.page-totals {
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
