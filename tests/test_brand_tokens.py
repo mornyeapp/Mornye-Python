@@ -34,21 +34,46 @@ def _vars(block: str) -> dict[str, str]:
 
 
 ROOT = _vars(_block(r"\n    :root"))
-LIGHT = {**ROOT, **_vars(_block(r"html\.light-theme,\s*body\.light-theme"))}
+LIGHT_BLOCK = _vars(_block(r"html\.light-theme,\s*body\.light-theme"))
+LIGHT = {**ROOT, **LIGHT_BLOCK}
 
 
-@pytest.mark.parametrize(
-    ("mode", "tokens", "css"), [("dark", bt.DARK, ROOT), ("light", bt.LIGHT, LIGHT)]
+BRIDGE = _vars(
+    re.search(r"\n    :root,\s*html\.light-theme,\s*body\.light-theme\s*\{(.*?)\n    \}", CSS, re.S).group(1)  # type: ignore[union-attr]
 )
-def test_stylesheet_matches_the_shared_tokens(
-    mode: str, tokens: dict, css: dict
-) -> None:
-    drift = {
-        name: (value, css.get(name))
-        for name, value in tokens.items()
-        if css.get(name) != value.lower()
-    }
-    assert not drift, f"{mode}: token -> (branding_tokens, styles.css) differ: {drift}"
+V2_NAMES = set(bt.V2_SEMANTIC["dark"]) | {
+    *bt.V2_SPACE,
+    *bt.V2_SIZE,
+    *bt.V2_RADIUS,
+    *bt.V2_TYPE,
+    *bt.V2_ELEVATION,
+    *bt.V2_MOTION,
+}
+
+
+def test_the_gui_takes_its_palette_from_token_v2() -> None:
+    """Redesign Fase 3, voce 10: styles.css's own names alias token v2.
+
+    branding_tokens.DARK/LIGHT now drive only the TUI (until Fase 4). In the
+    GUI each of those names is either a v2 name itself (and gone from the
+    old blocks, where it would shadow v2) or bridged to a v2 token.
+    """
+    for name in bt.DARK:
+        if name in V2_NAMES:
+            assert name not in ROOT and name not in LIGHT_BLOCK, name
+            continue
+        value = BRIDGE.get(name)
+        assert value, f"--{name} is not bridged to token v2"
+        ref = re.fullmatch(r"var\(--([\w-]+)\)", value)
+        assert ref and ref.group(1) in V2_NAMES, f"--{name}: {value}"
+
+
+def test_every_bridged_value_is_a_v2_token_or_neutral() -> None:
+    for name, value in BRIDGE.items():
+        if value in ("none", "transparent"):
+            continue
+        ref = re.fullmatch(r"var\(--([\w-]+)\)", value)
+        assert ref and ref.group(1) in V2_NAMES, f"--{name}: {value}"
 
 
 @pytest.mark.parametrize(("mode", "tokens"), [("dark", bt.DARK), ("light", bt.LIGHT)])

@@ -371,13 +371,18 @@ function changePreviewVolume() {
 
 function changeFont() {
   const font = $('config-font').value;
-  document.documentElement.style.setProperty('--app-font', font);
-  // Titles use the display face (Fraunces) only with the default font; any
-  // other choice applies to them too, so the whole window follows the
-  // setting instead of the headings staying behind.
+  // The default ('Inter', the old look's face) leaves both properties to the
+  // stylesheet, which now gives JetBrains Mono everywhere (token v2). Only
+  // an explicit other choice is written inline, for titles too. The picker
+  // itself goes when Settings is rebuilt (redesign voce 14).
   const isDefault = /^'Inter'/.test(font);
-  if (isDefault) document.documentElement.style.removeProperty('--font-display');
-  else document.documentElement.style.setProperty('--font-display', font);
+  if (isDefault) {
+    document.documentElement.style.removeProperty('--app-font');
+    document.documentElement.style.removeProperty('--font-display');
+  } else {
+    document.documentElement.style.setProperty('--app-font', font);
+    document.documentElement.style.setProperty('--font-display', font);
+  }
   try {
     const stored = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) || '{}');
     stored.font = font;

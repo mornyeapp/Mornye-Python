@@ -39,6 +39,9 @@
   <!-- No hand-kept ?v= suffix: the three files below are written out with a
        fresh timestamp on every load, so a changed styles.css/app.js is never
        served from the web view's cache. They are local files; nothing is lost. -->
+  <!-- css/tokens.css (token v2, generated from branding_tokens.py) comes
+       first: styles.css's old variable names are aliases of it now. -->
+  <script>document.write('<link rel="stylesheet" href="css/tokens.css?_=' + Date.now() + '">');</script>
   <script>document.write('<link rel="stylesheet" href="styles.css?_=' + Date.now() + '">');</script>
   <script>
     // Theme, applied before the first paint. app.js used to do this only from
