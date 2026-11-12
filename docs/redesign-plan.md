@@ -172,8 +172,12 @@ regola (una parola = un elemento).
      Playing resta bianco sulla tinta della copertina ma con forme quadre e
      copertina senza alone. `tokens.css` ora include anche `FIXED` e
      `FIXED_CHANNELS`. Verificato con tre WAV di silenzio nella sandbox.
-   **Prossimo:** voce 20, Logs; poi 21, 22, Fasi 4–6 (l'utente ha chiesto
-   di fare tutte le voci). Aperta la riorganizzazione di Settings.
+   - **voce 20, Logs** (commit sotto): `css/views/logs.css`, pannello a
+     filetto, legenda in maiuscoletto, pulsanti quadrati, messaggi nel colore
+     di stato, niente animazione d'ingresso per riga.
+   **Prossimo:** voce 21 (avvisi, dialoghi, stati vuoti, skeleton, reduced
+   motion), poi 22, Fasi 4–6 (l'utente ha chiesto di fare tutte le voci).
+   Aperta la riorganizzazione di Settings.
 0. **Fase 2 completa** — sul branch **`redesign`** (creato da `2.0.6` dopo
    i mock, come da §5: dalla Fase 2 in poi un branch dedicato e un rilascio
    unico). Commit locali, non pushati.
