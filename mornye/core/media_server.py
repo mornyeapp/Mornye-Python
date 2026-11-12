@@ -26,6 +26,7 @@ from urllib.parse import quote, unquote, urlsplit
 logger = logging.getLogger(__name__)
 
 _CHUNK = 64 * 1024
+_MAX_REGISTERED = 4096  # files remembered at once; the oldest is forgotten
 _RANGE_RE = re.compile(r"^bytes=(\d*)-(\d*)$")
 
 _EXTRA_TYPES = {
@@ -78,6 +79,9 @@ class MediaServer:
     def __init__(self, is_allowed: Callable[[Path], bool]) -> None:
         self._is_allowed = is_allowed
         self._token = secrets.token_urlsafe(18)
+        self._paths: dict[str, Path] = {}
+        self._keys: dict[Path, str] = {}
+        self._paths_lock = threading.Lock()
         outer = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -91,14 +95,17 @@ class MediaServer:
                 if len(parts) != 3 or not hmac.compare_digest(parts[1], outer._token):
                     self.send_error(403)
                     return None
-                raw = unquote(parts[2])
-                if not raw or "\x00" in raw:
-                    self.send_error(400)
+                # The URL names a file by an opaque id handed out by url_for();
+                # the request never supplies a path, only a key into the
+                # table of files this process chose to serve.
+                path = outer._lookup(unquote(parts[2]).partition(".")[0])
+                if path is None:
+                    self.send_error(404)
                     return None
                 try:
-                    path = Path(raw).resolve()
-                    # The approved-folders check comes first: nothing outside
-                    # them is ever stat'ed, opened or even confirmed to exist.
+                    # Still checked against the approved folders at serve
+                    # time: a folder removed since the URL was minted stops
+                    # being served.
                     allowed = outer._is_allowed(path) and path.is_file()
                 except (OSError, RuntimeError, ValueError):
                     allowed = False
@@ -157,8 +164,26 @@ class MediaServer:
             target=self._httpd.serve_forever, name="mornye-media", daemon=True
         ).start()
 
+    def _lookup(self, key: str) -> Path | None:
+        with self._paths_lock:
+            return self._paths.get(key)
+
     def url_for(self, path: str | Path) -> str:
-        return f"http://127.0.0.1:{self.port}/{self._token}/{quote(str(path))}"
+        resolved = Path(path).resolve()
+        with self._paths_lock:
+            key = self._keys.get(resolved)
+            if key is None:
+                key = secrets.token_hex(8)
+                self._keys[resolved] = key
+                self._paths[key] = resolved
+                if len(self._paths) > _MAX_REGISTERED:  # oldest first
+                    old_key = next(iter(self._paths))
+                    self._keys.pop(self._paths.pop(old_key), None)
+        # The extension is cosmetic (some players sniff it); lookup ignores it.
+        return (
+            f"http://127.0.0.1:{self.port}/{self._token}/{key}"
+            f"{quote(resolved.suffix)}"
+        )
 
     def close(self) -> None:
         self._httpd.shutdown()
