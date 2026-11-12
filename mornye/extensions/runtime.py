@@ -460,7 +460,7 @@ class JSRuntime:
                 try:
                     self.storage.apply(
                         str(msg.get("op", "")),
-                        msg.get("key"),
+                        str(msg.get("key") or ""),
                         msg.get("value"),
                     )
                 except Exception as exc:

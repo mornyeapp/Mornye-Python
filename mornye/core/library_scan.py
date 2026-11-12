@@ -84,8 +84,8 @@ def thumbnail_jpeg(path: str | Path, size: int = THUMB_PX) -> bytes | None:
         return None
     from PIL import Image
 
-    with Image.open(io.BytesIO(emb.cover_data)) as img:
-        img = img.convert("RGB")
+    with Image.open(io.BytesIO(emb.cover_data)) as source:
+        img = source.convert("RGB")
         img.thumbnail((size, size))
         out = io.BytesIO()
         img.save(out, format="JPEG", quality=82)

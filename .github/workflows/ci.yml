@@ -47,12 +47,10 @@ jobs:
       - name: Black (format check)
         run: black --check .
 
-      - name: Mypy (advisory — see [tool.mypy] in pyproject.toml)
-        # Not blocking yet: the codebase predates type checking and carries a
-        # sizeable pre-existing error backlog. Surfaced in the log so it's
-        # visible and can be tightened incrementally, without turning every
-        # unrelated PR red today.
-        run: mypy mornye || true
+      - name: Mypy
+        # Blocking since the backlog reached zero (2026-11). The settings in
+        # [tool.mypy] are still lenient; tighten them module by module.
+        run: mypy mornye
 
       - name: Pytest (with coverage)
         run: pytest -v --cov=mornye --cov-report=term-missing --cov-fail-under=30

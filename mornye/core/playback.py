@@ -13,6 +13,7 @@ import asyncio
 import hashlib
 import logging
 from pathlib import Path
+from typing import Any
 
 from .errors import ErrorKind, MornyeError
 from .paths import cache_path
@@ -42,7 +43,8 @@ def _mp4_is_alac(path: Path) -> bool:
     try:
         from mutagen.mp4 import MP4
 
-        return str(MP4(str(path)).info.codec).lower().startswith("alac")
+        info = MP4(str(path)).info
+        return str(getattr(info, "codec", "")).lower().startswith("alac")
     except Exception:
         return False
 
@@ -114,7 +116,7 @@ async def playable_file_async(path: str | Path) -> tuple[Path, str]:
     return dest, "flac-copy"
 
 
-def quality_label(info: dict[str, object], mode: str, suffix: str) -> str:
+def quality_label(info: dict[str, Any], mode: str, suffix: str) -> str:
     """What the listener is hearing, e.g. ``FLAC 24-bit / 96 kHz``, with a note
     when the stream is a lossless copy of a format the engine cannot play."""
     rate = int(info.get("sample_rate") or 0)

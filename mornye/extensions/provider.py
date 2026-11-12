@@ -635,7 +635,12 @@ class JSExtensionProvider(BaseProvider):
             artist_url=str(item.get("artist_url") or ""),
         )
 
-    def get_url(self, url: str, **_: Any) -> tuple[str, list[TrackMetadata], str]:
+    def get_url(
+        self, url: str, **_: Any
+    ) -> (
+        tuple[str, list[TrackMetadata], str]
+        | tuple[str, list[TrackMetadata], str, dict[str, Any]]
+    ):
         """Adapt an extension's handleUrl result to the metadata client contract."""
         response = self.handle_url(url)
         if not isinstance(response, dict) or response.get("success") is False:
