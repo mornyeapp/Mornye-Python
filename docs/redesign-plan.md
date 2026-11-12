@@ -183,8 +183,23 @@ regola (una parola = un elemento).
      coda. **Aperto (F7):** gli 11 `confirm()` nativi non sono ancora
      sostituiti dal dialogo della styleguide; il toast "fetching metadata…"
      che resta durante la ricerca non è stato indagato.
-   **Prossimo:** voce 22 (rimozione di `styles.css`), poi Fasi 4–6.
-   Aperta la riorganizzazione di Settings.
+   - **voce 22 — rinviata, da fare in una sessione dedicata.** `styles.css`
+     contiene ancora tutta la *struttura* (griglie, posizionamenti,
+     responsive, barra telefono); i fogli nuovi ne cambiano solo l'aspetto.
+     Toglierlo = riscriverne la struttura nei file nuovi. Metodo proposto,
+     vista per vista: (1) spostare le regole strutturali della vista da
+     `styles.css` al suo `css/views/*.css` (o a `layout.css` per la shell);
+     (2) togliere da `styles.css` le regole ormai sovrascritte; (3) dopo
+     ogni passo, confronto stili calcolati a runtime prima/dopo con lo
+     strumento della Fase 1 (`runtime.py`, ricostruibile: Playwright, GUI
+     web su dati di prova, ogni vista e scheda) → 0 differenze; (4) in
+     fondo: togliere il blocco "Token v2 bridge" sostituendo i nomi v1 con
+     i v2 nei fogli rimasti, rimuovere `styles.css` da `index.html`,
+     `sw.js` (SHELL_FILES), `MANIFEST.in`/package-data, aggiornare
+     `test_brand_tokens.py`, `test_frontend_inline_styles.py` (utility
+     `u-*` → dove finiscono), i font Inter/Fraunces da `assets/fonts/`.
+   **Prossimo:** Fase 4 (TUI, voci 23–26). Aperte: voce 22, F7
+   (`confirm()`), riorganizzazione di Settings.
 0. **Fase 2 completa** — sul branch **`redesign`** (creato da `2.0.6` dopo
    i mock, come da §5: dalla Fase 2 in poi un branch dedicato e un rilascio
    unico). Commit locali, non pushati.
