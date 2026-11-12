@@ -107,6 +107,7 @@ include-package-data = true
     "frontend/assets/icons/*",
     "frontend/assets/fonts/*",
     "frontend/css/*",
+    "frontend/css/views/*",
     # Textual reads the TUI's stylesheet from disk at startup (CSS_PATH), so
     # an install without it opens on an unstyled screen rather than failing
     # loudly — worth listing here explicitly.

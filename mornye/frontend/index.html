@@ -46,6 +46,9 @@
   <!-- css/layout.css: the shell (titlebar, rail, dock, player bar) in the
        console look, over styles.css until that file goes (redesign voce 22). -->
   <script>document.write('<link rel="stylesheet" href="css/layout.css?_=' + Date.now() + '">');</script>
+  <!-- Old shared controls, then one stylesheet per rebuilt view. -->
+  <script>document.write('<link rel="stylesheet" href="css/legacy.css?_=' + Date.now() + '">');</script>
+  <script>document.write('<link rel="stylesheet" href="css/views/home.css?_=' + Date.now() + '">');</script>
   <script>
     // Theme, applied before the first paint. app.js used to do this only from
     // its 'pywebviewready' handler, which meant the window painted light and

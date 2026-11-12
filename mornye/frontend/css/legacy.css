@@ -1,0 +1,59 @@
+/* frontend/css/legacy.css — the old shared control classes in the console
+   look (redesign Fase 3). app.js and index.html use .act-btn, .page-btn and
+   .explicit-badge in every view; until each view is rebuilt on the new
+   components (components.css: .btn, .qd…) they are restyled here, after
+   styles.css, restating each property they change. Goes with styles.css in
+   voce 22. Semantic tokens only. */
+
+.act-btn {
+  min-height: var(--row);
+  height: var(--row);
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background: var(--raised);
+  color: var(--text);
+  box-shadow: none;
+  font-family: var(--font);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  letter-spacing: .04em;
+  white-space: nowrap;
+  transition: border-color var(--motion-fast) var(--ease), background var(--motion-fast) var(--ease);
+}
+.act-btn svg { width: 14px; height: 14px; }
+.act-btn:hover { transform: none; box-shadow: none; border-color: var(--text-2); }
+.act-btn:active { transform: none; background: var(--selected); }
+.act-btn.primary { background: var(--signal); border-color: var(--signal); color: var(--signal-ink); }
+.act-btn.primary:hover { background: var(--signal); border-color: var(--signal-strong); transform: none; box-shadow: none; }
+.act-btn.secondary { background: var(--raised); color: var(--text); }
+.act-btn.secondary:hover { background: var(--raised); border-color: var(--text-2); color: var(--text); transform: none; }
+.act-btn.ghost { background: transparent; border-color: transparent; color: var(--text-2); }
+.act-btn.ghost:hover { border-color: var(--rule-strong); color: var(--text); }
+.act-btn.danger { background: var(--raised); border-color: var(--control-border); color: var(--error); }
+.act-btn.danger:hover { background: var(--raised); border-color: var(--error); color: var(--error); }
+.act-btn:disabled { opacity: .45; }
+.act-btn:focus-visible { outline: 1px solid var(--signal-strong); outline-offset: 2px; }
+
+.page-btn {
+  height: var(--row);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background: var(--raised);
+  color: var(--text-2);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+}
+.page-btn:hover:not(:disabled) { background: var(--raised); border-color: var(--text-2); color: var(--text); }
+
+/* "E" as a bordered readout, like the quality display, not a filled chip. */
+.explicit-badge {
+  background: transparent;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-1);
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-weight: var(--weight-medium);
+}

@@ -100,7 +100,16 @@ def test_textual_theme_builds(mode: str) -> None:
     assert theme.dark is (mode == "dark")
 
 
-@pytest.mark.parametrize("sheet", ["base.css", "components.css"])
+#: Every stylesheet built on tokens.css: the component library and the
+#: Fase 3 files that restyle the app (layout, legacy controls, views).
+SHEETS = sorted(
+    str(p.relative_to(TOKENS_CSS.parent))
+    for p in TOKENS_CSS.parent.rglob("*.css")
+    if p.name != "tokens.css"
+)
+
+
+@pytest.mark.parametrize("sheet", SHEETS)
 def test_components_use_semantic_tokens_only(sheet: str) -> None:
     """GUI and TUI consume the semantic level only (redesign-plan §3): no
     colour literal and no primitive in the stylesheets built on tokens.css."""
@@ -115,9 +124,11 @@ def test_components_use_semantic_tokens_only(sheet: str) -> None:
     assert not primitives, f"{sheet}: primitives used directly {primitives}"
 
 
-@pytest.mark.parametrize("sheet", ["base.css", "components.css"])
+@pytest.mark.parametrize("sheet", SHEETS)
 def test_every_token_a_stylesheet_names_exists(sheet: str) -> None:
     css = (TOKENS_CSS.parent / sheet).read_text()
+    # tokens.css, plus the shell sizes a sheet declares for itself.
     defined = set(re.findall(r"--([\w-]+):", TOKENS_CSS.read_text()))
+    defined |= set(re.findall(r"--([\w-]+):", css))
     used = set(re.findall(r"var\(--([\w-]+)", css))
     assert used <= defined, sorted(used - defined)

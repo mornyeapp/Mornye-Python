@@ -1,0 +1,361 @@
+/* frontend/css/views/home.css — Home in the console look (redesign voce 11):
+   hero, link/search bar, album card, track table, recent fetches.
+
+   Over styles.css until voce 22, so each property that changes is restated
+   (radii, shadows, transforms included). Semantic tokens only; ids and
+   handlers untouched. Reference: docs/mocks/home.html. */
+
+/* ── Hero: a compact masthead, not a splash ───────────────────────────── */
+#home-hero { padding: var(--space-6) var(--space-5) var(--space-2); justify-content: flex-start; }
+.hero-text { max-width: none; text-align: left; padding: 0; border-radius: 0; }
+.hero-headline { justify-content: flex-start; gap: var(--space-3); }
+.hero-logo { display: none; }
+.hero-main { justify-content: flex-start; gap: var(--space-3); }
+.hero-title {
+  font-family: var(--font);
+  font-size: var(--text-xl);
+  line-height: 1.2;
+  font-weight: var(--weight-bold);
+  letter-spacing: .24em;
+  text-transform: uppercase;
+}
+.hero-version {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-regular);
+  letter-spacing: .08em;
+}
+.hero-update-badge {
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-1);
+  background: transparent;
+  border: 1px solid var(--signal-strong);
+  color: var(--signal-text);
+  font-size: var(--text-xs);
+}
+.hero-update-badge:hover { transform: none; }
+.hero-subtitle {
+  max-width: 72ch;
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading);
+  text-wrap: pretty;
+}
+
+/* ── Link / search bar: one row of 32px controls ─────────────────────── */
+#search-bar { padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--rule); }
+.search-container {
+  max-width: none;
+  margin: 0;
+  gap: var(--space-2);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.mode-wrap { gap: var(--space-2); }
+.mode-btn, .search-source {
+  width: var(--row);
+  height: var(--row);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background: var(--raised);
+  color: var(--text-2);
+  transition: border-color var(--motion-fast) var(--ease);
+}
+.search-source { width: auto; padding: 0 var(--space-2); font-family: var(--font); font-size: var(--text-sm); }
+.mode-btn:hover, .search-source:hover { background: var(--raised); border-color: var(--text-2); color: var(--text); }
+.mode-btn.active { background: var(--selected); border-color: var(--signal-strong); color: var(--signal-text); }
+.mode-btn-icon { width: 14px; height: 14px; }
+#urlInput {
+  height: var(--row);
+  padding: 0 var(--space-6) 0 calc(var(--space-6) + var(--space-2));
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background: var(--raised);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-md);
+}
+#urlInput::placeholder { color: var(--text-muted); font-size: var(--text-md); }
+#urlInput:focus { border-color: var(--signal-strong); box-shadow: none; }
+.url-icon { left: var(--space-3); }
+#fetchBtn {
+  width: var(--row);
+  height: var(--row);
+  border-radius: var(--radius-1);
+  background: var(--signal);
+  border: 1px solid var(--signal);
+  color: var(--signal-ink);
+  transition: border-color var(--motion-fast) var(--ease);
+}
+#fetchBtn:hover, #fetchBtn:active { transform: none; background: var(--signal); border-color: var(--signal-strong); }
+/* One primary action per screen: with an album open that is "Download". */
+body:has(#album-card:not(.hidden)) #fetchBtn {
+  background: var(--raised);
+  border-color: var(--control-border);
+  color: var(--text);
+}
+
+.status-bar { max-width: none; margin: var(--space-2) 0 0; color: var(--text-muted); font-size: var(--text-sm); }
+#track-render-status {
+  margin: var(--space-2) 0 0;
+  border: 0;
+  border-left: 2px solid var(--signal-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/* ── Album card: the panel of the mock ───────────────────────────────── */
+#album-card {
+  margin: var(--space-5) 0 0;
+  padding: var(--space-4);
+  gap: var(--space-5);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-1);
+  box-shadow: none;
+}
+#album-card::before { display: none; }
+#album-cover,
+#album-cover img {
+  border-radius: 0;
+  box-shadow: none;
+}
+#album-cover { width: 168px; height: 168px; background: var(--raised); }
+@media (min-width: 1440px) { #album-cover { width: 200px; height: 200px; } }
+#album-info { gap: var(--space-2); }
+#album-type-badge {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+#album-title {
+  font-family: var(--font);
+  font-size: var(--text-2xl);
+  line-height: 1.2;
+  font-weight: var(--weight-bold);
+  letter-spacing: -.01em;
+}
+#album-meta, #album-artist { color: var(--text-2); font-size: var(--text-md); }
+.album-meta-details, .album-subtitle, .album-description { color: var(--text-muted); font-size: var(--text-sm); }
+.dot-sep { color: var(--rule-strong); }
+#album-actions { gap: var(--space-2); margin-top: var(--space-2); }
+
+/* The facts column: label + value pairs, a readout panel. */
+#album-tech { width: 200px; padding-left: var(--space-4); border-left: 1px solid var(--rule); gap: var(--space-3); }
+#album-tech .tech-k {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+}
+#album-tech .tech-v { color: var(--text); font-family: var(--font); font-size: var(--text-sm); }
+#album-tech .tech-barcode { border-radius: 0; }
+
+/* ── Track controls ───────────────────────────────────────────────────── */
+#trackSearch {
+  height: var(--row);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background: var(--raised);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+  box-shadow: none;
+}
+#trackSearch:focus { border-color: var(--signal-strong); box-shadow: none; }
+
+/* ── Track table: rows on rules, no cards ────────────────────────────── */
+#track-table-wrap { padding: 0 var(--space-5) var(--space-4); }
+.track-table-header, .track-row {
+  padding: 0 var(--space-3);
+  border-radius: 0;
+  border-bottom: 1px solid var(--rule);
+}
+.track-table-header {
+  min-height: var(--row-head);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+.track-table-header input,
+.tr-check input { accent-color: var(--signal-strong); width: 13px; height: 13px; }
+.track-row {
+  min-height: 40px;
+  transition: background var(--motion-fast) var(--ease);
+}
+.track-row:hover { background: var(--raised); box-shadow: none; transform: none; }
+.track-row:focus-within { background: var(--raised); box-shadow: inset 2px 0 0 var(--signal-strong); }
+.tr-num {
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.tr-title-cell { gap: var(--space-3); }
+.tr-thumb {
+  width: 28px; height: 28px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background-color: var(--raised);
+}
+.tr-thumb img { border-radius: 0; }
+.track-row:hover .tr-thumb { transform: none; }
+.tr-name {
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  line-height: 1.3;
+}
+.tr-artist, .tr-artist a { color: var(--text-muted); font-size: var(--text-sm); }
+.tr-playcount, .tr-dur {
+  color: var(--text-2);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.ta-btn {
+  width: 24px; height: 24px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-1);
+  background: transparent;
+  color: var(--text-muted);
+  box-shadow: none;
+}
+.ta-btn:hover:not(:disabled) { transform: none; background: var(--raised); border-color: var(--rule-strong); color: var(--text); }
+
+/* Download state on the row: a 2px bar on the left edge, no tint. */
+.track-row.done, .track-row.failed, .track-row.skipped, .track-row.dl-active { background: transparent; }
+.track-row.done { box-shadow: inset 2px 0 0 var(--ok); }
+.track-row.failed { box-shadow: inset 2px 0 0 var(--error); }
+.track-row.skipped { box-shadow: inset 2px 0 0 var(--text-muted); }
+.track-row.dl-active { background: var(--selected); box-shadow: inset 2px 0 0 var(--signal-strong); }
+.track-row.dl-active::after { height: 2px; border-radius: 0; background: var(--signal-strong); transition: none; }
+
+/* ── Recent fetches: square covers on rules ──────────────────────────── */
+.recent-label {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+.recent-card {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-1);
+  background: var(--surface);
+  box-shadow: none;
+  transition: border-color var(--motion-fast) var(--ease);
+}
+.recent-card:hover { transform: none; box-shadow: none; border-color: var(--rule-strong); background: var(--surface); }
+.recent-card.active { border-color: var(--signal-strong); box-shadow: none; }
+.rc-cover { border-radius: 0; box-shadow: none; }
+
+/* ── One left edge for the whole view ───────────────────────────────────
+   The old layout centred the card and the table at their own max widths;
+   here they share the search bar's 20px gutter and use the full width. */
+.list-container, .recent-container {
+  max-width: none;
+  margin: 0;
+  padding: 0 var(--space-5);
+}
+#track-controls, #track-table-wrap {
+  max-width: none;
+  margin: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* A download per row would be a column of signal: neutral until pointed at. */
+.ta-btn.dl { background: transparent; border-color: var(--rule-strong); color: var(--text-2); }
+.ta-btn.dl:hover:not(:disabled) { background: var(--signal); border-color: var(--signal); color: var(--signal-ink); }
+
+/* styles.css ends with a rebrand layer that names these more specifically
+   (.search-container .mode-btn, #csvBtn:hover…); answered here in kind. */
+#search-bar { padding: var(--space-4) var(--space-5); }
+#urlInput,
+.search-container .mode-btn,
+#fetchBtn { border-radius: var(--radius-1); }
+#urlInput { background: var(--raised); border-color: var(--control-border); }
+#urlInput:focus { border-color: var(--signal-strong); }
+.search-container .mode-btn:not(.active) {
+  background: var(--raised);
+  border-color: var(--control-border);
+  color: var(--text-2);
+}
+#searchModeToggle:hover,
+#csvBtn:hover,
+#pasteBtn:hover { background: var(--raised); border-color: var(--text-2); color: var(--text); }
+#recent-wrap { padding-top: var(--space-5); }
+
+/* ── Text search results: a full-width panel of rows ─────────────────── */
+#text-search-results { max-width: none; margin: 0; gap: var(--space-4); }
+.sr-panel { border: 1px solid var(--rule); border-radius: var(--radius-1); background: var(--surface); }
+.sr-tab-bar { border-bottom: 1px solid var(--rule); }
+.sr-tab {
+  color: var(--text-2);
+  font-family: var(--font);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+.sr-tab:hover { color: var(--text); }
+.sr-tab.active { color: var(--text); border-bottom-color: var(--signal-strong); }
+.sr-tab-badge, .sr-tab.active .sr-tab-badge {
+  background: transparent;
+  border-radius: 0;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.sr-tab.active .sr-tab-badge { color: var(--signal-text); }
+.sr-filter-input {
+  height: var(--row);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background: var(--raised);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+}
+.sr-filter-input:focus { border-color: var(--signal-strong); }
+.search-result-item {
+  min-height: 48px;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  transition: background var(--motion-fast) var(--ease);
+}
+.search-result-item:hover { background: var(--raised); }
+.search-result-thumbnail,
+.search-result-thumbnail.artist-thumb {
+  width: 32px; height: 32px;
+  border-radius: 0;
+  box-shadow: none;
+}
+.search-result-title { font-size: var(--text-md); font-weight: var(--weight-medium); }
+.search-result-meta { color: var(--text-muted); font-size: var(--text-sm); }
+.sr-duration { color: var(--text-2); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+
+/* Phone: controls keep the 44px touch size styles.css gives them there. */
+@media (max-width: 700px) {
+  .mode-btn, .search-container .mode-btn, #fetchBtn { width: 44px; height: 44px; min-width: 44px; }
+  .search-source { height: 44px; }
+  #urlInput { height: 44px; }
+}
