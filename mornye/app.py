@@ -265,6 +265,9 @@ class MornyeAPI(
         self.owner = ""
         self.current_tracks = []
         self.current_url = ""
+        # The fetched collection's name when it is a playlist, else "": what
+        # a failed track records so its retry goes back to that folder.
+        self.current_playlist_name = ""
         self.app_version = "unknown"
         # determine application version at construction time so JS can query it early
         try:
@@ -1327,6 +1330,7 @@ class MornyeAPI(
                 return
 
             self.current_tracks = tracks
+            self.current_playlist_name = collection_name if is_playlist else ""
             track_data = []
 
             # Retrieve playcount from Spotify if applicable (non-blocking)
@@ -1579,6 +1583,10 @@ class MornyeAPI(
             # Decided now, against the tracklist the user was looking at:
             # after a restart there is no tracklist left to compare with.
             "whole": sorted(indices) == list(range(len(self.current_tracks))),
+            # Only recorded with a failure (core/failed_tracks.py), never a
+            # folder for this job: a whole playlist gets its folder from the
+            # downloader, and "playlist_name" would nest it twice.
+            "collection_name": getattr(self, "current_playlist_name", ""),
             "config": dict(config or {}),
             "session": self._session_id,
         }
@@ -1635,6 +1643,7 @@ class MornyeAPI(
             source_url=str(payload.get("source_url") or ""),
             whole=bool(payload.get("whole")),
             playlist_name=str(payload.get("playlist_name") or ""),
+            collection_name=str(payload.get("collection_name") or ""),
             announce=payload.get("session") == self._session_id,
         )
         return {"tracks": len(indices)}
@@ -1739,6 +1748,7 @@ class MornyeAPI(
         source_url: str | None = None,
         whole: bool | None = None,
         playlist_name: str = "",
+        collection_name: str | None = None,
         announce: bool = True,
     ) -> None:
         """One batch, start to finish.
@@ -2061,7 +2071,15 @@ class MornyeAPI(
             # of failures ends with this call.
             from .core import failed_tracks
 
-            failed_hook = failed_tracks.hook(self.owner, collection_url)
+            if collection_name is None:
+                collection_name = (
+                    getattr(self, "current_playlist_name", "")
+                    if source_url is None
+                    else ""
+                )
+            failed_hook = failed_tracks.hook(
+                self.owner, collection_url, playlist_name or collection_name
+            )
             deferred_download_hooks: list[tuple[Any, Any]] = []
             post_delivery_hooks = [log_hook, failed_hook]
             # Notifications configured by the environment (MORNYE_NOTIFY and

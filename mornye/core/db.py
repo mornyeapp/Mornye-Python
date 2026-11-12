@@ -265,6 +265,13 @@ _MIGRATIONS: tuple[tuple[str, ...], ...] = (
         "UPDATE subscriptions SET baselined = 1 WHERE id IN "
         "(SELECT DISTINCT subscription_id FROM subscription_seen)",
     ),
+    # v8 — the playlist a failed track belonged to.
+    #
+    # A retry re-submitted the failures as loose tracks, so one that came
+    # from a playlist downloaded into the bare download folder and was left
+    # out of the playlist's M3U (issue #277). The name lets the retry send it
+    # back to that playlist's folder.
+    ("ALTER TABLE failed_tracks ADD COLUMN playlist_name TEXT NOT NULL DEFAULT ''",),
 )
 
 

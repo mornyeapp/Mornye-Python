@@ -39,18 +39,21 @@ class FailedTracksMixin:
 
         groups = failed_tracks.retry_groups(getattr(self, "owner", "") or "", keys)
         queued = 0
-        for source_url, tracks in groups:
-            self._start_download_job(
-                {
-                    "indices": list(range(len(tracks))),
-                    "tracks": tracks,
-                    "source_url": source_url,
-                    # A retry is always a hand-picked selection, never "the
-                    # whole collection": the collection is what already ran.
-                    "whole": False,
-                    "config": dict(config or {}),
-                }
-            )
+        for source_url, playlist_name, tracks in groups:
+            payload = {
+                "indices": list(range(len(tracks))),
+                "tracks": tracks,
+                "source_url": source_url,
+                # A retry is always a hand-picked selection, never "the
+                # whole collection": the collection is what already ran.
+                "whole": False,
+                "config": dict(config or {}),
+            }
+            if playlist_name:
+                # Back into the playlist's folder and onto its M3U, not
+                # loose in the download folder (issue #277).
+                payload["playlist_name"] = playlist_name
+            self._start_download_job(payload)
             queued += len(tracks)
         if queued:
             self.log(f"Retrying {queued} failed track(s)…", "info")

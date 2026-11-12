@@ -111,7 +111,7 @@ def test_retry_groups_keep_the_source_and_clear_takes_keys():
     tidal = "https://tidal.com/browse/playlist/b"
     failed_tracks.hook(source_url=tidal)(DownloadResult.fail("t", "e"), _track(5))
 
-    groups = dict(failed_tracks.retry_groups())
+    groups = {url: tracks for url, _, tracks in failed_tracks.retry_groups()}
     assert set(groups) == {PLAYLIST, tidal}
     assert groups[PLAYLIST][0]["id"] == "sp4"
 
@@ -219,7 +219,7 @@ def test_a_batchs_failures_are_listed_with_their_source(tmp_path, monkeypatch):
 
     [item] = failed_tracks.list_for()
     assert item["title"] == "Song 1"
-    [(source, _)] = failed_tracks.retry_groups()
+    [(source, _, _)] = failed_tracks.retry_groups()
     assert source == PLAYLIST
 
 
@@ -236,6 +236,30 @@ def test_retry_submits_the_missing_tracks_as_a_background_job():
     assert "session" not in payload, "no open page dispatched a retry"
     # Still listed: only an actual download takes a track off the list.
     assert len(api.get_failed_tracks()["tracks"]) == 1
+    assert "playlist_name" not in payload, "no playlist was recorded"
+
+
+def test_a_retry_goes_back_to_the_playlist_folder_it_failed_in():
+    """Issue #277: a retried playlist track landed loose, off the M3U."""
+    failed_tracks.hook(source_url=PLAYLIST, playlist_name="Top 50 - India")(
+        DownloadResult.fail("t", "e"), _track(8)
+    )
+    api = MornyeAPI()
+    api._download_queue = _RecordingQueue()
+
+    api.retry_failed_tracks({"services": ["tidal"]})
+
+    [(_, payload)] = api._download_queue.jobs
+    assert payload["playlist_name"] == "Top 50 - India"
+    assert payload["whole"] is False
+
+
+def test_a_whole_playlist_job_records_its_name_only_for_failures(tmp_path):
+    api = _api(tmp_path)
+    api.current_playlist_name = "Hot Hits Hindi"
+    payload = api._download_job_payload([0], {})
+    assert payload["collection_name"] == "Hot Hits Hindi"
+    assert "playlist_name" not in payload, "would nest the folder twice"
 
 
 # ── webapp.py wiring ──────────────────────────────────────────────────────

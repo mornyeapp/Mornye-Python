@@ -63,7 +63,11 @@ def _serialise(metadata: Any) -> str:
 
 
 def record_failure(
-    owner: str, metadata: Any, error: str = "", source_url: str = ""
+    owner: str,
+    metadata: Any,
+    error: str = "",
+    source_url: str = "",
+    playlist_name: str = "",
 ) -> None:
     """Adds a failed track, or counts one more attempt at it. Never raises.
 
@@ -81,12 +85,13 @@ def record_failure(
             conn.execute(
                 """
                 INSERT INTO failed_tracks (
-                    owner, track_key, track, source_url, error,
-                    attempts, first_failed_at, last_failed_at
-                ) VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+                    owner, track_key, track, source_url, playlist_name,
+                    error, attempts, first_failed_at, last_failed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
                 ON CONFLICT(owner, track_key) DO UPDATE SET
                     track          = excluded.track,
                     source_url     = excluded.source_url,
+                    playlist_name  = excluded.playlist_name,
                     error          = excluded.error,
                     attempts       = failed_tracks.attempts + 1,
                     last_failed_at = excluded.last_failed_at
@@ -96,6 +101,7 @@ def record_failure(
                     key,
                     track,
                     source_url or "",
+                    (playlist_name or "").strip(),
                     (error or "")[:_MAX_ERROR_CHARS],
                     now,
                     now,
@@ -120,13 +126,16 @@ def resolve(owner: str, metadata: Any) -> None:
         logger.debug("[failed_tracks] could not resolve %s", key, exc_info=True)
 
 
-def hook(owner: str = "", source_url: str = "") -> Callable[[Any, Any], None]:
+def hook(
+    owner: str = "", source_url: str = "", playlist_name: str = ""
+) -> Callable[[Any, Any], None]:
     """A post-download hook that keeps the table in step with each run.
 
     A success resolves the track, and so does a skip — a skipped track is one
     that is already on disk, which is the outcome a retry is after. Anything
     else is recorded, with `source_url` kept so the retry can rebuild the
-    track's link (see core.tracklist.track_url).
+    track's link (see core.tracklist.track_url), and `playlist_name` so it
+    lands back in that playlist's folder and M3U (issue #277).
     """
 
     def _on_track(result: Any, metadata: Any) -> None:
@@ -134,7 +143,11 @@ def hook(owner: str = "", source_url: str = "") -> Callable[[Any, Any], None]:
             resolve(owner, metadata)
         else:
             record_failure(
-                owner, metadata, getattr(result, "error", "") or "", source_url
+                owner,
+                metadata,
+                getattr(result, "error", "") or "",
+                source_url,
+                playlist_name,
             )
 
     _on_track.__qualname__ = "failed_tracks.hook.on_track"
@@ -185,24 +198,25 @@ def list_for(owner: str = "") -> list[dict]:
 
 def retry_groups(
     owner: str = "", keys: Iterable[str] | None = None
-) -> list[tuple[str, list[dict]]]:
-    """The failures to re-submit, grouped by the collection they came from.
+) -> list[tuple[str, str, list[dict]]]:
+    """The failures to re-submit as ``(source_url, playlist_name, tracks)``.
 
-    Grouped because a bare track id only turns into a link next to the
-    service that issued it, and one download job carries one source URL.
-    Never raises.
+    Grouped by the collection they came from, because a bare track id only
+    turns into a link next to the service that issued it, and one download
+    job carries one source URL and one playlist folder. Never raises.
     """
     try:
         rows = _rows(owner, keys)
     except Exception:
         logger.debug("[failed_tracks] could not read the list", exc_info=True)
         return []
-    groups: dict[str, list[dict]] = {}
+    groups: dict[tuple[str, str], list[dict]] = {}
     for row in rows:
         track = db.loads(row["track"], None)
         if isinstance(track, dict):
-            groups.setdefault(row["source_url"] or "", []).append(track)
-    return list(groups.items())
+            group = (row["source_url"] or "", row["playlist_name"] or "")
+            groups.setdefault(group, []).append(track)
+    return [(url, name, tracks) for (url, name), tracks in groups.items()]
 
 
 def clear(owner: str = "", keys: Iterable[str] | None = None) -> int:
