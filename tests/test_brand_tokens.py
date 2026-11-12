@@ -106,6 +106,34 @@ def test_amber_is_the_default_accent_everywhere() -> None:
     assert "data-accent" not in CSS, "styles.css no longer carries presets"
 
 
+@pytest.mark.parametrize("mode", ["dark", "light"])
+def test_every_accent_meets_wcag_aa(mode: str) -> None:
+    """Voce 30: an accent is four signal values; each must still read."""
+    css = (
+        Path(__file__).resolve().parents[1]
+        / "mornye"
+        / "frontend"
+        / "css"
+        / "accents.css"
+    ).read_text(encoding="utf-8")
+    surface = bt.v2_tokens(mode)["surface"]
+    light = r"\.light-theme" if mode == "light" else ""
+    weak = {}
+    for name, body in re.findall(
+        rf'html{light}\[data-accent="(\w+)"\][^{{]*\{{([^}}]*)\}}', css
+    ):
+        v = dict(re.findall(r"--(signal[\w-]*):\s*([^;]+);", body))
+        pairs = {
+            "text/surface": (bt.contrast_ratio(v["signal-text"], surface), 4.5),
+            "ink/signal": (bt.contrast_ratio(v["signal-ink"], v["signal"]), 4.5),
+            "strong/surface": (bt.contrast_ratio(v["signal-strong"], surface), 3.0),
+        }
+        weak.update(
+            {f"{name} {k}": round(r, 2) for k, (r, floor) in pairs.items() if r < floor}
+        )
+    assert not weak, f"{mode}: {weak}"
+
+
 def test_textual_themes_build_from_the_tokens() -> None:
     from textual.theme import Theme
 

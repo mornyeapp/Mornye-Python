@@ -7,6 +7,18 @@
    ids and onclick handlers app.js relies on are untouched
    (tests/test_frontend_dom_contract.py). */
 
+/* One focus treatment for the whole app (voce 30), the same as base.css in
+   the component library: a 1px signal ring outside the box. styles.css's
+   2px ring drew in the old --accent and reshaped every focused control to
+   an 8px radius; this restates both at the same specificity, later. Fields
+   that show focus on their own border opt out in their view sheets. */
+:focus-visible { outline: 1px solid var(--signal-strong); outline-offset: 2px; }
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 1px solid var(--signal-strong);
+  outline-offset: 2px;
+  border-radius: var(--radius-1);
+}
+
 :root {
   --sidebar-w: var(--rail);
   --rail-collapsed-w: 52px;

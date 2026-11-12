@@ -10,7 +10,11 @@
    Set as data-accent on <html> and <body> by applyAccent() in app.js. The
    dark selectors outrank :root; the light ones carry .light-theme so they
    outrank tokens.css's body.light-theme. The list must match ACCENTS in
-   app.js and MornyeAPI.ACCENTS in app.py. */
+   app.js and MornyeAPI.ACCENTS in app.py.
+
+   Every pair meets WCAG AA (test_brand_tokens.py): --signal-text on the
+   surface and --signal-ink on --signal at 4.5:1, --signal-strong as a
+   control edge at 3:1. Light orange and cyan take dark ink for that. */
 
 html[data-accent="teal"], body[data-accent="teal"] {
   --signal: #5cd3c3;  --signal-strong: #5cd3c3;
@@ -27,7 +31,7 @@ html[data-accent="green"], body[data-accent="green"] {
 }
 html.light-theme[data-accent="green"], body.light-theme[data-accent="green"] {
   --signal: #24863d;  --signal-strong: #19652d;
-  --signal-text: #24863d;  --signal-ink: #ffffff;
+  --signal-text: #19652d;  --signal-ink: #ffffff;
 }
 
 html[data-accent="blue"], body[data-accent="blue"] {
@@ -63,7 +67,7 @@ html[data-accent="orange"], body[data-accent="orange"] {
 }
 html.light-theme[data-accent="orange"], body.light-theme[data-accent="orange"] {
   --signal: #c76a10;  --signal-strong: #98510c;
-  --signal-text: #a1560d;  --signal-ink: #ffffff;
+  --signal-text: #a1560d;  --signal-ink: #0b0b0d;
 }
 
 html[data-accent="red"], body[data-accent="red"] {
@@ -81,5 +85,5 @@ html[data-accent="cyan"], body[data-accent="cyan"] {
 }
 html.light-theme[data-accent="cyan"], body.light-theme[data-accent="cyan"] {
   --signal: #0d9a9a;  --signal-strong: #096b6b;
-  --signal-text: #0a7474;  --signal-ink: #ffffff;
+  --signal-text: #0a7474;  --signal-ink: #0b0b0d;
 }
