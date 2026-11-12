@@ -116,7 +116,7 @@
     <div class="dot x" onclick="pyWin('WindowToggleMaximise')" title="Maximize"></div>
   </div>
   
-  <div class="pywebview-drag-region" style="flex: 1; height: 100%; -webkit-app-region: drag;"></div>
+  <div class="pywebview-drag-region u-flex-1 u-h-100pct u-app-region-drag"></div>
 
   <div id="tb-logo">
     <span>Mornye</span>
@@ -248,7 +248,7 @@
               </span>
             </button>
             <input id="csvFileInput" type="file" accept=".csv,.tsv,.txt,.m3u,.m3u8,text/csv,audio/x-mpegurl"
-                   style="display:none" onchange="onCsvFileChosen(this)">
+                   style="display:none;" onchange="onCsvFileChosen(this)">
           </div>
           <div class="url-wrap">
             <span class="url-icon">
@@ -307,7 +307,7 @@
                   <span id="album-artist">—</span>
                 </div>
                 <div id="album-meta-details" class="album-meta-details hidden">
-                  <div id="album-owner-row" style="display:flex;align-items:center;gap:8px;">
+                  <div class="u-items-center u-gap-8" id="album-owner-row" style="display:flex;">
                     <div id="album-owner-avatar" class="owner-avatar hidden"></div>
                     <span id="album-owner"></span>
                     <span class="dot-sep">·</span>
@@ -336,7 +336,7 @@
                 </div>
               </div>
               <aside id="album-tech" class="hidden" aria-label="Technical details"></aside>
-              <button onclick="closeAlbumCard()" style="background:none;border:none;color:var(--muted);cursor:pointer;position:absolute;top:10px;right:10px;font-size:16px;line-height:1;padding:3px;">
+              <button style="position:absolute;" class="u-bg-none u-border-none u-c-muted u-cursor-pointer u-top-10 u-right-10 u-fs-16 u-lh-1 u-p-3" onclick="closeAlbumCard()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
             </div>
@@ -395,10 +395,10 @@
         </div></div>
     </div>
     <div class="view" id="view-explore">
-      <div class="explore-container" style="padding: 20px; overflow-y: auto; height: 100%;">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:24px;flex-wrap:wrap;">
-          <h2 id="explore-greeting" style="margin:0;font-size:28px;">Explore</h2>
-          <label class="s-label" style="display:flex;align-items:center;gap:8px;">Feed
+      <div class="explore-container u-p-20 u-oy-auto u-h-100pct">
+        <div class="u-items-center u-justify-space-between u-gap-12 u-mb-24 u-wrap-wrap" style="display:flex;">
+          <h2 class="u-m-0 u-fs-28" id="explore-greeting">Explore</h2>
+          <label class="s-label u-items-center u-gap-8" style="display:flex;">Feed
             <select id="explore-source" onchange="setExploreSource(this.value)" title="Where the feed comes from">
               <option value="spotify">Spotify</option>
             </select>
@@ -436,9 +436,9 @@
         </div>
       </div>
       <div class="s-body" id="player-body">
-        <div class="s-section" style="padding:14px 18px;">
-          <div class="s-row" style="align-items:center;gap:8px;">
-            <input type="text" id="player-path-input" class="full" style="flex:1;" placeholder="Folder with your music — /Users/name/Music, C:\Music"
+        <div class="s-section u-p-14-18">
+          <div class="s-row u-items-center u-gap-8">
+            <input style="flex:1;" type="text" id="player-path-input" class="full" placeholder="Folder with your music — /Users/name/Music, C:\Music"
                    onkeydown="if(event.key==='Enter') scanPlayerLibrary()">
             <button class="act-btn secondary" type="button" onclick="openPlayerFolderBrowser()">Browse</button>
             <button class="act-btn primary" type="button" onclick="scanPlayerLibrary()" id="player-scan-btn">Open</button>
@@ -473,7 +473,7 @@
             <span class="c-num">#</span><span></span><span>Title</span><span class="c-dur">Time</span><span class="c-fmt">Format</span>
           </div>
         </div>
-        <div id="player-status" style="font-size:12.5px;color:var(--muted);padding:6px 2px;"></div>
+        <div class="u-fs-12_5 u-c-muted u-p-6-2" id="player-status"></div>
         <div id="player-list" class="player-list" role="list"></div>
       </div>
     </div>
@@ -493,8 +493,8 @@
         </div>
       </div>
       
-      <div class="s-body" style="display:flex; flex-direction:column; gap:16px;">
-        <div class="s-section" style="padding: 16px 20px;">
+      <div class="s-body u-dir-column u-gap-16" style="display:flex;">
+        <div class="s-section u-p-16-20">
           <div class="s-title">Target Directory</div>
           <div
             id="local-drop-zone"
@@ -505,34 +505,34 @@
           >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
             <span class="local-drop-zone-text">Drag & drop a folder or audio file here, or paste a path below</span>
-            <div class="s-row" style="align-items:center; gap:8px; width:100%;">
-              <input type="text" id="local-path-input" class="full" placeholder="Folder path or network share — /Users/name/Music, C:\Music, smb://nas/Music" style="flex:1;" onclick="event.stopPropagation()">
-              <button class="act-btn secondary" onclick="openFolderBrowser()" style="padding:6px 12px; font-size:12px; white-space:nowrap;">
+            <div class="s-row u-items-center u-gap-8 u-w-100pct">
+              <input type="text" id="local-path-input" class="full u-flex-1" placeholder="Folder path or network share — /Users/name/Music, C:\Music, smb://nas/Music" onclick="event.stopPropagation()">
+              <button class="act-btn secondary u-p-6-12 u-fs-12 u-ws-nowrap" onclick="openFolderBrowser()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
                 Browse
               </button>
             </div>
             <div id="local-network-shares" class="share-chips hidden" onclick="event.stopPropagation()" aria-label="Mounted network shares"></div>
           </div>
-          <p style="font-size:11.5px; color:var(--muted); margin-top:8px; line-height:1.5;">
+          <p class="u-fs-11_5 u-c-muted u-mt-8 u-lh-1_5">
             Paste (or drop) the folder or file you want to fix — a NAS works too: type its smb:// address or a \\server\share path once the share is connected on this computer. Supported formats: FLAC, MP3, M4A/AAC, OGG Vorbis, Opus, WAV, AIFF, WMA, WavPack, Monkey's Audio, Musepack, TrueAudio.
             Mornye will scan them, find the correct Spotify metadata, and let you compare before applying changes.
           </p>
         </div>
         
-        <div id="local-results-wrap" class="hidden" style="flex:1; display:flex; flex-direction:column; min-height: 0;">
-          <div class="track-table-header" style="grid-template-columns: 24px 1fr 80px 1fr; margin-bottom: 8px;">
+        <div id="local-results-wrap" class="hidden u-dir-column u-minh-0" style="display:flex;flex:1;">
+          <div class="track-table-header u-cols-24-1fr-80-1fr u-mb-8">
             <div><input id="check-all-local" type="checkbox" checked onchange="toggleAllLocal(this)"></div>
             <div>Current File (Local)</div>
-            <div style="text-align:center;">Match</div>
+            <div class="u-ta-center">Match</div>
             <div>New Tags (Mornye)</div>
           </div>
-          <div id="local-track-rows" style="display:flex; flex-direction:column; gap:6px; overflow-y:auto; padding-right: 4px;"></div>
+          <div class="u-dir-column u-gap-6 u-oy-auto u-pr-4" id="local-track-rows" style="display:flex;"></div>
         </div>
 
-        <div id="dedup-results-wrap" class="hidden s-section" style="padding:16px 20px;">
+        <div id="dedup-results-wrap" class="hidden s-section u-p-16-20">
           <div class="s-title">Duplicate Groups</div>
-          <p style="font-size:11.5px;color:var(--muted);margin:-4px 0 12px;line-height:1.5;">
+          <p class="u-fs-11_5 u-c-muted u-m-n4-0-12 u-lh-1_5">
             Files in the same group are acoustically the same recording — review before deleting
             anything; a match is a strong hint, not a certification.
           </p>
@@ -542,56 +542,56 @@
         <!-- Library-wide duplicates (core/library_dedup.py). Different tool
              from the fingerprint scan above: metadata first, so it scales to
              a whole library, and it can act on what it finds. -->
-        <div class="s-section" style="padding:16px 20px;">
+        <div class="s-section u-p-16-20">
           <div class="s-title">Library Duplicates</div>
-          <p style="font-size:11.5px;color:var(--muted);margin:-4px 0 12px;line-height:1.5;">
+          <p class="u-fs-11_5 u-c-muted u-m-n4-0-12 u-lh-1_5">
             Groups every copy of the same recording in the folder above — by ISRC, then by
             artist/title and duration for the files that have none — and keeps the best copy of
             each. Fast enough for a library of thousands, where the fingerprint scan is not.
           </p>
-          <div class="s-row" style="gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
-            <select id="libdedup-match" style="max-width:210px;" title="Which signal decides that two files are one recording">
+          <div class="s-row u-gap-10 u-wrap-wrap u-items-center u-mb-12">
+            <select class="u-maxw-210" id="libdedup-match" title="Which signal decides that two files are one recording">
               <option value="both">ISRC, then tags</option>
               <option value="isrc">ISRC only (safest)</option>
               <option value="tags">Tags only</option>
             </select>
-            <label class="s-label" style="display:flex;align-items:center;gap:6px;font-size:11.5px;" title="How far two durations may differ and still be the same recording">
+            <label class="s-label u-items-center u-gap-6 u-fs-11_5" style="display:flex;" title="How far two durations may differ and still be the same recording">
               Duration slack
-              <input type="number" id="libdedup-tolerance" value="4" min="0" max="60" step="0.5" style="width:64px;">s
+              <input class="u-w-64" type="number" id="libdedup-tolerance" value="4" min="0" max="60" step="0.5">s
             </label>
-            <label class="s-label" style="display:flex;align-items:center;gap:6px;font-size:11.5px;" title="Fingerprint each group and split it where the audio disagrees. Slower; needs the fpcalc binary (Chromaprint) on this machine.">
+            <label class="s-label u-items-center u-gap-6 u-fs-11_5" style="display:flex;" title="Fingerprint each group and split it where the audio disagrees. Slower; needs the fpcalc binary (Chromaprint) on this machine.">
               <input type="checkbox" id="libdedup-verify"> Confirm with audio
             </label>
-            <label class="s-label" style="display:flex;align-items:center;gap:6px;font-size:11.5px;" title="Also write a SQLite index of the whole library next to the quarantine folder">
+            <label class="s-label u-items-center u-gap-6 u-fs-11_5" style="display:flex;" title="Also write a SQLite index of the whole library next to the quarantine folder">
               <input type="checkbox" id="libdedup-db"> Write index .db
             </label>
-            <button class="act-btn primary" onclick="startLibraryDedupScan()" id="btn-libdedup-scan" style="margin-left:auto;">
+            <button class="act-btn primary u-ml-auto" onclick="startLibraryDedupScan()" id="btn-libdedup-scan">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
               Scan Library
             </button>
           </div>
-          <div id="libdedup-progress" class="hidden s-label" style="font-size:11.5px;margin-bottom:10px;"></div>
-          <div id="libdedup-summary" class="hidden" style="font-size:11.5px;color:var(--text2);line-height:1.7;margin-bottom:12px;white-space:pre-wrap;font-family:monospace;"></div>
+          <div id="libdedup-progress" class="hidden s-label u-fs-11_5 u-mb-10"></div>
+          <div id="libdedup-summary" class="hidden u-fs-11_5 u-c-text2 u-lh-1_7 u-mb-12 u-ws-pre-wrap u-ff-monospace"></div>
           <div id="libdedup-groups" class="sort-list"></div>
-          <div id="libdedup-actions" class="hidden s-row" style="gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap;">
-            <span id="libdedup-selected" style="font-weight:600;font-size:12px;color:var(--text);">0 selected</span>
-            <button class="act-btn secondary" onclick="resolveLibraryDuplicates('trash')" id="btn-libdedup-trash" style="margin-left:auto;" title="Move them into .mornye-duplicates inside the library. Undoable.">
+          <div id="libdedup-actions" class="hidden s-row u-gap-10 u-items-center u-mt-12 u-wrap-wrap">
+            <span class="u-fw-600 u-fs-12 u-c-text" id="libdedup-selected">0 selected</span>
+            <button class="act-btn secondary u-ml-auto" onclick="resolveLibraryDuplicates('trash')" id="btn-libdedup-trash" title="Move them into .mornye-duplicates inside the library. Undoable.">
               Move to quarantine
             </button>
             <button class="act-btn danger" onclick="resolveLibraryDuplicates('delete')" id="btn-libdedup-delete" title="Delete them outright. Not undoable.">
               Delete permanently
             </button>
           </div>
-          <div id="libdedup-undo" class="hidden" style="margin-top:12px;font-size:11.5px;color:var(--muted);display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-            <span id="libdedup-manifest" class="reg-url" style="flex:1;min-width:0;"></span>
+          <div id="libdedup-undo" class="hidden u-mt-12 u-fs-11_5 u-c-muted u-gap-10 u-items-center u-wrap-wrap" style="display:flex;">
+            <span id="libdedup-manifest" class="reg-url u-flex-1 u-minw-0"></span>
             <button class="act-btn secondary" onclick="undoLibraryDedup()" id="btn-libdedup-undo">Undo</button>
           </div>
         </div>
       </div>
 
-      <div class="s-footer hidden" id="local-footer" style="padding:14px 18px; border-top:1px solid var(--border); background:var(--surface2); justify-content:space-between; align-items:center; flex-shrink: 0;">
-        <span id="local-selected-count" style="font-weight:600; font-size:13px; color:var(--text);">0 selected</span>
-        <div style="display:flex; gap:10px; align-items:center;">
+      <div class="s-footer hidden u-p-14-18 u-border-top-1-solid-border u-bg-surface2 u-justify-space-between u-items-center u-shrink-0" id="local-footer">
+        <span class="u-fw-600 u-fs-13 u-c-text" id="local-selected-count">0 selected</span>
+        <div class="u-gap-10 u-items-center" style="display:flex;">
           <button class="act-btn secondary" type="button" onclick="openConvertDialog()" id="btn-convert-local" title="Convert the ticked files to another audio format">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
             Convert…
@@ -618,57 +618,57 @@
       </div>
       <div class="s-body">
         <div class="s-section" id="weekly-section">
-          <div class="s-row" style="align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;">
-            <div class="s-title" style="margin:0;">New this week</div>
-            <div style="display:flex;gap:8px;align-items:center;">
-              <select id="weekly-days" onchange="loadWeeklyReleases(false)" style="max-width:130px;">
+          <div class="s-row u-items-center u-justify-space-between u-gap-10 u-mb-8">
+            <div class="s-title u-m-0">New this week</div>
+            <div class="u-gap-8 u-items-center" style="display:flex;">
+              <select class="u-maxw-130" id="weekly-days" onchange="loadWeeklyReleases(false)">
                 <option value="7">Last 7 days</option>
                 <option value="14">Last 14 days</option>
                 <option value="30">Last 30 days</option>
               </select>
-              <button class="act-btn secondary" type="button" onclick="loadWeeklyReleases(true)" id="weekly-refresh-btn" style="padding:6px 12px;font-size:12px;">Refresh</button>
+              <button class="act-btn secondary u-p-6-12 u-fs-12" type="button" onclick="loadWeeklyReleases(true)" id="weekly-refresh-btn">Refresh</button>
             </div>
           </div>
-          <div id="weekly-status" style="font-size:12px;color:var(--muted);"></div>
-          <div id="weekly-list" style="display:flex;flex-direction:column;gap:6px;margin-top:8px;"></div>
+          <div class="u-fs-12 u-c-muted" id="weekly-status"></div>
+          <div class="u-dir-column u-gap-6 u-mt-8" id="weekly-list" style="display:flex;"></div>
         </div>
         <div class="s-section">
           <div class="s-title">Follow an artist or a playlist</div>
-          <p style="font-size:12px;color:var(--muted);margin:-4px 0 12px;line-height:1.6;">
+          <p class="u-fs-12 u-c-muted u-m-n4-0-12 u-lh-1_6">
             Paste a Spotify artist or playlist link. What already exists is recorded
             as seen, so the first thing downloaded is the first release — or the first
             track added to the playlist — <em>after</em> you follow, not the whole back
             catalogue. Use <strong>Reset</strong> on a row if you do want everything.
           </p>
-          <p style="font-size:12px;color:var(--muted);margin:-4px 0 12px;line-height:1.6;">
+          <p class="u-fs-12 u-c-muted u-m-n4-0-12 u-lh-1_6">
             Pick <strong>Check every…</strong> to have it checked on its own and new
             items downloaded automatically, with the download settings you have when
             you set it (or last press <strong>Check &amp; download</strong>).
           </p>
-          <div class="s-row" style="align-items:stretch;gap:8px;flex-wrap:wrap;">
-            <input type="text" id="subscription-url-input" class="full" placeholder="https://open.spotify.com/artist/… or /playlist/…" style="flex:1;min-width:220px;">
-            <select id="subscription-groups" style="max-width:170px;" title="Which releases count, for an artist (ignored for a playlist)">
+          <div class="s-row u-items-stretch u-gap-8 u-wrap-wrap">
+            <input style="flex:1;min-width:220px;" type="text" id="subscription-url-input" class="full" placeholder="https://open.spotify.com/artist/… or /playlist/…">
+            <select class="u-maxw-170" id="subscription-groups" title="Which releases count, for an artist (ignored for a playlist)">
               <option value="album,single">Albums &amp; singles</option>
               <option value="album">Albums only</option>
               <option value="single">Singles only</option>
               <option value="all">Everything</option>
             </select>
-            <select id="subscription-interval" style="max-width:170px;" title="Check automatically and download what is new"></select>
-            <button class="act-btn primary" type="button" onclick="addSubscription()" style="padding:8px 16px;font-size:12px;white-space:nowrap;">Follow</button>
+            <select class="u-maxw-170" id="subscription-interval" title="Check automatically and download what is new"></select>
+            <button class="act-btn primary u-p-8-16 u-fs-12 u-ws-nowrap" type="button" onclick="addSubscription()">Follow</button>
           </div>
           <div class="bulk-follow">
             <label for="subscription-bulk-input" class="field-label">Follow several artists at once</label>
             <p class="field-hint">One artist link per line, or separate them with commas.</p>
             <textarea id="subscription-bulk-input" class="field-textarea" rows="4"
               placeholder="https://open.spotify.com/artist/…&#10;https://open.spotify.com/artist/…"></textarea>
-            <div class="s-row" style="align-items:center;justify-content:space-between;gap:10px;margin-top:8px;flex-wrap:wrap;">
-              <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);">
+            <div class="s-row u-items-center u-justify-space-between u-gap-10 u-mt-8 u-wrap-wrap">
+              <label class="u-items-center u-gap-8 u-fs-12 u-c-muted" style="display:flex;">
                 <input type="checkbox" id="subscription-bulk-backfill" checked>
                 Reset seen history so the whole back catalogue is found
               </label>
-              <button class="act-btn secondary" type="button" onclick="addSubscriptionsBulk()" style="padding:8px 16px;font-size:12px;white-space:nowrap;">Follow all</button>
+              <button class="act-btn secondary u-p-8-16 u-fs-12 u-ws-nowrap" type="button" onclick="addSubscriptionsBulk()">Follow all</button>
             </div>
-            <p style="font-size:11.5px;color:var(--muted);margin:8px 0 0;line-height:1.5;">
+            <p class="u-fs-11_5 u-c-muted u-m-8-0-0 u-lh-1_5">
               Accepts Spotify artist URLs only. Duplicates are ignored. With back catalogue enabled,
               the next <strong>Check &amp; download</strong> will offer existing releases too.
             </p>
@@ -677,14 +677,14 @@
 
         <div class="s-section">
           <div class="s-title">Followed artists &amp; playlists</div>
-          <div id="subscription-list" class="sort-list" style="margin-top:4px;">
-            <div class="s-label" style="font-size:11.5px;">Loading…</div>
+          <div id="subscription-list" class="sort-list u-mt-4">
+            <div class="s-label u-fs-11_5">Loading…</div>
           </div>
         </div>
 
         <div class="s-section" id="subscription-results-section" style="display:none;">
           <div class="s-title">Last check</div>
-          <div id="subscription-results" class="sort-list" style="margin-top:4px;"></div>
+          <div id="subscription-results" class="sort-list u-mt-4"></div>
         </div>
       </div>
     </div>
@@ -702,7 +702,7 @@
               Scan library
             </button>
           </div>
-          <select id="stats-period" onchange="loadStats()" style="max-width:170px;">
+          <select class="u-maxw-170" id="stats-period" onchange="loadStats()">
             <option value="all">All time</option>
             <option value="year">This year</option>
             <option value="365">Last 365 days</option>
@@ -718,7 +718,7 @@
         </p>
         <div id="stats-smb-status" class="stats-smb-status hidden" role="status" aria-live="polite"></div>
         <div id="stats-body">
-          <div class="s-label" style="font-size:11.5px;">Loading…</div>
+          <div class="s-label u-fs-11_5">Loading…</div>
         </div>
       </div>
     </div>
@@ -807,7 +807,7 @@
                 <span class="toggle-sl"></span>
               </label>
             </div>
-            <div class="s-row verify-hires-opt" style="display:none;padding-left:16px;border-left:2px solid var(--border2);margin-left:4px;">
+            <div class="s-row verify-hires-opt u-pl-16 u-bl-2-solid-border2 u-ml-4" style="display:none;">
               <span class="s-label">Replace fake Hi-Res<small>Off = a finding is only reported. On = the flagged file is set aside, the track is re-downloaded as LOSSLESS, and the flagged file is deleted only once the replacement is on disk</small></span>
               <label class="toggle">
                 <input type="checkbox" id="config-redownload-fake-hires">
@@ -873,7 +873,7 @@
               </select>
             </div>
             <div class="s-row">
-              <span class="s-label" style="font-size:11px;color:var(--muted);">Preview: The quick brown fox jumps over the lazy dog.</span>
+              <span class="s-label u-fs-11 u-c-muted">Preview: The quick brown fox jumps over the lazy dog.</span>
             </div>
           </div>
           <div class="s-section hidden" id="account-signout-row">
@@ -1015,7 +1015,7 @@
                 </optgroup>
               </select>
             </div>
-            <div class="s-row transcode-lossy" style="display:none;padding-left:16px;border-left:2px solid var(--border2);margin-left:4px;">
+            <div class="s-row transcode-lossy u-pl-16 u-bl-2-solid-border2 u-ml-4" style="display:none;">
               <span class="s-label">Bitrate</span>
               <select id="config-transcode-bitrate">
                 <option value="320k">320 kbps</option>
@@ -1024,7 +1024,7 @@
                 <option value="128k">128 kbps</option>
               </select>
             </div>
-            <div class="s-row transcode-opt" style="display:none;padding-left:16px;border-left:2px solid var(--border2);margin-left:4px;">
+            <div class="s-row transcode-opt u-pl-16 u-bl-2-solid-border2 u-ml-4" style="display:none;">
               <span class="s-label">Keep original file<small>Off = the downloaded source is deleted after conversion</small></span>
               <label class="toggle">
                 <input type="checkbox" id="config-transcode-keep">
@@ -1062,35 +1062,35 @@
               </select>
             </div>
             <div id="post-cmd-row" style="display:none;" class="s-row">
-              <input type="text" id="config-post-cmd" class="full" placeholder="rsync -av {folder}/ user@nas:/music/" style="width:100%">
+              <input type="text" id="config-post-cmd" class="full u-w-100pct" placeholder="rsync -av {folder}/ user@nas:/music/">
             </div>
           </div>
           <div class="s-section">
             <div class="s-title">Auth & APIs</div>
             <div class="s-row">
               <span class="s-label">Provider APIs<small>The APIs each download service uses (Tidal's download API, Deezer's resolver, Qobuz app ID, country codes…) are set in that extension's own settings</small></span>
-              <button class="act-btn secondary" type="button" onclick="switchTab('extensions', document.querySelector('.stab[onclick*=&quot;extensions&quot;]'))" style="padding:5px 12px;font-size:11.5px;">Extension Settings</button>
+              <button class="act-btn secondary u-p-5-12 u-fs-11_5" type="button" onclick="switchTab('extensions', document.querySelector('.stab[onclick*=&quot;extensions&quot;]'))">Extension Settings</button>
             </div>
             <div class="s-row">
               <span class="s-label">AcoustID API key<small>Optional. Identifying untagged files uses a key shared by all users, capped at 3 lookups/second between everyone; your own key gets its own budget. Free from acoustid.org/new-application</small></span>
-              <input type="text" id="config-acoustid-key" placeholder="Using the shared key" style="width:190px;">
+              <input class="u-w-190" type="text" id="config-acoustid-key" placeholder="Using the shared key">
             </div>
           </div>
           <div class="s-section">
             <div class="s-title">Profiles</div>
             <div class="s-row">
               <span class="s-label">Save</span>
-              <input type="text" id="profile-name" placeholder="Profile name" style="width:120px;">
-              <button onclick="saveProfile()" class="act-btn secondary" style="padding:5px 10px;font-size:11.5px;">Save</button>
+              <input class="u-w-120" type="text" id="profile-name" placeholder="Profile name">
+              <button onclick="saveProfile()" class="act-btn secondary u-p-5-10 u-fs-11_5">Save</button>
             </div>
             <div class="s-row">
               <span class="s-label">Load</span>
-              <select id="profile-select" style="flex:1;"><option value="">Select…</option></select>
-              <button onclick="loadProfile()" class="act-btn secondary" style="padding:5px 10px;font-size:11.5px;">Load</button>
+              <select class="u-flex-1" id="profile-select"><option value="">Select…</option></select>
+              <button onclick="loadProfile()" class="act-btn secondary u-p-5-10 u-fs-11_5">Load</button>
             </div>
             <div class="s-row">
               <span class="s-label">Delete</span>
-              <button onclick="deleteProfile()" class="act-btn danger" style="padding:5px 10px;font-size:11.5px;">Delete</button>
+              <button onclick="deleteProfile()" class="act-btn danger u-p-5-10 u-fs-11_5">Delete</button>
             </div>
           </div>
         </div>
@@ -1098,7 +1098,7 @@
         <div class="tc" id="tc-files" data-title="Files">
           <div class="s-section">
             <div class="s-title">Download Location</div>
-            <div class="s-row" style="justify-content: flex-start; gap: 12px;">
+            <div class="s-row u-justify-flex-start u-gap-12">
               <button class="act-btn secondary" type="button" onclick="pyWin('choose_folder')">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
                 Choose Folder
@@ -1108,8 +1108,8 @@
           </div>
           <div class="s-section">
             <div class="s-title">Filename Format</div>
-            <div class="s-row"><span class="s-label" style="font-size:11px;color:var(--muted);">{title} {artist} {album} {album_artist} {year} {track} {disc} {isrc} {position}</span></div>
-            <input type="text" id="config-filename" class="full" value="{title} - {artist}" style="width:100%;margin-bottom:8px;">
+            <div class="s-row"><span class="s-label u-fs-11 u-c-muted">{title} {artist} {album} {album_artist} {year} {track} {disc} {isrc} {position}</span></div>
+            <input type="text" id="config-filename" class="full u-w-100pct u-mb-8" value="{title} - {artist}">
             <div class="s-sep"></div>
             <div class="s-row">
               <span class="s-label">Add track number to filename</span>
@@ -1118,7 +1118,7 @@
                 <span class="toggle-sl"></span>
               </label>
             </div>
-            <div class="s-row" id="album-track-row" style="display:none;padding-left:16px;border-left:2px solid var(--border2);margin-left:4px;">
+            <div class="s-row u-pl-16 u-bl-2-solid-border2 u-ml-4" id="album-track-row" style="display:none;">
               <span class="s-label">Use original album track number</span>
               <label class="toggle">
                 <input type="checkbox" id="config-album-track-numbers">
@@ -1152,7 +1152,7 @@
             </div>
             <div class="s-row">
               <span class="s-label">Existing library folders<small>Playlists and single tracks already here are not downloaded again; the playlist file links to them. Separate folders with ;</small></span>
-              <input type="text" id="config-library-scan-dirs" placeholder="e.g. /music/old-library" style="width: 220px;">
+              <input class="u-w-220" type="text" id="config-library-scan-dirs" placeholder="e.g. /music/old-library">
             </div>
             <div class="s-row">
               <span class="s-label">First artist only in tags & filename</span>
@@ -1161,9 +1161,9 @@
                 <span class="toggle-sl"></span>
               </label>
             </div>
-            <div class="s-row" id="config-artist-sep-row" style="padding-left:16px; border-left:2px solid var(--border2); margin-left:4px;">
+            <div class="s-row u-pl-16 u-bl-2-solid-border2 u-ml-4" id="config-artist-sep-row">
               <span class="s-label">Artist Separator<small>(e.g. ", " or " / ")</small></span>
-              <input type="text" id="config-artist-separator" placeholder="None (Standard Vorbis array)" style="width: 160px;">
+              <input class="u-w-160" type="text" id="config-artist-separator" placeholder="None (Standard Vorbis array)">
             </div>
           </div>  
 
@@ -1180,9 +1180,9 @@
               </label>
             </div>
             <div id="lyrics-prov-wrap">
-              <div class="s-title" style="margin-top:8px;">Lyrics Providers</div>
+              <div class="s-title u-mt-8">Lyrics Providers</div>
               <div id="lyrics-list" class="sort-list"></div>
-              <div class="s-row" style="margin-top:8px;">
+              <div class="s-row u-mt-8">
                 <span class="s-label">Word-by-word sync (Apple, BiniLyrics, Unison)<small>(off = line-by-line sync)</small></span>
                 <label class="toggle">
                   <input type="checkbox" id="config-apple-wbw" checked>
@@ -1201,7 +1201,7 @@
               </label>
             </div>
             <div id="enrich-prov-wrap">
-              <div class="s-title" style="margin-top:8px;">Enrichment Providers</div>
+              <div class="s-title u-mt-8">Enrichment Providers</div>
               <div id="enrich-list" class="sort-list"></div>
             </div>
             <div class="s-row">
@@ -1213,8 +1213,8 @@
             </div>
             <div class="s-row">
               <span class="s-label">Animated artwork API URL<small>Leave blank to use the configured environment default</small></span>
-              <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                <button class="act-btn secondary" type="button" onclick="openApiConfigPopup('animated')" style="padding:5px 12px;font-size:11.5px;">Configure</button>
+              <div class="u-gap-8 u-items-center u-wrap-wrap" style="display:flex;">
+                <button class="act-btn secondary u-p-5-12 u-fs-11_5" type="button" onclick="openApiConfigPopup('animated')">Configure</button>
                 <span id="config-animated-artwork-api-display" class="api-config-pill">Not set</span>
               </div>
               <input type="hidden" id="config-animated-artwork-api-url">
@@ -1227,7 +1227,7 @@
             <div class="status-panel-header">
               <div>
                 <div class="s-title">Mornye</div>
-                <p style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6;">Check endpoint reachability for each Mornye provider.</p>
+                <p class="u-fs-12 u-c-muted u-mb-12 u-lh-1_6">Check endpoint reachability for each Mornye provider.</p>
               </div>
               <div class="status-toolbar">
                 <button class="status-check-all" onclick="checkAll()">Check</button>
@@ -1251,139 +1251,139 @@
         <div class="tc" id="tc-extensions" data-title="Extensions">
           <div class="s-section" id="custom-endpoints">
             <div class="s-title">Self-hosted Endpoints</div>
-            <p style="font-size:12px;color:var(--muted);margin:-4px 0 12px;line-height:1.6;">
+            <p class="u-fs-12 u-c-muted u-m-n4-0-12 u-lh-1_6">
               Download through your own server. It is tried first; if it fails the
               extension falls back to its default API. Tidal expects a
-              <a href="https://github.com/binimum/hifi-api" target="_blank" rel="noopener" style="color:var(--accent);">hifi-api</a>
+              <a class="u-c-accent" href="https://github.com/binimum/hifi-api" target="_blank" rel="noopener">hifi-api</a>
               compatible server, Qobuz a
-              <a href="https://github.com/BartolomeoRusso9/qobuz-rest-api" target="_blank" rel="noopener" style="color:var(--accent);">qobuz-rest-api</a>
+              <a class="u-c-accent" href="https://github.com/BartolomeoRusso9/qobuz-rest-api" target="_blank" rel="noopener">qobuz-rest-api</a>
               compatible one. A server on this machine or your LAN
               (<code>http://192.168.1.10:8000</code>) is allowed for that address only.
             </p>
             <div class="s-row">
               <span class="s-label">Tidal endpoint<small id="ce-tidal-note">tidal-web</small></span>
-              <input type="text" class="full" id="ce-tidal" placeholder="http://192.168.1.10:8000" style="flex:1 1 220px;min-width:180px;max-width:320px;">
-              <button class="act-btn secondary" type="button" id="ce-tidal-test" onclick="testCustomEndpoint('tidal')" style="padding:6px 14px;font-size:12px;">Test</button>
+              <input style="flex:1 1 220px;min-width:180px;max-width:320px;" type="text" class="full" id="ce-tidal" placeholder="http://192.168.1.10:8000">
+              <button class="act-btn secondary u-p-6-14 u-fs-12" type="button" id="ce-tidal-test" onclick="testCustomEndpoint('tidal')">Test</button>
             </div>
             <div class="ce-result" id="ce-tidal-result" role="status" aria-live="polite" hidden></div>
             <div class="s-row">
               <span class="s-label">Qobuz endpoint<small id="ce-qobuz-note">qobuz-web</small></span>
-              <input type="text" class="full" id="ce-qobuz" placeholder="http://127.0.0.1:8000" style="flex:1 1 220px;min-width:180px;max-width:320px;">
-              <button class="act-btn secondary" type="button" id="ce-qobuz-test" onclick="testCustomEndpoint('qobuz')" style="padding:6px 14px;font-size:12px;">Test</button>
+              <input style="flex:1 1 220px;min-width:180px;max-width:320px;" type="text" class="full" id="ce-qobuz" placeholder="http://127.0.0.1:8000">
+              <button class="act-btn secondary u-p-6-14 u-fs-12" type="button" id="ce-qobuz-test" onclick="testCustomEndpoint('qobuz')">Test</button>
             </div>
             <div class="ce-result" id="ce-qobuz-result" role="status" aria-live="polite" hidden></div>
             <div class="s-row">
               <span class="s-label">Qobuz API key<small>Sent as X-API-Key; leave empty to keep the saved one</small></span>
-              <input type="password" class="full" id="ce-qobuz-key" autocomplete="off" placeholder="Not set" style="flex:1 1 220px;min-width:180px;max-width:320px;">
+              <input style="flex:1 1 220px;min-width:180px;max-width:320px;" type="password" class="full" id="ce-qobuz-key" autocomplete="off" placeholder="Not set">
             </div>
-            <div class="s-row" style="align-items:stretch;gap:8px;">
-              <button class="act-btn" type="button" id="ce-save" onclick="saveCustomEndpoints()" style="padding:8px 16px;font-size:12px;">Save endpoints</button>
+            <div class="s-row u-items-stretch u-gap-8">
+              <button class="act-btn u-p-8-16 u-fs-12" type="button" id="ce-save" onclick="saveCustomEndpoints()">Save endpoints</button>
             </div>
           </div>
 
           <div class="s-section">
             <div class="s-title">Extension Settings</div>
-            <p style="font-size:12px;color:var(--muted);margin:-4px 0 12px;line-height:1.6;">
+            <p class="u-fs-12 u-c-muted u-m-n4-0-12 u-lh-1_6">
               Each extension's own options, as its manifest declares them — country,
               API URLs, tokens and so on. A saved value reaches the extension the next
               time it starts, which is the next download, search or link lookup.
               Secret values are never shown again once saved; leave the field empty
               to keep the current one.
             </p>
-            <div class="s-row" style="align-items:stretch;gap:8px;">
-              <button class="act-btn secondary" type="button" onclick="loadExtensionSettings()" style="padding:8px 16px;font-size:12px;">Refresh</button>
+            <div class="s-row u-items-stretch u-gap-8">
+              <button class="act-btn secondary u-p-8-16 u-fs-12" type="button" onclick="loadExtensionSettings()">Refresh</button>
             </div>
-            <div id="ext-settings-list" class="sort-list" style="margin-top:12px;">
-              <div class="s-label" style="font-size:11.5px;">Loading extension settings…</div>
+            <div id="ext-settings-list" class="sort-list u-mt-12">
+              <div class="s-label u-fs-11_5">Loading extension settings…</div>
             </div>
           </div>
 
           <div class="s-section">
             <div class="s-title">Extension Health</div>
-            <p style="font-size:12px;color:var(--muted);margin:-4px 0 12px;line-height:1.6;">
+            <p class="u-fs-12 u-c-muted u-m-n4-0-12 u-lh-1_6">
               How each provider has actually behaved on this machine — attempts,
               how often they worked, how long they took, and what the last failure
               said. Worst first. An extension listed as <em>never tried</em> is not
               broken; nothing has reached it yet, usually because another provider
               earlier in your service order keeps succeeding first.
             </p>
-            <div class="s-row" style="align-items:stretch;gap:8px;">
-              <button class="act-btn secondary" type="button" onclick="loadExtensionHealth()" style="padding:8px 16px;font-size:12px;">Refresh</button>
-              <button class="act-btn secondary" type="button" onclick="resetExtensionHealth()" style="padding:8px 16px;font-size:12px;" title="Clear the recorded counters — useful after fixing a broken extension, so old failures stop dominating its success rate.">Reset stats</button>
+            <div class="s-row u-items-stretch u-gap-8">
+              <button class="act-btn secondary u-p-8-16 u-fs-12" type="button" onclick="loadExtensionHealth()">Refresh</button>
+              <button class="act-btn secondary u-p-8-16 u-fs-12" type="button" onclick="resetExtensionHealth()" title="Clear the recorded counters — useful after fixing a broken extension, so old failures stop dominating its success rate.">Reset stats</button>
             </div>
-            <div id="ext-health-list" class="sort-list" style="margin-top:12px;">
-              <div class="s-label" style="font-size:11.5px;">Loading extension health…</div>
+            <div id="ext-health-list" class="sort-list u-mt-12">
+              <div class="s-label u-fs-11_5">Loading extension health…</div>
             </div>
           </div>
 
           <div class="s-section">
             <div class="s-title">Signed Sessions</div>
-            <p style="font-size:12px;color:var(--muted);margin:-4px 0 12px;line-height:1.6;">
+            <p class="u-fs-12 u-c-muted u-m-n4-0-12 u-lh-1_6">
               The verified sessions extensions use to talk to their gateway, and when
               each one expires. An expired session is renewed with a new verification
               the next time it is needed. <em>Orphaned</em> ones were left behind by an
               extension update and are never used again.
             </p>
-            <div class="s-row" style="align-items:stretch;gap:8px;">
-              <button class="act-btn secondary" type="button" onclick="loadSignedSessions()" style="padding:8px 16px;font-size:12px;">Refresh</button>
-              <button class="act-btn secondary" type="button" onclick="pruneSignedSessions()" style="padding:8px 16px;font-size:12px;" title="Delete session files no installed extension uses any more.">Remove orphaned</button>
+            <div class="s-row u-items-stretch u-gap-8">
+              <button class="act-btn secondary u-p-8-16 u-fs-12" type="button" onclick="loadSignedSessions()">Refresh</button>
+              <button class="act-btn secondary u-p-8-16 u-fs-12" type="button" onclick="pruneSignedSessions()" title="Delete session files no installed extension uses any more.">Remove orphaned</button>
             </div>
-            <div id="signed-sessions-list" class="sort-list" style="margin-top:12px;">
-              <div class="s-label" style="font-size:11.5px;">Loading signed sessions…</div>
+            <div id="signed-sessions-list" class="sort-list u-mt-12">
+              <div class="s-label u-fs-11_5">Loading signed sessions…</div>
             </div>
           </div>
 
           <div class="s-section">
             <div class="s-title">Extension Registries</div>
-            <p style="font-size:12px;color:var(--muted);margin:-4px 0 12px;line-height:1.6;">
+            <p class="u-fs-12 u-c-muted u-m-n4-0-12 u-lh-1_6">
               Registry URLs tell Mornye where to look for installable extensions. Sources
               can come from a terminal <code>export</code>, from a <code>.env</code> file, or
               be added here. You can remove any of them, including ones set outside the app.
             </p>
-            <div class="s-row" style="align-items:stretch;gap:8px;">
-              <input type="text" id="registry-url-input" class="full" placeholder="https://example.com/registry.json" style="flex:1;">
-              <button class="act-btn primary" type="button" onclick="addRegistryLink()" style="padding:8px 16px;font-size:12px;white-space:nowrap;">Add Link</button>
+            <div class="s-row u-items-stretch u-gap-8">
+              <input style="flex:1;" type="text" id="registry-url-input" class="full" placeholder="https://example.com/registry.json">
+              <button class="act-btn primary u-p-8-16 u-fs-12 u-ws-nowrap" type="button" onclick="addRegistryLink()">Add Link</button>
             </div>
-            <div id="registry-list" class="sort-list" style="margin-top:12px;">
-              <div class="s-label" style="font-size:11.5px;">Loading registries…</div>
+            <div id="registry-list" class="sort-list u-mt-12">
+              <div class="s-label u-fs-11_5">Loading registries…</div>
             </div>
           </div>
 
           <div class="s-section">
             <div class="s-title">Discover Registries</div>
-            <p style="font-size:12px;color:var(--muted);margin:-4px 0 12px;line-height:1.6;">
+            <p class="u-fs-12 u-c-muted u-m-n4-0-12 u-lh-1_6">
               A <em>directory</em> lists registries (not extensions directly) for you to review.
               Nothing here is bundled either — add a directory URL someone shared with you, then
               click Discover to probe each registry it lists for reachability before deciding
               whether to add it above.
             </p>
-            <div class="s-row" style="align-items:stretch;gap:8px;">
-              <input type="text" id="directory-url-input" class="full" placeholder="https://example.com/my-directory.json" style="flex:1;">
-              <button class="act-btn primary" type="button" onclick="addDirectoryLink()" style="padding:8px 16px;font-size:12px;white-space:nowrap;">Add Link</button>
+            <div class="s-row u-items-stretch u-gap-8">
+              <input style="flex:1;" type="text" id="directory-url-input" class="full" placeholder="https://example.com/my-directory.json">
+              <button class="act-btn primary u-p-8-16 u-fs-12 u-ws-nowrap" type="button" onclick="addDirectoryLink()">Add Link</button>
             </div>
-            <div id="directory-list" class="sort-list" style="margin-top:12px;">
-              <div class="s-label" style="font-size:11.5px;">Loading directories…</div>
+            <div id="directory-list" class="sort-list u-mt-12">
+              <div class="s-label u-fs-11_5">Loading directories…</div>
             </div>
-            <div class="s-row" style="margin-top:12px;">
-              <button class="act-btn secondary" type="button" onclick="runDiscovery()" id="btn-run-discovery" style="font-size:12px;">Discover Registries</button>
+            <div class="s-row u-mt-12">
+              <button class="act-btn secondary u-fs-12" type="button" onclick="runDiscovery()" id="btn-run-discovery">Discover Registries</button>
             </div>
-            <div id="discovery-results" class="sort-list" style="margin-top:12px;"></div>
+            <div id="discovery-results" class="sort-list u-mt-12"></div>
           </div>
 
           <div class="s-section">
             <div class="s-title">Trusted Signing Keys</div>
-            <p style="font-size:12px;color:var(--muted);margin:-4px 0 12px;line-height:1.6;">
+            <p class="u-fs-12 u-c-muted u-m-n4-0-12 u-lh-1_6">
               A registry's sha256 checksum proves a package wasn't corrupted in transit — it says
               nothing about who published it. Trust a maintainer's public key here to verify their
               signed entries too; unsigned entries are exactly as trusted as they are today.
             </p>
-            <div class="s-row" style="align-items:stretch;gap:8px;flex-wrap:wrap;">
-              <input type="text" id="trust-key-name-input" placeholder="Key name (e.g. a maintainer's handle)" style="flex:1;min-width:140px;">
-              <input type="text" id="trust-key-value-input" class="full" placeholder="Base64 Ed25519 public key" style="flex:2;min-width:200px;">
-              <button class="act-btn primary" type="button" onclick="addTrustedKeyLink()" style="padding:8px 16px;font-size:12px;white-space:nowrap;">Add Key</button>
+            <div class="s-row u-items-stretch u-gap-8 u-wrap-wrap">
+              <input style="flex:1;min-width:140px;" type="text" id="trust-key-name-input" placeholder="Key name (e.g. a maintainer's handle)">
+              <input style="flex:2;min-width:200px;" type="text" id="trust-key-value-input" class="full" placeholder="Base64 Ed25519 public key">
+              <button class="act-btn primary u-p-8-16 u-fs-12 u-ws-nowrap" type="button" onclick="addTrustedKeyLink()">Add Key</button>
             </div>
-            <div id="trust-key-list" class="sort-list" style="margin-top:12px;">
-              <div class="s-label" style="font-size:11.5px;">Loading trusted keys…</div>
+            <div id="trust-key-list" class="sort-list u-mt-12">
+              <div class="s-label u-fs-11_5">Loading trusted keys…</div>
             </div>
           </div>
         </div>
@@ -1522,26 +1522,26 @@
       <div class="api-modal-header">
         <div>
           <div id="aiconf-title" class="s-title">AI provider for translation</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:4px;">Requests go straight from this computer to the provider you choose, with your own key.</div>
+          <div class="u-fs-12 u-c-muted u-mt-4">Requests go straight from this computer to the provider you choose, with your own key.</div>
         </div>
         <button class="close-btn" type="button" onclick="closeAiConfig()">✕</button>
       </div>
       <div class="api-modal-body">
-        <label for="aiconf-provider" style="font-size:12px;color:var(--muted);">Provider</label>
-        <select id="aiconf-provider" onchange="updateAiConfigFields()" style="width:100%;margin:4px 0 10px;"></select>
-        <label for="aiconf-model" style="font-size:12px;color:var(--muted);">Model</label>
-        <input type="text" id="aiconf-model" style="width:100%;margin:4px 0 10px;">
+        <label class="u-fs-12 u-c-muted" for="aiconf-provider">Provider</label>
+        <select class="u-w-100pct u-m-4-0-10" id="aiconf-provider" onchange="updateAiConfigFields()"></select>
+        <label class="u-fs-12 u-c-muted" for="aiconf-model">Model</label>
+        <input class="u-w-100pct u-m-4-0-10" type="text" id="aiconf-model">
         <div id="aiconf-url-wrap" class="hidden">
-          <label for="aiconf-url" style="font-size:12px;color:var(--muted);">Server URL</label>
-          <input type="text" id="aiconf-url" placeholder="http://localhost:11434/v1" style="width:100%;margin:4px 0 10px;">
+          <label class="u-fs-12 u-c-muted" for="aiconf-url">Server URL</label>
+          <input class="u-w-100pct u-m-4-0-10" type="text" id="aiconf-url" placeholder="http://localhost:11434/v1">
         </div>
-        <label for="aiconf-key" style="font-size:12px;color:var(--muted);">API key</label>
-        <input type="password" id="aiconf-key" autocomplete="off" style="width:100%;margin:4px 0 4px;">
-        <div id="aiconf-key-note" style="font-size:11.5px;color:var(--muted);"></div>
+        <label class="u-fs-12 u-c-muted" for="aiconf-key">API key</label>
+        <input class="u-w-100pct u-m-4-0-4" type="password" id="aiconf-key" autocomplete="off">
+        <div class="u-fs-11_5 u-c-muted" id="aiconf-key-note"></div>
       </div>
       <div class="api-modal-actions">
         <span></span>
-        <div style="display:flex; gap:10px;">
+        <div class="u-gap-10" style="display:flex;">
           <button class="act-btn secondary" type="button" onclick="closeAiConfig()">Cancel</button>
           <button class="act-btn primary" type="button" onclick="saveAiConfig()">Save</button>
         </div>
@@ -1551,53 +1551,53 @@
 
   <div id="concerts-modal" class="api-modal hidden" role="dialog" aria-modal="true" aria-labelledby="concerts-title">
     <div class="api-modal-backdrop" onclick="closeConcerts()"></div>
-    <div class="api-modal-card" style="max-width:640px;">
+    <div class="api-modal-card u-maxw-640">
       <div class="api-modal-header">
         <div id="concerts-title" class="s-title">Concerts</div>
         <button class="close-btn" type="button" onclick="closeConcerts()">✕</button>
       </div>
-      <div class="api-modal-body" style="max-height:62vh;overflow-y:auto;">
-        <div id="concerts-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+      <div class="api-modal-body u-maxh-62vh u-oy-auto">
+        <div class="u-dir-column u-gap-8" id="concerts-list" style="display:flex;"></div>
       </div>
     </div>
   </div>
 
   <div id="tagedit-modal" class="api-modal hidden" role="dialog" aria-modal="true" aria-labelledby="tagedit-title">
     <div class="api-modal-backdrop" onclick="closeTagEditor()"></div>
-    <div class="api-modal-card" style="max-width:620px;">
+    <div class="api-modal-card u-maxw-620">
       <div class="api-modal-header">
         <div>
           <div id="tagedit-title" class="s-title">Edit tags</div>
-          <div id="tagedit-file" style="font-size:12px;color:var(--muted);margin-top:4px;word-break:break-all;"></div>
+          <div class="u-fs-12 u-c-muted u-mt-4 u-wb-break-all" id="tagedit-file"></div>
         </div>
         <button class="close-btn" type="button" onclick="closeTagEditor()">✕</button>
       </div>
-      <div class="api-modal-body" style="max-height:62vh;overflow-y:auto;">
-        <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:12px;">
-          <img id="tagedit-cover" alt="Cover" style="width:96px;height:96px;object-fit:cover;border-radius:8px;background:var(--surface3);">
-          <div style="display:flex;flex-direction:column;gap:6px;">
+      <div class="api-modal-body u-maxh-62vh u-oy-auto">
+        <div class="u-gap-14 u-items-flex-start u-mb-12" style="display:flex;">
+          <img class="u-w-96 u-h-96 u-fit-cover u-r-8 u-bg-surface3" id="tagedit-cover" alt="Cover">
+          <div class="u-dir-column u-gap-6" style="display:flex;">
             <button class="act-btn secondary" type="button" onclick="$('tagedit-cover-file').click()">Change cover…</button>
             <button class="act-btn secondary" type="button" onclick="removeTagEditorCover()">Remove cover</button>
             <input type="file" id="tagedit-cover-file" accept="image/*" class="hidden" onchange="pickTagEditorCover(this)">
           </div>
         </div>
-        <div id="tagedit-fields" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;"></div>
-        <label for="tagedit-lyrics" style="font-size:12px;color:var(--muted);display:block;margin-top:12px;">Lyrics</label>
-        <textarea id="tagedit-lyrics" rows="6" style="width:100%;margin-top:4px;font-family:var(--font-mono);font-size:12px;"></textarea>
-        <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;">
-          <select id="tagedit-lang" style="max-width:150px;" aria-label="Translate to"></select>
+        <div class="u-cols-1fr-1fr u-gap-10" id="tagedit-fields" style="display:grid;"></div>
+        <label class="u-fs-12 u-c-muted u-mt-12" for="tagedit-lyrics" style="display:block;">Lyrics</label>
+        <textarea class="u-w-100pct u-mt-4 u-ff-font-mono u-fs-12" id="tagedit-lyrics" rows="6"></textarea>
+        <div class="u-gap-8 u-items-center u-mt-8 u-wrap-wrap" style="display:flex;">
+          <select class="u-maxw-150" id="tagedit-lang" aria-label="Translate to"></select>
           <button class="act-btn secondary" type="button" onclick="translateTagEditorLyrics()" id="tagedit-translate-btn">Translate</button>
           <button class="act-btn secondary" type="button" onclick="openAiConfig()" title="Choose the AI provider and enter your API key">AI settings…</button>
         </div>
-        <div id="tagedit-translation-wrap" class="hidden" style="margin-top:8px;">
-          <label for="tagedit-translation" style="font-size:12px;color:var(--muted);">Translation</label>
-          <textarea id="tagedit-translation" rows="6" style="width:100%;margin-top:4px;font-family:var(--font-mono);font-size:12px;"></textarea>
-          <button class="act-btn secondary" type="button" onclick="saveTagEditorTranslation()" style="margin-top:6px;">Save as .lrc next to the file</button>
+        <div id="tagedit-translation-wrap" class="hidden u-mt-8">
+          <label class="u-fs-12 u-c-muted" for="tagedit-translation">Translation</label>
+          <textarea class="u-w-100pct u-mt-4 u-ff-font-mono u-fs-12" id="tagedit-translation" rows="6"></textarea>
+          <button class="act-btn secondary u-mt-6" type="button" onclick="saveTagEditorTranslation()">Save as .lrc next to the file</button>
         </div>
       </div>
       <div class="api-modal-actions">
-        <span style="font-size:11.5px;color:var(--muted);">Empty a field to remove that tag.</span>
-        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <span class="u-fs-11_5 u-c-muted">Empty a field to remove that tag.</span>
+        <div class="u-gap-10 u-wrap-wrap" style="display:flex;">
           <button class="act-btn secondary" type="button" onclick="closeTagEditor()">Cancel</button>
           <button class="act-btn primary" type="button" onclick="saveTagEditor()" id="tagedit-save-btn">Save</button>
         </div>
@@ -1607,19 +1607,19 @@
 
   <div id="analyze-modal" class="api-modal hidden" role="dialog" aria-modal="true" aria-labelledby="analyze-title">
     <div class="api-modal-backdrop" onclick="closeAnalyze()"></div>
-    <div class="api-modal-card" style="max-width:780px;">
+    <div class="api-modal-card u-maxw-780">
       <div class="api-modal-header">
         <div>
           <div id="analyze-title" class="s-title">Audio analysis</div>
-          <div id="analyze-file" style="font-size:12px;color:var(--muted);margin-top:4px;word-break:break-all;"></div>
+          <div class="u-fs-12 u-c-muted u-mt-4 u-wb-break-all" id="analyze-file"></div>
         </div>
         <button class="close-btn" type="button" onclick="closeAnalyze()">✕</button>
       </div>
       <div class="api-modal-body">
-        <div id="analyze-info" style="display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12px;margin-bottom:10px;"></div>
-        <div id="analyze-status" style="font-size:12.5px;color:var(--muted);">Drawing the spectrogram…</div>
-        <img id="analyze-img" alt="Spectrogram" class="hidden" style="width:100%;border-radius:8px;background:#000;">
-        <div style="font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.5;">
+        <div class="u-wrap-wrap u-gap-6-18 u-fs-12 u-mb-10" id="analyze-info" style="display:flex;"></div>
+        <div class="u-fs-12_5 u-c-muted" id="analyze-status">Drawing the spectrogram…</div>
+        <img id="analyze-img" alt="Spectrogram" class="hidden u-w-100pct u-r-8 u-bg-000">
+        <div class="u-fs-11_5 u-c-muted u-mt-8 u-lh-1_5">
           A real lossless file has content up to about half its sample rate. A hard cut-off near 16–20 kHz means it was made from a lossy source.
         </div>
       </div>
@@ -1628,25 +1628,25 @@
 
   <div id="reorg-modal" class="api-modal hidden" role="dialog" aria-modal="true" aria-labelledby="reorg-title">
     <div class="api-modal-backdrop" onclick="closeReorganize()"></div>
-    <div class="api-modal-card" style="max-width:700px;">
+    <div class="api-modal-card u-maxw-700">
       <div class="api-modal-header">
         <div>
           <div id="reorg-title" class="s-title">Organize library</div>
-          <div id="reorg-root" style="font-size:12px;color:var(--muted);margin-top:4px;word-break:break-all;"></div>
+          <div class="u-fs-12 u-c-muted u-mt-4 u-wb-break-all" id="reorg-root"></div>
         </div>
         <button class="close-btn" type="button" onclick="closeReorganize()">✕</button>
       </div>
       <div class="api-modal-body">
-        <label for="reorg-template" style="font-size:12px;color:var(--muted);">Folder template</label>
-        <input type="text" id="reorg-template" style="width:100%;margin:4px 0 6px;font-family:var(--font-mono);" oninput="invalidateReorganizePlan()">
-        <div id="reorg-hint" style="font-size:11.5px;color:var(--muted);margin-bottom:10px;"></div>
+        <label class="u-fs-12 u-c-muted" for="reorg-template">Folder template</label>
+        <input class="u-w-100pct u-m-4-0-6 u-ff-font-mono" type="text" id="reorg-template" oninput="invalidateReorganizePlan()">
+        <div class="u-fs-11_5 u-c-muted u-mb-10" id="reorg-hint"></div>
         <button class="act-btn secondary" type="button" onclick="previewReorganize()" id="reorg-preview-btn">Preview</button>
-        <div id="reorg-summary" style="font-size:12.5px;margin:10px 0 6px;"></div>
-        <div id="reorg-list" style="max-height:260px;overflow-y:auto;font-family:var(--font-mono);font-size:11px;line-height:1.6;"></div>
+        <div class="u-fs-12_5 u-m-10-0-6" id="reorg-summary"></div>
+        <div class="u-maxh-260 u-oy-auto u-ff-font-mono u-fs-11 u-lh-1_6" id="reorg-list"></div>
       </div>
       <div class="api-modal-actions">
-        <span style="font-size:11.5px;color:var(--muted);">Nothing is overwritten. Lyrics files (.lrc) move with their track.</span>
-        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <span class="u-fs-11_5 u-c-muted">Nothing is overwritten. Lyrics files (.lrc) move with their track.</span>
+        <div class="u-gap-10 u-wrap-wrap" style="display:flex;">
           <button class="act-btn secondary" type="button" onclick="closeReorganize()">Close</button>
           <button class="act-btn primary" type="button" onclick="applyReorganize()" id="reorg-apply-btn" disabled>Move files</button>
         </div>
@@ -1660,40 +1660,40 @@
       <div class="api-modal-header">
         <div>
           <div id="convert-title" class="s-title">Convert audio</div>
-          <div id="convert-desc" style="font-size:12px;color:var(--muted);margin-top:4px;"></div>
+          <div class="u-fs-12 u-c-muted u-mt-4" id="convert-desc"></div>
         </div>
         <button class="close-btn" type="button" onclick="closeConvertDialog()">✕</button>
       </div>
       <div class="api-modal-body">
-        <label for="convert-format" style="font-size:12px;color:var(--muted);">Format</label>
-        <select id="convert-format" onchange="updateConvertOptions()" style="width:100%;margin:4px 0 12px;"></select>
-        <div id="convert-lossy-opts" style="margin-bottom:12px;">
-          <label for="convert-bitrate" style="font-size:12px;color:var(--muted);">Bitrate</label>
-          <select id="convert-bitrate" style="width:100%;margin-top:4px;"></select>
+        <label class="u-fs-12 u-c-muted" for="convert-format">Format</label>
+        <select class="u-w-100pct u-m-4-0-12" id="convert-format" onchange="updateConvertOptions()"></select>
+        <div class="u-mb-12" id="convert-lossy-opts">
+          <label class="u-fs-12 u-c-muted" for="convert-bitrate">Bitrate</label>
+          <select class="u-w-100pct u-mt-4" id="convert-bitrate"></select>
         </div>
-        <div id="convert-lossless-opts" class="hidden" style="display:flex;gap:10px;margin-bottom:12px;">
-          <div style="flex:1;">
-            <label for="convert-depth" style="font-size:12px;color:var(--muted);">Bit depth (max)</label>
-            <select id="convert-depth" style="width:100%;margin-top:4px;">
+        <div id="convert-lossless-opts" class="hidden u-gap-10 u-mb-12" style="display:flex;">
+          <div class="u-flex-1">
+            <label class="u-fs-12 u-c-muted" for="convert-depth">Bit depth (max)</label>
+            <select class="u-w-100pct u-mt-4" id="convert-depth">
               <option value="0">Original</option><option value="24">24-bit</option><option value="16">16-bit</option>
             </select>
           </div>
-          <div style="flex:1;">
-            <label for="convert-rate" style="font-size:12px;color:var(--muted);">Sample rate (max)</label>
-            <select id="convert-rate" style="width:100%;margin-top:4px;">
+          <div class="u-flex-1">
+            <label class="u-fs-12 u-c-muted" for="convert-rate">Sample rate (max)</label>
+            <select class="u-w-100pct u-mt-4" id="convert-rate">
               <option value="0">Original</option><option value="192000">192 kHz</option><option value="96000">96 kHz</option>
               <option value="48000">48 kHz</option><option value="44100">44.1 kHz</option>
             </select>
           </div>
         </div>
-        <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;">
+        <label class="u-gap-8 u-items-center u-fs-12_5" style="display:flex;">
           <input type="checkbox" id="convert-keep"> Keep the original files
         </label>
-        <div id="convert-note" style="font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.5;"></div>
+        <div class="u-fs-11_5 u-c-muted u-mt-10 u-lh-1_5" id="convert-note"></div>
       </div>
       <div class="api-modal-actions">
         <span></span>
-        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <div class="u-gap-10 u-wrap-wrap" style="display:flex;">
           <button class="act-btn secondary" type="button" onclick="closeConvertDialog()">Cancel</button>
           <button class="act-btn primary" type="button" onclick="startConvert()" id="convert-start-btn">Convert</button>
         </div>
@@ -1707,21 +1707,21 @@
       <div class="api-modal-header">
         <div>
           <div id="api-config-title" class="s-title">Configure API</div>
-          <div id="api-config-desc" style="font-size:12px;color:var(--muted);margin-top:4px;">Enter the URL and verify the endpoint.</div>
+          <div class="u-fs-12 u-c-muted u-mt-4" id="api-config-desc">Enter the URL and verify the endpoint.</div>
         </div>
         <button class="close-btn" type="button" onclick="closeApiConfigPopup()">✕</button>
       </div>
       <div class="api-modal-body">
         <input type="text" id="api-config-value" placeholder="https://...">
-        <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap;">
+        <div class="u-gap-8 u-items-center u-mt-12 u-wrap-wrap" style="display:flex;">
           <button class="act-btn secondary" type="button" onclick="checkApiConfig()" id="api-config-check-btn">Check API</button>
           <button class="act-btn secondary" type="button" onclick="clearApiConfigValue()" id="api-config-clear-btn">Clear</button>
-          <span id="api-config-status" style="font-size:12px;color:var(--muted);">Enter a URL and press Check.</span>
+          <span class="u-fs-12" id="api-config-status" style="color:var(--muted);">Enter a URL and press Check.</span>
         </div>
       </div>
       <div class="api-modal-actions">
         <a id="api-config-help" class="api-config-help" href="#" target="_blank" rel="noreferrer">How to create your own instance</a>
-        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <div class="u-gap-10 u-wrap-wrap" style="display:flex;">
           <button class="act-btn secondary" type="button" onclick="closeApiConfigPopup()">Cancel</button>
           <button class="act-btn primary" type="button" onclick="saveApiConfig()" id="api-config-save-btn">Save</button>
         </div>
@@ -1740,17 +1740,17 @@
       <div class="api-modal-header">
         <div>
           <div class="s-title">Sign in</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:4px;">This Mornye instance requires an account.</div>
+          <div class="u-fs-12 u-c-muted u-mt-4">This Mornye instance requires an account.</div>
         </div>
       </div>
       <div class="api-modal-body">
         <input type="text" id="login-username" placeholder="Username" autocomplete="username">
-        <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" style="margin-top:8px;" onkeydown="if(event.key==='Enter') doLogin();">
-        <div id="login-error" style="font-size:12px;color:var(--red);margin-top:8px;min-height:16px;"></div>
+        <input class="u-mt-8" type="password" id="login-password" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter') doLogin();">
+        <div class="u-fs-12 u-c-red u-mt-8 u-minh-16" id="login-error"></div>
       </div>
       <div class="api-modal-actions">
         <div></div>
-        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <div class="u-gap-10 u-wrap-wrap" style="display:flex;">
           <button class="act-btn primary" type="button" onclick="doLogin()" id="login-submit-btn">Sign in</button>
         </div>
       </div>
@@ -1798,7 +1798,7 @@
 
 <div id="player-bar" class="hidden" role="region" aria-label="Player">
   <audio id="player-audio" preload="metadata"></audio>
-  <div class="pl-info" onclick="openNowPlaying()" style="cursor:pointer;" title="Open the full player">
+  <div class="pl-info u-cursor-pointer" onclick="openNowPlaying()" title="Open the full player">
     <div id="pl-title" class="pl-title">—</div>
     <div id="pl-quality" class="pl-quality" title="Played exactly as stored. Formats the window cannot decode are played as a lossless FLAC copy. The operating system may still resample to your output device's rate."></div>
   </div>
