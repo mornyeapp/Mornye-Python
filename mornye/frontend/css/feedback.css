@@ -1,0 +1,132 @@
+/* frontend/css/feedback.css — toasts, modals, empty and error states,
+   skeletons and reduced motion in the console look (redesign voce 21).
+   Shared by every view; mirrors the notice, fault, blank, dialog and skel
+   components of components.css (see docs/styleguide.html) on the class
+   names app.js and toast-system.js already write.
+
+   Over styles.css until voce 22. Semantic tokens only. */
+
+/* ── Toasts → notices: a ruled strip with a state rule on the left ───── */
+.toast {
+  border: 1px solid var(--rule-strong);
+  border-left-width: 2px;
+  border-radius: var(--radius-1);
+  background: var(--raised);
+  color: var(--text);
+  box-shadow: var(--elevation-overlay);
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  font-family: var(--font);
+}
+.toast.success { border-left-color: var(--ok); }
+.toast.success .toast-icon { color: var(--ok); }
+.toast.error { border-left-color: var(--error); }
+.toast.error .toast-icon { color: var(--error); }
+.toast.warning, .toast.loading { border-left-color: var(--signal-strong); }
+.toast.warning .toast-icon, .toast.loading .toast-icon { color: var(--signal-text); }
+.toast.info { border-left-color: var(--rule-strong); }
+.toast.info .toast-icon { color: var(--text-2); }
+.toast-title { font-size: var(--text-sm); font-weight: var(--weight-medium); }
+.toast-message { color: var(--text-2); font-size: var(--text-xs); }
+.toast-close { border-radius: var(--radius-1); color: var(--text-muted); }
+.toast-close:hover { background: var(--selected); color: var(--text); }
+.toast-progress { height: 2px; border-radius: 0; background: var(--signal-strong); }
+
+/* ── Modals → dialogs: a ruled panel over a dimmed ground ────────────── */
+.api-modal-backdrop {
+  background: var(--ground);
+  opacity: .72;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+.api-modal-card {
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-1);
+  background: var(--surface);
+  box-shadow: var(--elevation-overlay);
+}
+.api-modal-header {
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font);
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+}
+.api-modal-header .close-btn { border-radius: var(--radius-1); background: transparent; color: var(--text-muted); }
+.api-modal-header .close-btn:hover { background: var(--raised); color: var(--text); }
+.api-modal-body { color: var(--text-2); font-size: var(--text-sm); }
+.api-modal-body input:where(:not([type="checkbox"], [type="radio"], [type="range"])),
+.api-modal-body select,
+.api-modal-body textarea {
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background-color: var(--raised);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+}
+.api-modal-actions { border-top: 1px solid var(--rule); }
+
+/* ── Empty state → blank: left-aligned, no dashed frame ──────────────── */
+.empty-state {
+  align-items: flex-start;
+  text-align: left;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.empty-state .es-icon {
+  border-radius: var(--radius-1);
+  background: var(--raised);
+  color: var(--text-muted);
+}
+.empty-state .es-title {
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+.empty-state .es-hint { color: var(--text-2); font-size: var(--text-sm); }
+.page-list > .empty-state, .page-list > .error-state { border: 0; background: transparent; }
+
+/* ── Error state → fault: the one place an error is shown ───────────── */
+.error-state {
+  border: 1px solid var(--rule);
+  border-left: 2px solid var(--error);
+  border-radius: var(--radius-1);
+  background: var(--surface);
+  box-shadow: none;
+}
+.error-state .es-icon,
+.error-state.setup .es-icon,
+.error-state.network .es-icon {
+  border-radius: var(--radius-1);
+  background: transparent;
+  color: var(--error);
+}
+.error-state .es-title {
+  color: var(--error);
+  font-family: var(--font);
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+}
+.error-state .es-body { color: var(--text-2); font-size: var(--text-sm); }
+.error-state .es-detail { color: var(--text-muted); font-size: var(--text-xs); }
+.error-state .es-detail code { border-radius: var(--radius-1); background: var(--raised); }
+
+/* ── Skeletons stand still: motion is for state changes only ────────── */
+.skeleton,
+.skeleton-text {
+  border-radius: var(--radius-1);
+  background: var(--raised);
+  animation: none;
+}
+.skeleton::after, .skeleton-text::after { display: none; }
+
+/* ── Reduced motion: no transitions or animations at all ────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

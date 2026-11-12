@@ -3781,7 +3781,9 @@ window.app_handle_provider_search_error = function(message) {
   $('track-rows').innerHTML = errorStateHTML(info, info.kind === 'setup' ? '' : 'onFetch()');
   $('track-controls').classList.add('hidden');
   $('track-table-wrap').classList.remove('hidden');
-  setStatus(info.title + '.', false);
+  // One error, one place (redesign §8): the card says it, the status line
+  // under the search bar no longer repeats its title.
+  setStatus('', false);
   // Quiet: into the Logs panel, without a second toast for the same failure.
   logMessage(`Provider search error: ${message}`, 'error-quiet');
   $('urlInput').disabled = false;
@@ -4526,7 +4528,9 @@ async function addToStagedQueue() {
     const res = await window.pywebview.api.add_to_staged_queue(indices, info);
     if (res?.ok) {
       showToast(`Added "${res.item.title}" to the queue (${res.item.track_count} track${res.item.track_count === 1 ? '' : 's'}).`);
-      logMessage(`Queued for later: ${res.item.title}`, 'ok');
+      // Into the Logs panel only: the toast above already says it, and an
+      // 'ok' line would raise a second one with the same news.
+      logMessage(`Queued for later: ${res.item.title}`);
     } else {
       showToast(res?.error || 'Could not add to the queue.', 'error');
     }
