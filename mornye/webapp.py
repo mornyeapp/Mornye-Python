@@ -1163,7 +1163,9 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
         # Containment first, existence second: a path outside the approved
         # roots is never probed on disk, so it cannot be told apart from a
         # missing one. Only `full`, after this check, is ever used.
-        if not any(full == r or full.startswith(r.rstrip(os.sep) + os.sep) for r in roots):
+        if not any(
+            full == r or full.startswith(r.rstrip(os.sep) + os.sep) for r in roots
+        ):
             return PlainTextResponse("Not found", status_code=404)
         if not os.path.isfile(full):
             return PlainTextResponse("Not found", status_code=404)
