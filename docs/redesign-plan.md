@@ -162,7 +162,12 @@ regola (una parola = un elemento).
      nota invece del logo verde di Spotify (sbagliato su ogni altro feed).
      Verificata con sezioni d'esempio (il feed di Apple non rispondeva in
      quel momento; quello vero era stato provato in J3), scuro/chiaro/375px.
-   **Prossimo:** voce 18, Stats; aperta la riorganizzazione di Settings.
+   - **voce 18, Stats** (commit sotto): `css/views/stats.css`, totali come
+     striscia di letture, classifiche come meter a 20 tacche; `statsBars()`
+     passa `--v` arrotondato a tacche intere. Verificata con dati d'esempio
+     (la sandbox non ha cronologia), scuro/chiaro/375px.
+   **Prossimo:** voce 19, Player e Now Playing; aperta la riorganizzazione
+   di Settings.
 0. **Fase 2 completa** — sul branch **`redesign`** (creato da `2.0.6` dopo
    i mock, come da §5: dalla Fase 2 in poi un branch dedicato e un rilascio
    unico). Commit locali, non pushati.
