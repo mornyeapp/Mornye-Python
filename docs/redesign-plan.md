@@ -144,8 +144,14 @@ regola (una parola = un elemento).
      destinations" (scheda Download) ha un'impaginazione propria stretta
      (riquadro SMB3) da rivedere lì. Accento: il selettore dice ancora
      "Teal" (voce 28).
-   **Prossimo:** voce 15, Local (Fix Local Files); oppure la
-   riorganizzazione di Settings se la si vuole prima.
+   - **voce 15, Fix Local Files** (commit sotto): `css/views/local.css`,
+     riquadro di trascinamento a filetto tratteggiato (segnale durante il
+     trascinamento), campi da 32px, footer a filetto; "Scan Library"
+     diventa secondario. Verificata in scuro/chiaro/375px; i risultati di
+     una scansione (righe `track-row.local-row`, già coperte da `home.css`)
+     non provati: servono file audio veri.
+   **Prossimo:** voce 16, Following; aperta la riorganizzazione di
+   Settings.
 0. **Fase 2 completa** — sul branch **`redesign`** (creato da `2.0.6` dopo
    i mock, come da §5: dalla Fase 2 in poi un branch dedicato e un rilascio
    unico). Commit locali, non pushati.
