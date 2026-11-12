@@ -6508,11 +6508,16 @@ function renderHomeSections(sections) {
       const card = document.createElement('div');
       card.className = 'explore-card';
       
-      const imgUrl = item.cover_url || 'assets/icons/spotify.svg';
+      // No cover, or one that fails to load: a neutral square (css/views/
+      // explore.css), not another service's logo — the feed may be Apple's
+      // or a Jellyfin server's.
+      const blank = '<div class="explore-cover-blank" aria-hidden="true">♪</div>';
       const subText = item.description || item.artists || item.type;
 
       card.innerHTML = `
-        <img src="${escHtml(imgUrl)}" loading="lazy" onerror="this.src='assets/icons/spotify.svg'">
+        ${item.cover_url
+          ? `<img src="${escHtml(item.cover_url)}" alt="" loading="lazy" onerror="this.outerHTML='${blank.replace(/"/g, '&quot;')}'">`
+          : blank}
         <div class="explore-card-title" title="${escHtml(item.name)}">${escHtml(item.name)}</div>
         <div class="explore-card-subtitle" title="${escHtml(subText)}">${escHtml(subText)}</div>
       `;
