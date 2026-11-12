@@ -15,6 +15,7 @@ from urllib.parse import quote, unquote, urljoin, urlsplit
 
 import httpx
 
+from . import safe_xml
 from .network_destinations import DestinationError, WebDAVProfile
 
 logger = logging.getLogger(__name__)
@@ -152,7 +153,7 @@ class WebDAVBackend:
             ),
         )
         try:
-            root = ET.fromstring(response.content)
+            root = safe_xml.fromstring(response.content)
         except ET.ParseError as exc:
             raise DestinationError(
                 "The WebDAV server returned an invalid listing."

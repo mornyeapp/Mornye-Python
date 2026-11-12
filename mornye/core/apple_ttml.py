@@ -29,6 +29,8 @@ import re
 from dataclasses import dataclass, field
 from xml.etree import ElementTree
 
+from . import safe_xml
+
 logger = logging.getLogger(__name__)
 
 #: ttm:role on a span whose contents are background/backing vocals. Apple
@@ -224,7 +226,7 @@ def parse_ttml(xml_text: str) -> TtmlLyrics:
         return result
 
     try:
-        root = ElementTree.fromstring(xml_text)
+        root = safe_xml.fromstring(xml_text)
     except ElementTree.ParseError as exc:
         logger.debug("[apple_ttml] not parseable as XML: %s", exc)
         return result
