@@ -1,0 +1,65 @@
+/* frontend/css/views/stats.css — Stats in the console look (redesign voce 18):
+   the totals as readouts and every ranking as a segmented meter, the second
+   signature element doing what it is for.
+
+   Over styles.css until voce 22. Semantic tokens only; ids and handlers
+   untouched. */
+
+.stats-intro { color: var(--text-muted); font-size: var(--text-sm); }
+.stats-smb-status { color: var(--text-2); font-size: var(--text-sm); }
+.stats-smb-status.error { color: var(--error); }
+.stats-source-note { color: var(--text-muted); font-size: var(--text-xs); }
+
+#view-stats select {
+  height: var(--row);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background-color: var(--raised);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+}
+#view-stats select:focus { border-color: var(--signal-strong); outline: none; }
+
+/* Totals: a row of readouts divided by rules, label under a big value. */
+.stat-tiles { gap: 0; border: 1px solid var(--rule); border-radius: var(--radius-1); }
+.stat-tile {
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  border-right: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.stat-tile:last-child { border-right: 0; }
+.stat-tile-value {
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+.stat-tile-label {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+.stat-tile-hint { color: var(--text-muted); font-size: var(--text-xs); }
+
+/* Rankings: 20 LED steps; app.js gives the lit share in whole steps (--v). */
+.stat-bar-row { gap: var(--space-3); min-height: var(--row-head); }
+.stat-bar-label { color: var(--text); font-size: var(--text-sm); }
+.stat-bar-value { color: var(--text-2); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.stat-bar-track {
+  height: 10px;
+  border-radius: 0;
+  background: linear-gradient(
+    90deg,
+    var(--signal-strong) 0 calc(var(--v, 0) * 100%),
+    var(--rule-strong) calc(var(--v, 0) * 100%) 100%
+  );
+  -webkit-mask-image: repeating-linear-gradient(90deg, black 0 calc(5% - 2px), transparent calc(5% - 2px) 5%);
+          mask-image: repeating-linear-gradient(90deg, black 0 calc(5% - 2px), transparent calc(5% - 2px) 5%);
+}

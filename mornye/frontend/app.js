@@ -9559,7 +9559,7 @@ function statsBars(rows, formatValue) {
   return rows.map((row) => `
     <div class="stat-bar-row">
       <div class="stat-bar-label" title="${regEscapeHtml(row.label)}">${regEscapeHtml(row.label)}</div>
-      <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${Math.max(2, (row.value / peak) * 100)}%"></div></div>
+      <div class="stat-bar-track" style="--v:${Math.max(1, Math.round((row.value / peak) * 20)) / 20}"></div>
       <div class="stat-bar-value">${regEscapeHtml((formatValue || String)(row.value))}</div>
     </div>`).join('');
 }
