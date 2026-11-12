@@ -7949,7 +7949,12 @@ function parseLyrics(text) {
         words.push(prev);
         run = [];
       }
-      if (prev && prev.e == null) prev.e = run.length ? run[0] : prev.s + 0.6;
+      if (prev && prev.e == null) {
+        if (run.length) prev.e = run[0];
+        // No closing stamp: a guess, which fillNowPlaying() refines once
+        // it knows when the next line starts.
+        else { prev.e = prev.s + 0.6; prev.open = true; }
+      }
       if (!words.length) words = null;
     }
     const lineText = words ? words.map(w => w.text).join('').trim() : stripWordTags(body);
@@ -7970,6 +7975,32 @@ function parseLyrics(text) {
   }
   while (plain.length && !plain[0].text) plain.shift();
   return { lines: plain, synced: false, wordSynced: false };
+}
+
+// A timed piece can hold several words: a provider that times phrases, or a
+// line with a single stamp (`[00:51.00]<00:51.00>I don't know how … stay`).
+// The lit copy of a piece is laid over it on one row and cannot wrap with
+// it, so a phrase longer than the row ran off the right edge ("…you to trea")
+// while the dim copy underneath wrapped and stayed grey. Each word becomes a
+// piece of its own, the phrase's time shared out by length, so the lit copy
+// wraps word by word with the text it covers.
+function npSplitTimedPhrases(words) {
+  const out = [];
+  for (const w of words) {
+    const tokens = w.text.match(/\S+\s*/g);
+    if (!tokens || tokens.length < 2) { out.push(w); continue; }
+    const lead = w.text.match(/^\s*/)[0];
+    const total = tokens.reduce((n, t) => n + t.trim().length, 0) || 1;
+    const span = Math.max(0, (w.e ?? w.s) - w.s);
+    let at = w.s;
+    tokens.forEach((t, k) => {
+      const share = span * t.trim().length / total;
+      const last = k === tokens.length - 1;
+      out.push({ s: at, e: last ? w.e : at + share, text: (k === 0 ? lead : '') + t });
+      at += share;
+    });
+  }
+  return out;
 }
 
 function npTechLabel(res) {
@@ -8038,6 +8069,18 @@ function fillNowPlaying(item, res) {
     // A line ends when its last word does, else when the next one starts.
     npLines.forEach((l, i) => {
       const next = npLines[i + 1];
+      if (l.words) {
+        // A last piece with no end of its own — one stamp for a whole line,
+        // say — lasts about a third of a second a word, never past the
+        // next line, before it is shared out word by word.
+        const last = l.words[l.words.length - 1];
+        if (last.open) {
+          const count = (last.text.match(/\S+/g) || []).length;
+          const until = next && next.t != null && next.t > last.s ? next.t : Infinity;
+          last.e = Math.min(until, last.s + Math.max(0.6, 0.32 * count));
+        }
+        l.words = npSplitTimedPhrases(l.words);
+      }
       l.end = l.words ? l.words[l.words.length - 1].e : (next && next.t != null ? next.t : (l.t ?? 0) + 4);
       if (l.words && next && next.t != null && l.end > next.t + 8) l.end = next.t;
     });
@@ -8047,8 +8090,12 @@ function fillNowPlaying(item, res) {
       }
       const body = l.words
         ? l.words.map(w => {
-            const core = w.text.replace(/\s+$/, '');
-            return `<span class="w" data-s="${w.s}" data-e="${w.e}" data-t="${escHtml(core)}">${escHtml(core)}</span>${escHtml(w.text.slice(core.length))}`;
+            // Spaces stay outside the word: inside, they would be part of
+            // what the lit copy draws and of the box the line wraps around.
+            const lead = w.text.match(/^\s*/)[0];
+            const core = w.text.trim();
+            const tail = w.text.slice(lead.length + core.length);
+            return `${escHtml(lead)}<span class="w" data-s="${w.s}" data-e="${w.e}" data-t="${escHtml(core)}">${escHtml(core)}</span>${escHtml(tail)}`;
           }).join('')
         : escHtml(l.text);
       const extra = (l.rom ? `<div class="np-sub">${escHtml(l.rom)}</div>` : '')
