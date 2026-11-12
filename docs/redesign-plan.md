@@ -108,7 +108,21 @@ regola (una parola = un elemento).
      display di qualità sull'album (`24 / 96 · FLAC`): l'interfaccia non lo
      conosce prima del download; da decidere se mostrarlo dalla qualità
      richiesta o dopo il primo brano.
-   **Prossimo:** voce 12, Coda + pannello falliti.
+   - `68723c3` — **voce 12, Coda.** `css/views/queue.css`: pannello
+     "Downloading now" piatto, quattro metriche come letture, contatori come
+     filtri-lettura, elementi in download su filetti con lo stato come parola
+     nel suo tono e meter a 20 tacche scritto da `app.js` (tacche intere); la
+     riga sotto un elemento fermo non ripete più lo stato. Falliti in un solo
+     pannello con filetto rosso a sinistra. `css/legacy.css` ora copre anche
+     le parti condivise con History/Following/Settings (`s-header`,
+     `seg-tab`, `tb-field`, `page-row`, `row-btn`, `status-pill`) e risponde
+     a `.s-actions .act-btn`. Un solo primario: "Start" della barra e "Retry
+     all" dei falliti diventano secondari. Verificato con un job vero e con
+     elementi d'esempio in memoria per gli stati in corso/falliti (la
+     sandbox non ha provider che scaricano).
+     **Note per la voce 21:** aggiungere alla coda mostra due toast con lo
+     stesso messaggio.
+   **Prossimo:** voce 13, History.
 0. **Fase 2 completa** — sul branch **`redesign`** (creato da `2.0.6` dopo
    i mock, come da §5: dalla Fase 2 in poi un branch dedicato e un rilascio
    unico). Commit locali, non pushati.
