@@ -155,8 +155,14 @@ regola (una parola = un elemento).
      settimanali su filetti; "Follow" diventa secondario. Righe degli
      artisti seguiti e uscite della settimana non provate (servono
      iscrizioni vere).
-   **Prossimo:** voce 17, Explore (con il feed delle estensioni, J3);
-   aperta la riorganizzazione di Settings.
+   - **voce 17, Explore** (commit sotto): `css/views/explore.css`, saluto e
+     selettore del feed sulla scala, titoli di sezione in maiuscoletto su
+     filetto, griglia di copertine quadrate con contorno segnale al
+     passaggio. Copertina mancante o non caricata: riquadro neutro con una
+     nota invece del logo verde di Spotify (sbagliato su ogni altro feed).
+     Verificata con sezioni d'esempio (il feed di Apple non rispondeva in
+     quel momento; quello vero era stato provato in J3), scuro/chiaro/375px.
+   **Prossimo:** voce 18, Stats; aperta la riorganizzazione di Settings.
 0. **Fase 2 completa** — sul branch **`redesign`** (creato da `2.0.6` dopo
    i mock, come da §5: dalla Fase 2 in poi un branch dedicato e un rilascio
    unico). Commit locali, non pushati.
