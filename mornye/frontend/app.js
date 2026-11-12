@@ -9113,6 +9113,39 @@ function extSettingFieldHtml(ext, entry, cardIdx) {
   </div>`;
 }
 
+// "Allow local network access" (extensions/local_network.py). Extensions
+// are kept off private addresses; this lets one reach the server typed into
+// its own settings — a Jellyfin on 192.168.x.x — and nothing else on the LAN.
+// Shown only where a text setting holds a URL: elsewhere it would open nothing.
+function extLocalNetworkRowHtml(ext) {
+  const hosts = ext.local_network_hosts || [];
+  if (!hosts.length && !ext.local_network) return '';
+  const what = hosts.length
+    ? `Lets it reach ${hosts.map(regEscapeHtml).join(', ')} even on your home network. Nothing else on the local network is opened.`
+    : 'No server address is saved yet.';
+  return `<div class="s-row">
+    <span class="s-label">Allow local network access<small>${what}</small></span>
+    <label class="toggle"><input type="checkbox" ${ext.local_network ? 'checked' : ''}
+      onchange="setExtensionLocalNetwork('${regEscapeHtml(ext.name)}', this)"><span class="toggle-sl"></span></label>
+  </div>`;
+}
+
+async function setExtensionLocalNetwork(name, input) {
+  const api = window.pywebview?.api;
+  if (!api?.set_extension_local_network) return;
+  const wanted = !!input.checked;
+  try {
+    const res = await api.set_extension_local_network(name, wanted);
+    if (res?.error) throw new Error(res.error);
+    showToast(wanted
+      ? `${res.display_name || name} may now reach ${(res.local_network_hosts || []).join(', ') || 'its server'}.`
+      : `${res.display_name || name} is kept off the local network again.`);
+  } catch (e) {
+    input.checked = !wanted;
+    showToast(e?.message || 'Could not change local network access.', 'error');
+  }
+}
+
 function renderExtensionSettings(data) {
   const list = $('ext-settings-list');
   if (!list) return;
@@ -9133,6 +9166,7 @@ function renderExtensionSettings(data) {
       </summary>
       <div style="margin-top:10px;">
         ${ext.settings.map((entry) => extSettingFieldHtml(ext, entry, idx)).join('')}
+        ${extLocalNetworkRowHtml(ext)}
         <div class="s-row" style="justify-content:flex-end;gap:8px;">
           <button class="act-btn secondary" type="button" style="padding:6px 14px;font-size:12px;"
             onclick="resetExtensionSettings('${regEscapeHtml(ext.name)}')">Reset to defaults</button>

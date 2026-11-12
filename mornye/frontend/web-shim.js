@@ -190,7 +190,7 @@
     // Each JS extension's own settings (api_mixins/extension_settings.py).
     'list_extension_settings', 'get_extension_settings',
     'save_extension_settings', 'reset_extension_settings',
-    'run_extension_setting_action',
+    'run_extension_setting_action', 'set_extension_local_network',
     // The Test buttons next to the self-hosted endpoints (admin-only).
     'test_custom_endpoint',
   ];

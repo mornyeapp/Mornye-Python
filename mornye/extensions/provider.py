@@ -43,6 +43,7 @@ from mornye.core.text_match import track_identity_mismatch
 from mornye.core.signed_session_mobile import SignedSessionClient
 
 from .manager import ExtensionManager, InstalledExtension
+from . import local_network
 from .sandbox import network_grants
 from .storage import ExtensionStorage
 from .runtime import ExtensionRuntimeError, JSRuntime
@@ -300,7 +301,11 @@ class JSExtensionProvider(BaseProvider):
             ),
             cancelled_probe=self._stop_requested,
             ext_name=self._ext.name,
-            granted_hosts=network_grants(self._ext.manifest, self._settings),
+            granted_hosts=network_grants(
+                self._ext.manifest,
+                self._settings,
+                local_network=local_network.is_allowed(self._ext.name),
+            ),
             storage=self._storage,
         )
         rt.start()

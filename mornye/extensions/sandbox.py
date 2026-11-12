@@ -146,20 +146,30 @@ def _passthrough_names() -> tuple[str, ...]:
 GRANTED_HOSTS_ENV = "MORNYE_EXT_GRANTED_HOSTS"
 
 
-def network_grants(manifest: dict, settings: dict) -> list[str]:
+def network_grants(
+    manifest: dict, settings: dict, *, local_network: bool = False
+) -> list[str]:
     """Hosts of the URLs the user typed into ``grantsNetwork`` settings.
 
     Mirrors the Mornye app: only ``string`` settings marked
     ``"grantsNetwork": true`` count, an empty value falls back to the
     setting's default, and anything that is not an ``http(s)`` URL with a
     host and no credentials is ignored.
+
+    ``local_network`` is the user's per-extension "Allow local network
+    access" (extensions/local_network.py). It widens the rule to every
+    non-secret ``string`` setting, for manifests such as Jellyfin's that
+    take a server address without marking it ``grantsNetwork``. Still only
+    the hosts the user typed: the rest of the LAN stays blocked.
     """
     hosts: list[str] = []
     schema = manifest.get("settings") if isinstance(manifest, dict) else None
     for entry in schema if isinstance(schema, list) else []:
-        if not isinstance(entry, dict) or entry.get("grantsNetwork") is not True:
+        if not isinstance(entry, dict) or entry.get("type") != "string":
             continue
-        if entry.get("type") != "string":
+        if entry.get("grantsNetwork") is not True and (
+            not local_network or entry.get("secret")
+        ):
             continue
         key = entry.get("key")
         value = settings.get(key) if isinstance(settings, dict) else None

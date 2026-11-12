@@ -242,6 +242,9 @@ ALLOWED_METHODS: set[str] = {
     "save_extension_settings",
     "reset_extension_settings",
     "run_extension_setting_action",
+    # Lets one extension reach the server typed into its own settings on the
+    # LAN (extensions/local_network.py). Widens the sandbox: admin-only.
+    "set_extension_local_network",
     # Probes the self-hosted endpoint typed in (or saved) for tidal-web /
     # qobuz-web: an outbound request to a user-chosen URL, so admin-only.
     "test_custom_endpoint",
@@ -256,6 +259,7 @@ EXTENSION_SETTINGS_ADMIN_METHODS = {
     "save_extension_settings",
     "reset_extension_settings",
     "run_extension_setting_action",
+    "set_extension_local_network",
     "test_custom_endpoint",
 }
 
