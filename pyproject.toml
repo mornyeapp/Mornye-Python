@@ -124,6 +124,11 @@ dev = [
     "mypy>=1.10",
     "pre-commit>=3.0",
 ]
+# tests/visual/capture_gui.py: GUI screenshots for the redesign, driven
+# through the Google Chrome already installed (no browser download).
+visual = [
+    "playwright>=1.48",
+]
 # `web`, `hires` and `dedup` used to live here. Everything they installed is
 # part of the base install now, and pip treats a request for an extra that no
 # longer exists as a warning rather than an error, so an old
