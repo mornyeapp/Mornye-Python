@@ -2073,6 +2073,10 @@ class LegacyDownloadWorker:
             output_directory=output_directory,
             post_processing=self._post_processing,
             existing_paths=self._existing_paths,
+            library_root=(
+                self._opts.library_dir
+                or (self._opts.output_dir if self._is_playlist else None)
+            ),
             skipped_provider=self._providers[0].name,
             positions=self._positions,
             on_result=on_result,
