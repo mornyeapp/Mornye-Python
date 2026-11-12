@@ -79,6 +79,7 @@ regola (una parola = un elemento).
    (stringhe in un dizionario), M2 (`create_app`), M4 (test JS con
    `node:test`) — oppure direttamente la Fase 2 (mock, token v2,
    styleguide).
+   Suite completa dopo la Fase 1: 2253 passati, 357 saltati.
    **Lasciato apposta:** colori dentro `app.js` (tinta di default di Now
    Playing in `npApplyColors`, `theme-color`), da portare ai token nella
    voce 8.
