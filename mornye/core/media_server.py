@@ -91,8 +91,18 @@ class MediaServer:
                 if len(parts) != 3 or not hmac.compare_digest(parts[1], outer._token):
                     self.send_error(403)
                     return None
-                path = Path(unquote(parts[2])).resolve()
-                if not path.is_file() or not outer._is_allowed(path):
+                raw = unquote(parts[2])
+                if not raw or "\x00" in raw:
+                    self.send_error(400)
+                    return None
+                try:
+                    path = Path(raw).resolve()
+                    # The approved-folders check comes first: nothing outside
+                    # them is ever stat'ed, opened or even confirmed to exist.
+                    allowed = outer._is_allowed(path) and path.is_file()
+                except (OSError, RuntimeError, ValueError):
+                    allowed = False
+                if not allowed:
                     self.send_error(404)
                     return None
                 return path

@@ -1148,6 +1148,8 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
         from .core.paths import cache_path
 
         target_api = api_for(request)
+        if not path or "\x00" in path:
+            return PlainTextResponse("Bad path", status_code=400)
         try:
             resolved = Path(path).expanduser().resolve()
         except Exception:
@@ -1158,7 +1160,10 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
         ]
         if not multiuser:
             roots.append(Path.home().resolve())
-        if not resolved.is_file() or not any(resolved.is_relative_to(r) for r in roots):
+        # Containment first, existence second: a path outside the approved
+        # roots is never probed on disk, so it cannot be told apart from a
+        # missing one.
+        if not any(resolved.is_relative_to(r) for r in roots) or not resolved.is_file():
             return PlainTextResponse("Not found", status_code=404)
         return FileResponse(
             resolved,

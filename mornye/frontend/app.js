@@ -3942,9 +3942,16 @@ function addToQueue(indices) {
       // Deduped on the track's own identity, never on its position: a
       // second fetch puts a *different* track at index 0, and matching on
       // the index there silently refused to download it.
+      //
+      // And only within the list it came from. A track a different playlist
+      // already queued must not be dropped here: the backend downloads the
+      // list as a playlist (own folder + M3U) only when every one of its
+      // tracks is selected, so a playlist sharing songs with an earlier one
+      // lost them and fell back to loose files in the download folder.
+      const sameList = q => (q.source || '') === (currentUrl || '');
       const duplicate = spotifyId
-        ? queue.find(q => q.spotify_id === spotifyId)
-        : queue.find(q => q.index === realIndex && q.title === t.title);
+        ? queue.find(q => sameList(q) && q.spotify_id === spotifyId)
+        : queue.find(q => sameList(q) && q.index === realIndex && q.title === t.title);
       if (duplicate) {
         console.warn('Track already in queue', spotifyId || realIndex);
         skipped.push(duplicate);
@@ -3953,6 +3960,7 @@ function addToQueue(indices) {
       queue.push({
         id: itemId,
         spotify_id: spotifyId,
+        source: currentUrl || '',
         index: realIndex,
         title: t.title,
         artist: t.artist || t.artists || '',
