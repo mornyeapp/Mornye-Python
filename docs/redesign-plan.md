@@ -175,8 +175,15 @@ regola (una parola = un elemento).
    - **voce 20, Logs** (commit sotto): `css/views/logs.css`, pannello a
      filetto, legenda in maiuscoletto, pulsanti quadrati, messaggi nel colore
      di stato, niente animazione d'ingresso per riga.
-   **Prossimo:** voce 21 (avvisi, dialoghi, stati vuoti, skeleton, reduced
-   motion), poi 22, Fasi 4–6 (l'utente ha chiesto di fare tutte le voci).
+   - **voce 21, feedback** (commit sotto): `css/feedback.css` — toast come
+     avvisi, modali come dialoghi a filetto, stati vuoti allineati a
+     sinistra senza cornice, stati d'errore con filetto rosso, skeleton
+     fermi, `prefers-reduced-motion` che spegne tutto. Doppioni tolti:
+     errore di ricerca (riga di stato) e toast ripetuto all'aggiunta in
+     coda. **Aperto (F7):** gli 11 `confirm()` nativi non sono ancora
+     sostituiti dal dialogo della styleguide; il toast "fetching metadata…"
+     che resta durante la ricerca non è stato indagato.
+   **Prossimo:** voce 22 (rimozione di `styles.css`), poi Fasi 4–6.
    Aperta la riorganizzazione di Settings.
 0. **Fase 2 completa** — sul branch **`redesign`** (creato da `2.0.6` dopo
    i mock, come da §5: dalla Fase 2 in poi un branch dedicato e un rilascio
