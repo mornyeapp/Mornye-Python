@@ -145,6 +145,8 @@ def _capture(url: str, out: Path, views, widths, themes) -> list[Path]:
 #: of the same page differ by a pixel or two of anti-aliasing (measured: at
 #: most 16 of 255); a real change of colour or layout is far above it.
 _NOISE = 16
+#: How many pixels may exceed it before a picture counts as changed.
+_NOISY_PIXELS = 20
 
 
 def _differs(a: Path, b: Path) -> bool:
@@ -161,8 +163,11 @@ def _differs(a: Path, b: Path) -> bool:
         if left.size != right.size:
             return True
         diff = ImageChops.difference(left.convert("RGB"), right.convert("RGB"))
-        # The largest channel difference anywhere in the picture.
-        return max(high for _low, high in diff.getextrema()) > _NOISE
+        red, green, blue = diff.split()
+        # Per pixel, the largest of its three channel differences.
+        worst = ImageChops.lighter(ImageChops.lighter(red, green), blue)
+        # A stray anti-aliased pixel or two is noise; a change moves many.
+        return sum(worst.histogram()[_NOISE + 1 :]) > _NOISY_PIXELS
 
 
 def _compare(out: Path, baseline: Path) -> int:

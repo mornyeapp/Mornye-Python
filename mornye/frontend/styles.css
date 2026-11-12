@@ -4905,7 +4905,8 @@ body.has-player #app-body { margin-bottom: 64px; }
 }
 
 /* ── Utilities (Fase 1, docs/redesign-plan.md) ────────────────────────────
-   What index.html used to say in style="" attributes, one declaration per
+   What index.html and the markup app.js writes used to say in style=""
+   attributes, one declaration per
    class, so every look decision lives in a stylesheet. Declarations that
    app.js clears at runtime (display, opacity, transform…) stay inline until
    voce 5 turns them into state classes. Each selector names its class twice:
@@ -4917,6 +4918,7 @@ body.has-player #app-body { margin-bottom: 64px; }
 .u-bg-surface2.u-bg-surface2 { background: var(--surface2); }
 .u-bg-surface3.u-bg-surface3 { background: var(--surface3); }
 .u-bl-2-solid-border2.u-bl-2-solid-border2 { border-left: 2px solid var(--border2); }
+.u-border-bottom-1-solid-border.u-border-bottom-1-solid-border { border-bottom: 1px solid var(--border); }
 .u-border-none.u-border-none { border: none; }
 .u-border-top-1-solid-border.u-border-top-1-solid-border { border-top: 1px solid var(--border); }
 .u-c-accent.u-c-accent { color: var(--accent); }
@@ -4926,49 +4928,70 @@ body.has-player #app-body { margin-bottom: 64px; }
 .u-c-text2.u-c-text2 { color: var(--text2); }
 .u-cols-1fr-1fr.u-cols-1fr-1fr { grid-template-columns: 1fr 1fr; }
 .u-cols-24-1fr-80-1fr.u-cols-24-1fr-80-1fr { grid-template-columns: 24px 1fr 80px 1fr; }
+.u-cursor-default.u-cursor-default { cursor: default; }
 .u-cursor-pointer.u-cursor-pointer { cursor: pointer; }
 .u-dir-column.u-dir-column { flex-direction: column; }
 .u-ff-font-mono.u-ff-font-mono { font-family: var(--font-mono); }
+.u-ff-jetbrains-mono-monospace.u-ff-jetbrains-mono-monospace { font-family: 'JetBrains Mono', monospace; }
 .u-ff-monospace.u-ff-monospace { font-family: monospace; }
 .u-fit-cover.u-fit-cover { object-fit: cover; }
 .u-flex-1.u-flex-1 { flex: 1; }
+.u-fs-10.u-fs-10 { font-size: 10px; }
+.u-fs-10_5.u-fs-10_5 { font-size: 10.5px; }
 .u-fs-11.u-fs-11 { font-size: 11px; }
 .u-fs-11_5.u-fs-11_5 { font-size: 11.5px; }
 .u-fs-12.u-fs-12 { font-size: 12px; }
 .u-fs-12_5.u-fs-12_5 { font-size: 12.5px; }
 .u-fs-13.u-fs-13 { font-size: 13px; }
+.u-fs-14.u-fs-14 { font-size: 14px; }
 .u-fs-16.u-fs-16 { font-size: 16px; }
 .u-fs-28.u-fs-28 { font-size: 28px; }
+.u-fs-9_5.u-fs-9_5 { font-size: 9.5px; }
+.u-fs-fs-75.u-fs-fs-75 { font-size: var(--fs-75); }
+.u-fst-italic.u-fst-italic { font-style: italic; }
+.u-fw-400.u-fw-400 { font-weight: 400; }
 .u-fw-600.u-fw-600 { font-weight: 600; }
 .u-gap-10.u-gap-10 { gap: 10px; }
 .u-gap-12.u-gap-12 { gap: 12px; }
 .u-gap-14.u-gap-14 { gap: 14px; }
 .u-gap-16.u-gap-16 { gap: 16px; }
-.u-gap-6.u-gap-6 { gap: 6px; }
 .u-gap-6-18.u-gap-6-18 { gap: 6px 18px; }
+.u-gap-6.u-gap-6 { gap: 6px; }
 .u-gap-8.u-gap-8 { gap: 8px; }
+.u-grid-column-1-n1.u-grid-column-1-n1 { grid-column: 1/-1; }
 .u-h-100pct.u-h-100pct { height: 100%; }
+.u-h-14.u-h-14 { height: 14px; }
+.u-h-30.u-h-30 { height: 30px; }
+.u-h-44.u-h-44 { height: 44px; }
 .u-h-96.u-h-96 { height: 96px; }
 .u-items-center.u-items-center { align-items: center; }
 .u-items-flex-start.u-items-flex-start { align-items: flex-start; }
 .u-items-stretch.u-items-stretch { align-items: stretch; }
+.u-justify-flex-end.u-justify-flex-end { justify-content: flex-end; }
 .u-justify-flex-start.u-justify-flex-start { justify-content: flex-start; }
 .u-justify-space-between.u-justify-space-between { justify-content: space-between; }
 .u-lh-1.u-lh-1 { line-height: 1; }
 .u-lh-1_5.u-lh-1_5 { line-height: 1.5; }
 .u-lh-1_6.u-lh-1_6 { line-height: 1.6; }
 .u-lh-1_7.u-lh-1_7 { line-height: 1.7; }
+.u-lh-1_9.u-lh-1_9 { line-height: 1.9; }
+.u-m-0-22-0-auto.u-m-0-22-0-auto { margin: 0 22px 0 auto; }
+.u-m-0-auto.u-m-0-auto { margin: 0 auto; }
 .u-m-0.u-m-0 { margin: 0; }
 .u-m-10-0-6.u-m-10-0-6 { margin: 10px 0 6px; }
 .u-m-4-0-10.u-m-4-0-10 { margin: 4px 0 10px; }
 .u-m-4-0-12.u-m-4-0-12 { margin: 4px 0 12px; }
 .u-m-4-0-4.u-m-4-0-4 { margin: 4px 0 4px; }
 .u-m-4-0-6.u-m-4-0-6 { margin: 4px 0 6px; }
+.u-m-6-0-0.u-m-6-0-0 { margin: 6px 0 0; }
 .u-m-8-0-0.u-m-8-0-0 { margin: 8px 0 0; }
+.u-m-8-0-4.u-m-8-0-4 { margin: 8px 0 4px; }
+.u-m-n2-0-10.u-m-n2-0-10 { margin: -2px 0 10px; }
 .u-m-n4-0-12.u-m-n4-0-12 { margin: -4px 0 12px; }
 .u-maxh-260.u-maxh-260 { max-height: 260px; }
 .u-maxh-62vh.u-maxh-62vh { max-height: 62vh; }
 .u-maxw-130.u-maxw-130 { max-width: 130px; }
+.u-maxw-140.u-maxw-140 { max-width: 140px; }
 .u-maxw-150.u-maxw-150 { max-width: 150px; }
 .u-maxw-170.u-maxw-170 { max-width: 170px; }
 .u-maxw-210.u-maxw-210 { max-width: 210px; }
@@ -4987,35 +5010,62 @@ body.has-player #app-body { margin-bottom: 64px; }
 .u-ml-auto.u-ml-auto { margin-left: auto; }
 .u-mt-10.u-mt-10 { margin-top: 10px; }
 .u-mt-12.u-mt-12 { margin-top: 12px; }
+.u-mt-3.u-mt-3 { margin-top: 3px; }
 .u-mt-4.u-mt-4 { margin-top: 4px; }
 .u-mt-6.u-mt-6 { margin-top: 6px; }
 .u-mt-8.u-mt-8 { margin-top: 8px; }
+.u-o-hidden.u-o-hidden { overflow: hidden; }
 .u-oy-auto.u-oy-auto { overflow-y: auto; }
+.u-p-10-12.u-p-10-12 { padding: 10px 12px; }
 .u-p-14-18.u-p-14-18 { padding: 14px 18px; }
 .u-p-16-20.u-p-16-20 { padding: 16px 20px; }
 .u-p-20.u-p-20 { padding: 20px; }
 .u-p-3.u-p-3 { padding: 3px; }
+.u-p-4-10.u-p-4-10 { padding: 4px 10px; }
+.u-p-40-20.u-p-40-20 { padding: 40px 20px; }
+.u-p-40.u-p-40 { padding: 40px; }
 .u-p-5-10.u-p-5-10 { padding: 5px 10px; }
 .u-p-5-12.u-p-5-12 { padding: 5px 12px; }
+.u-p-5-8.u-p-5-8 { padding: 5px 8px; }
 .u-p-6-12.u-p-6-12 { padding: 6px 12px; }
 .u-p-6-14.u-p-6-14 { padding: 6px 14px; }
 .u-p-6-2.u-p-6-2 { padding: 6px 2px; }
 .u-p-8-16.u-p-8-16 { padding: 8px 16px; }
 .u-pl-16.u-pl-16 { padding-left: 16px; }
 .u-pr-4.u-pr-4 { padding-right: 4px; }
+.u-r-2.u-r-2 { border-radius: 2px; }
+.u-r-6.u-r-6 { border-radius: 6px; }
 .u-r-8.u-r-8 { border-radius: 8px; }
 .u-right-10.u-right-10 { right: 10px; }
 .u-shrink-0.u-shrink-0 { flex-shrink: 0; }
 .u-ta-center.u-ta-center { text-align: center; }
+.u-text-overflow-ellipsis.u-text-overflow-ellipsis { text-overflow: ellipsis; }
 .u-top-10.u-top-10 { top: 10px; }
 .u-w-100pct.u-w-100pct { width: 100%; }
 .u-w-120.u-w-120 { width: 120px; }
+.u-w-14.u-w-14 { width: 14px; }
+.u-w-16.u-w-16 { width: 16px; }
 .u-w-160.u-w-160 { width: 160px; }
 .u-w-190.u-w-190 { width: 190px; }
 .u-w-220.u-w-220 { width: 220px; }
+.u-w-30.u-w-30 { width: 30px; }
+.u-w-40.u-w-40 { width: 40px; }
+.u-w-40pct.u-w-40pct { width: 40%; }
+.u-w-44.u-w-44 { width: 44px; }
+.u-w-50pct.u-w-50pct { width: 50%; }
 .u-w-64.u-w-64 { width: 64px; }
+.u-w-70pct.u-w-70pct { width: 70%; }
 .u-w-96.u-w-96 { width: 96px; }
 .u-wb-break-all.u-wb-break-all { word-break: break-all; }
 .u-wrap-wrap.u-wrap-wrap { flex-wrap: wrap; }
 .u-ws-nowrap.u-ws-nowrap { white-space: nowrap; }
 .u-ws-pre-wrap.u-ws-pre-wrap { white-space: pre-wrap; }
+
+/* Tones: what a status word means, set by app.js as data-tone (and on the
+   Save button as data-dirty) instead of a colour written into style="". */
+[data-tone="muted"] { color: var(--muted); }
+[data-tone="ok"] { color: var(--green); }
+[data-tone="warn"] { color: var(--yellow); }
+[data-tone="error"] { color: var(--red); }
+.s-actions .act-btn.primary[data-dirty="true"] { border-color: var(--red); }
+.s-actions .act-btn.primary[data-dirty="false"] { border-color: var(--yellow-d); }

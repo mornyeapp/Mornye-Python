@@ -77,8 +77,9 @@ def test_inline_styles_hold_only_what_must_stay_inline() -> None:
 
 def test_every_utility_class_used_in_the_markup_exists() -> None:
     html = INDEX.read_text(encoding="utf-8")
+    html += (INDEX.parent / "app.js").read_text(encoding="utf-8")
     css = (INDEX.parent / "styles.css").read_text(encoding="utf-8")
-    used = set(re.findall(r'class="[^"]*', html))
+    used = set(re.findall(r'class="[^"]*|className\s*=\s*[\'`][^\'`]*', html))
     names = {n for chunk in used for n in re.findall(r"\bu-[\w-]+", chunk)}
     defined = set(re.findall(r"^\.(u-[\w-]+)\.\1 \{", css, re.M))
     assert names <= defined, sorted(names - defined)

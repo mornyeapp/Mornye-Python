@@ -36,23 +36,23 @@ function showSkeletonTracks(count = 5) {
   
   // Clear the table and insert skeletons using the SAME grid as real tracks
   container.innerHTML = Array(count).fill(0).map(() => `
-    <div class="track-row" style="pointer-events: none; border-bottom: 1px solid var(--border);">
-      <div><div class="skeleton" style="width:14px; height:14px; border-radius:2px;"></div></div>
-      <div><div class="skeleton" style="width:16px; height:14px;"></div></div>
+    <div class="track-row u-border-bottom-1-solid-border" style="pointer-events:none;">
+      <div><div class="skeleton u-w-14 u-h-14 u-r-2"></div></div>
+      <div><div class="skeleton u-w-16 u-h-14"></div></div>
       <div class="tr-title-cell">
-        <div class="skeleton" style="width:44px; height:44px; border-radius:6px; flex-shrink:0;"></div>
-        <div style="display:flex; flex-direction:column; gap:6px; width:100%;">
-          <div class="skeleton skeleton-text" style="margin:0; width:70%;"></div>
-          <div class="skeleton skeleton-text short" style="margin:0; width:40%;"></div>
+        <div class="skeleton u-w-44 u-h-44 u-r-6 u-shrink-0"></div>
+        <div class="u-dir-column u-gap-6 u-w-100pct" style="display:flex;">
+          <div class="skeleton skeleton-text u-m-0 u-w-70pct"></div>
+          <div class="skeleton skeleton-text short u-m-0 u-w-40pct"></div>
         </div>
       </div>
-      <div><div class="skeleton skeleton-text" style="margin:0 auto; width:50%;"></div></div>
-      <div><div class="skeleton skeleton-text" style="margin:0 22px 0 auto; width:40px;"></div></div>
+      <div><div class="skeleton skeleton-text u-m-0-auto u-w-50pct"></div></div>
+      <div><div class="skeleton skeleton-text u-m-0-22-0-auto u-w-40"></div></div>
       <div class="tr-actions">
-        <div class="skeleton" style="width:30px; height:30px; border-radius:6px;"></div>
-        <div class="skeleton" style="width:30px; height:30px; border-radius:6px;"></div>
-        <div class="skeleton" style="width:30px; height:30px; border-radius:6px;"></div>
-        <div class="skeleton" style="width:30px; height:30px; border-radius:6px;"></div>
+        <div class="skeleton u-w-30 u-h-30 u-r-6"></div>
+        <div class="skeleton u-w-30 u-h-30 u-r-6"></div>
+        <div class="skeleton u-w-30 u-h-30 u-r-6"></div>
+        <div class="skeleton u-w-30 u-h-30 u-r-6"></div>
       </div>
     </div>
   `).join("");
@@ -80,10 +80,10 @@ function updateSaveButtonVisual() {
     if (isDirty) {
         btn.style.opacity = "1";
         btn.textContent = "Save Changes (Unsaved)";
-        btn.style.borderColor = "var(--red)"; // Visual cue
+        btn.dataset.dirty = "true"; // red border: styles.css
     } else {
         btn.textContent = "Save Changes";
-        btn.style.borderColor = "var(--yellow-d)";
+        btn.dataset.dirty = "false";
     }
 }
 
@@ -928,7 +928,7 @@ function showServicesPlaceholder(message, withLink = false) {
   const link = withLink
     ? ` <a href="#" onclick="openExtensionsSettings(); return false;">Settings → Extensions</a>.`
     : '';
-  el.innerHTML = `<div class="s-label" style="font-size:11.5px;padding:6px 2px;">${escHtml(message)}${link}</div>`;
+  el.innerHTML = `<div class="s-label u-fs-11_5 u-p-6-2">${escHtml(message)}${link}</div>`;
 }
 
 function openExtensionsSettings() {
@@ -1088,7 +1088,7 @@ function renderExtensionQualityRows() {
       svc.quality_options.map(o =>
         `<option value="${regEscapeHtml(o.id)}" ${o.id === current ? 'selected' : ''} title="${regEscapeHtml(o.description || '')}">${regEscapeHtml(o.label || o.id)}</option>`)
     ).join('');
-    return `<div class="s-row" style="padding-left:16px;border-left:2px solid var(--border2);margin-left:4px;">
+    return `<div class="s-row u-pl-16 u-bl-2-solid-border2 u-ml-4">
       <span class="s-label">${regEscapeHtml(svc.label || svc.id)}<small>${regEscapeHtml(svc.primary || '')}</small></span>
       <select data-service="${regEscapeHtml(svc.id)}" onchange="onExtensionQualityChange(this)">${opts}</select>
     </div>`;
@@ -1243,7 +1243,7 @@ function renderExtensionStatusGrid() {
   const grid = $('status-extensions-grid');
   if (!grid) return;
   if (!extensionStatusRows.length) {
-    grid.innerHTML = `<div class="s-label" style="font-size:11.5px;grid-column:1/-1;">${
+    grid.innerHTML = `<div class="s-label u-fs-11_5 u-grid-column-1-n1">${
       extensionStatusLoaded
         ? 'No installed extension declares a health check.'
         : 'Loading the installed extensions…'}</div>`;
@@ -1254,7 +1254,7 @@ function renderExtensionStatusGrid() {
       const state = c.ok === true ? '✓' : c.ok === false ? '✗' : '·';
       const latency = c.latency >= 0 ? ` · ${c.latency} ms` : '';
       const detail = c.detail ? ` — ${c.detail}` : '';
-      return `<div class="s-label" style="font-size:11px;" title="${regEscapeHtml(c.url)}">${state} ${regEscapeHtml(c.label)}${regEscapeHtml(detail)}${latency}</div>`;
+      return `<div class="s-label u-fs-11" title="${regEscapeHtml(c.url)}">${state} ${regEscapeHtml(c.label)}${regEscapeHtml(detail)}${latency}</div>`;
     }).join('');
     return `<div class="status-card" title="${regEscapeHtml(row.name)}">
       <div class="status-card-header">
@@ -2775,7 +2775,7 @@ function renderTracks(tracks, page = 1) {
         ? `<button class="ta-btn ta-link" data-tip="Open in Spotify" onclick="openExternal(${globalIndex})">
              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
            </button>`
-        : `<button class="ta-btn" data-tip="No link" disabled style="opacity:.3">
+        : `<button class="ta-btn" data-tip="No link" disabled style="opacity:.3;">
              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
            </button>`;
 
@@ -3514,10 +3514,10 @@ function renderCodeResults(results) {
     const row = document.createElement('div');
     row.className = 'track-row';
     row.id = `code-row-${idx}`;
-    const pathHtml = `<div style="font-family: 'JetBrains Mono', monospace; color: var(--text2); font-size:12px;">${escHtml(r.path)}:${r.line}</div>`;
-    const snippet = `<pre style="white-space:pre-wrap;margin:6px 0 0;color:var(--text);font-size:13px;">${escHtml(r.snippet)}</pre>`;
+    const pathHtml = `<div class="u-ff-jetbrains-mono-monospace u-c-text2 u-fs-12">${escHtml(r.path)}:${r.line}</div>`;
+    const snippet = `<pre class="u-ws-pre-wrap u-m-6-0-0 u-c-text u-fs-13">${escHtml(r.snippet)}</pre>`;
     row.innerHTML = `
-      <div style="padding:10px 12px; grid-column: 1 / -1;">
+      <div class="u-p-10-12 u-grid-column-1-n1">
         ${pathHtml}
         ${snippet}
       </div>
@@ -3889,7 +3889,7 @@ function renderRecent(hist) {
   // Artwork tiles, not the one-line rows renderRecentSearches() builds.
   grid.classList.remove('searches');
   if (!hist || !hist.length) {
-    grid.innerHTML = `<div style="grid-column:1/-1;">${emptyState(
+    grid.innerHTML = `<div class="u-grid-column-1-n1">${emptyState(
       'disc',
       'No recent fetches yet',
       'Paste a Spotify track, album or playlist link above — what you fetch shows up here.',
@@ -5394,7 +5394,7 @@ function openApiConfigPopup(target) {
   $('api-config-desc').textContent = description;
   $('api-config-value').value = existingValue || '';
   status.textContent = 'Enter a URL and press Check.';
-  status.style.color = '';
+  status.dataset.tone = '';
   const helpLink = $('api-config-help');
   if (helpLink) {
     helpLink.href = 'https://github.com/m8tec/apple-music-animated-artworks';
@@ -5423,22 +5423,22 @@ async function checkApiConfig() {
   const button = $('api-config-check-btn');
   if (!url) {
     status.textContent = 'Enter a URL first.';
-    status.style.color = 'var(--red)';
+    status.dataset.tone = 'error';
     return;
   }
   if (rawValue.trim() !== url) {
     status.textContent = 'Multiple URLs detected; only the first will be tested.';
-    status.style.color = 'var(--yellow)';
+    status.dataset.tone = 'warn';
     $('api-config-value').value = url;
   } else {
     status.textContent = 'Checking…';
-    status.style.color = '';
+    status.dataset.tone = '';
   }
   button.disabled = true;
   try {
     if (!window.pywebview?.api) {
       status.textContent = 'API check unavailable in this environment.';
-      status.style.color = 'var(--red)';
+      status.dataset.tone = 'error';
       return;
     }
     let result = null;
@@ -5447,14 +5447,14 @@ async function checkApiConfig() {
     }
     if (result?.ok) {
       status.textContent = 'Reachable ✓';
-      status.style.color = 'var(--green)';
+      status.dataset.tone = 'ok';
     } else {
       status.textContent = `Check failed: ${result?.error || 'invalid response'}`;
-      status.style.color = 'var(--red)';
+      status.dataset.tone = 'error';
     }
   } catch (e) {
     status.textContent = `Check failed: ${e?.message || e}`;
-    status.style.color = 'var(--red)';
+    status.dataset.tone = 'error';
   } finally {
     button.disabled = false;
   }
@@ -5466,12 +5466,12 @@ function clearApiConfigValue() {
   const current = normalizeApiInput(input.value);
   if (!current) {
     status.textContent = 'No API configured to clear.';
-    status.style.color = 'var(--red)';
+    status.dataset.tone = 'error';
     return;
   }
   input.value = '';
   status.textContent = 'API cleared from the field. Save to remove it from settings.';
-  status.style.color = 'var(--green)';
+  status.dataset.tone = 'ok';
 }
 
 function saveApiConfig() {
@@ -5484,7 +5484,7 @@ function saveApiConfig() {
   if (rawValue.trim() !== value) {
     const status = $('api-config-status');
     status.textContent = 'Only the first URL was saved.';
-    status.style.color = 'var(--yellow)';
+    status.dataset.tone = 'warn';
   }
   updateAllApiConfigDisplays();
   closeApiConfigPopup();
@@ -5587,13 +5587,12 @@ function renderHealthResults(data) {
     const okCount = rows.filter(r => r.ok).length;
     const totalCount = rows.length;
     const group  = document.createElement('div');
-    group.className = 'hc-prov-group s-section';
-    group.style.padding = '10px 12px';
+    group.className = 'hc-prov-group s-section u-p-10-12';
     group.innerHTML = `
       <div class="hc-prov-name">
         <span class="hc-dot ${anyOk ? 'ok' : 'err'}"></span>
         ${prov}
-        <span style="font-size:10px;font-weight:400;color:var(--muted)">${okCount}/${totalCount} endpoints OK</span>
+        <span class="u-fs-10 u-fw-400 u-c-muted">${okCount}/${totalCount} endpoints OK</span>
       </div>
     `;
     container.appendChild(group);
@@ -5605,14 +5604,12 @@ function renderHealthResults(data) {
     const okCount = extRows.filter(r => r.ok).length;
     const totalCount = extRows.length;
     const group = document.createElement('div');
-    group.className = 'hc-prov-group hc-ext-group s-section';
-    group.style.padding = '10px 12px';
-    group.style.marginTop = '10px';
+    group.className = 'hc-prov-group hc-ext-group s-section u-p-10-12 u-mt-10';
     group.innerHTML = `
       <div class="hc-prov-name">
         <span class="hc-dot ${anyOk ? 'ok' : 'err'}"></span>
         Extensions
-        <span style="font-size:10px;font-weight:400;color:var(--muted)">${okCount}/${totalCount} OK</span>
+        <span class="u-fs-10 u-fw-400 u-c-muted">${okCount}/${totalCount} OK</span>
       </div>
     `;
     container.appendChild(group);
@@ -5644,14 +5641,14 @@ async function loadRegistries() {
   const list = $('registry-list');
   if (!list) return;
   if (!window.pywebview?.api?.get_registries) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">Registry management is unavailable in this build.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5">Registry management is unavailable in this build.</div>';
     return;
   }
   try {
     const registries = await window.pywebview.api.get_registries();
     renderRegistries(registries);
   } catch (e) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Unable to load registries.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Unable to load registries.</div>';
   }
 }
 
@@ -5660,12 +5657,12 @@ function renderRegistries(registries) {
   if (!list) return;
 
   if (registries?.error) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Failed to load registries: ' + regEscapeHtml(registries.message || 'unknown error') + '</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Failed to load registries: ' + regEscapeHtml(registries.message || 'unknown error') + '</div>';
     return;
   }
 
   if (!registries || !registries.length) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">No registry links configured yet.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5">No registry links configured yet.</div>';
     return;
   }
 
@@ -5735,14 +5732,14 @@ async function loadDirectories() {
   const list = $('directory-list');
   if (!list) return;
   if (!window.pywebview?.api?.get_registry_directories) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">Directory management is unavailable in this build.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5">Directory management is unavailable in this build.</div>';
     return;
   }
   try {
     const directories = await window.pywebview.api.get_registry_directories();
     renderDirectories(directories);
   } catch (e) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Unable to load directories.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Unable to load directories.</div>';
   }
 }
 
@@ -5751,11 +5748,11 @@ function renderDirectories(directories) {
   if (!list) return;
 
   if (directories?.error) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Failed to load directories: ' + regEscapeHtml(directories.error) + '</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Failed to load directories: ' + regEscapeHtml(directories.error) + '</div>';
     return;
   }
   if (!directories || !directories.length) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">No directory links configured yet.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5">No directory links configured yet.</div>';
     return;
   }
 
@@ -5826,12 +5823,12 @@ async function runDiscovery() {
     return;
   }
   if (btn) { btn.disabled = true; btn.textContent = 'Discovering…'; }
-  results.innerHTML = '<div class="s-label" style="font-size:11.5px;">Probing registries…</div>';
+  results.innerHTML = '<div class="s-label u-fs-11_5">Probing registries…</div>';
   try {
     const byDirectory = await window.pywebview.api.discover_registries();
     renderDiscoveryResults(byDirectory);
   } catch (e) {
-    results.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Discovery failed.</div>';
+    results.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Discovery failed.</div>';
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Discover Registries'; }
   }
@@ -5842,13 +5839,13 @@ function renderDiscoveryResults(byDirectory) {
   if (!results) return;
 
   if (byDirectory?.error) {
-    results.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">' + regEscapeHtml(byDirectory.error) + '</div>';
+    results.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">' + regEscapeHtml(byDirectory.error) + '</div>';
     return;
   }
 
   const directoryUrls = Object.keys(byDirectory || {});
   if (!directoryUrls.length) {
-    results.innerHTML = '<div class="s-label" style="font-size:11.5px;">No directories configured, or none reachable.</div>';
+    results.innerHTML = '<div class="s-label u-fs-11_5">No directories configured, or none reachable.</div>';
     return;
   }
 
@@ -5869,7 +5866,7 @@ function renderDiscoveryResults(byDirectory) {
           </button>
         </div>`;
     }).join('');
-    return `<div class="s-label" style="font-size:11px;margin:8px 0 4px;">${regEscapeHtml(dirUrl)}</div>${rows}`;
+    return `<div class="s-label u-fs-11 u-m-8-0-4">${regEscapeHtml(dirUrl)}</div>${rows}`;
   }).join('');
 }
 
@@ -5897,14 +5894,14 @@ async function loadTrustedKeys() {
   const list = $('trust-key-list');
   if (!list) return;
   if (!window.pywebview?.api?.get_trusted_keys) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">Trust management is unavailable in this build.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5">Trust management is unavailable in this build.</div>';
     return;
   }
   try {
     const keys = await window.pywebview.api.get_trusted_keys();
     renderTrustedKeys(keys);
   } catch (e) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Unable to load trusted keys.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Unable to load trusted keys.</div>';
   }
 }
 
@@ -5913,11 +5910,11 @@ function renderTrustedKeys(keys) {
   if (!list) return;
 
   if (keys?.error) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Failed to load trusted keys: ' + regEscapeHtml(keys.error) + '</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Failed to load trusted keys: ' + regEscapeHtml(keys.error) + '</div>';
     return;
   }
   if (!keys || !keys.length) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">No trusted keys yet.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5">No trusted keys yet.</div>';
     return;
   }
 
@@ -6039,15 +6036,15 @@ function renderDuplicateGroups(groups) {
   if (!wrap || !container) return;
 
   if (!groups.length) {
-    container.innerHTML = '<div class="s-label" style="font-size:11.5px;">No duplicates found.</div>';
+    container.innerHTML = '<div class="s-label u-fs-11_5">No duplicates found.</div>';
     wrap.classList.remove('hidden');
     toastMgr.success('No duplicates found.');
     return;
   }
 
   container.innerHTML = groups.map((group, i) => `
-    <div class="sort-item" style="flex-direction:column;align-items:stretch;gap:6px;cursor:default;">
-      <div class="s-label" style="font-size:11px;">Group ${i + 1} (${group.length} files)</div>
+    <div class="sort-item u-dir-column u-items-stretch u-gap-6 u-cursor-default">
+      <div class="s-label u-fs-11">Group ${i + 1} (${group.length} files)</div>
       ${group.map((path) => `<span class="reg-url" title="${regEscapeHtml(path)}">${regEscapeHtml(path)}</span>`).join('')}
     </div>`).join('');
   wrap.classList.remove('hidden');
@@ -6186,35 +6183,35 @@ function renderLibraryDedup(report) {
   });
 
   if (!libDedupGroups.length) {
-    container.innerHTML = '<div class="s-label" style="font-size:11.5px;">No duplicates found.</div>';
+    container.innerHTML = '<div class="s-label u-fs-11_5">No duplicates found.</div>';
     actions?.classList.add('hidden');
     toastMgr.success('No duplicates found.');
     return;
   }
 
   container.innerHTML = libDedupGroups.map((group, i) => `
-    <div class="sort-item" style="flex-direction:column;align-items:stretch;gap:6px;cursor:default;">
-      <div class="s-label" style="font-size:11px;">
+    <div class="sort-item u-dir-column u-items-stretch u-gap-6 u-cursor-default">
+      <div class="s-label u-fs-11">
         ${regEscapeHtml(group.label)} — ${group.files.length} copies, ${formatLibDedupSize(group.reclaimable)} reclaimable, matched by ${regEscapeHtml(group.matchedBy)}
       </div>
       ${group.files.map((file, j) => {
         const isKeeper = file.path === group.keepPath;
         return `
-        <div style="display:flex;align-items:center;gap:8px;">
+        <div class="u-items-center u-gap-8" style="display:flex;">
           <input type="radio" name="libdedup-keep-${i}" ${isKeeper ? 'checked' : ''}
                  onchange="setLibDedupKeeper(${i}, ${j})" title="Keep this copy">
           <input type="checkbox" ${group.selected.has(file.path) ? 'checked' : ''}
                  ${isKeeper ? 'disabled' : ''}
                  onchange="toggleLibDedupFile(${i}, ${j}, this.checked)"
                  title="${isKeeper ? 'The kept copy is never removed' : 'Remove this copy'}">
-          <span class="reg-url" style="flex:1;min-width:0;" title="${regEscapeHtml(file.path)}">${regEscapeHtml(file.path)}</span>
-          <span class="s-label" style="font-size:10.5px;white-space:nowrap;">${regEscapeHtml(file.quality || '')}</span>
+          <span class="reg-url u-flex-1 u-minw-0" title="${regEscapeHtml(file.path)}">${regEscapeHtml(file.path)}</span>
+          <span class="s-label u-fs-10_5 u-ws-nowrap">${regEscapeHtml(file.quality || '')}</span>
         </div>`;
       }).join('')}
     </div>`).join('');
 
   if (report.shown_groups !== undefined && report.shown_groups < report.groups) {
-    container.innerHTML += `<div class="s-label" style="font-size:11px;">Showing ${report.shown_groups} of ${report.groups} groups — resolve these, then scan again for the rest.</div>`;
+    container.innerHTML += `<div class="s-label u-fs-11">Showing ${report.shown_groups} of ${report.groups} groups — resolve these, then scan again for the rest.</div>`;
   }
   actions?.classList.remove('hidden');
   updateLibDedupCount();
@@ -6461,7 +6458,7 @@ async function loadExploreData() {
   
   if (!sectionsContainer) return;
   
-  sectionsContainer.innerHTML = '<div style="text-align:center; padding: 40px; color: var(--muted);">Loading feed...</div>';
+  sectionsContainer.innerHTML = '<div class="u-ta-center u-p-40 u-c-muted">Loading feed...</div>';
   const source = await refreshExploreSources();
   if (window.pywebview?.api?.get_spotify_home_feed) {
     try {
@@ -6484,7 +6481,7 @@ async function loadExploreData() {
   } else {
     // Demo Mode
     if (greetingEl) greetingEl.textContent = 'Explore (Demo)';
-    sectionsContainer.innerHTML = '<div style="color:var(--muted);">Python backend not connected. Unable to load recommendations.</div>';
+    sectionsContainer.innerHTML = '<div class="u-c-muted">Python backend not connected. Unable to load recommendations.</div>';
   }
 }
 
@@ -7058,7 +7055,7 @@ function renderLocalTracks() {
     container.innerHTML = '';
     
     if (!localScanData.length) {
-        container.innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--muted);font-size:14px;">No supported audio files found in this folder (FLAC, MP3, M4A/AAC, OGG, Opus, WAV, AIFF, WMA, WavPack, APE and more).</div>';
+        container.innerHTML = '<div class="u-p-40-20 u-ta-center u-c-muted u-fs-14">No supported audio files found in this folder (FLAC, MP3, M4A/AAC, OGG, Opus, WAV, AIFF, WMA, WavPack, APE and more).</div>';
         return;
     }
     
@@ -7075,7 +7072,7 @@ function renderLocalTracks() {
         const oldTitle = item.old_title || item.guessed_title || fileName;
         const oldArtist = item.old_artist || item.guessed_artist || "Unknown Artist";
         
-        let newCol = `<div style="color:var(--muted); font-size:12.5px; font-style:italic;">No match found</div>`;
+        let newCol = `<div class="u-c-muted u-fs-12_5 u-fst-italic">No match found</div>`;
         let scoreCol = `<span class="local-badge err">No Match</span>`;
         let checkbox = `<input type="checkbox" class="local-cb" value="${i}" data-file-path="${escHtml(item.file_path)}" disabled>`;
 
@@ -7122,13 +7119,11 @@ function renderLocalTracks() {
             checkbox = `<input type="checkbox" class="local-cb" value="${i}" data-file-path="${escHtml(item.file_path)}" ${isSafe ? 'checked' : ''} onchange="updateLocalSelection()">`;
         } else if (item.error) {
             scoreCol = `<span class="local-badge err">Error</span>`;
-            newCol = `<div style="color:var(--red); font-size:11px;">${escHtml(item.error)}</div>`;
+            newCol = `<div class="u-c-red u-fs-11">${escHtml(item.error)}</div>`;
         }
 
         const row = document.createElement('div');
-        row.className = 'track-row local-row';
-        row.style.gridTemplateColumns = "24px 1fr 80px 1fr";
-        row.style.cursor = "default";
+        row.className = 'track-row local-row u-cols-24-1fr-80-1fr u-cursor-default';
         
         row.innerHTML = `
             <div class="tr-check">${checkbox}</div>
@@ -7137,7 +7132,7 @@ function renderLocalTracks() {
                 <div class="local-info">
                     <div class="local-title" title="Current: ${escHtml(oldTitle)}">${escHtml(oldTitle)}</div>
                     <div class="local-artist">${escHtml(oldArtist)}</div>
-                    <div style="font-family:'JetBrains Mono', monospace; font-size:9.5px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:3px;" title="${escHtml(item.file_path)}">${escHtml(fileName)}</div>
+                    <div class="u-ff-jetbrains-mono-monospace u-fs-9_5 u-c-muted u-o-hidden u-text-overflow-ellipsis u-ws-nowrap u-mt-3" title="${escHtml(item.file_path)}">${escHtml(fileName)}</div>
                     <div class="local-actions">
                       <button type="button" class="local-convert-btn" title="Play this file as it is stored" onclick="playLocal(${i})">Play</button>
                       <button type="button" class="local-convert-btn" title="Edit the tags, cover and lyrics of this file" onclick="openTagEditor(${i})">Edit</button>
@@ -7146,7 +7141,7 @@ function renderLocalTracks() {
                     </div>
                 </div>
             </div>
-            <div style="text-align:center;">${scoreCol}</div>
+            <div class="u-ta-center">${scoreCol}</div>
             ${newCol}
         `;
         container.appendChild(row);
@@ -7275,8 +7270,8 @@ async function openTagEditor(index) {
   $('tagedit-file').textContent = item.file_path.split(/[\\/]/).pop();
   $('tagedit-fields').innerHTML = res.fields.map(f => `
     <div style="${f === 'TITLE' || f === 'COPYRIGHT' ? 'grid-column:1/-1;' : ''}">
-      <label for="tagedit-${f}" style="font-size:12px;color:var(--muted);">${escHtml(TAG_LABELS[f] || f)}</label>
-      <input type="text" id="tagedit-${f}" data-tag="${f}" style="width:100%;margin-top:3px;" value="${escHtml(res.tags[f] || '')}">
+      <label class="u-fs-12 u-c-muted" for="tagedit-${f}">${escHtml(TAG_LABELS[f] || f)}</label>
+      <input class="u-w-100pct u-mt-3" type="text" id="tagedit-${f}" data-tag="${f}" value="${escHtml(res.tags[f] || '')}">
     </div>`).join('');
   $('tagedit-lyrics').value = res.lyrics || '';
   $('tagedit-translation-wrap').classList.add('hidden');
@@ -7374,7 +7369,7 @@ async function openAnalyze(index) {
     ['Bitrate', i.bitrate ? Math.round(i.bitrate / 1000) + ' kbps' : ''], ['Duration', dur], ['Size', mb],
   ].filter(f => f[1]);
   $('analyze-info').innerHTML = facts.map(([k, v]) =>
-    `<span><span style="color:var(--muted);">${escHtml(k)}</span> ${escHtml(String(v))}</span>`).join('');
+    `<span><span class="u-c-muted">${escHtml(k)}</span> ${escHtml(String(v))}</span>`).join('');
   $('analyze-img').src = res.spectrogram;
   $('analyze-img').classList.remove('hidden');
   $('analyze-status').classList.add('hidden');
@@ -7422,7 +7417,7 @@ async function previewReorganize() {
     `${count('move')} to move · ${count('same')} already in place · ${count('conflict')} skipped (destination exists)`;
   const rel = p => p.startsWith(reorgRoot) ? p.slice(reorgRoot.length).replace(/^[\\/]/, '') : p;
   $('reorg-list').innerHTML = reorgPlan.filter(m => m.status !== 'same').slice(0, 300).map(m =>
-    `<div style="${m.status === 'conflict' ? 'color:var(--red);' : ''}">${escHtml(rel(m.src))} → ${escHtml(rel(m.dest))}</div>`).join('');
+    `<div${m.status === 'conflict' ? ' data-tone="error"' : ''}>${escHtml(rel(m.src))} → ${escHtml(rel(m.dest))}</div>`).join('');
   $('reorg-apply-btn').disabled = count('move') === 0;
 }
 
@@ -7487,7 +7482,7 @@ async function loadWeeklyReleases(refresh) {
           <div class="weekly-title">${escHtml(r.title || '—')}</div>
           <div class="weekly-artist">${escHtml(r.artist)} · ${escHtml(r.type)}</div>
         </div>
-        <button type="button" class="act-btn secondary" style="padding:5px 12px;font-size:12px;" data-weekly="${i}">Open</button>
+        <button type="button" class="act-btn secondary u-p-5-12 u-fs-12" data-weekly="${i}">Open</button>
       </div>`).join('');
     list.querySelectorAll('[data-weekly]').forEach(btn => btn.addEventListener('click', () => {
       const rel = res.releases[parseInt(btn.dataset.weekly)];
@@ -7571,8 +7566,8 @@ function openConcerts(artistName) {
         <div class="weekly-title">${escHtml(concertWhen(c))}</div>
         <div class="weekly-artist">${escHtml([c.venue, c.location].filter(Boolean).join(' · '))}</div>
       </div>
-      <button type="button" class="act-btn secondary" style="padding:5px 12px;font-size:12px;" onclick="downloadConcertIcs(${i})" title="Download a calendar event">Add to calendar</button>
-      ${c.url ? `<button type="button" class="act-btn secondary" style="padding:5px 12px;font-size:12px;" onclick="openExternalUrl(${escHtml(JSON.stringify(c.url))})">Details</button>` : ''}
+      <button type="button" class="act-btn secondary u-p-5-12 u-fs-12" onclick="downloadConcertIcs(${i})" title="Download a calendar event">Add to calendar</button>
+      ${c.url ? `<button type="button" class="act-btn secondary u-p-5-12 u-fs-12" onclick="openExternalUrl(${escHtml(JSON.stringify(c.url))})">Details</button>` : ''}
     </div>`).join('');
   $('concerts-modal').classList.remove('hidden');
 }
@@ -8720,13 +8715,13 @@ async function loadSubscriptions() {
     intervalSelect.innerHTML = subIntervalOptions(0);
   }
   if (!window.pywebview?.api?.get_subscriptions) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">Following is unavailable in this build.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5">Following is unavailable in this build.</div>';
     return;
   }
   try {
     renderSubscriptions(await window.pywebview.api.get_subscriptions());
   } catch (e) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Unable to load subscriptions.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Unable to load subscriptions.</div>';
   }
 }
 
@@ -8735,7 +8730,7 @@ function renderSubscriptions(subs) {
   if (!list) return;
 
   if (subs?.error) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Failed to load: ' + regEscapeHtml(subs.error) + '</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Failed to load: ' + regEscapeHtml(subs.error) + '</div>';
     return;
   }
   if (!subs || !subs.length) {
@@ -8751,7 +8746,7 @@ function renderSubscriptions(subs) {
     const name = regEscapeHtml(s.name || s.url);
     const isPlaylist = s.kind === 'playlist';
     const err = s.last_error
-      ? `<div class="s-label" style="font-size:11px;color:var(--red);">Last check failed: ${regEscapeHtml(s.last_error)}</div>`
+      ? `<div class="s-label u-fs-11 u-c-red">Last check failed: ${regEscapeHtml(s.last_error)}</div>`
       : '';
     const what = isPlaylist
       ? `Playlist · ${s.seen_count} track(s) seen`
@@ -8764,12 +8759,12 @@ function renderSubscriptions(subs) {
       <div class="sort-item reg-item${s.enabled ? '' : ' reg-item-disabled'}">
         <div class="reg-item-main">
           <span class="reg-url" title="${regEscapeHtml(s.url)}">${name}</span>
-          <div class="s-label" style="font-size:11px;">
+          <div class="s-label u-fs-11">
             ${what} · checked ${regEscapeHtml(subFormatDate(s.last_checked_at))}${next}
           </div>
           ${err}
         </div>
-        <select style="max-width:140px;padding:5px 8px;font-size:var(--fs-75);flex-shrink:0;"
+        <select class="u-maxw-140 u-p-5-8 u-fs-fs-75 u-shrink-0"
                 title="Check this ${target} automatically and download what is new"
                 onchange="setSubscriptionInterval('${regEscapeHtml(s.id)}', this.value)">
           ${subIntervalOptions(s.interval_minutes)}
@@ -8933,7 +8928,7 @@ async function resetSubscription(id) {
 async function checkSubscriptions(download) {
   const results = $('subscription-results');
   if (results) {
-    results.innerHTML = '<div class="s-label" style="font-size:11.5px;">Checking…</div>';
+    results.innerHTML = '<div class="s-label u-fs-11_5">Checking…</div>';
     $('subscription-results-section').style.display = '';
   }
   try {
@@ -8955,13 +8950,13 @@ function subscriptionsChecked(payload) {
   section.style.display = '';
 
   if (payload?.error) {
-    results.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">' + regEscapeHtml(payload.error) + '</div>';
+    results.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">' + regEscapeHtml(payload.error) + '</div>';
     return;
   }
 
   const rows = payload?.results || [];
   if (!rows.length) {
-    results.innerHTML = '<div class="s-label" style="font-size:11.5px;">Nothing is being followed yet.</div>';
+    results.innerHTML = '<div class="s-label u-fs-11_5">Nothing is being followed yet.</div>';
     return;
   }
 
@@ -8972,23 +8967,23 @@ function subscriptionsChecked(payload) {
     if (r.error) {
       return `<div class="sort-item reg-item"><div class="reg-item-main">
         <span class="reg-url">${artist}</span>
-        <div class="s-label" style="font-size:11px;color:var(--red);">${regEscapeHtml(r.error)}</div>
+        <div class="s-label u-fs-11 u-c-red">${regEscapeHtml(r.error)}</div>
       </div></div>`;
     }
     if (r.watermarked) {
       return `<div class="sort-item reg-item"><div class="reg-item-main">
         <span class="reg-url">${artist}</span>
-        <div class="s-label" style="font-size:11px;">First check — ${r.total_releases} ${unit}(s) recorded as seen. Only ${isPlaylist ? 'tracks added later' : 'later releases'} will be fetched.</div>
+        <div class="s-label u-fs-11">First check — ${r.total_releases} ${unit}(s) recorded as seen. Only ${isPlaylist ? 'tracks added later' : 'later releases'} will be fetched.</div>
       </div></div>`;
     }
     const releases = (r.new_releases || []).map((rel) =>
       isPlaylist
-        ? `<div class="s-label" style="font-size:11px;">· ${regEscapeHtml(rel.title)}</div>`
-        : `<div class="s-label" style="font-size:11px;">· ${regEscapeHtml(rel.title)}${rel.year ? ' (' + regEscapeHtml(rel.year) + ')' : ''} [${regEscapeHtml(rel.type)}]</div>`
+        ? `<div class="s-label u-fs-11">· ${regEscapeHtml(rel.title)}</div>`
+        : `<div class="s-label u-fs-11">· ${regEscapeHtml(rel.title)}${rel.year ? ' (' + regEscapeHtml(rel.year) + ')' : ''} [${regEscapeHtml(rel.type)}]</div>`
     ).join('');
     return `<div class="sort-item reg-item"><div class="reg-item-main">
       <span class="reg-url">${artist}</span>
-      <div class="s-label" style="font-size:11px;">${(r.new_releases || []).length} new ${unit}(s)${payload?.scheduled ? ' · scheduled check' : ''}</div>
+      <div class="s-label u-fs-11">${(r.new_releases || []).length} new ${unit}(s)${payload?.scheduled ? ' · scheduled check' : ''}</div>
       ${releases}
     </div></div>`;
   }).join('');
@@ -9004,24 +8999,25 @@ function healthRate(rate) {
   return rate === null || rate === undefined ? '—' : Math.round(rate * 100) + '%';
 }
 
-function healthColour(row) {
-  if (!row.attempts) return 'var(--muted)';
-  if (row.success_rate >= 0.9) return 'var(--green, #1ed760)';
-  if (row.success_rate >= 0.5) return 'var(--yellow, #f0c674)';
-  return 'var(--red)';
+/** The tone (see [data-tone] in styles.css) of an extension's success rate. */
+function healthTone(row) {
+  if (!row.attempts) return 'muted';
+  if (row.success_rate >= 0.9) return 'ok';
+  if (row.success_rate >= 0.5) return 'warn';
+  return 'error';
 }
 
 async function loadExtensionHealth() {
   const list = $('ext-health-list');
   if (!list) return;
   if (!window.pywebview?.api?.get_extension_health) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">Extension health is unavailable in this build.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5">Extension health is unavailable in this build.</div>';
     return;
   }
   try {
     renderExtensionHealth(await window.pywebview.api.get_extension_health());
   } catch (e) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Unable to load extension health.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Unable to load extension health.</div>';
   }
 }
 
@@ -9030,12 +9026,12 @@ function renderExtensionHealth(data) {
   if (!list) return;
 
   if (data?.error) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">' + regEscapeHtml(data.error) + '</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">' + regEscapeHtml(data.error) + '</div>';
     return;
   }
   const rows = data?.providers || [];
   if (!rows.length) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">No extensions installed, and nothing has been downloaded yet.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5">No extensions installed, and nothing has been downloaded yet.</div>';
     return;
   }
 
@@ -9045,16 +9041,16 @@ function renderExtensionHealth(data) {
       ? `${r.successes}/${r.attempts} succeeded · ~${r.avg_duration_s}s each`
       : 'never tried';
     const err = r.last_error
-      ? `<div class="s-label" style="font-size:11px;color:var(--red);">Last error: ${regEscapeHtml(r.last_error)}</div>`
+      ? `<div class="s-label u-fs-11 u-c-red">Last error: ${regEscapeHtml(r.last_error)}</div>`
       : '';
     return `
       <div class="sort-item reg-item">
         <div class="reg-item-main">
           <span class="reg-url">${regEscapeHtml(r.provider)}${version}</span>
-          <div class="s-label" style="font-size:11px;">${regEscapeHtml(detail)}</div>
+          <div class="s-label u-fs-11">${regEscapeHtml(detail)}</div>
           ${err}
         </div>
-        <span style="font-weight:600;font-size:13px;color:${healthColour(r)};">${healthRate(r.success_rate)}</span>
+        <span class="u-fw-600 u-fs-13" data-tone="${healthTone(r)}">${healthRate(r.success_rate)}</span>
       </div>`;
   }).join('');
 }
@@ -9179,13 +9175,13 @@ async function loadExtensionSettings() {
   const list = $('ext-settings-list');
   if (!list) return;
   if (!window.pywebview?.api?.list_extension_settings) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">Extension settings are unavailable in this build.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5">Extension settings are unavailable in this build.</div>';
     return;
   }
   try {
     renderExtensionSettings(await window.pywebview.api.list_extension_settings());
   } catch (e) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Unable to load extension settings.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Unable to load extension settings.</div>';
   }
 }
 
@@ -9200,7 +9196,7 @@ function extSettingFieldHtml(ext, entry, cardIdx) {
 
   if (entry.type === 'button') {
     return `<div class="s-row">${label}
-      <button class="act-btn secondary" type="button" style="padding:6px 14px;font-size:12px;"
+      <button class="act-btn secondary u-p-6-14 u-fs-12" type="button"
         onclick="runExtensionSettingAction('${regEscapeHtml(ext.name)}','${regEscapeHtml(entry.key)}')">${regEscapeHtml(entry.label)}</button>
     </div>`;
   }
@@ -9272,27 +9268,27 @@ function renderExtensionSettings(data) {
   const list = $('ext-settings-list');
   if (!list) return;
   if (data?.error) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">' + regEscapeHtml(data.error) + '</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">' + regEscapeHtml(data.error) + '</div>';
     return;
   }
   const rows = data?.extensions || [];
   if (!rows.length) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">No installed extension has settings.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5">No installed extension has settings.</div>';
     return;
   }
   list.innerHTML = rows.map((ext, idx) => `
     <details class="sort-item reg-item" data-ext="${regEscapeHtml(ext.name)}" style="display:block;">
-      <summary style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;">
+      <summary class="u-cursor-pointer u-justify-space-between u-items-center u-gap-8" style="display:flex;">
         <span class="reg-url">${regEscapeHtml(ext.display_name)}</span>
-        <span class="s-label" style="font-size:11px;">${regEscapeHtml(ext.name)} · v${regEscapeHtml(ext.version || '?')}</span>
+        <span class="s-label u-fs-11">${regEscapeHtml(ext.name)} · v${regEscapeHtml(ext.version || '?')}</span>
       </summary>
-      <div style="margin-top:10px;">
+      <div class="u-mt-10">
         ${ext.settings.map((entry) => extSettingFieldHtml(ext, entry, idx)).join('')}
         ${extLocalNetworkRowHtml(ext)}
-        <div class="s-row" style="justify-content:flex-end;gap:8px;">
-          <button class="act-btn secondary" type="button" style="padding:6px 14px;font-size:12px;"
+        <div class="s-row u-justify-flex-end u-gap-8">
+          <button class="act-btn secondary u-p-6-14 u-fs-12" type="button"
             onclick="resetExtensionSettings('${regEscapeHtml(ext.name)}')">Reset to defaults</button>
-          <button class="act-btn primary" type="button" style="padding:6px 14px;font-size:12px;"
+          <button class="act-btn primary u-p-6-14 u-fs-12" type="button"
             onclick="saveExtensionSettings('${regEscapeHtml(ext.name)}', this)">Save</button>
         </div>
       </div>
@@ -9364,11 +9360,11 @@ async function runExtensionSettingAction(name, key) {
 let signedSessionsTimer = null;
 
 const SIGNED_STATE = {
-  active: ['active', 'var(--green, #1ed760)'],
-  refresh_due: ['refresh due', 'var(--yellow, #f0c674)'],
-  expired: ['expired', 'var(--red)'],
-  unverified: ['not verified', 'var(--muted)'],
-  orphaned: ['orphaned', 'var(--muted)'],
+  active: ['active', 'ok'],
+  refresh_due: ['refresh due', 'warn'],
+  expired: ['expired', 'error'],
+  unverified: ['not verified', 'muted'],
+  orphaned: ['orphaned', 'muted'],
 };
 
 function signedDuration(seconds) {
@@ -9388,13 +9384,13 @@ async function loadSignedSessions() {
   const list = $('signed-sessions-list');
   if (!list) return;
   if (!window.pywebview?.api?.get_signed_sessions) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">Signed sessions are unavailable in this build.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5">Signed sessions are unavailable in this build.</div>';
     return;
   }
   try {
     renderSignedSessions(await window.pywebview.api.get_signed_sessions());
   } catch (e) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Unable to load signed sessions.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Unable to load signed sessions.</div>';
   }
 }
 
@@ -9404,18 +9400,18 @@ function renderSignedSessions(data) {
   if (signedSessionsTimer) { clearInterval(signedSessionsTimer); signedSessionsTimer = null; }
 
   if (data?.error) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">' + regEscapeHtml(data.error) + '</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">' + regEscapeHtml(data.error) + '</div>';
     return;
   }
   const rows = data?.sessions || [];
   if (!rows.length) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">No signed sessions stored yet — one is created the first time an extension needs it.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5">No signed sessions stored yet — one is created the first time an extension needs it.</div>';
     return;
   }
 
   const loadedAt = Date.now();
   list.innerHTML = rows.map((r, i) => {
-    const [stateLabel, colour] = SIGNED_STATE[r.state] || [r.state, 'var(--muted)'];
+    const [stateLabel, tone] = SIGNED_STATE[r.state] || [r.state, 'muted'];
     const version = r.version ? ' · v' + regEscapeHtml(r.version) : '';
     const details = [];
     if (r.kind !== 'gateway' && r.extensions?.length) details.push('used by ' + r.extensions.join(', '));
@@ -9423,16 +9419,16 @@ function renderSignedSessions(data) {
     if (r.capabilities?.length) details.push(r.capabilities.join(', '));
     if (r.auth_paused_s) details.push('verification paused ' + signedDuration(r.auth_paused_s));
     const clearBtn = r.state === 'unverified' ? '' :
-      `<button class="act-btn secondary" type="button" style="padding:4px 10px;font-size:11px;" data-signed-clear="${regEscapeHtml(r.key)}" title="Drop this session so the next request verifies again.">Clear</button>`;
+      `<button class="act-btn secondary u-p-4-10 u-fs-11" type="button" data-signed-clear="${regEscapeHtml(r.key)}" title="Drop this session so the next request verifies again.">Clear</button>`;
     return `
       <div class="sort-item reg-item">
         <div class="reg-item-main">
           <span class="reg-url">${regEscapeHtml(r.label)}${version}</span>
-          <div class="s-label" style="font-size:11px;" data-signed-expiry="${i}"></div>
-          ${details.length ? `<div class="s-label" style="font-size:11px;">${regEscapeHtml(details.join(' · '))}</div>` : ''}
+          <div class="s-label u-fs-11" data-signed-expiry="${i}"></div>
+          ${details.length ? `<div class="s-label u-fs-11">${regEscapeHtml(details.join(' · '))}</div>` : ''}
         </div>
-        <span style="display:flex;align-items:center;gap:8px;">
-          <span style="font-weight:600;font-size:12px;color:${colour};">${regEscapeHtml(stateLabel)}</span>
+        <span class="u-items-center u-gap-8" style="display:flex;">
+          <span class="u-fw-600 u-fs-12" data-tone="${tone}">${regEscapeHtml(stateLabel)}</span>
           ${clearBtn}
         </span>
       </div>`;
@@ -9550,7 +9546,7 @@ function statsTile(label, value, hint) {
 // relative to the largest value so the shape of the list is readable at a
 // glance rather than needing the numbers to be compared by eye.
 function statsBars(rows, formatValue) {
-  if (!rows.length) return '<div class="s-label" style="font-size:11.5px;">Nothing here yet.</div>';
+  if (!rows.length) return '<div class="s-label u-fs-11_5">Nothing here yet.</div>';
   const peak = Math.max(...rows.map((row) => row.value)) || 1;
   return rows.map((row) => `
     <div class="stat-bar-row">
@@ -9564,7 +9560,7 @@ function statsSection(title, inner, note) {
   return `
     <div class="s-section">
       <div class="s-title">${regEscapeHtml(title)}</div>
-      ${note ? `<div class="s-label" style="font-size:11px;margin:-2px 0 10px;">${regEscapeHtml(note)}</div>` : ''}
+      ${note ? `<div class="s-label u-fs-11 u-m-n2-0-10">${regEscapeHtml(note)}</div>` : ''}
       ${inner}
     </div>`;
 }
@@ -9625,7 +9621,7 @@ async function scanSmbLibrary() {
   button.disabled = true;
   button.classList.add('ta-loading');
   setStatsSmbStatus(`Connecting to ${protocol} library…`);
-  $('stats-body').innerHTML = `<div class="s-label" style="font-size:11.5px;">Scanning ${protocol} library…</div>`;
+  $('stats-body').innerHTML = `<div class="s-label u-fs-11_5">Scanning ${protocol} library…</div>`;
   try {
     const result = await window.pywebview.api.scan_smb_library(profileId);
     if (result?.status === 'error') throw new Error(result.error || 'Could not start network scan.');
@@ -9667,15 +9663,15 @@ async function loadStats() {
   if (!body) return;
   void loadStatsSmbDestinations();
   if (!window.pywebview?.api?.get_stats) {
-    body.innerHTML = '<div class="s-label" style="font-size:11.5px;">Statistics are unavailable in this build.</div>';
+    body.innerHTML = '<div class="s-label u-fs-11_5">Statistics are unavailable in this build.</div>';
     return;
   }
-  body.innerHTML = '<div class="s-label" style="font-size:11.5px;">Loading…</div>';
+  body.innerHTML = '<div class="s-label u-fs-11_5">Loading…</div>';
   try {
     const [year, days] = statsPeriodArgs();
     renderStats(await window.pywebview.api.get_stats(year, days, 10));
   } catch (e) {
-    body.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Could not read the download log.</div>';
+    body.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Could not read the download log.</div>';
   }
 }
 
@@ -9683,7 +9679,7 @@ function renderStats(doc) {
   const body = $('stats-body');
   if (!body) return;
   if (!doc || doc.error) {
-    body.innerHTML = `<div class="s-label" style="font-size:11.5px;color:var(--red);">${regEscapeHtml(doc?.error || 'No data.')}</div>`;
+    body.innerHTML = `<div class="s-label u-fs-11_5 u-c-red">${regEscapeHtml(doc?.error || 'No data.')}</div>`;
     return;
   }
 
@@ -9807,7 +9803,7 @@ function renderStats(doc) {
   if (facts.length) {
     sections.push(statsSection(
       'Highlights',
-      facts.map((fact) => `<div class="s-label" style="font-size:12px;line-height:1.9;">${regEscapeHtml(fact)}</div>`).join(''),
+      facts.map((fact) => `<div class="s-label u-fs-12 u-lh-1_9">${regEscapeHtml(fact)}</div>`).join(''),
     ));
   }
 
