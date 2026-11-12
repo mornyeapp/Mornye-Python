@@ -243,7 +243,7 @@ function setThemeClass(dark) {
   // when the OS flips under an 'auto' choice.
   try {
     const tc = document.querySelector('meta[name="theme-color"]');
-    if (tc) tc.setAttribute('content', dark ? '#0e0c0b' : '#f6f2ec');
+    if (tc) tc.setAttribute('content', dark ? '#0d0d0d' : '#f2f2f0');
   } catch (e) { /* no <head> access is not worth failing the theme over */ }
 }
 

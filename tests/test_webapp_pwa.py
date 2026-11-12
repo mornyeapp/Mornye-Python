@@ -79,3 +79,21 @@ def test_index_html_registers_the_service_worker_gated_on_web_mode() -> None:
     flag_pos = html.index("__MORNYE_WEB_MODE__ = true")
     register_pos = html.index("navigator.serviceWorker.register")
     assert flag_pos < register_pos
+
+
+def test_the_browser_chrome_is_painted_in_the_console_ground() -> None:
+    """Voce 27: theme-color, the manifest and the native window open on the
+    v2 ground, so nothing frames the page in the old warm black."""
+    import json
+
+    from mornye.branding_tokens import v2_tokens
+
+    dark, light = v2_tokens("dark")["ground"], v2_tokens("light")["ground"]
+    html = (webapp.FRONTEND_DIR / "index.html").read_text()
+    app_js = (webapp.FRONTEND_DIR / "app.js").read_text()
+    manifest = json.loads((webapp.FRONTEND_DIR / "manifest.json").read_text())
+
+    assert f'name="theme-color" content="{dark}"' in html
+    for source in (html, app_js):
+        assert f"dark ? '{dark}' : '{light}'" in source
+    assert manifest["theme_color"] == manifest["background_color"] == dark

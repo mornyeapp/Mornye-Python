@@ -18,7 +18,7 @@
        pywebview window too: manifest/theme-color are simply unused there,
        and the registration script below no-ops without that flag. -->
   <link rel="manifest" href="manifest.json?v=20261106-warm-rebrand">
-  <meta name="theme-color" content="#0e0c0b">
+  <meta name="theme-color" content="#0d0d0d">
   <!-- apple-mobile-web-app-capable is the legacy spelling Safari still reads;
        mobile-web-app-capable is the standard one everything else reads. Both,
        because dropping either loses standalone mode on one of the two. -->
@@ -89,7 +89,7 @@
       // setThemeClass() for every change after it.
       try {
         var tc = document.querySelector('meta[name="theme-color"]');
-        if (tc) tc.setAttribute('content', dark ? '#0e0c0b' : '#f6f2ec');
+        if (tc) tc.setAttribute('content', dark ? '#0d0d0d' : '#f2f2f0');
       } catch (e) {}
       // Accent, for the same reason and in the same breath: without it the
       // first frames paint the default teal before applyAccent() runs.

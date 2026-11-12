@@ -2545,7 +2545,7 @@ def run_gui() -> None:
         min_size=(1000, 800),
         frameless=True,
         easy_drag=False,
-        background_color="#0a0a0a",
+        background_color="#0d0d0d",  # v2 ground, dark: no flash before CSS
     )
     api.set_window(window)
     if window is not None:
