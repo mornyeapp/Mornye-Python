@@ -150,8 +150,13 @@ regola (una parola = un elemento).
      diventa secondario. Verificata in scuro/chiaro/375px; i risultati di
      una scansione (righe `track-row.local-row`, già coperte da `home.css`)
      non provati: servono file audio veri.
-   **Prossimo:** voce 16, Following; aperta la riorganizzazione di
-   Settings.
+   - **voce 16, Following** (commit sotto): `css/views/following.css`, campi
+     e textarea, sottotitolo del blocco "segui più artisti", righe
+     settimanali su filetti; "Follow" diventa secondario. Righe degli
+     artisti seguiti e uscite della settimana non provate (servono
+     iscrizioni vere).
+   **Prossimo:** voce 17, Explore (con il feed delle estensioni, J3);
+   aperta la riorganizzazione di Settings.
 0. **Fase 2 completa** — sul branch **`redesign`** (creato da `2.0.6` dopo
    i mock, come da §5: dalla Fase 2 in poi un branch dedicato e un rilascio
    unico). Commit locali, non pushati.
