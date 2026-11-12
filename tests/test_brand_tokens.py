@@ -86,20 +86,24 @@ def test_text_pairs_meet_wcag_aa(mode: str, tokens: dict) -> None:
     assert not weak, f"{mode}: below 4.5:1 — {weak}"
 
 
-def test_teal_is_the_default_accent_everywhere() -> None:
+def test_amber_is_the_default_accent_everywhere() -> None:
+    """Voce 28: the console signal is the default; an accent sets the
+    --signal tokens and nothing else."""
     from mornye.app import MornyeAPI
 
-    app_js = (
-        Path(__file__).resolve().parents[1] / "mornye" / "frontend" / "app.js"
-    ).read_text(encoding="utf-8")
+    frontend = Path(__file__).resolve().parents[1] / "mornye" / "frontend"
+    app_js = (frontend / "app.js").read_text(encoding="utf-8")
+    accents_css = (frontend / "css" / "accents.css").read_text(encoding="utf-8")
     js_accents = re.search(r"const ACCENTS = \[(.*?)\];", app_js).group(1)
     assert [a.strip(" '") for a in js_accents.split(",")] == list(MornyeAPI.ACCENTS)
-    assert MornyeAPI.ACCENTS[0] == "teal"
-    assert ROOT["accent"] == bt.DARK["accent"]
-    # Every non-default accent has a dark and a light preset.
+    assert MornyeAPI.ACCENTS[0] == "amber"
+    assert 'data-accent="amber"' not in accents_css, "amber is tokens.css itself"
+    # Every other accent has a dark and a light block, of signal tokens only.
     for accent in MornyeAPI.ACCENTS[1:]:
-        assert f'html[data-accent="{accent}"]' in CSS
-        assert f'html.light-theme[data-accent="{accent}"]' in CSS
+        assert f'html[data-accent="{accent}"]' in accents_css
+        assert f'html.light-theme[data-accent="{accent}"]' in accents_css
+    assert "--accent" not in accents_css.split("*/", 1)[1]
+    assert "data-accent" not in CSS, "styles.css no longer carries presets"
 
 
 def test_textual_themes_build_from_the_tokens() -> None:

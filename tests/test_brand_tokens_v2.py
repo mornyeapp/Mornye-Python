@@ -102,10 +102,12 @@ def test_textual_theme_builds(mode: str) -> None:
 
 #: Every stylesheet built on tokens.css: the component library and the
 #: Fase 3 files that restyle the app (layout, legacy controls, views).
+#: accents.css is left out with tokens.css: like it, it defines token values
+#: (the --signal of each accent choice, voce 28) rather than using them.
 SHEETS = sorted(
     str(p.relative_to(TOKENS_CSS.parent))
     for p in TOKENS_CSS.parent.rglob("*.css")
-    if p.name != "tokens.css"
+    if p.name not in ("tokens.css", "accents.css")
 )
 
 

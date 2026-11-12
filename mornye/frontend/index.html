@@ -42,6 +42,8 @@
   <!-- css/tokens.css (token v2, generated from branding_tokens.py) comes
        first: styles.css's old variable names are aliases of it now. -->
   <script>document.write('<link rel="stylesheet" href="css/tokens.css?_=' + Date.now() + '">');</script>
+  <!-- css/accents.css: the Appearance accents, each a set of --signal values. -->
+  <script>document.write('<link rel="stylesheet" href="css/accents.css?_=' + Date.now() + '">');</script>
   <script>document.write('<link rel="stylesheet" href="styles.css?_=' + Date.now() + '">');</script>
   <!-- css/layout.css: the shell (titlebar, rail, dock, player bar) in the
        console look, over styles.css until that file goes (redesign voce 22). -->
@@ -92,15 +94,15 @@
         if (tc) tc.setAttribute('content', dark ? '#0d0d0d' : '#f2f2f0');
       } catch (e) {}
       // Accent, for the same reason and in the same breath: without it the
-      // first frames paint the default teal before applyAccent() runs.
-      // 'teal' is the default and has no data-accent value of its own.
-      // Before the 2026 rebrand the default was 'green', so a stored 'green'
-      // from then is almost always the untouched default: it is moved to
-      // teal once ('mornye-brand' marks it done; see migrateAccent in app.js).
+      // first frames paint the default amber before applyAccent() runs.
+      // 'amber' (the console signal) is the default and has no data-accent
+      // value. A stored 'teal' or 'green' from before the console redesign
+      // is almost always an untouched old default: moved to amber once
+      // ('mornye-brand' marks it done; see migrateAccent in app.js).
       try {
         var accent = localStorage.getItem('mornye-accent');
-        if (accent === 'green' && localStorage.getItem('mornye-brand') !== '2') accent = 'teal';
-        if (accent && accent !== 'teal') document.documentElement.setAttribute('data-accent', accent);
+        if ((accent === 'teal' || accent === 'green') && localStorage.getItem('mornye-brand') !== '3') accent = 'amber';
+        if (accent && accent !== 'amber') document.documentElement.setAttribute('data-accent', accent);
       } catch (e) {}
     })();
   </script>
@@ -844,7 +846,7 @@
               </select>
             </div>
             <div class="s-row">
-              <span class="s-label">Accent Color<small>Default: Teal</small></span>
+              <span class="s-label">Accent Color<small>The signal colour: focus, selection, the primary action. Default: Amber</small></span>
               <div class="accent-picker">
                 <!-- A swatch of the current accent next to the select: the
                      names alone ("Cyan" vs "Blue") don't tell you what you
@@ -852,7 +854,8 @@
                      --accent itself, so it is always the real colour. -->
                 <span class="accent-dot" aria-hidden="true"></span>
                 <select id="config-accent" onchange="changeAccent()">
-                  <option value="teal" selected>Teal</option>
+                  <option value="amber" selected>Amber</option>
+                  <option value="teal">Teal</option>
                   <option value="green">Green</option>
                   <option value="blue">Blue</option>
                   <option value="purple">Purple</option>
@@ -860,7 +863,6 @@
                   <option value="orange">Orange</option>
                   <option value="red">Red</option>
                   <option value="cyan">Cyan</option>
-                  <option value="amber">Amber</option>
                 </select>
               </div>
             </div>

@@ -685,10 +685,12 @@ class MornyeAPI(
             self.log(f"Failed to save theme: {e}", "error")
             return {"ok": False, "error": str(e)}
 
-    #: Accents the frontend has an --accent-* block for (styles.css). Kept
-    #: here as well so an unknown value can't be written to disk and then
-    #: applied at boot as a data-accent nothing styles.
+    #: Accents the frontend has a block for (css/accents.css; amber, the
+    #: default, is tokens.css itself). Kept here as well so an unknown value
+    #: can't be written to disk and then applied at boot as a data-accent
+    #: nothing styles.
     ACCENTS = (
+        "amber",
         "teal",
         "green",
         "blue",
@@ -697,15 +699,14 @@ class MornyeAPI(
         "orange",
         "red",
         "cyan",
-        "amber",
     )
     #: Matches BRAND_VERSION in frontend/app.js: stored next to the accent so
-    #: the one-off green -> teal migration there runs once per install.
-    BRAND_VERSION = 2
+    #: the one-off teal/green -> amber migration there runs once per install.
+    BRAND_VERSION = 3
 
     def save_accent(self, accent: str) -> dict:
         """Persists the accent colour, same reasoning as save_theme()."""
-        accent = str(accent or "teal")
+        accent = str(accent or "amber")
         if accent not in self.ACCENTS:
             return {"ok": False, "error": f"unknown accent: {accent}"}
         try:

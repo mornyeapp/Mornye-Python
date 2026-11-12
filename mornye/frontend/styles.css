@@ -65,7 +65,7 @@
         radial-gradient(1100px 640px at 0% 0%, rgba(31,79,79,.34), transparent 62%),
         radial-gradient(900px 560px at 100% 100%, rgba(240,165,96,.07), transparent 60%);
 
-      /* Accent — teal from the logo (default; data-accent picks another) */
+      /* Accent — the v1 teal; the bridge below points every --accent-* at the signal */
       --green-500:      #5cd3c3;
       --accent:         #5cd3c3;
       --accent-hover:   #7adfd1;
@@ -248,7 +248,7 @@
        the views are rebuilt one by one. --text, --surface and --ease are v2
        names already and were dropped from the blocks above. The selector
        list matches the light block so this wins in both themes; the
-       data-accent presets below still override --accent-* (Fase 5, voce 28).
+       accents set the --signal tokens in css/accents.css (voce 28).
        Goes away with styles.css (voce 22). */
     :root,
     html.light-theme,
@@ -330,103 +330,6 @@
       --dur-4: var(--motion);
       --ease-out: var(--ease);
       --ease-spring: var(--ease);
-    }
-
-    /* ── Accent presets ──
-       Everything accent-coloured in the app resolves through the eight
-       --accent-* tokens, so an alternative accent is those eight values and
-       nothing else — no per-component overrides anywhere. The default teal
-       stays in :root / .light-theme above; these only exist for the other
-       choices, set as data-accent on <html> and <body> (same pair the theme
-       classes go on) by applyAccent() in app.js.
-
-       The light selectors carry the extra .light-theme class deliberately:
-       that outranks the dark block regardless of source order, so a light
-       window can never pick up a dark accent value.
-
-       Values are plain hex/rgba rather than oklch()/color-mix() to match the
-       rest of the file — the desktop web view's floor is kept low on purpose.
-       Generated from one base colour per accent (hover/press are lightness
-       steps, the tints are the same alphas the teal uses). */
-    html[data-accent="green"], body[data-accent="green"] {
-      --accent: #30d158;  --accent-hover: #4be06e;  --accent-press: #28c24d;
-      --accent-fg: #07190c;  --accent-text: #52d979;
-      --accent-subtle: rgba(48,209,88,.14);  --accent-border: rgba(48,209,88,.42);  --accent-ring: rgba(48,209,88,.34);
-    }
-    html.light-theme[data-accent="green"], body.light-theme[data-accent="green"] {
-      --accent: #24863d;  --accent-hover: #1f7936;  --accent-press: #19652d;
-      --accent-fg: #ffffff;  --accent-text: #24863d;
-      --accent-subtle: rgba(36,134,61,.12);  --accent-border: rgba(36,134,61,.4);  --accent-ring: rgba(36,134,61,.28);
-    }
-    html[data-accent="blue"], body[data-accent="blue"] {
-      --accent: #4d9dff;  --accent-hover: #76b3ff;  --accent-press: #2989ff;
-      --accent-fg: #0b0b0d;  --accent-text: #67abff;
-      --accent-subtle: rgba(77,157,255,.14);  --accent-border: rgba(77,157,255,.42);  --accent-ring: rgba(77,157,255,.34);
-    }
-    html.light-theme[data-accent="blue"], body.light-theme[data-accent="blue"] {
-      --accent: #1f6feb;  --accent-hover: #1463dd;  --accent-press: #1258c5;
-      --accent-fg: #ffffff;  --accent-text: #125ccf;
-      --accent-subtle: rgba(31,111,235,.12);  --accent-border: rgba(31,111,235,.4);  --accent-ring: rgba(31,111,235,.28);
-    }
-    html[data-accent="purple"], body[data-accent="purple"] {
-      --accent: #a97bff;  --accent-hover: #c4a4ff;  --accent-press: #9257ff;
-      --accent-fg: #0b0b0d;  --accent-text: #ba95ff;
-      --accent-subtle: rgba(169,123,255,.14);  --accent-border: rgba(169,123,255,.42);  --accent-ring: rgba(169,123,255,.34);
-    }
-    html.light-theme[data-accent="purple"], body.light-theme[data-accent="purple"] {
-      --accent: #7c4fd6;  --accent-hover: #6d3ad1;  --accent-press: #602ec4;
-      --accent-fg: #ffffff;  --accent-text: #6430cd;
-      --accent-subtle: rgba(124,79,214,.12);  --accent-border: rgba(124,79,214,.4);  --accent-ring: rgba(124,79,214,.28);
-    }
-    html[data-accent="pink"], body[data-accent="pink"] {
-      --accent: #ff6fae;  --accent-hover: #ff98c5;  --accent-press: #ff4b9a;
-      --accent-fg: #0b0b0d;  --accent-text: #ff89bc;
-      --accent-subtle: rgba(255,111,174,.14);  --accent-border: rgba(255,111,174,.42);  --accent-ring: rgba(255,111,174,.34);
-    }
-    html.light-theme[data-accent="pink"], body.light-theme[data-accent="pink"] {
-      --accent: #d6337b;  --accent-hover: #c7286e;  --accent-press: #b22463;
-      --accent-fg: #ffffff;  --accent-text: #bb2667;
-      --accent-subtle: rgba(214,51,123,.12);  --accent-border: rgba(214,51,123,.4);  --accent-ring: rgba(214,51,123,.28);
-    }
-    html[data-accent="orange"], body[data-accent="orange"] {
-      --accent: #ff9f45;  --accent-hover: #ffb46e;  --accent-press: #ff8d21;
-      --accent-fg: #0b0b0d;  --accent-text: #ffac5e;
-      --accent-subtle: rgba(255,159,69,.14);  --accent-border: rgba(255,159,69,.42);  --accent-ring: rgba(255,159,69,.34);
-    }
-    html.light-theme[data-accent="orange"], body.light-theme[data-accent="orange"] {
-      --accent: #c76a10;  --accent-hover: #af5d0e;  --accent-press: #98510c;
-      --accent-fg: #ffffff;  --accent-text: #a1560d;
-      --accent-subtle: rgba(199,106,16,.12);  --accent-border: rgba(199,106,16,.4);  --accent-ring: rgba(199,106,16,.28);
-    }
-    html[data-accent="red"], body[data-accent="red"] {
-      --accent: #ff6b6b;  --accent-hover: #ff9494;  --accent-press: #ff4747;
-      --accent-fg: #0b0b0d;  --accent-text: #ff8585;
-      --accent-subtle: rgba(255,107,107,.14);  --accent-border: rgba(255,107,107,.42);  --accent-ring: rgba(255,107,107,.34);
-    }
-    html.light-theme[data-accent="red"], body.light-theme[data-accent="red"] {
-      --accent: #d13a3a;  --accent-hover: #c42e2e;  --accent-press: #af2929;
-      --accent-fg: #ffffff;  --accent-text: #b72b2b;
-      --accent-subtle: rgba(209,58,58,.12);  --accent-border: rgba(209,58,58,.4);  --accent-ring: rgba(209,58,58,.28);
-    }
-    html[data-accent="cyan"], body[data-accent="cyan"] {
-      --accent: #3fd6d6;  --accent-hover: #61dddd;  --accent-press: #2ac7c7;
-      --accent-fg: #0b0b0d;  --accent-text: #54dada;
-      --accent-subtle: rgba(63,214,214,.14);  --accent-border: rgba(63,214,214,.42);  --accent-ring: rgba(63,214,214,.34);
-    }
-    html.light-theme[data-accent="cyan"], body.light-theme[data-accent="cyan"] {
-      --accent: #0d9a9a;  --accent-hover: #0b8282;  --accent-press: #096b6b;
-      --accent-fg: #ffffff;  --accent-text: #0a7474;
-      --accent-subtle: rgba(13,154,154,.12);  --accent-border: rgba(13,154,154,.4);  --accent-ring: rgba(13,154,154,.28);
-    }
-    html[data-accent="amber"], body[data-accent="amber"] {
-      --accent: #f5c451;  --accent-hover: #f7d178;  --accent-press: #f3b92f;
-      --accent-fg: #0b0b0d;  --accent-text: #f6cc69;
-      --accent-subtle: rgba(245,196,81,.14);  --accent-border: rgba(245,196,81,.42);  --accent-ring: rgba(245,196,81,.34);
-    }
-    html.light-theme[data-accent="amber"], body.light-theme[data-accent="amber"] {
-      --accent: #a67c00;  --accent-hover: #8c6900;  --accent-press: #735600;
-      --accent-fg: #ffffff;  --accent-text: #7d5e00;
-      --accent-subtle: rgba(166,124,0,.12);  --accent-border: rgba(166,124,0,.4);  --accent-ring: rgba(166,124,0,.28);
     }
 
     html, body { height: 100%; overflow: hidden; background: var(--bg); }

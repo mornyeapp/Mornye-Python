@@ -285,41 +285,42 @@ function syncSystemTheme(e) {
   if (val === 'auto') applyTheme('auto');
 }
 
-//: Must match MornyeAPI.ACCENTS in app.py and the --accent-* blocks in
-//: styles.css. 'teal' (the logo's colour) is the default and has no block of
-//: its own: it is what :root already says, so it is applied by removing the
-//: attribute.
-const ACCENTS = ['teal', 'green', 'blue', 'purple', 'pink', 'orange', 'red', 'cyan', 'amber'];
+//: Must match MornyeAPI.ACCENTS in app.py and the blocks in css/accents.css.
+//: 'amber' (the console look's signal) is the default and has no block of
+//: its own: it is what tokens.css already says, so it is applied by removing
+//: the attribute. An accent changes the signal tokens and nothing else.
+const ACCENTS = ['amber', 'teal', 'green', 'blue', 'purple', 'pink', 'orange', 'red', 'cyan'];
 //: Bumped by a rebrand that changes the default accent. Stored both in
 //: localStorage ('mornye-brand') and in gui-settings.json ('brand', written by
 //: save_accent()) so the one-off migration below happens once per install.
-const BRAND_VERSION = 2;
+const BRAND_VERSION = 3;
 
-// Before the warm rebrand the default accent was 'green', and nearly every
-// stored 'green' is that untouched default rather than a choice. Move it to
-// the new default once; anyone who picks green again afterwards keeps it.
+// The default was 'green' before the 2026 warm rebrand and 'teal' until the
+// console redesign; a stored one is nearly always that untouched default
+// rather than a choice. Move it to amber once; anyone who picks teal or
+// green again afterwards keeps it.
 function migrateAccent(accent, cfgBrand) {
   let done = Number(cfgBrand) >= BRAND_VERSION;
   try { done = done || localStorage.getItem('mornye-brand') === String(BRAND_VERSION); } catch (e) {}
   try { localStorage.setItem('mornye-brand', String(BRAND_VERSION)); } catch (e) {}
-  return (!done && accent === 'green') ? 'teal' : accent;
+  return (!done && (accent === 'green' || accent === 'teal')) ? 'amber' : accent;
 }
 
 // data-accent goes on <html> *and* <body>, the same pair the theme classes
-// use (see setThemeClass) — styles.css keys the accent blocks off both, so
+// use (see setThemeClass) — css/accents.css keys the blocks off both, so
 // that the token values are in scope no matter which element a rule resolves
 // against.
 function applyAccent(accent) {
-  const val = ACCENTS.includes(accent) ? accent : 'teal';
+  const val = ACCENTS.includes(accent) ? accent : 'amber';
   for (const el of [document.documentElement, document.body]) {
     if (!el) continue;
-    if (val === 'teal') el.removeAttribute('data-accent');
+    if (val === 'amber') el.removeAttribute('data-accent');
     else el.setAttribute('data-accent', val);
   }
 }
 
 function changeAccent() {
-  const val = $('config-accent')?.value || 'teal';
+  const val = $('config-accent')?.value || 'amber';
   applyAccent(val);
   // Three copies for the same reason changeTheme() keeps three: the two
   // localStorage writes are per-origin and can vanish, gui-settings.json is
@@ -338,7 +339,7 @@ function changeAccent() {
 function loadAccentFromStorage() {
   const stored = (() => {
     try { return localStorage.getItem('mornye-accent'); } catch (e) { return null; }
-  })() || 'teal';
+  })() || 'amber';
   const accent = migrateAccent(stored);
   try { localStorage.setItem('mornye-accent', accent); } catch (e) {}
   if ($('config-accent')) $('config-accent').value = accent;
@@ -437,7 +438,7 @@ function applySettings(settings = {}) {
   // Same dedicated-key-wins-over-blob dance as the theme above, for the
   // same reason: gui-settings.json is what survives, localStorage is what
   // the next launch reads first.
-  let accent = cfg.accent || 'teal';
+  let accent = cfg.accent || 'amber';
   try { accent = localStorage.getItem('mornye-accent') || accent; } catch (e) {}
   accent = migrateAccent(accent, cfg.brand);
   try { localStorage.setItem('mornye-accent', accent); } catch (e) {}
@@ -728,7 +729,7 @@ const ALL_ENRICH = [
 const SETTINGS_STORAGE_KEY = 'mornye-settings';
 const DEFAULT_SETTINGS = {
   theme: 'auto',
-  accent: 'teal',
+  accent: 'amber',
   sound_enabled: true,
   notification_sound: true,
   preview_volume: 100,
