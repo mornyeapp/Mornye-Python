@@ -1865,6 +1865,61 @@ function artistsCreditHtml(artistsData, joinedNames, fallbackUrl) {
 let g_albumArtistUrl = '';
 let g_albumArtistsData = [];
 
+// "See more…" toggle for long artist bios. The bio is line-clamped in CSS; the
+// button only shows while the text is actually truncated (or already expanded),
+// and is re-evaluated on resize since the card may be hidden when this runs.
+let _bioObserver = null;
+function setupBioToggle(subtitle, enabled) {
+  let btn = document.getElementById('artist-bio-toggle');
+  if (_bioObserver) { _bioObserver.disconnect(); _bioObserver = null; }
+  if (!enabled) { btn?.remove(); return; }
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.id = 'artist-bio-toggle';
+    btn.type = 'button';
+    btn.className = 'artist-bio-toggle';
+    subtitle.insertAdjacentElement('afterend', btn);
+  }
+  btn.onclick = () => {
+    const expanded = subtitle.classList.toggle('expanded');
+    btn.textContent = expanded ? 'See less' : 'See more…';
+    btn.setAttribute('aria-expanded', String(expanded));
+  };
+  btn.textContent = 'See more…';
+  btn.setAttribute('aria-expanded', 'false');
+  btn.hidden = true;
+  const update = () => {
+    if (!subtitle.clientHeight) return; // card not laid out yet
+    const expanded = subtitle.classList.contains('expanded');
+    btn.hidden = !(expanded || subtitle.scrollHeight > subtitle.clientHeight + 1);
+  };
+  if (typeof ResizeObserver !== 'undefined') {
+    _bioObserver = new ResizeObserver(update);
+    _bioObserver.observe(subtitle);
+  }
+  requestAnimationFrame(update);
+}
+
+// Providers join the © and ℗ lines with " · "; when both say the same thing
+// show it once (mirrors collapse_copyright in core/models.py).
+function collapseCopyright(value) {
+  const mark = /^\s*(?:[©℗]|\([cp]\))\s*/i;
+  const parts = String(value || '').split(' · ').map(p => p.trim()).filter(Boolean);
+  if (parts.length < 2) return String(value || '').trim();
+  const seen = new Map();
+  const marks = new Set();
+  for (const part of parts) {
+    const m = part.match(mark);
+    if (m) marks.add(m[0].trim().toUpperCase());
+    const key = part.replace(mark, '').toLowerCase().split(/\s+/).join(' ');
+    if (!seen.has(key)) seen.set(key, part);
+  }
+  if (seen.size === 1 && marks.has('©') && marks.has('℗')) {
+    return '©℗ ' + [...seen.values()][0].replace(mark, '');
+  }
+  return [...seen.values()].join(' · ');
+}
+
 function setAlbumCard(title, artist, coverUrl, quality, description, followers, owner, ownerAvatar, source, artistListeners, artistRank, artistVerified, artistBiography, releaseDate, trackCount, artistUrl, artistsData) {
   g_albumReleaseDate = releaseDate || '';
   g_albumTrackCount = trackCount || 0;
@@ -1928,6 +1983,7 @@ function setAlbumCard(title, artist, coverUrl, quality, description, followers, 
     subtitle.className = '';
     subtitle.style.display = (description || quality) ? '' : 'none';
   }
+  setupBioToggle(subtitle, isArtistCard);
 
   const ownerEl = $('album-owner');
   const followersEl = $('album-followers');
@@ -2162,7 +2218,7 @@ function updateAlbumMeta(trackCount) {
       ['Total time', formatLongDuration(totalMs)],
       ['Label', t0.publisher || t0.label],
       ['UPC', t0.upc],
-      ['Copyright', t0.copyright],
+      ['Copyright', collapseCopyright(t0.copyright)],
     ]);
   } else if (badgeType !== 'TRACK') {
     // ARTIST / SEARCH — showSingleTrackCard owns the TRACK case.
@@ -2219,7 +2275,7 @@ function showSingleTrackCard(t) {
     ['Genre', t.genre],
     ['ISRC', t.isrc],
     ['Label', t.publisher || t.label],
-    ['Copyright', t.copyright],
+    ['Copyright', collapseCopyright(t.copyright)],
   ]);
 
   // Bottoni azione specifici per la track

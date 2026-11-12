@@ -3483,7 +3483,19 @@
   font-size: 12.5px; color: var(--text2); line-height: 1.6;
   display: -webkit-box; -webkit-line-clamp: 4; line-clamp: 4; -webkit-box-orient: vertical;
   overflow: hidden; margin-bottom: 8px;
+  /* body is user-select: none; let the bio be selected and copied */
+  user-select: text; -webkit-user-select: text; cursor: text;
 }
+#album-subtitle.artist-bio.expanded {
+  display: block; -webkit-line-clamp: unset; line-clamp: unset; overflow: visible;
+}
+.artist-bio-toggle {
+  background: none; border: 0; padding: 0; margin: -4px 0 8px;
+  color: var(--accent); font: inherit; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; align-self: flex-start;
+}
+.artist-bio-toggle:hover { text-decoration: underline; }
+.artist-bio-toggle[hidden] { display: none; }
 
 /* =========================================
    RESPONSIVITY ADJUSTMENTS
