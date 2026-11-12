@@ -266,3 +266,26 @@ def test_307_and_308_repeat_the_request_302_turns_it_into_a_get(net_js, server) 
         net_js(f"http.post({json.dumps(server + '/r302')}, 'a=1')")["body"]
     )
     assert (found["method"], found["body"]) == ("GET", "")
+
+
+# ---------------------------------------------------------------------------
+# fetch
+# ---------------------------------------------------------------------------
+
+
+def test_fetch_answers_at_once_the_way_mobile_extensions_read_it(
+    net_js, server
+) -> None:
+    """Not a Promise: amazon and ytmusic read `res.status` on the next line."""
+    res = net_js(
+        f"(function () {{ var res = fetch({json.dumps(server)}, "
+        "{method: 'POST', headers: {'X-Test': 'yes'}, body: 'hi'});"
+        " return [res.ok, res.status, res.json(), typeof res.text()]; })()"
+    )
+    assert res[:2] == [True, 200]
+    assert (res[2]["method"], res[2]["body"], res[2]["x"]) == ("POST", "hi", "yes")
+    assert res[3] == "string"
+
+
+def test_fetch_json_of_a_non_json_body_is_null_not_a_throw(net_js, server) -> None:
+    assert net_js(f"fetch({json.dumps(server)}, {{method: 'HEAD'}}).json()") is None

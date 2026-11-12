@@ -168,6 +168,21 @@ if (!isMainThread) {
     delete: (url, headers)       => methodCall('DELETE', url, null, headers),
   };
 
+  // The mobile runtime's `fetch(url, {method, headers, body})` answers at
+  // once, not with a Promise: extensions written for it read `res.status`
+  // on the next line. Left undefined here, the name resolved to Node's own
+  // asynchronous fetch, every such read came back undefined, and amazon and
+  // ytmusic saw each of their requests as "no result". `await fetch(...)`
+  // still works on this one — awaiting a plain value just yields it.
+  global.fetch = (url, opts) => {
+    const res = global.http.request(String(url), opts) || {};
+    const body = typeof res.body === 'string' ? res.body : '';
+    return Object.assign(res, {
+      text: () => body,
+      json: () => { try { return JSON.parse(body); } catch (_) { return null; } },
+    });
+  };
+
   // `matching`, as the mobile runtime defines it (extension_runtime_matching.go).
   // Reproduced rather than improved on: apple-music turns these numbers into
   // accept/reject thresholds tuned against the Go versions — a Levenshtein
