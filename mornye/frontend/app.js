@@ -2275,6 +2275,7 @@ function showSingleTrackCard(t) {
     ['Genre', t.genre],
     ['ISRC', t.isrc],
     ['Label', t.publisher || t.label],
+    ['UPC', t.upc],
     ['Copyright', collapseCopyright(t.copyright)],
   ]);
 
@@ -2442,10 +2443,63 @@ function renderAlbumTech(rows) {
   });
   el.innerHTML = clean.map(([k, v]) => {
     const val = String(v);
+    const barcode = k === 'UPC' ? retailBarcodeSvg(val) : '';
+    if (barcode) {
+      return `<div class="tech-row"><div class="tech-k">${escHtml(k)}</div>` +
+        `<button type="button" class="tech-barcode" data-copy="${escHtml(val)}" ` +
+        `title="Click to copy ${escHtml(val)}" aria-label="UPC ${escHtml(val)}, click to copy">` +
+        `${barcode}<span class="tech-barcode-num">${escHtml(val)}</span></button></div>`;
+    }
     return `<div class="tech-row"><div class="tech-k">${escHtml(k)}</div>` +
       `<div class="tech-v" title="${escHtml(val)}">${escHtml(val)}</div></div>`;
   }).join('');
   el.classList.toggle('hidden', clean.length === 0);
+}
+
+// Clicking a rendered barcode copies the number it encodes.
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest?.('.tech-barcode');
+  if (!btn) return;
+  const text = btn.dataset.copy || '';
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(
+      () => toastMgr.success('UPC copied'),
+      () => toastMgr.warning('Could not copy the UPC'));
+  }
+});
+
+// UPC-A (12 digits) / EAN-13 (13 digits) as an inline SVG, like the mobile
+// app's metadata screen. Anything that is not a valid retail code (wrong
+// length, bad check digit) returns '' and the caller shows plain text.
+const _EAN_L = ['0001101','0011001','0010011','0111101','0100011','0110001','0101111','0111011','0110111','0001011'];
+const _EAN_G = ['0100111','0110011','0011011','0100001','0011101','0111001','0000101','0010001','0001001','0010111'];
+const _EAN_R = ['1110010','1100110','1101100','1000010','1011100','1001110','1010000','1000100','1001000','1110100'];
+const _EAN_PARITY = ['LLLLLL','LLGLGG','LLGGLG','LLGGGL','LGLLGG','LGGLLG','LGGGLL','LGLGLG','LGLGGL','LGGLGL'];
+
+function retailBarcodeSvg(value) {
+  const digits = String(value || '').replace(/[\s-]/g, '');
+  if (!/^\d{12,13}$/.test(digits)) return '';
+  const ean = digits.length === 12 ? '0' + digits : digits;
+  const d = [...ean].map(Number);
+  const sum = d.slice(0, 12).reduce((a, n, i) => a + n * (i % 2 ? 3 : 1), 0);
+  if ((10 - (sum % 10)) % 10 !== d[12]) return '';
+  const parity = _EAN_PARITY[d[0]];
+  let modules = '101';
+  for (let i = 0; i < 6; i++) modules += (parity[i] === 'L' ? _EAN_L : _EAN_G)[d[i + 1]];
+  modules += '01010';
+  for (let i = 7; i < 13; i++) modules += _EAN_R[d[i]];
+  modules += '101';
+  const quiet = 9;
+  let path = '';
+  for (let i = 0; i < modules.length; ) {
+    if (modules[i] !== '1') { i++; continue; }
+    let j = i;
+    while (modules[j] === '1') j++;
+    path += `M${quiet + i} 0h${j - i}v1h-${j - i}z`;
+    i = j;
+  }
+  return `<svg class="tech-barcode-svg" viewBox="0 0 ${modules.length + quiet * 2} 1" ` +
+    `preserveAspectRatio="none" aria-hidden="true"><path d="${path}"/></svg>`;
 }
 
 function injectArtistTabs(tracks) {

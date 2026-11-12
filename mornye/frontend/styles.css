@@ -885,6 +885,17 @@
          number is here specifically to be copied out. */
       user-select: text; -webkit-user-select: text;
     }
+    #album-tech .tech-barcode {
+      display: flex; flex-direction: column; align-items: center; gap: 5px;
+      width: 100%; padding: 10px 10px 7px; border: 0; border-radius: 8px;
+      background: #fff; color: #000; cursor: pointer; font: inherit;
+    }
+    #album-tech .tech-barcode-svg { width: 100%; height: 56px; display: block; fill: #000; }
+    #album-tech .tech-barcode-num {
+      font-family: var(--font-mono); font-size: 11.5px; font-weight: 600;
+      letter-spacing: .18em; color: #000;
+    }
+    #album-tech .tech-barcode:hover { filter: brightness(.94); }
     #album-cover {
       width: clamp(200px, 22vw, 240px); height: clamp(200px, 22vw, 240px); border-radius: 10px;
       background: var(--surface3); flex-shrink: 0;

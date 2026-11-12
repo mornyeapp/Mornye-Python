@@ -607,6 +607,15 @@ class JSExtensionProvider(BaseProvider):
             publisher=str(item.get("label") or item.get("publisher") or ""),
             composer=str(item.get("composer") or ""),
             genre=str(item.get("genre") or ""),
+            # The album's barcode, for the card's UPC row. Extensions that
+            # know it (Qobuz, Beatport, YT Music...) send it on the track or
+            # on the collection; it used to be dropped here.
+            upc=str(
+                item.get("upc")
+                or item.get("barcode")
+                or (collection.get("upc") or collection.get("barcode") if from_album else "")
+                or ""
+            ).strip(),
             is_explicit=bool(item.get("explicit")),
             preview_url=str(item.get("preview_url") or ""),
             extra_info={"provider_id": provider_id} if provider_id else {},
