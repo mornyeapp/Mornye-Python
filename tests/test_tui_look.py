@@ -262,6 +262,30 @@ async def test_the_default_theme_is_the_one_the_screen_was_drawn_against() -> No
         assert app_of(pilot).theme == "mornye-console-dark"
 
 
+@drives_the_ui
+async def test_the_theme_picked_with_t_is_there_next_time() -> None:
+    """F9: `t` repainted the screen and forgot the choice on exit."""
+    from mornye.tui.app import saved_theme
+
+    async with MornyeTui(_ready_state()).run_test() as pilot:
+        app_of(pilot).action_cycle_theme()
+        picked = app_of(pilot).theme
+    assert picked != THEMES[0]
+    assert saved_theme() == picked
+
+    async with MornyeTui(_ready_state()).run_test() as pilot:
+        assert app_of(pilot).theme == picked
+
+
+def test_an_unknown_saved_theme_falls_back_to_the_default(monkeypatch, tmp_path):
+    from mornye.tui.app import saved_theme
+
+    stale = tmp_path / "tui-theme"
+    stale.write_text("a-theme-that-was-removed\n", encoding="utf-8")
+    monkeypatch.setenv("MORNYE_TUI_THEME_FILE", str(stale))
+    assert saved_theme() == THEMES[0]
+
+
 def test_every_offered_theme_exists() -> None:
     """A missing theme name is a crash on the keypress that selects it."""
     from textual.theme import BUILTIN_THEMES

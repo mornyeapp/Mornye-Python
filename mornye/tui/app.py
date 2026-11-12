@@ -25,6 +25,8 @@ those lines would land on the terminal underneath and tear the layout.
 from __future__ import annotations
 
 import logging
+import os
+from pathlib import Path
 from contextlib import aclosing
 from textual.css.query import NoMatches
 from collections import deque
@@ -47,7 +49,7 @@ from textual.widgets import (
 
 from .banner import Banner, HintBar
 from ..branding_tokens import textual_theme_kwargs, v2_textual_theme_kwargs
-from ..core.paths import default_download_dir
+from ..core.paths import data_path, default_download_dir
 from .branding import mode_glyph, notice, panel_tag, panel_title
 from .clipboard import TERMINAL_ONLY_NOTE, copy_text
 
@@ -110,6 +112,37 @@ THEMES: tuple[str, ...] = (
     "gruvbox",
     "rose-pine",
 )
+
+
+def theme_file() -> Path:
+    """Where the theme picked with `t` is kept (F9 in the redesign plan).
+
+    ``$MORNYE_TUI_THEME_FILE`` overrides it, which is how the test suite
+    keeps a picked theme from leaking between tests or into ~/.mornye.
+    """
+    override = os.environ.get("MORNYE_TUI_THEME_FILE", "").strip()
+    return Path(override) if override else data_path("tui-theme")
+
+
+def saved_theme() -> str:
+    """The theme picked last time, or the default. Never raises."""
+    try:
+        name = theme_file().read_text(encoding="utf-8").strip()
+    except OSError:
+        return THEMES[0]
+    return name if name in THEMES else THEMES[0]
+
+
+def save_theme(name: str) -> None:
+    """Remembers `name` for the next start. Never raises: a read-only home
+    costs the preference, not the keypress."""
+    try:
+        target = theme_file()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(name + "\n", encoding="utf-8")
+    except OSError:
+        logging.getLogger(__name__).debug("could not save the theme", exc_info=True)
+
 
 #: Panel id -> (title, the slash-command tag on the right). MovieBox puts a
 #: command in every card's top-right corner; here it names the CLI flag or
@@ -256,7 +289,7 @@ class MornyeTui(App[None]):
     def on_mount(self) -> None:
         for theme in MORNYE_THEMES:
             self.register_theme(theme)
-        self.theme = THEMES[0]
+        self.theme = saved_theme()
         self._decorate_panels()
         self.query_one("#log-pane").display = False
         self.query_one("#sidebar", ListView).index = 0
@@ -797,6 +830,7 @@ class MornyeTui(App[None]):
     def action_cycle_theme(self) -> None:
         current = THEMES.index(self.theme) if self.theme in THEMES else 0
         self.theme = THEMES[(current + 1) % len(THEMES)]
+        save_theme(self.theme)
         # `t` is unlisted and cycles eleven themes. Repainting without naming
         # what you landed on leaves you pressing it again to find out, and
         # with no way back to the one you liked two presses ago.
