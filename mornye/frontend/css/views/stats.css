@@ -53,12 +53,13 @@
 .stat-bar-label { color: var(--text); font-size: var(--text-sm); }
 .stat-bar-value { color: var(--text-2); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
 .stat-bar-track {
+  --v: 0; /* the lit share; app.js sets it inline per row */
   height: 10px;
   border-radius: 0;
   background: linear-gradient(
     90deg,
-    var(--signal-strong) 0 calc(var(--v, 0) * 100%),
-    var(--rule-strong) calc(var(--v, 0) * 100%) 100%
+    var(--signal-strong) 0 calc(var(--v) * 100%),
+    var(--rule-strong) calc(var(--v) * 100%) 100%
   );
   -webkit-mask-image: repeating-linear-gradient(90deg, black 0 calc(5% - 2px), transparent calc(5% - 2px) 5%);
           mask-image: repeating-linear-gradient(90deg, black 0 calc(5% - 2px), transparent calc(5% - 2px) 5%);
