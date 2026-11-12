@@ -91,6 +91,7 @@ class TrackMetadata(BaseModel):
     @classmethod
     def _collapse_copyright(cls, v: str) -> str:
         return collapse_copyright(v)
+
     description: str = ""
     avatar_url: str = ""
     header_url: str = ""

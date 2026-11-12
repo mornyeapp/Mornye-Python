@@ -59,7 +59,11 @@ def _instant(event: dict[str, Any]) -> datetime:
         dt = datetime.fromisoformat(raw)
     except ValueError:
         dt = datetime.fromisoformat(raw[:10])
-    return dt.replace(tzinfo=None) if dt.tzinfo is None else dt.astimezone().replace(tzinfo=None)
+    return (
+        dt.replace(tzinfo=None)
+        if dt.tzinfo is None
+        else dt.astimezone().replace(tzinfo=None)
+    )
 
 
 def normalize_concerts(value: Any) -> list[dict[str, Any]]:

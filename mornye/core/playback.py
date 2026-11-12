@@ -29,7 +29,9 @@ logger = logging.getLogger(__name__)
 
 #: Decoded natively by every engine the app runs in (WKWebView, WebView2,
 #: WebKitGTK, Chromium, Firefox).
-DIRECT_SUFFIXES = frozenset({".flac", ".mp3", ".wav", ".wave", ".ogg", ".oga", ".opus", ".aac"})
+DIRECT_SUFFIXES = frozenset(
+    {".flac", ".mp3", ".wav", ".wave", ".ogg", ".oga", ".opus", ".aac"}
+)
 #: MPEG-4 audio: plain AAC plays everywhere, ALAC only in some engines.
 MP4_SUFFIXES = frozenset({".m4a", ".mp4", ".m4b"})
 
@@ -104,7 +106,8 @@ async def playable_file_async(path: str | Path) -> tuple[Path, str]:
     if rc != 0 or not tmp.is_file() or tmp.stat().st_size == 0:
         tmp.unlink(missing_ok=True)
         raise MornyeError(
-            ErrorKind.FILE_IO, f"ffmpeg could not decode {src.name} for playback: {stderr}"
+            ErrorKind.FILE_IO,
+            f"ffmpeg could not decode {src.name} for playback: {stderr}",
         )
     tmp.replace(dest)
     await asyncio.to_thread(_trim_cache)

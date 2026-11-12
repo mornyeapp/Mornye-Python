@@ -39,7 +39,9 @@ def probe_audio(path: str | Path) -> dict[str, object]:
             info["duration_s"] = round(float(getattr(meta, "length", 0) or 0), 1)
     except Exception as exc:  # unreadable stream: still return what we have
         info["error"] = str(exc)
-    if not info.get("sample_rate") or (not info.get("bitrate") and not info.get("bit_depth")):
+    if not info.get("sample_rate") or (
+        not info.get("bitrate") and not info.get("bit_depth")
+    ):
         _fill_from_ffprobe(p, info)
     return info
 
@@ -53,12 +55,21 @@ def _fill_from_ffprobe(path: Path, info: dict[str, object]) -> None:
     try:
         out = subprocess.run(
             [
-                "ffprobe", "-v", "error", "-select_streams", "a:0",
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "a:0",
                 "-show_entries",
                 "stream=sample_rate,bit_rate,channels,bits_per_raw_sample:format=bit_rate,duration",
-                "-of", "json", str(path),
+                "-of",
+                "json",
+                str(path),
             ],
-            capture_output=True, text=True, timeout=20, check=False,
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
         ).stdout
         data = json.loads(out or "{}")
     except (OSError, ValueError, subprocess.SubprocessError):

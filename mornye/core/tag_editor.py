@@ -133,7 +133,9 @@ async def save_file_tags_async(
             ) from exc
         fitted = await asyncio.to_thread(fit_cover, cover)
         if fitted is None:
-            raise MornyeError(ErrorKind.FILE_IO, "The cover image is too large to embed")
+            raise MornyeError(
+                ErrorKind.FILE_IO, "The cover image is too large to embed"
+            )
         cover_data = fitted
 
     backup_path: Path | None = None

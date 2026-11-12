@@ -89,7 +89,9 @@ async def weekly_releases_async(
             day = _parse_day(item.date) if item.date else None
             if day is None or not (since <= day <= now):
                 continue
-            releases.append({**item.to_dict(), "artist": artist, "day": day.isoformat()})
+            releases.append(
+                {**item.to_dict(), "artist": artist, "day": day.isoformat()}
+            )
 
     await asyncio.gather(*(one(s) for s in artists))
     releases.sort(key=lambda r: (r["day"], r["artist"]), reverse=True)

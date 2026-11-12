@@ -76,7 +76,9 @@ class LibraryToolsMixin:
         cover = None
         if cover_data_url:
             try:
-                cover = base64.b64decode(cover_data_url.split(",", 1)[-1], validate=True)
+                cover = base64.b64decode(
+                    cover_data_url.split(",", 1)[-1], validate=True
+                )
             except (binascii.Error, ValueError):
                 return {"status": "error", "error": "The cover image is not valid"}
         try:
@@ -307,7 +309,11 @@ class LibraryToolsMixin:
             raw = thumbnail_jpeg(path)
         except Exception:
             raw = None
-        url = "data:image/jpeg;base64," + base64.b64encode(raw).decode("ascii") if raw else ""
+        url = (
+            "data:image/jpeg;base64," + base64.b64encode(raw).decode("ascii")
+            if raw
+            else ""
+        )
         if len(cache) > 4000:
             cache.clear()
         cache[path] = url

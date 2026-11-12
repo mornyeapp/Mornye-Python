@@ -291,9 +291,7 @@ class LocalTaggingMixin:
                     resolved = Path(candidate).resolve()
                 except Exception:
                     return False
-                return any(
-                    resolved.is_relative_to(root) for root in approved_roots
-                )
+                return any(resolved.is_relative_to(root) for root in approved_roots)
 
             ensure_ffmpeg_available(fmt)
 

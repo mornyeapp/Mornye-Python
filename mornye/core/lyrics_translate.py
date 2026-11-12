@@ -35,7 +35,11 @@ PROVIDERS: dict[str, dict[str, object]] = {
         "key": True,
     },
     "gemini": {"label": "Google Gemini", "model": "gemini-3.5-flash-lite", "key": True},
-    "anthropic": {"label": "Anthropic Claude", "model": "claude-haiku-5-5", "key": True},
+    "anthropic": {
+        "label": "Anthropic Claude",
+        "model": "claude-haiku-5-5",
+        "key": True,
+    },
     "custom": {"label": "Custom (OpenAI-compatible)", "model": "", "key": False},
 }
 

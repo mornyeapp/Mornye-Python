@@ -1152,7 +1152,10 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
             resolved = Path(path).expanduser().resolve()
         except Exception:
             return PlainTextResponse("Bad path", status_code=400)
-        roots = [Path(target_api.download_dir).resolve(), cache_path("playback").resolve()]
+        roots = [
+            Path(target_api.download_dir).resolve(),
+            cache_path("playback").resolve(),
+        ]
         if not multiuser:
             roots.append(Path.home().resolve())
         if not resolved.is_file() or not any(resolved.is_relative_to(r) for r in roots):

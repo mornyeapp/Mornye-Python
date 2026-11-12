@@ -613,7 +613,11 @@ class JSExtensionProvider(BaseProvider):
             upc=str(
                 item.get("upc")
                 or item.get("barcode")
-                or (collection.get("upc") or collection.get("barcode") if from_album else "")
+                or (
+                    collection.get("upc") or collection.get("barcode")
+                    if from_album
+                    else ""
+                )
                 or ""
             ).strip(),
             is_explicit=bool(item.get("explicit")),
