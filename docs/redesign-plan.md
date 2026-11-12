@@ -166,8 +166,14 @@ regola (una parola = un elemento).
      striscia di letture, classifiche come meter a 20 tacche; `statsBars()`
      passa `--v` arrotondato a tacche intere. Verificata con dati d'esempio
      (la sandbox non ha cronologia), scuro/chiaro/375px.
-   **Prossimo:** voce 19, Player e Now Playing; aperta la riorganizzazione
-   di Settings.
+   - **voce 19, Player e Now Playing** (commit sotto):
+     `css/views/player.css`; righe del player su filetti con barra segnale
+     sul brano in riproduzione, controlli a 32px, "Open" secondario. Now
+     Playing resta bianco sulla tinta della copertina ma con forme quadre e
+     copertina senza alone. `tokens.css` ora include anche `FIXED` e
+     `FIXED_CHANNELS`. Verificato con tre WAV di silenzio nella sandbox.
+   **Prossimo:** voce 20, Logs; poi 21, 22, Fasi 4–6 (l'utente ha chiesto
+   di fare tutte le voci). Aperta la riorganizzazione di Settings.
 0. **Fase 2 completa** — sul branch **`redesign`** (creato da `2.0.6` dopo
    i mock, come da §5: dalla Fase 2 in poi un branch dedicato e un rilascio
    unico). Commit locali, non pushati.
