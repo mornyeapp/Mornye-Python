@@ -24,6 +24,7 @@ import contextlib
 import logging
 import queue
 import re
+import shutil
 import threading
 import time
 from collections.abc import Callable
@@ -91,6 +92,14 @@ def apply_legacy_endpoint_options(options: object) -> None:
     """
     for attr, (ext_name, key) in LEGACY_ENDPOINT_SETTINGS.items():
         set_setting_override(ext_name, key, str(getattr(options, attr, None) or ""))
+
+
+def _concatenate_files(parts: list[Any], destination: Path) -> None:
+    """Appends `parts` in order into `destination`, one buffer at a time."""
+    with open(destination, "wb") as out_f:
+        for part in parts:
+            with open(part, "rb") as part_f:
+                shutil.copyfileobj(part_f, out_f, 1024 * 1024)
 
 
 class _TransferProgress:
@@ -1364,10 +1373,9 @@ class JSExtensionProvider(BaseProvider):
 
         raw_concat = output_path.with_suffix(".raw.tmp")
         try:
-            with open(raw_concat, "wb") as out_f:
-                for seg_path in segments:
-                    with open(seg_path, "rb") as seg_f:
-                        out_f.write(seg_f.read())
+            # Off the event loop: this copies the whole track, and on the
+            # loop it would freeze every other download's progress meanwhile.
+            await asyncio.to_thread(_concatenate_files, segments, raw_concat)
         except Exception as e:
             logger.exception("[%s] Segment concatenation failed: %s", self.name, e)
             if raw_concat.exists():

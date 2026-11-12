@@ -1079,8 +1079,11 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
     # single-user mode there is nobody to reuse it for, so nothing is added.
     _private_headers = {"Cache-Control": "no-store"} if multiuser else None
 
+    # `def`, not `async def`: listing a directory is blocking I/O (slow on a
+    # NAS share), and FastAPI runs a plain function in its threadpool instead
+    # of on the event loop that also carries the progress WebSocket.
     @app.get("/api/browse-folder")
-    async def browse_folder(request: Request, path: str | None = None) -> JSONResponse:
+    def browse_folder(request: Request, path: str | None = None) -> JSONResponse:
         target_api = api_for(request)
         # In multi-user mode the only approved root is the caller's own
         # download folder, and it is also where browsing starts — landing
@@ -1139,8 +1142,9 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
             headers=_private_headers,
         )
 
+    # Also a plain `def`, for the same reason as the folder browser above.
     @app.get("/api/media")
-    async def media(request: Request, path: str):
+    def media(request: Request, path: str):
         """Streams an audio file (or a player copy of it) with Range support,
         so the in-page player can seek. Same approved roots as the folder
         browser: in multi-user mode only the caller's own download folder."""
