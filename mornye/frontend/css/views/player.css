@@ -108,3 +108,13 @@
   text-transform: uppercase;
 }
 #np-title { font-family: var(--font); font-weight: var(--weight-bold); letter-spacing: -.01em; }
+
+/* On a phone the view is inset 12px, not 16px: the toolbar's bleed follows,
+   or it stuck out 4px each side and the page scrolled sideways (voce 30). */
+@media (max-width: 700px) {
+  .player-toolbar {
+    margin: 0 calc(-1 * var(--space-3));
+    padding-left: var(--space-3);
+    padding-right: var(--space-3);
+  }
+}
