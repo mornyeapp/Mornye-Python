@@ -1,0 +1,43 @@
+/* frontend/css/views/local.css — Fix Local Files in the console look
+   (redesign voce 15). Sections, buttons and the result rows come from the
+   shared sheets (legacy.css, settings.css's .s-section, home.css's
+   .track-row); this adds the drop zone and the view's own fields.
+
+   Over styles.css until voce 22. Semantic tokens only; ids and handlers
+   untouched. */
+
+/* The drop target: a dashed rule, flat, the signal while dragging over. */
+.local-drop-zone {
+  padding: var(--space-5) var(--space-4);
+  border: 1px dashed var(--rule-strong);
+  border-radius: var(--radius-1);
+  background: var(--surface);
+  color: var(--text-muted);
+  transition: border-color var(--motion-fast) var(--ease);
+}
+.local-drop-zone.drag-over {
+  border-color: var(--signal-strong);
+  background: var(--selected);
+  color: var(--signal-text);
+}
+.local-drop-zone-text { font-size: var(--text-sm); }
+
+/* Fields of the view, at the console's field; :where() keeps the type
+   filter weightless. */
+#view-local input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"])),
+#view-local select {
+  height: var(--row);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background-color: var(--raised);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+  box-shadow: none;
+}
+#view-local input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"])):focus,
+#view-local select:focus { border-color: var(--signal-strong); box-shadow: none; outline: none; }
+#view-local input[type="checkbox"] { accent-color: var(--signal-strong); }
+
+/* The footer under the results: a ruled strip, not a tinted band. */
+#view-local .s-footer { background: var(--surface); border-top: 1px solid var(--rule); }
