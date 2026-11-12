@@ -1,0 +1,103 @@
+/* frontend/css/tokens.css — token v2, generated from
+   mornye/branding_tokens.py. Do not edit: change the module and run
+   `python -m mornye.branding_tokens`; tests/test_brand_tokens.py fails
+   when the two differ. Interfaces use the semantic names only. */
+
+:root {
+  --grey-0: #0d0d0d;
+  --grey-1: #141414;
+  --grey-2: #1b1b1b;
+  --grey-3: #242424;
+  --grey-4: #2c2c2c;
+  --grey-5: #3d3d3d;
+  --grey-6: #6b6b6b;
+  --grey-7: #8c8c8c;
+  --grey-8: #b5b5b5;
+  --grey-9: #e8e8e8;
+  --paper-0: #f2f2f0;
+  --paper-1: #fafafa;
+  --paper-2: #efefed;
+  --paper-3: #e4e4e2;
+  --paper-4: #dcdcda;
+  --paper-5: #c4c4c2;
+  --paper-6: #8a8a88;
+  --paper-7: #666664;
+  --paper-8: #3d3d3d;
+  --paper-9: #141414;
+  --amber-400: #ffb000;
+  --amber-500: #e8a000;
+  --amber-700: #b06d00;
+  --amber-800: #8a5700;
+  --amber-ink: #120d00;
+  --green-on-dark: #5ec46b;
+  --green-on-light: #1d7a39;
+  --red-on-dark: #ff5a4f;
+  --red-on-light: #c4362c;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --row: 32px;
+  --row-head: 28px;
+  --titlebar: 32px;
+  --dock: 40px;
+  --rail: 176px;
+  --radius-1: 2px;
+  --radius-2: 3px;
+  --font: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --text-xs: 10.5px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-lg: 15px;
+  --text-xl: 18px;
+  --text-2xl: 22px;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-bold: 700;
+  --leading: 1.4;
+  --tracking-label: .14em;
+  --elevation-0: none;
+  --elevation-overlay: 0 0 0 1px var(--rule-strong);
+  --motion-fast: 80ms;
+  --motion: 120ms;
+  --ease: cubic-bezier(.2, 0, 0, 1);
+  --ground: var(--grey-0);
+  --surface: var(--grey-1);
+  --raised: var(--grey-2);
+  --selected: var(--grey-3);
+  --rule: var(--grey-4);
+  --rule-strong: var(--grey-5);
+  --control-border: var(--grey-6);
+  --text: var(--grey-9);
+  --text-2: var(--grey-8);
+  --text-muted: var(--grey-7);
+  --signal: var(--amber-400);
+  --signal-strong: var(--amber-400);
+  --signal-text: var(--amber-400);
+  --signal-ink: var(--amber-ink);
+  --ok: var(--green-on-dark);
+  --error: var(--red-on-dark);
+}
+
+html.light-theme,
+body.light-theme {
+  --ground: var(--paper-0);
+  --surface: var(--paper-1);
+  --raised: var(--paper-2);
+  --selected: var(--paper-3);
+  --rule: var(--paper-4);
+  --rule-strong: var(--paper-5);
+  --control-border: var(--paper-6);
+  --text: var(--paper-9);
+  --text-2: var(--paper-8);
+  --text-muted: var(--paper-7);
+  --signal: var(--amber-500);
+  --signal-strong: var(--amber-700);
+  --signal-text: var(--amber-800);
+  --signal-ink: var(--amber-ink);
+  --ok: var(--green-on-light);
+  --error: var(--red-on-light);
+}

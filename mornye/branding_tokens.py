@@ -155,3 +155,242 @@ def relative_luminance(hex_colour: str) -> float:
 def contrast_ratio(a: str, b: str) -> float:
     la, lb = sorted((relative_luminance(a), relative_luminance(b)), reverse=True)
     return (la + 0.05) / (lb + 0.05)
+
+
+# ===========================================================================
+# Token v2 — "Console da studio" (docs/redesign-plan.md §2, §3, voce 8)
+#
+# What the redesign builds on. The v1 palette above stays until Fase 3 (GUI)
+# and Fase 4 (TUI) move off it. Two levels: primitives are raw values with
+# no meaning; semantic tokens say what a value is for, per theme, and are
+# the only thing the interfaces use. frontend/css/tokens.css is generated
+# from here (python -m mornye.branding_tokens) and a test keeps it equal.
+# ===========================================================================
+
+#: Raw values. Graphite with no warm or blue cast, its "paper" counterpart
+#: for the light theme, one amber signal, and two state colours per theme.
+V2_PRIMITIVES: dict[str, str] = {
+    "grey-0": "#0d0d0d",
+    "grey-1": "#141414",
+    "grey-2": "#1b1b1b",
+    "grey-3": "#242424",
+    "grey-4": "#2c2c2c",
+    "grey-5": "#3d3d3d",
+    "grey-6": "#6b6b6b",
+    "grey-7": "#8c8c8c",
+    "grey-8": "#b5b5b5",
+    "grey-9": "#e8e8e8",
+    "paper-0": "#f2f2f0",
+    "paper-1": "#fafafa",
+    "paper-2": "#efefed",
+    "paper-3": "#e4e4e2",
+    "paper-4": "#dcdcda",
+    "paper-5": "#c4c4c2",
+    "paper-6": "#8a8a88",
+    "paper-7": "#666664",
+    "paper-8": "#3d3d3d",
+    "paper-9": "#141414",
+    "amber-400": "#ffb000",
+    "amber-500": "#e8a000",
+    "amber-700": "#b06d00",
+    "amber-800": "#8a5700",
+    "amber-ink": "#120d00",
+    "green-on-dark": "#5ec46b",
+    "green-on-light": "#1d7a39",
+    "red-on-dark": "#ff5a4f",
+    "red-on-light": "#c4362c",
+}
+
+#: Semantic token -> primitive, per theme.
+#:
+#: The signal has three jobs that need three contrasts, which only coincide
+#: on dark: ``signal`` fills (a primary button, with ``signal-ink`` on it),
+#: ``signal-strong`` draws (focus ring, selection bar, lit meter segment:
+#: 3:1 against the surface), ``signal-text`` writes (4.5:1).
+V2_SEMANTIC: dict[str, dict[str, str]] = {
+    "dark": {
+        "ground": "grey-0",
+        "surface": "grey-1",
+        "raised": "grey-2",
+        "selected": "grey-3",
+        "rule": "grey-4",
+        "rule-strong": "grey-5",
+        "control-border": "grey-6",
+        "text": "grey-9",
+        "text-2": "grey-8",
+        "text-muted": "grey-7",
+        "signal": "amber-400",
+        "signal-strong": "amber-400",
+        "signal-text": "amber-400",
+        "signal-ink": "amber-ink",
+        "ok": "green-on-dark",
+        "error": "red-on-dark",
+    },
+    "light": {
+        "ground": "paper-0",
+        "surface": "paper-1",
+        "raised": "paper-2",
+        "selected": "paper-3",
+        "rule": "paper-4",
+        "rule-strong": "paper-5",
+        "control-border": "paper-6",
+        "text": "paper-9",
+        "text-2": "paper-8",
+        "text-muted": "paper-7",
+        "signal": "amber-500",
+        "signal-strong": "amber-700",
+        "signal-text": "amber-800",
+        "signal-ink": "amber-ink",
+        "ok": "green-on-light",
+        "error": "red-on-light",
+    },
+}
+
+#: Everything that is not a colour. Same in both themes.
+V2_SPACE: dict[str, str] = {
+    "space-1": "4px",
+    "space-2": "8px",
+    "space-3": "12px",
+    "space-4": "16px",
+    "space-5": "20px",
+    "space-6": "24px",
+    "space-8": "32px",
+}
+V2_SIZE: dict[str, str] = {
+    "row": "32px",
+    "row-head": "28px",
+    "titlebar": "32px",
+    "dock": "40px",
+    "rail": "176px",
+}
+V2_RADIUS: dict[str, str] = {"radius-1": "2px", "radius-2": "3px"}
+V2_TYPE: dict[str, str] = {
+    "font": "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
+    "text-xs": "10.5px",
+    "text-sm": "12px",
+    "text-md": "13px",
+    "text-lg": "15px",
+    "text-xl": "18px",
+    "text-2xl": "22px",
+    "weight-regular": "400",
+    "weight-medium": "500",
+    "weight-bold": "700",
+    "leading": "1.4",
+    "tracking-label": ".14em",
+}
+#: Flat by rule: separation is a 1px rule. An overlay (menu, modal) is told
+#: apart by its border, not a shadow.
+V2_ELEVATION: dict[str, str] = {
+    "elevation-0": "none",
+    "elevation-overlay": "0 0 0 1px var(--rule-strong)",
+}
+#: State changes only, never entrances; nothing longer than 120ms.
+V2_MOTION: dict[str, str] = {
+    "motion-fast": "80ms",
+    "motion": "120ms",
+    "ease": "cubic-bezier(.2, 0, 0, 1)",
+}
+
+#: (foreground, background, minimum ratio) that must hold in both themes:
+#: 4.5:1 for text, 3:1 for what identifies a control or carries a value.
+V2_CONTRAST: tuple[tuple[str, str, float], ...] = (
+    ("text", "ground", 4.5),
+    ("text", "surface", 4.5),
+    ("text", "selected", 4.5),
+    ("text-2", "surface", 4.5),
+    ("text-muted", "surface", 4.5),
+    ("text-muted", "raised", 4.5),
+    ("text-muted", "selected", 4.5),
+    ("signal-text", "surface", 4.5),
+    ("signal-text", "selected", 4.5),
+    ("signal-ink", "signal", 4.5),
+    ("ok", "surface", 4.5),
+    ("error", "surface", 4.5),
+    ("signal-strong", "surface", 3.0),
+    ("signal-strong", "selected", 3.0),
+    ("control-border", "surface", 3.0),
+    ("control-border", "raised", 3.0),
+)
+
+
+def v2_tokens(mode: str) -> dict[str, str]:
+    """The semantic tokens of ``mode`` ("dark" or "light"), as hex values."""
+    return {name: V2_PRIMITIVES[ref] for name, ref in V2_SEMANTIC[mode].items()}
+
+
+def v2_textual_theme_kwargs(mode: str) -> dict:
+    """``textual.theme.Theme`` arguments for the console look (Fase 4).
+
+    Not registered yet: the TUI moves to it in voce 24, with its new
+    stylesheet. ``$primary`` (focus, active mode, panel title) is the
+    signal; ``$panel`` is the selected row, one step above the surface.
+    """
+    dark = mode != "light"
+    t = v2_tokens("dark" if dark else "light")
+    return {
+        "name": "mornye-console-dark" if dark else "mornye-console-light",
+        "primary": t["signal-strong"],
+        "secondary": t["text-2"],
+        "accent": t["signal-text"],
+        "warning": t["signal-text"],
+        "error": t["error"],
+        "success": t["ok"],
+        "foreground": t["text"],
+        "background": t["ground"],
+        "surface": t["surface"],
+        "panel": t["selected"],
+        "boost": t["raised"],
+        "dark": dark,
+        "variables": {
+            "text-muted": t["text-muted"],
+            "border": t["rule-strong"],
+            "border-blurred": t["rule"],
+            "footer-key-foreground": t["signal-text"],
+            "input-selection-background": t["signal"] + "40",
+        },
+    }
+
+
+def v2_tokens_css() -> str:
+    """frontend/css/tokens.css, exactly. Regenerate with
+    ``python -m mornye.branding_tokens``."""
+
+    def block(selector: str, values: dict[str, str]) -> list[str]:
+        return [f"{selector} {{", *(f"  --{k}: {v};" for k, v in values.items()), "}"]
+
+    def semantic(mode: str) -> dict[str, str]:
+        return {name: f"var(--{ref})" for name, ref in V2_SEMANTIC[mode].items()}
+
+    lines = [
+        "/* frontend/css/tokens.css — token v2, generated from",
+        "   mornye/branding_tokens.py. Do not edit: change the module and run",
+        "   `python -m mornye.branding_tokens`; tests/test_brand_tokens.py fails",
+        "   when the two differ. Interfaces use the semantic names only. */",
+        "",
+        *block(
+            ":root",
+            {
+                **V2_PRIMITIVES,
+                **V2_SPACE,
+                **V2_SIZE,
+                **V2_RADIUS,
+                **V2_TYPE,
+                **V2_ELEVATION,
+                **V2_MOTION,
+                **semantic("dark"),
+            },
+        ),
+        "",
+        *block("html.light-theme,\nbody.light-theme", semantic("light")),
+        "",
+    ]
+    return "\n".join(lines)
+
+
+if __name__ == "__main__":
+    from pathlib import Path
+
+    target = Path(__file__).with_name("frontend") / "css" / "tokens.css"
+    target.parent.mkdir(exist_ok=True)
+    target.write_text(v2_tokens_css(), encoding="utf-8")
+    print(f"wrote {target}")
