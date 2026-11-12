@@ -66,6 +66,17 @@ regola (una parola = un elemento).
 
 ### Non fatto — da qui si riparte
 
+0. **Fase 2 · voce 7 — mock pronti, in attesa di approvazione.** In
+   `docs/mocks/`: `home.html` (Home con album aperto), `queue.html` (Coda con
+   pannello falliti), `tui-download.html` (pannello Download della TUI a
+   120×40, generato da `make_tui_mock.py`), tutti su `console.css`, che
+   contiene la proposta di valori per i token v2 (grafite `#0d0d0d`…`#242424`,
+   segnale `#ffb000`, stato `#5ec46b`/`#ff5a4f`). Si aprono servendo la radice
+   del repo (`python -m http.server`, configurazione `mocks` in
+   `.claude/launch.json`). Regole emerse disegnando: la qualità per riga è una
+   lettura grigia, l'ambra resta a album, selezione, download in corso e
+   azione primaria (una sola per schermata); gli errori stanno in un solo
+   pannello "Failed". Jellyfin compare nel rail come *Library → Server*.
 1. **Fase 1 completa** (voci 4–6) — l'aspetto è identico per costruzione:
    stili calcolati di ogni elemento di `index.html` senza JS (1472 elementi ×
    desktop/telefono × scuro/chiaro) e della GUI in esecuzione (ogni vista e

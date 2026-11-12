@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mock · Queue</title>
+<link rel="stylesheet" href="console.css">
+<style>
+  .head { display: flex; align-items: baseline; gap: 16px; }
+  .head h1 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: .02em; }
+  .readouts { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--rule); }
+  .readouts > div { padding: 12px 16px; border-right: 1px solid var(--rule); }
+  .readouts > div:last-child { border-right: 0; }
+  .readouts .v { font-size: 20px; font-weight: 500; margin-top: 4px; }
+  .now { display: grid; grid-template-columns: 64px 1fr auto; gap: 16px; align-items: center; }
+  .now svg { width: 64px; height: 64px; display: block; }
+  .now .t { font-size: 15px; font-weight: 500; }
+  .now .s { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .now .line { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+  .now .side { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+  .table td.job { width: 100%; max-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .table td.job small { color: var(--muted); margin-left: 10px; }
+  .table td.n { color: var(--text-2); text-align: right; }
+  .err-line { display: flex; gap: 12px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--rule); }
+  .err-line .msg { color: var(--text-2); flex: 1; }
+  .foot { display: flex; align-items: center; gap: 8px; padding: 10px 16px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="titlebar">
+    <span class="wordmark">MORNYE<small>2.0.6</small></span>
+    <span class="rule"></span>
+    <span class="state run">● downloading 3 / 12</span>
+  </header>
+
+  <nav class="rail">
+    <div class="rail-group">
+      <div class="rail-head">Discover</div>
+      <a href="home.html"><span class="ico">⌂</span>Home</a>
+      <a href="#"><span class="ico">◇</span>Explore</a>
+    </div>
+    <div class="rail-group">
+      <div class="rail-head">Library</div>
+      <a class="on" href="#"><span class="ico">≡</span>Queue<span class="count">9</span></a>
+      <a href="#"><span class="ico">↺</span>History</a>
+      <a href="#"><span class="ico">▶</span>Player</a>
+      <a href="#"><span class="ico">⌗</span>Local files</a>
+      <a href="#"><span class="ico">＋</span>Following</a>
+      <a href="#"><span class="ico">▤</span>Server</a>
+    </div>
+    <div class="rail-group">
+      <div class="rail-head">System</div>
+      <a href="#"><span class="ico">∿</span>Stats</a>
+      <a href="#"><span class="ico">›</span>Logs</a>
+      <a href="#"><span class="ico">⚙</span>Settings</a>
+    </div>
+  </nav>
+
+  <main class="main">
+    <div class="head">
+      <h1>Queue</h1>
+      <span class="muted">4 jobs · 35 tracks</span>
+      <span class="spacer"></span>
+      <button class="btn">Pause</button>
+      <button class="btn ghost">Clear finished</button>
+    </div>
+
+    <section class="panel">
+      <span class="legend">Now</span>
+      <div class="panel-body now">
+        <svg viewBox="0 0 64 64" aria-label="Cover"><rect width="64" height="64" fill="#1d3d6b"/><circle cx="42" cy="22" r="13" fill="#f2c14e"/><path d="M0 46 L16 36 L30 44 L46 30 L64 42 L64 64 L0 64Z" fill="#0f1e33"/></svg>
+        <div>
+          <div class="t">Low Hours</div>
+          <div class="s">Arden Vale · Night Signals · track 3 of 12</div>
+          <div class="line"><span class="meter lg" data-v=".62" data-n="40"></span><span class="signal">62%</span><span class="muted">18.4 / 29.6 MB · 4.2 MB/s · 0:03 left</span></div>
+        </div>
+        <div class="side">
+          <span class="qd">24 / 96 · FLAC</span>
+          <span class="muted">via tidal-web</span>
+        </div>
+      </div>
+      <div class="readouts">
+        <div><div class="label">Done</div><div class="v">7</div></div>
+        <div><div class="label">Left</div><div class="v">27</div></div>
+        <div><div class="label">Failed</div><div class="v" style="color:var(--err)">1</div></div>
+        <div><div class="label">Written</div><div class="v">212.6 MB</div></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <span class="legend">Jobs <b>4</b></span>
+      <table class="table">
+        <thead><tr><th>Job</th><th style="text-align:right">Tracks</th><th>Progress</th><th>State</th></tr></thead>
+        <tbody>
+          <tr class="sel"><td class="job">Night Signals<small>Arden Vale · album</small></td><td class="n">3 / 12</td><td><span class="meter" data-v=".25" data-n="16"></span></td><td><span class="state run">running</span></td></tr>
+          <tr><td class="job">Late Shift Mix<small>playlist</small></td><td class="n">0 / 17</td><td><span class="meter" data-v="0" data-n="16"></span></td><td><span class="state idle">queued</span></td></tr>
+          <tr><td class="job">Quiet Band<small>Arden Vale · single</small></td><td class="n">0 / 1</td><td><span class="meter" data-v="0" data-n="16"></span></td><td><span class="state idle">queued</span></td></tr>
+          <tr><td class="job">Harbour Lights<small>Mira Sol · EP</small></td><td class="n">5 / 5</td><td><span class="meter ok" data-v="1" data-n="16"></span></td><td><span class="state ok">done</span></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <span class="legend">Failed <b>1</b></span>
+      <div class="err-line">
+        <span class="state err">not found</span>
+        <span class="msg">Dial Tone — Arden Vale · no 24/96 on tidal, qobuz or deezer; 16/44.1 on deezer</span>
+        <button class="btn">Accept 16 / 44.1</button>
+        <button class="btn ghost">Retry</button>
+      </div>
+      <div class="foot">
+        <span class="muted">Failed tracks stay here until you retry or clear them.</span>
+        <span class="spacer"></span>
+        <button class="btn ghost">Retry all</button>
+        <button class="btn ghost">Clear</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="dock">
+    <span class="label">Downloads</span>
+    <span class="meter lg" data-v=".25" data-n="24"></span>
+    <span class="signal">3 / 12</span>
+    <span class="sep"></span>
+    <span class="what">Low Hours — Arden Vale <span class="muted">· tidal · 4.2 MB/s</span></span>
+    <span class="qd">24 / 96 · FLAC</span>
+  </footer>
+</div>
+<script>
+  for (const m of document.querySelectorAll('.meter[data-v]')) {
+    const n = +m.dataset.n, lit = Math.round(+m.dataset.v * n);
+    m.innerHTML = Array.from({ length: n }, (_, i) => `<i class="${i < lit ? 'on' : ''}"></i>`).join('');
+  }
+</script>
+</body>
+</html>
