@@ -66,6 +66,29 @@ regola (una parola = un elemento).
 
 ### Non fatto — da qui si riparte
 
+0. **Fase 3 · voce 10 fatta** (branch `redesign`):
+   - `293aa15` — **tutta la GUI sui token v2.** `index.html` carica
+     `css/tokens.css` prima di `styles.css`; i nomi v1 di `styles.css`
+     diventano alias dei token v2 (blocco "Token v2 bridge"); `--text`,
+     `--surface`, `--ease` tolti dai blocchi v1 perché sono già nomi v2.
+     Font: JetBrains Mono ovunque; `changeFont()` non scrive più Inter
+     inline quando la scelta è quella di default (chi ha scelto un altro
+     carattere lo tiene finché la voce 14 toglie il selettore). Il test di
+     palette ora verifica il ponte; `branding_tokens.DARK/LIGHT` restano
+     solo per la TUI fino alla Fase 4. **Gli accenti `data-accent`
+     sovrascrivono ancora `--accent-*`**: chi ne ha scelto uno non di
+     default lo vede sulle parti vecchie — voce 28.
+   - `351dc22` — **shell.** `css/layout.css` (dopo `styles.css`): titlebar,
+     rail da 176px con etichette in maiuscoletto e barra segnale sulla voce
+     attiva, contatore coda come lettura, dock con meter a 24 tacche
+     (`app.js` arrotonda a tacche intere), player bar piatta. Il dock ora
+     sta sopra la player bar invece di finirci sotto (difetto preesistente).
+     Il layout telefono (barra in basso, ≤700px) è invariato. Verificato
+     in scuro, chiaro, rail compresso e 375px.
+   La baseline della Fase 0 (`tests/visual/baseline/`) resta il riferimento
+   *prima* del redesign e non viene aggiornata: `--compare` ora segnala le
+   viste cambiate, ed è atteso.
+   **Prossimo:** voce 11, Home / ricerca / album / tabella tracce.
 0. **Fase 2 completa** — sul branch **`redesign`** (creato da `2.0.6` dopo
    i mock, come da §5: dalla Fase 2 in poi un branch dedicato e un rilascio
    unico). Commit locali, non pushati.
