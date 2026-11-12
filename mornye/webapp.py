@@ -1150,23 +1150,26 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
         target_api = api_for(request)
         if not path or "\x00" in path:
             return PlainTextResponse("Bad path", status_code=400)
-        try:
-            resolved = Path(path).expanduser().resolve()
-        except Exception:
-            return PlainTextResponse("Bad path", status_code=400)
         roots = [
-            Path(target_api.download_dir).resolve(),
-            cache_path("playback").resolve(),
+            os.path.realpath(target_api.download_dir),
+            os.path.realpath(cache_path("playback")),
         ]
         if not multiuser:
-            roots.append(Path.home().resolve())
+            roots.append(os.path.realpath(Path.home()))
+        try:
+            full = os.path.realpath(os.path.expanduser(path))
+        except (OSError, ValueError):
+            return PlainTextResponse("Bad path", status_code=400)
         # Containment first, existence second: a path outside the approved
         # roots is never probed on disk, so it cannot be told apart from a
-        # missing one.
-        if not any(resolved.is_relative_to(r) for r in roots) or not resolved.is_file():
+        # missing one. Only `full`, after this check, is ever used.
+        if not any(full == r or full.startswith(r.rstrip(os.sep) + os.sep) for r in roots):
             return PlainTextResponse("Not found", status_code=404)
+        if not os.path.isfile(full):
+            return PlainTextResponse("Not found", status_code=404)
+        resolved = Path(full)
         return FileResponse(
-            resolved,
+            full,
             media_type=content_type_for(resolved),
             headers={"Cache-Control": "no-store"},
         )
