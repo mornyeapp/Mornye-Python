@@ -43,6 +43,10 @@ pushati**, uno per voce, senza trailer di co-autore.
 | Testi Now Playing che escono a destra | `f69b231` | un pezzo temporizzato con più parole ora è diviso parola per parola (vedi sotto) |
 | Fase 0 · voce 1: screenshot GUI | `0ceeb2b` | `tests/visual/capture_gui.py` → 60 PNG in `tests/visual/baseline/gui` (10 viste × desktop/768/375 × scuro/chiaro); Playwright + Chrome installato, extra `visual`; `--compare` tollera il rumore di antialiasing |
 
+| Fase 1 · voce 4: `style=""` di `index.html` → classi | `105738d` | 164 dei 217 stili inline diventano utility `u-*` (una dichiarazione ciascuna, in fondo a `styles.css`, selettore raddoppiato `.u-x.u-x` per battere regole come `.s-row input`). Restano inline le proprietà che `app.js` azzera (`display`, `opacity`, …) e 11 dichiarazioni che una regola con id o attributo altrimenti sovrascriverebbe; `tests/test_frontend_inline_styles.py` impedisce di aggiungerne |
+| Fase 1 · voce 5: stili scritti da `app.js` | `e5fcef9` | gli `style=""` nel markup generato diventano le stesse utility; i colori con un significato diventano `data-tone` (`muted`/`ok`/`warn`/`error`) e il bordo di Save `data-dirty`. Restano scritti da JS solo valori calcolati o di comportamento: mostra/nascondi, larghezze delle barre, moto dei testi, copertine |
+| Fase 1 · voce 6: colori fuori token | `8447302` | `branding_tokens.FIXED` + `FIXED_CHANNELS`: inchiostro e tinte di Now Playing, codice a barre, glifi; trasparenze come `rgba(var(--media-ink-rgb), .62)`. Test: nessun colore crudo nelle dichiarazioni (maschere escluse) |
+
 **Fase 0 completa.** J1–J4 e il fix dei testi sono stati verificati nel
 browser (GUI web su una cartella dati di prova): interruttore J1 acceso e
 salvato; `ext:jellyfin` primo e spuntato dopo un ricaricamento; Explore con
@@ -62,13 +66,22 @@ regola (una parola = un elemento).
 
 ### Non fatto — da qui si riparte
 
-1. **Fase 1** (bonifica: `style=""` → classi, stili scritti da `app.js` →
-   classi/attributi di stato, colori fuori token) — è il prossimo passo; la
-   rete di sicurezza della Fase 0 è pronta: dopo ogni voce
-   `python tests/visual/capture_gui.py --compare tests/visual/baseline/gui`
-   e `python tests/visual/capture_tui.py --compare tests/visual/baseline/tui`
-   devono dire "identical", e `tests/test_frontend_dom_contract.py` deve
-   passare.
+1. **Fase 1 completa** (voci 4–6) — l'aspetto è identico per costruzione:
+   stili calcolati di ogni elemento di `index.html` senza JS (1472 elementi ×
+   desktop/telefono × scuro/chiaro) e della GUI in esecuzione (ogni vista e
+   scheda delle impostazioni, 52.449 stati) confrontati prima/dopo con 0
+   differenze; screenshot uguali alla baseline. Copertura a runtime: 31 dei
+   107 tag generati da `app.js` sono comparsi nel giro; per gli altri un
+   controllo statico delle regole concorrenti ha trovato un solo caso reale
+   (input password delle impostazioni estensione), lasciato inline.
+   **Prossimo:** le voci di §7.4 previste "dentro le Fasi 0–1" e non ancora
+   fatte — F1 (CSP: prima `data-action` al posto dei 166 `onclick=`), M6
+   (stringhe in un dizionario), M2 (`create_app`), M4 (test JS con
+   `node:test`) — oppure direttamente la Fase 2 (mock, token v2,
+   styleguide).
+   **Lasciato apposta:** colori dentro `app.js` (tinta di default di Now
+   Playing in `npApplyColors`, `theme-color`), da portare ai token nella
+   voce 8.
 2. **§2 tutta decisa** (2026-11-12): direzione A, JetBrains Mono come unico
    font, segnale ambra, logo invariato fino alla Fase 5, tema chiaro
    derivato. Nessuna scelta aperta prima della Fase 2.
