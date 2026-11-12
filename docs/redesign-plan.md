@@ -37,36 +37,52 @@ pushati**, uno per voce, senza trailer di co-autore.
 | Fase 0 · voce 2: snapshot TUI | `6ad44f5` | `tests/visual/capture_tui.py` → 48 SVG in `tests/visual/baseline/tui` (12 pannelli × 80×24/120×40 × scuro/chiaro), HOME temporanea, deterministico; `--compare` per il confronto |
 | J1 · rete locale per estensione | `f5abb18` | `extensions/local_network.py`, interruttore in Settings → Extensions, API admin `set_extension_local_network` |
 | J2 · testi dalle estensioni | `00b7ac3` | `core/extension_lyrics.py`, provider `ext:<nome>` in GUI/TUI/CLI |
+| J3 · home feed in Explore | `33c8b4a` | `core/extension_home_feed.py`; selettore "Feed" in Explore (Spotify + ogni estensione con `capabilities.homeFeed`); ogni item ha un `open_url` apribile dal campo URL |
+| J4 · link di sorgenti proprie + flag skip | `641c0b1` | i link che nessun client integrato legge (Jellyfin `…/web/#/details?id=`) vanno all'estensione che li rivendica; le tracce portano `extra_info.source_extension`; `download_one_async` rispetta `skipBuiltInFallback` e `skipMetadataEnrichment` |
+| Campi impostazioni estensione troppo stretti | `e26ecc5` | il Server URL di Jellyfin era largo 25px |
+| Testi Now Playing che escono a destra | `f69b231` | un pezzo temporizzato con più parole ora è diviso parola per parola (vedi sotto) |
+| Fase 0 · voce 1: screenshot GUI | `0ceeb2b` | `tests/visual/capture_gui.py` → 60 PNG in `tests/visual/baseline/gui` (10 viste × desktop/768/375 × scuro/chiaro); Playwright + Chrome installato, extra `visual`; `--compare` tollera il rumore di antialiasing |
+
+**Fase 0 completa.** J1–J4 e il fix dei testi sono stati verificati nel
+browser (GUI web su una cartella dati di prova): interruttore J1 acceso e
+salvato; `ext:jellyfin` primo e spuntato dopo un ricaricamento; Explore con
+Apple Music mostra 15 sezioni e il clic apre l'album (17 tracce); con
+Jellyfin senza server compare un'unica scheda d'errore. **Mai provato con un
+server Jellyfin vero**: login, ricerca, apertura di un link, download
+`ORIGINAL`, testi e feed restano da verificare in quest'ordine.
+
+**Fix dei testi.** Una riga sincronizzata con un solo timestamp
+(`[00:51.00]<00:51.00>I don't know how … stay`) diventava un unico `span`:
+la copia bianca sovrapposta (`::after`, `white-space: pre`) restava su una
+riga e usciva dal bordo, quella grigia sotto andava a capo. Ora
+`npSplitTimedPhrases()` divide i pezzi in parole e ripartisce il tempo; un
+pezzo senza fine propria dura ~0,32 s a parola, mai oltre la riga dopo.
+Per il redesign: il componente "riga di testo" deve nascere con questa
+regola (una parola = un elemento).
 
 ### Non fatto — da qui si riparte
 
-1. **J3 (home feed)** — in corso, nessun codice scritto. Trovato: oltre a
-   Jellyfin, 8 estensioni installate hanno `getHomeFeed` (apple-music,
-   amazon, genie, bugs, melon, jiosaavn, ytmusic, spotify-web). Explore oggi
-   chiama solo `get_spotify_home_feed` (`app.py:896`) e `renderHomeSections`
-   (`app.js`) accetta già la stessa forma `{greeting, sections:[{title,
-   items:[{id, uri, type, name, artists, cover_url}]}]}`. Da fare: API
-   `get_extension_home_feed(name)` + elenco sorgenti, un selettore di
-   sorgente in Explore; il clic su una card passa `item.uri` a `onFetch()`
-   — verificare che `jellyfin:album:<id>` venga gestito da `handleUrl`.
-2. **J4** (`skipMetadataEnrichment` / `skipBuiltInFallback`) — non iniziato.
-3. **Fase 0 voce 1** (screenshot GUI) — non iniziata. J1 e J2 toccano la GUI
-   e **non sono stati verificati nel browser**: farlo insieme.
-2. **Fase 1** in poi — non iniziate. Nessun file di `mornye/frontend/` o
-   `mornye/tui/` è stato toccato per il look.
-3. **Default della §2 ancora da confermare** dall'utente: segnale ambra,
+1. **Fase 1** (bonifica: `style=""` → classi, stili scritti da `app.js` →
+   classi/attributi di stato, colori fuori token) — è il prossimo passo; la
+   rete di sicurezza della Fase 0 è pronta: dopo ogni voce
+   `python tests/visual/capture_gui.py --compare tests/visual/baseline/gui`
+   e `python tests/visual/capture_tui.py --compare tests/visual/baseline/tui`
+   devono dire "identical", e `tests/test_frontend_dom_contract.py` deve
+   passare.
+2. **Default della §2 ancora da confermare** dall'utente: segnale ambra,
    logo invariato fino alla Fase 5, tema chiaro derivato.
    **Già deciso:** direzione A e JetBrains Mono come unico font.
-4. **F1, F6, F7, F9, M1–M6, N1–N5** — non iniziati.
-5. **F3, resto**: restano ~30 avvisi `ASYNC240`, quasi tutti un singolo
-   `exists()`/`getsize()` su disco locale. Lasciati di proposito: da rivedere
-   solo se emergono blocchi su percorsi di rete.
+3. **F1, F6, F7, F9, M1–M6, N1–N5** — non iniziati.
+4. **F3, resto**: restano ~30 avvisi `ASYNC240`, quasi tutti un singolo
+   `exists()`/`getsize()` su disco locale. Lasciati di proposito.
+5. **Jellyfin con un server vero** — vedi sopra.
 6. **Note emerse:** a 80×24 il pannello History della TUI taglia il testo a
    destra (si vede negli snapshot). `mypy mornye` nella venv locale 3.14
    si ferma su uno stub di `numpy` (`python_version = "3.11"`); con
    `--python-version 3.12` resta 1 errore preesistente in
-   `core/hires_check.py:469`. Suite completa dopo i commit Jellyfin:
-   2209 passati, 357 saltati.
+   `core/hires_check.py:469`. `hc-summary` è aggiornato da `app.js` ma non
+   esiste più nell'HTML. Suite completa dopo J4: 2249 passati, 357 saltati
+   (l'unico fallimento era un test da aggiornare, fatto nello stesso commit).
 
 ### Da sapere prima di toccare qualcosa
 
@@ -74,8 +90,6 @@ pushati**, uno per voce, senza trailer di co-autore.
   job macOS, mypy bloccante) non sono mai girate: `mypy` e `black` sono stati
   provati solo in locale (Python 3.14, black 26.5.1 contro il ≥26.10.1 che la
   CI installa). Al primo push va guardato l'esito.
-- **Suite locale:** `pytest -q` → 2203 passati, 353 saltati prima delle
-  modifiche a ricerca/bridge; da rilanciare (vedi nota in fondo alla §9).
 - **28 file di test sono saltati di default** (`tests/conftest.py`,
   `_OPTIONAL_UTILITIES_TESTS`): girano solo con
   `MORNYE_TEST_REAL_EXT_DIR=1` e usano le estensioni installate in
@@ -405,7 +419,7 @@ server).
 | L'host chiama `handleUrl`, Jellyfin esporta `handleURL` | "No method: handleUrl": nessun link Jellyfin apribile | il bridge accetta entrambe le grafie |
 | Pattern `#/details?id=` | letto come regex (il `?` rendeva la `s` opzionale) e ancorato all'host: non combaciava mai | i pattern che iniziano con `#` sono confrontati con il frammento dell'URL (`extensions/url_match.py`) |
 
-### Ancora da fare
+### Da fare allora — **tutte e quattro fatte** (J1 `f5abb18`, J2 `00b7ac3`, J3 `33c8b4a`, J4 `641c0b1`; vedi §0)
 
 | # | Cosa manca | Dove | Peso |
 | --- | --- | --- | --- |
