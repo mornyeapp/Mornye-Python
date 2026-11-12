@@ -15,6 +15,60 @@ in cui costa meno farlo.
 
 ---
 
+## 0. Stato e ripartenza (aggiornato 2026-11-12)
+
+**Chi riprende legga questa sezione, poi la §2 (direzione scelta) e la §4
+(fasi).** Tutto il lavoro è sul branch `2.0.6`, in commit locali **non
+pushati**, uno per voce, senza trailer di co-autore.
+
+### Fatto
+
+| Voce | Commit | Note |
+| --- | --- | --- |
+| F2 · task asyncio senza riferimento | `65e3683` | `loop_runner.spawn()`; usato in `core/base.py`, `core/progress.py`, `extensions/provider.py` |
+| F4 · errori mypy | `65ca900` | 0 errori; il passo mypy in CI ora è **bloccante** |
+| F5 · XML remoto | `962a344` | `core/safe_xml.py` rifiuta DTD/entità; nessuna dipendenza nuova |
+| F3 · I/O bloccante (parte) | `3e6f280` | `/api/browse-folder` e `/api/media` ora `def` (threadpool); unione dei segmenti in `to_thread` |
+| F8 · strumenti | `2c6759a` | CI su 3.11–3.14 + macOS; hook `black` a 26.10.1 |
+| `fetch()` sincrono per le estensioni | `c9d2d1d` | vedi §8 |
+| Ricerca su sorgenti solo-ricerca | `2842669` | vedi §8 |
+| Jellyfin: lacune piccole | ultimo commit | vedi §9 |
+
+### Non fatto — da qui si riparte
+
+1. **Fase 0** (rete di sicurezza visiva + test del contratto `id`/classi) —
+   non iniziata. È il prossimo passo.
+2. **Fase 1** in poi — non iniziate. Nessun file di `mornye/frontend/` o
+   `mornye/tui/` è stato toccato per il look.
+3. **Default della §2 ancora da confermare** dall'utente: segnale ambra,
+   logo invariato fino alla Fase 5, tema chiaro derivato.
+   **Già deciso:** direzione A e JetBrains Mono come unico font.
+4. **F1, F6, F7, F9, M1–M6, N1–N5** — non iniziati.
+5. **F3, resto**: restano ~30 avvisi `ASYNC240`, quasi tutti un singolo
+   `exists()`/`getsize()` su disco locale. Lasciati di proposito: da rivedere
+   solo se emergono blocchi su percorsi di rete.
+6. **Jellyfin**: le quattro voci aperte della §9.
+
+### Da sapere prima di toccare qualcosa
+
+- **Verifiche da rifare su CI.** Le modifiche a `ci.yml` (matrice 3.13/3.14,
+  job macOS, mypy bloccante) non sono mai girate: `mypy` e `black` sono stati
+  provati solo in locale (Python 3.14, black 26.5.1 contro il ≥26.10.1 che la
+  CI installa). Al primo push va guardato l'esito.
+- **Suite locale:** `pytest -q` → 2203 passati, 353 saltati prima delle
+  modifiche a ricerca/bridge; da rilanciare (vedi nota in fondo alla §9).
+- **28 file di test sono saltati di default** (`tests/conftest.py`,
+  `_OPTIONAL_UTILITIES_TESTS`): girano solo con
+  `MORNYE_TEST_REAL_EXT_DIR=1` e usano le estensioni installate in
+  `~/.mornye/extensions`. Con quel flag, **5 test di
+  `tests/test_search_mixin.py` falliscono già da prima** di questo lavoro
+  (verificato con `git stash`): da indagare a parte.
+- **Hook del progetto (GateGuard):** il primo `Bash` e ogni `Write` di un
+  file nuovo vengono rifiutati finché non si dichiarano i "fatti" richiesti;
+  basta riproporre la stessa operazione dopo averli scritti.
+
+---
+
 ## 1. Da dove si parte
 
 | Pezzo | File | Righe | Nota |
@@ -60,13 +114,13 @@ dall'artwork; "Nativo morbido", troppo vicina all'attuale.)
 | Colore | **Un solo segnale** per focus, selezione, azione primaria, livello attivo. Rosso/verde solo come stato, mai come decorazione |
 | Separazione | Filetti da 1px. Niente card in rilievo, ombre, blur, gradienti d'ambiente |
 | Forma | Raggio 2–3px. Griglia a 4px, righe da 32px |
-| Testo | Inter per l'interfaccia; JetBrains Mono, cifre tabulari, per **ogni** numero e dato tecnico. Fraunces esce |
+| Testo | **JetBrains Mono per tutto** — interfaccia, titoli, numeri e dati tecnici (deciso dall'utente, 2026-11-12). Inter e Fraunces escono, con i loro file in `assets/fonts/`. La gerarchia si fa con peso, dimensione e maiuscoletto, non cambiando famiglia |
 | Etichette | Sezioni in maiuscoletto spaziato, come le serigrafie di un pannello |
 | Movimento | ≤120ms, solo cambi di stato. Niente animazioni d'ingresso |
 
 Tre elementi firma, identici nei due mondi:
 
-1. **Il display di qualità** — `24 / 96 · FLAC` in mono sul colore segnale,
+1. **Il display di qualità** — `24 / 96 · FLAC` sul colore segnale,
    al posto dei badge colorati (Hi-Res, Atmos, Lossless).
 2. **Il misuratore a segmenti** — l'avanzamento è una barra a tacche tipo
    LED (`▮▮▮▮▯▯▯▯`), non un riempimento liscio.
@@ -183,6 +237,10 @@ Ogni voce numerata è un commit a sé.
 
 - **HTML generato da `app.js`.** È dove un foglio nuovo lascia buchi. Le
   voci 3 e 5 esistono per questo; saltarle sposta il costo nella Fase 3.
+- **Tutto in monospazio.** Con JetBrains Mono ovunque il testo occupa più
+  larghezza di Inter: titoli lunghi, colonne della tabella tracce e la
+  Settings vanno provati presto (voce 9, styleguide) alle larghezze strette,
+  con troncamento e `font-variant-ligatures: none` nei dati.
 - **WebKitGTK datato.** `@layer` e le container query (già in uso) non ci
   sono nelle versioni vecchie: va fissata la versione minima supportata su
   Linux prima della Fase 3.
@@ -256,3 +314,92 @@ in `network_destinations.py`/`webdav.py` sono lambda eseguite subito.
 2. **Dentro le Fasi 0–1:** M4, F1, M6, M2 (`create_app`).
 3. **Dentro le Fasi 2–4:** F7, F6, M1, N1, N2, N4, N3, F9.
 4. **Dopo:** M3, M5, N5.
+
+---
+
+## 8. Ricerca tramite estensioni — cosa si è rotto e cosa è stato corretto
+
+Partito da uno screenshot dell'utente: ricerca "dr" su *Amazon Music* →
+"Could not reach the service", più due toast. Le cause erano quattro, tutte
+riprodotte e corrette (verifica reale: ricerca "dr dre" su ogni sorgente).
+
+1. **`fetch()` non esisteva nel bridge.** Il runtime mobile dà alle
+   estensioni un `fetch(url, opts)` *sincrono*; `_bridge.js` non lo definiva,
+   quindi il nome cadeva sul `fetch` asincrono di Node e ogni `res.status`
+   era `undefined`. Amazon (9 chiamate) e YouTube Music (16) vedevano ogni
+   richiesta come fallita. Ora `global.fetch` è costruito su `http.request`.
+2. **Sorgenti scambiate per Deezer.** `site_for_extension` decideva il sito
+   da `permissions.network`: amazon, spotify-web e ytmusic elencano
+   `api.deezer.com` e venivano offerte come sorgenti "Deezer", con id e link
+   Deezer sui risultati. Ora decide `urlHandler.patterns`; la lista di rete
+   resta solo come ripiego per i manifest senza `urlHandler`.
+3. **Nessun ripiego su `customSearch`.** Le estensioni con
+   `searchBehavior.enabled` espongono `customSearch(query, {filter})` e non
+   `searchTracks`. Ora la ricerca prova la prima e ripiega sulla seconda.
+   Nuovo concetto: **sorgenti solo-ricerca** (`search_only_extensions`) —
+   estensioni cercabili che non sono in `SITES`; i loro risultati tengono i
+   link dell'estensione, che continuano a passare da `handleUrl`.
+4. **Errore classificato male e mostrato tre volte.** Un metodo mancante era
+   `NETWORK_ERROR` (quindi anche ritentato); ora è `UNAVAILABLE` con
+   messaggio "the extension does not implement X()". Nel frontend l'errore
+   di ricerca mostra solo la scheda, senza i due toast.
+
+Esito sulle estensioni installate (3 risultati richiesti): bugs, deezer,
+genie, melon, qobuz-web, tidal-web, amazon, apple-music, beatport, jiosaavn,
+soundcloud, ytmusic → 3 tracce ciascuna con id e link corretti. jellyfin → 0
+(nessun server configurato).
+
+**Non verificato:** l'apertura e il download di un risultato Amazon/YouTube
+dalla GUI (il link passa dalla strada `handleUrl`, che non è stata toccata).
+
+**Per il redesign:** un errore = un solo posto sullo schermo. La regola va
+nel componente "stato d'errore" della voce 9, non ripetuta vista per vista.
+
+---
+
+## 9. Jellyfin — come funziona e cosa manca
+
+Estensione `jellyfin` 1.1.1 (`~/.mornye/extensions/jellyfin`), 720 righe.
+Usa il **proprio server** dell'utente come sorgente di ricerca, download,
+link, testi e home feed. Impostazioni: `server_url`, `username`,
+`password` *oppure* `api_key`, più due pulsanti (`testConnection`,
+`clearSession`). Login con `POST /Users/AuthenticateByName`, token in
+`credentials`; download con `file.download` e header `X-Emby-Token`;
+qualità `ORIGINAL` / `MP3_320` / `MP3_192` / `OPUS_128` (transcodifica lato
+server).
+
+**Analisi solo statica: non c'è un server Jellyfin con cui provarla.**
+
+### Già supportato dall'host
+`http.get/post`, `storage`, `file.download`, `utils.md5`,
+`matching.compareStrings`, `gobackend.getLocalTime`, `log`, impostazioni
+`string`/`secret`/`button` con `action` (backend
+`api_mixins/extension_settings.py:175`, frontend `app.js:9079`),
+`qualityOptions`.
+
+### Corretto ora (ultimo commit, con test sul bridge reale)
+
+| Mancava | Effetto | Correzione |
+| --- | --- | --- |
+| `credentials.store/get/remove` | token mai salvato: login a ogni avvio | `global.credentials` sopra lo storage cifrato, con prefisso riservato |
+| `gobackend.sanitizeFilename` | eccezione nel download quando l'host passa solo la cartella | aggiunto a `utils`/`gobackend` |
+| L'host chiama `handleUrl`, Jellyfin esporta `handleURL` | "No method: handleUrl": nessun link Jellyfin apribile | il bridge accetta entrambe le grafie |
+| Pattern `#/details?id=` | letto come regex (il `?` rendeva la `s` opzionale) e ancorato all'host: non combaciava mai | i pattern che iniziano con `#` sono confrontati con il frammento dell'URL (`extensions/url_match.py`) |
+
+### Ancora da fare
+
+| # | Cosa manca | Dove | Peso |
+| --- | --- | --- | --- |
+| J1 | **Accesso alla rete locale.** Il caso tipico è un server su `192.168.x.x`, che `_netguard.js` blocca. L'unica via oggi è `MORNYE_EXT_ALLOW_PRIVATE_NETWORK=1` (apre tutto, e solo da ambiente). Esiste già il meccanismo giusto — le impostazioni con `"grantsNetwork": true` (`sandbox.network_grants`) — ma `server_url` di Jellyfin non lo dichiara: il manifest presume un interruttore "Allow Local Network Access" che qui non c'è | backend: interruttore per estensione che concede gli host delle sue impostazioni-URL; frontend: il toggle in Settings → Extensions, con avviso | **bloccante** per l'uso reale |
+| J2 | **`lyrics_provider`.** Nessun codice chiama `fetchLyrics` di un'estensione: i provider di testi sono solo quelli interni | `core/lyrics.py` + elenco provider in GUI/TUI/CLI | medio |
+| J3 | **Home feed** (`capabilities.homeFeed`, `getHomeFeed`): sezioni "Recently added", "Most played", "Playlists"… Nessun supporto nell'host | backend: un metodo API; frontend: la vista *Explore* è il posto naturale | medio — conviene farlo **dentro la Fase 3** (voce 17), nel nuovo stile |
+| J4 | **`skipMetadataEnrichment` / `skipBuiltInFallback`.** Ignorati: un brano della propria libreria verrebbe "arricchito" da fonti esterne e, se il server fallisce, cercato su altri provider | `application/download_engine.py`, `metadata_service.py` | piccolo, ma tocca il motore: servono test |
+
+Da verificare con un server vero, in quest'ordine: `testConnection` dal
+pulsante → ricerca → apertura di un link `…/web/#/details?id=…` → download
+`ORIGINAL` → J1.
+
+**Nota per il redesign.** Jellyfin è la prima estensione che è una
+*libreria personale* e non un catalogo: nella direzione "console da studio"
+merita di essere una sorgente di prima classe (rail: *Library → Server*),
+non una voce nel menu della ricerca. Da decidere alla voce 7 (mock).
