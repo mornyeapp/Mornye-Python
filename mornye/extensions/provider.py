@@ -354,9 +354,16 @@ class JSExtensionProvider(BaseProvider):
             with self._acquire_runtime() as rt:
                 return rt.call(method, *args, timeout=self._timeout_s, **kw)
         except ExtensionRuntimeError as e:
+            # An extension that has no such function is not a network
+            # problem: nothing was sent, and trying again cannot help.
+            missing = f"No method: {method}" in str(e)
             raise MornyeError(
-                kind=ErrorKind.NETWORK_ERROR,
-                message=str(e),
+                kind=ErrorKind.UNAVAILABLE if missing else ErrorKind.NETWORK_ERROR,
+                message=(
+                    f"the extension does not implement {method}()"
+                    if missing
+                    else str(e)
+                ),
                 provider=self.name,
             ) from e
         finally:

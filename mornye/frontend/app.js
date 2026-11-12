@@ -3690,6 +3690,15 @@ function describeError(message, what) {
       detail: text,
     };
   }
+  if (/does not implement \w+\(\)|No method: /i.test(text)) {
+    return {
+      kind: 'error',
+      title: `${what} is not available here`,
+      body: 'The extension behind this source has no such feature. Pick another source, or update the extension from Settings → Extensions.',
+      action: { label: 'Open Extensions', onclick: 'openExtensionsSettings()' },
+      detail: text,
+    };
+  }
   if (/timed? ?out|network|connection|ENOTFOUND|getaddrinfo|unreachable/i.test(text)) {
     return {
       kind: 'network',
@@ -3737,13 +3746,16 @@ window.app_handle_provider_search_error = function(message) {
     message = message.message;
   }
   clearSearchUI();
-  setFetchingState('error');
+  // 'hide', not 'error': the card below says what happened, and the generic
+  // "Unable to retrieve data" toast on top of it said the same thing less well.
+  setFetchingState('hide');
   const info = describeError(message, 'Search');
   $('track-rows').innerHTML = errorStateHTML(info, info.kind === 'setup' ? '' : 'onFetch()');
   $('track-controls').classList.add('hidden');
   $('track-table-wrap').classList.remove('hidden');
   setStatus(info.title + '.', false);
-  logMessage(`Provider search error: ${message}`, 'error');
+  // Quiet: into the Logs panel, without a second toast for the same failure.
+  logMessage(`Provider search error: ${message}`, 'error-quiet');
   $('urlInput').disabled = false;
   $('fetchBtn').disabled = false;
 };
