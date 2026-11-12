@@ -21,6 +21,8 @@ Two pattern shapes are accepted, because both are in use:
   must begin at the start of the URL, or at a label boundary of its host,
   and must reach at least the end of the host — so it can neither start
   inside another name nor stop short of a suffix like ``.evil.example``.
+- Fragment (``#/details?id=``), for a self-hosted web app that has no fixed
+  host: the URL's fragment must begin with it.
 """
 
 from __future__ import annotations
@@ -120,6 +122,13 @@ def url_pattern_matches(pattern: Any, url: str) -> bool:
     pattern = str(pattern or "").strip()
     if not pattern or not url:
         return False
+    if pattern.startswith("#"):
+        # A fragment (`#/details?id=`): how a self-hosted web app such as
+        # Jellyfin addresses an item, on whatever host the user runs it.
+        # There is no host to anchor to, so the anchor is the fragment
+        # itself — it must begin the URL's own, not merely appear in it.
+        _, mark, fragment = url.strip().partition("#")
+        return bool(mark) and ("#" + fragment).lower().startswith(pattern.lower())
     if _REGEX_MARKERS.search(pattern):
         return _regex_matches(pattern, url)
     return _plain_matches(pattern.lower(), url)

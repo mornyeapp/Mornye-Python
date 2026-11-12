@@ -258,6 +258,19 @@ if (!isMainThread) {
     },
   };
 
+  // The mobile runtime's `credentials`: a second key/value store, for
+  // secrets. Here both live in the same per-extension file, which is already
+  // encrypted (extensions/storage.py), so this is storage under a prefix the
+  // extension's own keys cannot collide with. Without it Jellyfin could not
+  // keep its login token and signed in again on every start.
+  const _credKey = (k) => `__credentials__:${String(k)}`;
+  global.credentials = {
+    store:  (k, v) => global.storage.set(_credKey(k), v),
+    get:    (k)    => global.storage.get(_credKey(k)),
+    remove: (k)    => global.storage.delete(_credKey(k)),
+    has:    (k)    => global.storage.get(_credKey(k)) !== null,
+  };
+
   global.file = {
     download: (url, outputPath, opts) =>
       bridgeCall('file.download', { url, outputPath, opts: opts || {} }),
@@ -556,6 +569,17 @@ if (!isMainThread) {
       return Array.from(require('crypto').createHmac('sha1', k).update(m).digest());
     },
 
+    // What may not be in a file name on any of the three desktop systems,
+    // replaced the way the mobile runtime does it. Jellyfin names a file
+    // with this when the host gave it only a folder.
+    sanitizeFilename: (name) => {
+      const cleaned = String(name == null ? '' : name)
+        .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
+        .replace(/\s+/g, ' ')
+        .replace(/^[\s.]+|[\s.]+$/g, '');
+      return cleaned || 'untitled';
+    },
+
     // Mobile exposes this as gobackend.getLocalTime; gobackend is utils here.
     getLocalTime: () => {
       const now = new Date();
@@ -689,7 +713,10 @@ if (!isMainThread) {
     _cancelledAt = 0;
     _cancelled = false;
     try {
-      const fn = _ext[call];
+      // The mobile registry's extensions spell the link handler both ways
+      // (`handleUrl`, and `handleURL` in Jellyfin); the host asks for one.
+      const alias = { handleUrl: 'handleURL', handleURL: 'handleUrl' }[call];
+      const fn = typeof _ext[call] === 'function' ? _ext[call] : _ext[alias];
       if (typeof fn !== 'function') {
         parentPort.postMessage({ id, error: `No method: ${call}` });
         return;

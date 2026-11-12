@@ -289,3 +289,41 @@ def test_fetch_answers_at_once_the_way_mobile_extensions_read_it(
 
 def test_fetch_json_of_a_non_json_body_is_null_not_a_throw(net_js, server) -> None:
     assert net_js(f"fetch({json.dumps(server)}, {{method: 'HEAD'}}).json()") is None
+
+
+# ---------------------------------------------------------------------------
+# What Jellyfin needed: credentials, sanitizeFilename, handleURL
+# ---------------------------------------------------------------------------
+
+
+def test_credentials_are_kept_apart_from_storage(js) -> None:
+    run, _ = js
+    assert run("credentials.get('session')") is None
+    run("credentials.store('session', {token: 't'})")
+    assert run("credentials.get('session')") == {"token": "t"}
+    assert run("credentials.has('session')") is True
+    assert run("storage.get('session')") is None
+    run("credentials.remove('session')")
+    assert run("credentials.has('session')") is False
+
+
+def test_sanitize_filename_drops_what_no_filesystem_takes(js) -> None:
+    run, _ = js
+    assert run("gobackend.sanitizeFilename('AC/DC: Back?  In * Black.')") == (
+        "AC_DC_ Back_ In _ Black"
+    )
+    assert run("utils.sanitizeFilename('...')") == "untitled"
+
+
+def test_the_link_handler_answers_to_either_spelling(tmp_path: Path) -> None:
+    ext = tmp_path / "index.js"
+    ext.write_text(
+        "registerExtension({initialize: function () {},"
+        " handleURL: function (u) { return {seen: u}; }});"
+    )
+    rt = JSRuntime(ext_path=ext)
+    rt.start()
+    try:
+        assert rt.call("handleUrl", "x") == {"seen": "x"}
+    finally:
+        rt.stop()
