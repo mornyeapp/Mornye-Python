@@ -1,0 +1,46 @@
+/* frontend/css/views/following.css — Following in the console look
+   (redesign voce 16). Sections, rows, buttons and the empty state come from
+   the shared sheets; this adds the view's fields and the bulk-follow block.
+
+   Over styles.css until voce 22. Semantic tokens only; ids and handlers
+   untouched. */
+
+#view-following input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"])),
+#view-following select,
+#view-following textarea {
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background-color: var(--raised);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+  box-shadow: none;
+}
+#view-following input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"])),
+#view-following select { height: var(--row); }
+#view-following input:focus,
+#view-following select:focus,
+#view-following textarea:focus { border-color: var(--signal-strong); box-shadow: none; outline: none; }
+#view-following input[type="checkbox"] { accent-color: var(--signal-strong); }
+
+/* "Follow several artists at once": a sub-heading on the type scale. */
+.field-label {
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+}
+.field-hint { color: var(--text-muted); font-size: var(--text-sm); }
+.bulk-follow { border-top: 1px solid var(--rule); }
+
+/* New this week: one release per row, on rules like every other list. */
+.weekly-row {
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
+}
+.weekly-day { color: var(--text-muted); font-family: var(--font); font-size: var(--text-xs); }
+.weekly-title { font-size: var(--text-md); }
+.weekly-artist { color: var(--text-muted); font-size: var(--text-sm); }

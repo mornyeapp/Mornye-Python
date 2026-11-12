@@ -52,6 +52,7 @@
   <script>document.write('<link rel="stylesheet" href="css/views/queue.css?_=' + Date.now() + '">');</script>
   <script>document.write('<link rel="stylesheet" href="css/views/settings.css?_=' + Date.now() + '">');</script>
   <script>document.write('<link rel="stylesheet" href="css/views/local.css?_=' + Date.now() + '">');</script>
+  <script>document.write('<link rel="stylesheet" href="css/views/following.css?_=' + Date.now() + '">');</script>
   <script>
     // Theme, applied before the first paint. app.js used to do this only from
     // its 'pywebviewready' handler, which meant the window painted light and
@@ -666,7 +667,7 @@
               <option value="all">Everything</option>
             </select>
             <select class="u-maxw-170" id="subscription-interval" title="Check automatically and download what is new"></select>
-            <button class="act-btn primary u-p-8-16 u-fs-12 u-ws-nowrap" type="button" onclick="addSubscription()">Follow</button>
+            <button class="act-btn secondary u-p-8-16 u-fs-12 u-ws-nowrap" type="button" onclick="addSubscription()">Follow</button>
           </div>
           <div class="bulk-follow">
             <label for="subscription-bulk-input" class="field-label">Follow several artists at once</label>
