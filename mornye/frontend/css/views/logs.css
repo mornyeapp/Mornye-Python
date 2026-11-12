@@ -1,0 +1,43 @@
+/* frontend/css/views/logs.css — Logs in the console look (redesign voce 20):
+   one ruled panel, a small-caps legend with a signal lamp, square icon
+   buttons, lines in the state colours. No entrance animation per line
+   (motion is for state changes only).
+
+   Over styles.css until voce 22. Semantic tokens only; ids and handlers
+   untouched. */
+
+#log-panel {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-1);
+  background: var(--surface);
+  box-shadow: none;
+}
+#log-header { border-bottom: 1px solid var(--rule); }
+#log-header span {
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+#log-header span::before { border-radius: 0; background: var(--signal-strong); box-shadow: none; }
+.log-btn {
+  width: 28px; height: 28px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-1);
+  background: transparent;
+  color: var(--text-2);
+  box-shadow: none;
+}
+.log-btn:hover { background: var(--raised); border-color: var(--text-2); color: var(--text); transform: none; }
+.log-btn:active { transform: none; }
+
+#logArea { font-family: var(--font); font-size: var(--text-sm); }
+.log-line { animation: none; }
+.log-ts { color: var(--text-muted); opacity: 1; font-variant-numeric: tabular-nums; }
+/* The level is a class on the message (app.js logMessage()). */
+.log-msg.info { color: var(--text-2); }
+.log-msg.success { color: var(--ok); }
+.log-msg.warn, .log-msg.warning { color: var(--signal-text); }
+.log-msg.error { color: var(--error); }
