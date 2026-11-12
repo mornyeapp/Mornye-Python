@@ -128,8 +128,24 @@ regola (una parola = un elemento).
      Verificata con le voci vere di "Fetches" e righe di download d'esempio
      (la sandbox non ne ha), anche a 375px. Lo stato vuoto tratteggiato
      resta per la voce 21.
-   **Prossimo:** voce 14, Settings (da riorganizzare, non solo ridipingere:
-   via il selettore di carattere, accenti da migrare con la voce 28).
+   - `811faac` — **voce 14, Settings, ridisegnata.** `css/views/settings.css`:
+     colonna categorie come il rail (solo ≥701px; sul telefono resta la
+     striscia orizzontale), sezioni come pannelli piatti con titolo in
+     maiuscoletto, righe su filetti, interruttori quadrati, tutti i campi
+     a 32px (regola generica con `:where()` per non pesare sulle eccezioni),
+     liste provider con glifi neutri, pulsante e lettura della scheda
+     Status. **Un solo carattere:** riga del selettore e anteprima tolte,
+     `changeFont()` scarta qualunque font salvato; `#config-font` resta
+     nascosto perché `app.js` lo legge. Verificate tutte e sei le schede,
+     scuro/chiaro/375px.
+     **Non fatto (aperto):** la *riorganizzazione* chiesta dalla voce 14
+     (rivedere raggruppamento di sezioni e schede, 25 sezioni / 54 righe)
+     — questo commit ridisegna, non riordina. Il form "Network
+     destinations" (scheda Download) ha un'impaginazione propria stretta
+     (riquadro SMB3) da rivedere lì. Accento: il selettore dice ancora
+     "Teal" (voce 28).
+   **Prossimo:** voce 15, Local (Fix Local Files); oppure la
+   riorganizzazione di Settings se la si vuole prima.
 0. **Fase 2 completa** — sul branch **`redesign`** (creato da `2.0.6` dopo
    i mock, come da §5: dalla Fase 2 in poi un branch dedicato e un rilascio
    unico). Commit locali, non pushati.
