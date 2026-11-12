@@ -1163,18 +1163,17 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
         # Containment first, existence second: a path outside the approved
         # roots is never probed on disk, so it cannot be told apart from a
         # missing one. Only `full`, after this check, is ever used.
-        if not any(
-            full == r or full.startswith(r.rstrip(os.sep) + os.sep) for r in roots
-        ):
-            return PlainTextResponse("Not found", status_code=404)
-        if not os.path.isfile(full):
-            return PlainTextResponse("Not found", status_code=404)
-        resolved = Path(full)
-        return FileResponse(
-            full,
-            media_type=content_type_for(resolved),
-            headers={"Cache-Control": "no-store"},
-        )
+        # (A file is never a root itself, so "inside" is a plain prefix test.)
+        for root in roots:
+            if full.startswith(root.rstrip(os.sep) + os.sep):
+                if not os.path.isfile(full):
+                    break
+                return FileResponse(
+                    full,
+                    media_type=content_type_for(Path(full)),
+                    headers={"Cache-Control": "no-store"},
+                )
+        return PlainTextResponse("Not found", status_code=404)
 
     @app.get("/api/get-home-dir")
     async def get_home_dir(request: Request) -> JSONResponse:
