@@ -264,9 +264,30 @@ Collapsible > CollapsibleTitle {
     text-style: bold;
 }
 
+/* As wide as the label, not Textual's 16: four 16-cell buttons are 68
+   cells, wider than an 80x24 panel, and the last one was cut off. */
 Button {
     border: solid $border;
     margin-right: 1;
+    width: auto;
+    min-width: 10;
+}
+
+/* Only the primary action is filled. In the console theme $warning is the
+   signal itself, so a filled warning button read as a second primary; it
+   and the success variant are ruled buttons with the colour in the label. */
+Button.-warning,
+Button.-success {
+    background: $surface;
+    border: solid $border;
+    text-style: bold;
+}
+Button.-warning { color: $warning; }
+Button.-success { color: $success; }
+Button.-warning:hover,
+Button.-success:hover {
+    background: $boost;
+    border: solid $primary;
 }
 
 .section-heading {
@@ -275,7 +296,10 @@ Button {
     text-style: bold;
 }
 
+/* Full width, so it wraps: a Label is as wide as its text, and the
+   sentence ran off the right edge at 80 columns. */
 .panel-intro {
+    width: 100%;
     padding-bottom: 1;
     color: $text-muted;
 }
