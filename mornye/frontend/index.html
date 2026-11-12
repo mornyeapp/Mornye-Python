@@ -43,6 +43,9 @@
        first: styles.css's old variable names are aliases of it now. -->
   <script>document.write('<link rel="stylesheet" href="css/tokens.css?_=' + Date.now() + '">');</script>
   <script>document.write('<link rel="stylesheet" href="styles.css?_=' + Date.now() + '">');</script>
+  <!-- css/layout.css: the shell (titlebar, rail, dock, player bar) in the
+       console look, over styles.css until that file goes (redesign voce 22). -->
+  <script>document.write('<link rel="stylesheet" href="css/layout.css?_=' + Date.now() + '">');</script>
   <script>
     // Theme, applied before the first paint. app.js used to do this only from
     // its 'pywebviewready' handler, which meant the window painted light and
@@ -1770,19 +1773,14 @@
        not lift it above the 58px sidebar rail: the rail painted over
        its left edge, and the drawer's backdrop stopped at the rail. -->
       <div id="queue-dock" onclick="toggleQueueDrawer()" title="Open download queue">
-        <!-- Inline, and stroked with currentColor, like every other icon in
-             the app: assets/icons/download.svg paints a hardcoded #231f20,
-             which as an <img> cannot inherit colour — a near-black glyph on
-             the dark theme's dark tile, i.e. an empty square. -->
-        <div class="qd-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        </div>
+        <span class="qd-label label">Downloads</span>
+        <!-- A segmented meter: app.js sizes the fill in whole 8px steps. -->
+        <div class="qd-bar" aria-hidden="true"><i id="qd-bar-fill"></i></div>
         <div class="qd-body">
           <div class="qd-downloaded" id="qd-downloaded">0.00 MB</div>
           <div class="qd-speed" id="qd-speed">Idle</div>
         </div>
         <div class="qd-chevron">›</div>
-        <div class="qd-bar"><i id="qd-bar-fill"></i></div>
       </div>
 <div id="folder-browser-modal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="folder-browser-title" tabindex="-1">
     <div class="fb-card">

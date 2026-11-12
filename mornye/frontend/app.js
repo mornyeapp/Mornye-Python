@@ -4266,7 +4266,7 @@ function renderQueueNow() {
     if (downloaded) downloaded.textContent = queueStats.downloaded;
     if (speed) speed.textContent = 'Idle';
     const bar = $('qd-bar-fill');
-    if (bar) bar.style.width = '0%';
+    if (bar) bar.style.width = '0px';
     dock?.classList.remove('done');
     resetQueueDuration();
     // Queue just went empty (cleared, or its last item removed) — nothing
@@ -4368,7 +4368,9 @@ function renderQueueNow() {
         : `${done} of ${queue.length} done`;
   }
   const bar = $('qd-bar-fill');
-  if (bar) bar.style.width = `${queue.length ? Math.round((done / queue.length) * 100) : 0}%`;
+  // The dock's meter has 24 LED steps of 8px (css/layout.css): whole steps
+  // only, so a step is either lit or not.
+  if (bar) bar.style.width = `${queue.length ? Math.round((done / queue.length) * 24) * 8 : 0}px`;
   dock?.classList.toggle('done', queue.length > 0 && done === queue.length);
 
   updateQueueDuration();

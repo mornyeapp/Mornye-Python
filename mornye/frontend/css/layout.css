@@ -1,0 +1,210 @@
+/* frontend/css/layout.css — the shell in the console look (redesign voce 10):
+   titlebar, navigation rail, download dock, player bar.
+
+   Loads after styles.css, whose rules for these parts are still there and
+   go with it in voce 22; until then this file restates every property it
+   changes, shadows, blur and radii included. Semantic tokens only. The
+   ids and onclick handlers app.js relies on are untouched
+   (tests/test_frontend_dom_contract.py). */
+
+:root {
+  --sidebar-w: var(--rail);
+  --rail-collapsed-w: 52px;
+  --dock-h: var(--dock);
+  --player-h: 48px;
+}
+
+/* ── Titlebar (desktop window only; web mode hides it) ─────────────── */
+#titlebar {
+  height: var(--titlebar);
+  padding: 0 var(--space-3);
+  background: var(--surface);
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  border-bottom: 1px solid var(--rule);
+  box-shadow: none;
+}
+
+/* ── Navigation rail (the phone layout keeps its bottom bar) ───────── */
+@media (min-width: 701px) {
+  #sidebar {
+    padding: var(--space-2) 0;
+    gap: 0;
+    background: var(--surface);
+    -webkit-backdrop-filter: none; backdrop-filter: none;
+    border-right: 1px solid var(--rule);
+    transition: width var(--motion) var(--ease);
+  }
+
+  .sb-brand {
+    min-height: var(--row);
+    gap: var(--space-2);
+    padding: 0 var(--space-4) var(--space-3);
+  }
+  .sb-logo { width: 20px; height: 20px; padding: 2px; border-radius: var(--radius-1); }
+  .sb-name {
+    font-family: var(--font);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-bold);
+    letter-spacing: .24em;
+    text-transform: uppercase;
+  }
+  .sb-version {
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
+    color: var(--text-muted);
+    font-family: var(--font);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-regular);
+    letter-spacing: .08em;
+  }
+
+  .sb-group {
+    padding: var(--space-3) var(--space-4) var(--space-1);
+    color: var(--text-muted);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-medium);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+  }
+
+  .nav-btn {
+    height: var(--row);
+    gap: var(--space-3);
+    padding: 0 var(--space-4);
+    border: 0;
+    border-left: 2px solid transparent;
+    border-radius: 0;
+    color: var(--text-2);
+    font-family: var(--font);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-regular);
+    letter-spacing: .02em;
+    transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
+  }
+  .nav-btn svg { width: 14px; height: 14px; color: var(--text-muted); }
+  .nav-btn:hover { background: var(--raised); color: var(--text); }
+  .nav-btn:hover svg { color: var(--text); }
+  .nav-btn:active { transform: none; }
+  .nav-btn:focus-visible { outline: 1px solid var(--signal-strong); outline-offset: -1px; }
+  .nav-btn.active {
+    background: var(--raised);
+    border-left-color: var(--signal-strong);
+    color: var(--text);
+    font-weight: var(--weight-medium);
+  }
+  .nav-btn.active::before { display: none; }
+  .nav-btn.active svg { color: var(--signal-text); }
+
+  /* The queue count is a readout in the signal, not a filled pill. */
+  .nav-badge {
+    margin-left: auto;
+    min-width: 0;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    color: var(--signal-text);
+    font-family: var(--font);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-medium);
+  }
+
+  /* Folded to icons: the signal bar stays on the left edge. */
+  body.sidebar-collapsed .nav-btn { height: var(--row); padding: 0; justify-content: center; }
+  body.sidebar-collapsed .sb-brand { padding: 0 0 var(--space-3); }
+  body.sidebar-collapsed .nav-badge { top: 2px; right: 6px; }
+}
+
+/* ── Download dock ────────────────────────────────────────────────────
+   Label, a segmented meter, what is happening, and the way to the queue. */
+#queue-dock {
+  height: var(--dock-h);
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  gap: var(--space-4);
+  padding: 0 var(--space-3);
+  background: var(--surface);
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  border-top: 1px solid var(--rule);
+  font-size: var(--text-sm);
+  transition: background var(--motion-fast) var(--ease);
+}
+#queue-dock:hover { background: var(--raised); }
+#queue-dock:hover .qd-chevron { color: var(--signal-text); transform: none; }
+#queue-dock .qd-label {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+/* 24 LED steps of 6px with 2px between: the track draws the unlit steps,
+   the fill (sized by app.js in whole steps) draws the lit ones. */
+#queue-dock .qd-bar {
+  position: relative; inset: auto;
+  width: calc(24 * 8px - 2px); height: 14px;
+  background: repeating-linear-gradient(90deg, var(--rule-strong) 0 6px, transparent 6px 8px);
+  overflow: hidden;
+}
+#queue-dock .qd-bar > i {
+  display: block; height: 100%; width: 0;
+  background: repeating-linear-gradient(90deg, var(--signal-strong) 0 6px, transparent 6px 8px);
+  border-radius: 0;
+  transition: none;
+}
+#queue-dock.done .qd-bar > i {
+  background: repeating-linear-gradient(90deg, var(--ok) 0 6px, transparent 6px 8px);
+}
+
+#queue-dock .qd-body { flex-direction: row; align-items: baseline; gap: var(--space-3); }
+#queue-dock .qd-downloaded {
+  color: var(--signal-text);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+#queue-dock .qd-speed { color: var(--text-2); font-size: var(--text-sm); }
+#queue-dock .qd-chevron {
+  color: var(--text-2);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  transition: color var(--motion-fast) var(--ease);
+}
+
+/* ── Player bar ───────────────────────────────────────────────────────── */
+#player-bar {
+  height: var(--player-h);
+  gap: var(--space-4);
+  padding: 0 var(--space-3);
+  background: var(--surface);
+  border-top: 1px solid var(--rule);
+}
+body.has-player #app-body { margin-bottom: var(--player-h); }
+/* Both bars sit on the bottom edge; with the player open the dock rides on
+   top of it instead of being covered. */
+body.has-player #queue-dock { bottom: var(--player-h); }
+#player-bar .pl-title { font-size: var(--text-sm); color: var(--text); }
+#player-bar .pl-quality {
+  font-family: var(--font);
+  font-size: var(--text-xs);
+  letter-spacing: .06em;
+  color: var(--text-muted);
+}
+#player-bar .pl-controls { gap: var(--space-1); }
+#player-bar .pl-btn {
+  width: 28px; height: 28px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-1);
+  color: var(--text-2);
+}
+#player-bar .pl-btn:hover { background: var(--raised); border-color: var(--rule-strong); color: var(--text); }
+#player-bar .pl-btn.pl-main {
+  width: var(--row); height: var(--row);
+  background: var(--signal); border-color: var(--signal);
+  color: var(--signal-ink);
+}
+#player-bar .pl-time { font-family: var(--font); font-size: var(--text-xs); color: var(--text-muted); }
+#player-bar input[type=range] { accent-color: var(--signal-strong); }
