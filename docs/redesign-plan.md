@@ -88,7 +88,27 @@ regola (una parola = un elemento).
    La baseline della Fase 0 (`tests/visual/baseline/`) resta il riferimento
    *prima* del redesign e non viene aggiornata: `--compare` ora segnala le
    viste cambiate, ed è atteso.
-   **Prossimo:** voce 11, Home / ricerca / album / tabella tracce.
+   - `d53e04d` — **voce 11, Home.** `css/views/home.css`: testata compatta
+     al posto dell'hero, barra link/ricerca in controlli da 32px (44px su
+     telefono), Fetch primario solo finché non si apre un album
+     (`body:has(#album-card:not(.hidden))`), card album piatta con
+     copertina quadrata e colonna dati, righe su filetti con lo stato di
+     download come barra di 2px a sinistra e azioni neutre, recenti e
+     risultati di ricerca sullo stesso margine di 20px. In fondo a
+     `styles.css` c'è uno strato di "rebrand" con selettori più specifici
+     (`.search-container .mode-btn`, `#csvBtn:hover`…): va risposto selettore
+     per selettore. `css/legacy.css` ridisegna `.act-btn`, `.page-btn` e il
+     badge "E" in tutte le viste finché ognuna non è rifatta. Il test dei
+     token semantici ora copre tutti i fogli in `frontend/css/`.
+     Verificato con un album vero, una ricerca vera (Utilities e Spotify Web
+     copiate nella sandbox), in chiaro e a 375px.
+     **Note per la voce 21:** l'errore di ricerca compare due volte (riga
+     di stato sotto la barra e riquadro), contro la regola §8; il toast
+     "fetching metadata…" resta visibile durante la ricerca. **Manca** il
+     display di qualità sull'album (`24 / 96 · FLAC`): l'interfaccia non lo
+     conosce prima del download; da decidere se mostrarlo dalla qualità
+     richiesta o dopo il primo brano.
+   **Prossimo:** voce 12, Coda + pannello falliti.
 0. **Fase 2 completa** — sul branch **`redesign`** (creato da `2.0.6` dopo
    i mock, come da §5: dalla Fase 2 in poi un branch dedicato e un rilascio
    unico). Commit locali, non pushati.
