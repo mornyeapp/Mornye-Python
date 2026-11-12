@@ -1,28 +1,32 @@
 :root {
-  --ink: #101819;
-  --panel: #192323;
-  --panel-hover: #202e2e;
-  --surface: #151e1e;
-  --hairline: #293737;
-  --accent: #80c9c5;
-  --accent-bright: #a7e0dc;
-  --accent-dim: #4d9692;
-  --ok: #a3d4b5;
-  --warn: #e3bd78;
-  --text: #edf2f1;
-  --text-dim: #a5b2b0;
-  --text-faint: #73817f;
+  /* The console look of the app (redesign voce 29): graphite grounds, one
+     amber signal, JetBrains Mono everywhere. Values from the v2 tokens in
+     mornye/branding_tokens.py, dark theme. */
+  --ink: #0d0d0d;
+  --panel: #1b1b1b;
+  --panel-hover: #242424;
+  --surface: #141414;
+  --hairline: #2c2c2c;
+  --accent: #ffb000;
+  --accent-bright: #ffc23d;
+  --accent-dim: #b06d00;
+  --ok: #5ec46b;
+  --warn: #ffb000;
+  --text: #e8e8e8;
+  --text-dim: #b5b5b5;
+  --text-faint: #8c8c8c;
+  --display: 'JetBrains Mono', ui-monospace, monospace;
+  --body: 'JetBrains Mono', ui-monospace, monospace;
   --max-w: 1160px;
   color-scheme: dark;
 }
 
 html {
-  scrollbar-color: #40514f transparent;
+  scrollbar-color: #3d3d3d transparent;
 }
 
 body {
   background:
-    radial-gradient(ellipse at 50% -20rem, rgb(39 91 88 / 18%), transparent 48rem),
     var(--ink);
 }
 
@@ -32,7 +36,7 @@ body {
   left: 10px;
   z-index: 200;
   padding: 10px 14px;
-  border-radius: 8px;
+  border-radius: 3px;
   background: var(--accent-bright);
   color: var(--ink);
   font-weight: 700;
@@ -53,13 +57,13 @@ a {
 }
 
 ::selection {
-  background: #2b625e;
+  background: #4d3500;
   color: #fff;
 }
 
 nav {
-  background: rgb(16 24 25 / 84%);
-  border-bottom-color: rgb(167 224 220 / 10%);
+  background: rgb(13 13 13 / 84%);
+  border-bottom-color: rgb(255 255 255 / 6%);
 }
 
 .nav-inner {
@@ -76,9 +80,9 @@ nav {
   display: block;
   width: 34px;
   height: 34px;
-  border-radius: 9px;
+  border-radius: 3px;
   object-fit: cover;
-  box-shadow: 0 5px 18px rgb(5 20 20 / 30%);
+  box-shadow: 0 5px 18px rgb(0 0 0 / 30%);
 }
 
 .nav-brand .dot {
@@ -90,25 +94,24 @@ nav {
 }
 
 .nav-gh {
-  border-color: rgb(167 224 220 / 18%);
+  border-color: rgb(255 255 255 / 11%);
 }
 
 .nav-gh:hover {
-  border-color: rgb(167 224 220 / 38%);
+  border-color: rgb(255 255 255 / 23%);
 }
 
 .nav-toggle {
-  border-radius: 8px;
+  border-radius: 3px;
 }
 
 .nav-toggle:hover {
-  background: rgb(167 224 220 / 8%);
+  background: rgb(255 255 255 / 5%);
 }
 
 .hero,
 .page-header {
   background:
-    radial-gradient(ellipse at 51% 0%, rgb(62 127 121 / 18%), transparent 60%),
     transparent;
 }
 
@@ -122,7 +125,7 @@ nav {
   height: clamp(64px, 8vw, 92px);
   margin: 0 auto 26px;
   object-fit: contain;
-  filter: drop-shadow(0 12px 28px rgb(4 19 19 / 30%));
+  filter: drop-shadow(0 12px 28px rgb(0 0 0 / 30%));
 }
 
 .hero h1,
@@ -137,8 +140,8 @@ nav {
 }
 
 .badge {
-  border-color: rgb(167 224 220 / 17%);
-  background: rgb(25 35 35 / 76%);
+  border-color: rgb(255 255 255 / 10%);
+  background: rgb(27 27 27 / 76%);
 }
 
 .btn,
@@ -168,62 +171,62 @@ nav {
 }
 
 .btn-primary {
-  background: #80c9c5;
-  color: #102120;
-  box-shadow: 0 9px 24px rgb(54 129 123 / 18%);
+  background: var(--accent);
+  color: #120d00;
+  box-shadow: 0 9px 24px rgb(0 0 0 / 18%);
 }
 
 .btn-primary:hover {
-  background: #a7e0dc;
+  background: var(--accent-bright);
 }
 
 .btn-secondary {
-  border-color: rgb(167 224 220 / 28%);
+  border-color: rgb(255 255 255 / 17%);
 }
 
 .patchbay,
 .latest-card,
 .card {
-  box-shadow: 0 20px 56px rgb(3 15 15 / 14%);
+  box-shadow: 0 20px 56px rgb(0 0 0 / 14%);
 }
 
 .patchbay,
 .terminal {
-  background-color: #131d1d;
+  background-color: #141414;
 }
 
 .feature-card,
 .flow-card {
-  border-color: rgb(167 224 220 / 13%);
+  border-color: rgb(255 255 255 / 8%);
 }
 
 .feature-card:hover,
 .flow-card:hover {
-  border-color: rgb(128 201 197 / 36%);
+  border-color: rgb(255 176 0 / 36%);
 }
 
 .feature-icon,
 .card-mark {
-  background: rgb(128 201 197 / 12%);
+  background: rgb(255 176 0 / 12%);
   color: var(--accent-bright);
 }
 
 .card-mark.green {
-  background: rgb(163 212 181 / 12%);
+  background: rgb(94 196 107 / 12%);
   color: var(--ok);
 }
 
 .latest-badge {
-  background: rgb(128 201 197 / 14%);
+  background: rgb(255 176 0 / 14%);
   color: var(--accent-bright);
 }
 
 .latest-asset:hover {
-  border-color: rgb(128 201 197 / 34%);
+  border-color: rgb(255 176 0 / 34%);
 }
 
 .notice {
-  border-color: rgb(128 201 197 / 22%);
+  border-color: rgb(255 176 0 / 22%);
 }
 
 .footer-links a:hover {
@@ -244,9 +247,9 @@ nav {
     top: 62px;
     left: 0;
     right: 0;
-    background: rgb(16 24 25 / 98%);
+    background: rgb(13 13 13 / 98%);
     backdrop-filter: blur(16px);
-    border-bottom: 1px solid rgb(167 224 220 / 12%);
+    border-bottom: 1px solid rgb(255 255 255 / 7%);
     max-height: 0;
     overflow: hidden;
     visibility: hidden;
@@ -293,8 +296,8 @@ nav {
 
   .nav-links {
     top: 62px;
-    background: rgb(16 24 25 / 98%);
-    border-bottom-color: rgb(167 224 220 / 12%);
+    background: rgb(13 13 13 / 98%);
+    border-bottom-color: rgb(255 255 255 / 7%);
   }
 
   .hero {
