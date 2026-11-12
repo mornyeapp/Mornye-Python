@@ -86,3 +86,33 @@ def test_textual_themes_build_from_the_tokens() -> None:
         assert theme.name == f"mornye-{mode}"
         assert theme.primary.lower() == source["accent"]
         assert theme.background.lower() == source["bg"]
+
+
+def test_theme_independent_tokens_are_declared_once() -> None:
+    """Now Playing's ink, a barcode's paper: the same in both themes."""
+    fixed = {**bt.FIXED, **bt.FIXED_CHANNELS}
+    drift = {
+        name: (value, ROOT.get(name))
+        for name, value in fixed.items()
+        if ROOT.get(name) != value.lower()
+    }
+    assert not drift, f"token -> (branding_tokens, styles.css :root) differ: {drift}"
+    light_block = _vars(_block(r"html\.light-theme,\s*body\.light-theme"))
+    assert not set(fixed) & set(light_block), "the light theme overrides a fixed token"
+
+
+def test_declarations_use_tokens_not_raw_colours() -> None:
+    """Every colour lives in a custom property (Fase 1, voce 6).
+
+    Masks are exempt: their black is an alpha channel, not a colour.
+    """
+    body = re.sub(r"/\*.*?\*/", "", CSS, flags=re.S)
+    raw = []
+    for rule in re.finditer(r"([^{}]+)\{([^{}]*)\}", body):
+        for declaration in rule.group(2).split(";"):
+            prop = declaration.split(":", 1)[0].strip()
+            if ":" not in declaration or prop.startswith("--") or "mask" in prop:
+                continue
+            if re.search(r"#[0-9a-fA-F]{3,8}\b|rgba?\(\s*\d", declaration):
+                raw.append(" ".join(f"{rule.group(1)} {{{declaration}}}".split()))
+    assert not raw, "colours outside the tokens:\n  " + "\n  ".join(raw)
