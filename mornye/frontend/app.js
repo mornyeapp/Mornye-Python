@@ -6421,6 +6421,40 @@ async function doLogout() {
 }
 
 // --- EXPLORE LOGIC ---
+// Explore's feed comes from Spotify or from any installed extension with a
+// home feed (core/extension_home_feed.py) — Jellyfin's "Recently added" and
+// "Most played" from the user's own server among them. The choice is a
+// per-browser convenience, so localStorage is enough.
+const EXPLORE_SOURCE_KEY = 'mornye-explore-source';
+
+function savedExploreSource() {
+  try { return localStorage.getItem(EXPLORE_SOURCE_KEY) || 'spotify'; } catch (e) { return 'spotify'; }
+}
+
+function setExploreSource(value) {
+  try { localStorage.setItem(EXPLORE_SOURCE_KEY, value); } catch (e) { /* private mode */ }
+  loadExploreData();
+}
+
+/** Fills the source picker; returns the source to load (falls back to
+ *  Spotify when the saved one is no longer installed). */
+async function refreshExploreSources() {
+  const select = $('explore-source');
+  let wanted = savedExploreSource();
+  const api = window.pywebview?.api;
+  if (!select || typeof api?.get_home_feed_sources !== 'function') return 'spotify';
+  try {
+    const sources = (await api.get_home_feed_sources())?.sources || [];
+    if (sources.length) {
+      select.innerHTML = sources.map((s) =>
+        `<option value="${escHtml(s.id)}">${escHtml(s.label)}</option>`).join('');
+    }
+  } catch (e) { /* keep what is there */ }
+  if (![...select.options].some((o) => o.value === wanted)) wanted = 'spotify';
+  select.value = wanted;
+  return wanted;
+}
+
 async function loadExploreData() {
   const sectionsContainer = $('explore-sections');
   const greetingEl = $('explore-greeting');
@@ -6428,9 +6462,12 @@ async function loadExploreData() {
   if (!sectionsContainer) return;
   
   sectionsContainer.innerHTML = '<div style="text-align:center; padding: 40px; color: var(--muted);">Loading feed...</div>';
+  const source = await refreshExploreSources();
   if (window.pywebview?.api?.get_spotify_home_feed) {
     try {
-      const homeData = await window.pywebview.api.get_spotify_home_feed();
+      const homeData = source === 'spotify' || !window.pywebview.api.get_extension_home_feed
+        ? await window.pywebview.api.get_spotify_home_feed()
+        : await window.pywebview.api.get_extension_home_feed(source);
       
       if (homeData && homeData.success) {
         if (greetingEl) greetingEl.textContent = homeData.greeting || 'Explore';
@@ -6493,7 +6530,9 @@ function renderHomeSections(sections) {
         // Insert the URI
         const input = $('urlInput');
         if (input) {
-          input.value = item.uri || `spotify:${item.type}:${item.id}`;
+          // open_url: a link the URL box can open, built by the backend for
+          // extension feeds (a Jellyfin item becomes <server>/web/#/details?id=…).
+          input.value = item.open_url || item.uri || `spotify:${item.type}:${item.id}`;
           // Scatena la ricerca
           onFetch(); 
         }

@@ -161,7 +161,7 @@
   const REMOTE_METHODS = [
     'get_version', 'get_latest_version', 'get_pypi_version', 'get_network_shares', 'get_staged_queue', 'add_to_staged_queue', 'remove_staged_items', 'clear_staged_queue', 'retry_staged_items', 'start_staged_items', 'get_download_history', 'remove_download_history', 'clear_download_history', 'clear_fetch_history', 'get_artist_images', 'get_ffmpeg_status', 'get_node_status',
     'save_settings', 'save_theme', 'load_settings', 'get_registries', 'add_registry', 'remove_registry',
-    'get_history', 'get_profiles', 'load_profile_data', 'cache_image', 'get_spotify_home_feed',
+    'get_history', 'get_profiles', 'load_profile_data', 'cache_image', 'get_home_feed_sources', 'get_extension_home_feed', 'get_spotify_home_feed',
     'search_provider', 'search_provider_async', 'get_metadata_sources', 'remove_history_item',
     'save_profile_data', 'delete_profile_data', 'check_animated_artwork_api',
     'get_download_dir', 'open_config_folder', 'open_url', 'download_track_lyrics',

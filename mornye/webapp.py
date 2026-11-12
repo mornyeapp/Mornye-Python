@@ -140,6 +140,10 @@ ALLOWED_METHODS: set[str] = {
     "load_profile_data",
     "cache_image",
     "get_spotify_home_feed",
+    # Explore's other sources: extensions with a home feed
+    # (core/extension_home_feed.py). Read-only.
+    "get_home_feed_sources",
+    "get_extension_home_feed",
     "search_provider",
     "search_provider_async",
     "get_metadata_sources",

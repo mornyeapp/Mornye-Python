@@ -135,6 +135,34 @@ class ExtensionHealthMixin:
         except Exception as e:
             return {"extensions": [], "error": str(e)}
 
+    def get_home_feed_sources(self) -> dict:
+        """Where Explore can take its feed from: the built-in Spotify feed,
+        then every installed extension with ``capabilities.homeFeed``.
+
+        Shape: {"sources": [{"id": "spotify" | "ext:<name>", "label"}, ...]}.
+        """
+        sources = [{"id": "spotify", "label": "Spotify"}]
+        try:
+            from ..core.extension_home_feed import home_feed_extensions
+
+            sources += [
+                {"id": row["id"], "label": row["label"]}
+                for row in home_feed_extensions()
+            ]
+        except Exception as e:
+            return {"sources": sources, "error": str(e)}
+        return {"sources": sources}
+
+    def get_extension_home_feed(self, source: str) -> dict:
+        """One extension's home feed, in the shape of get_spotify_home_feed,
+        each item with an ``open_url`` the URL box can open."""
+        try:
+            from ..core.extension_home_feed import fetch_home_feed
+
+            return fetch_home_feed(str(source or ""))
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     def _installed_extension_index(self) -> dict[str, dict]:
         """{"ext:<name>": {"version": ..., "trust_tier": ...}} for what's installed.
 

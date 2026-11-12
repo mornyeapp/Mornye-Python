@@ -396,7 +396,14 @@
     </div>
     <div class="view" id="view-explore">
       <div class="explore-container" style="padding: 20px; overflow-y: auto; height: 100%;">
-        <h2 id="explore-greeting" style="margin-bottom: 24px; font-size: 28px;">Explore</h2>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:24px;flex-wrap:wrap;">
+          <h2 id="explore-greeting" style="margin:0;font-size:28px;">Explore</h2>
+          <label class="s-label" style="display:flex;align-items:center;gap:8px;">Feed
+            <select id="explore-source" onchange="setExploreSource(this.value)" title="Where the feed comes from">
+              <option value="spotify">Spotify</option>
+            </select>
+          </label>
+        </div>
         <div id="explore-sections"></div>
       </div>
     </div>
