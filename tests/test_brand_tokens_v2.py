@@ -98,3 +98,26 @@ def test_textual_theme_builds(mode: str) -> None:
     assert theme.primary.lower() == t["signal-strong"]
     assert theme.background.lower() == t["ground"]
     assert theme.dark is (mode == "dark")
+
+
+@pytest.mark.parametrize("sheet", ["base.css", "components.css"])
+def test_components_use_semantic_tokens_only(sheet: str) -> None:
+    """GUI and TUI consume the semantic level only (redesign-plan §3): no
+    colour literal and no primitive in the stylesheets built on tokens.css."""
+    css = re.sub(r"/\*.*?\*/", "", (TOKENS_CSS.parent / sheet).read_text(), flags=re.S)
+    literals = re.findall(r"#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(", css)
+    primitives = [
+        name
+        for name in re.findall(r"var\(--([\w-]+)\)", css)
+        if name in bt.V2_PRIMITIVES
+    ]
+    assert not literals, f"{sheet}: colour literals {literals}"
+    assert not primitives, f"{sheet}: primitives used directly {primitives}"
+
+
+@pytest.mark.parametrize("sheet", ["base.css", "components.css"])
+def test_every_token_a_stylesheet_names_exists(sheet: str) -> None:
+    css = (TOKENS_CSS.parent / sheet).read_text()
+    defined = set(re.findall(r"--([\w-]+):", TOKENS_CSS.read_text()))
+    used = set(re.findall(r"var\(--([\w-]+)", css))
+    assert used <= defined, sorted(used - defined)

@@ -66,17 +66,50 @@ regola (una parola = un elemento).
 
 ### Non fatto — da qui si riparte
 
-0. **Fase 2 · voce 7 — mock pronti, in attesa di approvazione.** In
-   `docs/mocks/`: `home.html` (Home con album aperto), `queue.html` (Coda con
-   pannello falliti), `tui-download.html` (pannello Download della TUI a
-   120×40, generato da `make_tui_mock.py`), tutti su `console.css`, che
-   contiene la proposta di valori per i token v2 (grafite `#0d0d0d`…`#242424`,
-   segnale `#ffb000`, stato `#5ec46b`/`#ff5a4f`). Si aprono servendo la radice
-   del repo (`python -m http.server`, configurazione `mocks` in
-   `.claude/launch.json`). Regole emerse disegnando: la qualità per riga è una
-   lettura grigia, l'ambra resta a album, selezione, download in corso e
-   azione primaria (una sola per schermata); gli errori stanno in un solo
-   pannello "Failed". Jellyfin compare nel rail come *Library → Server*.
+0. **Fase 2 completa** — sul branch **`redesign`** (creato da `2.0.6` dopo
+   i mock, come da §5: dalla Fase 2 in poi un branch dedicato e un rilascio
+   unico). Commit locali, non pushati.
+   - **Voce 7, mock** (`0e9fc45`, su `2.0.6`): `docs/mocks/home.html`,
+     `queue.html`, `tui-download.html` (generato da `make_tui_mock.py`, 120×40).
+     **Approvati dall'utente.** Regole emerse: la qualità per riga è una
+     lettura grigia; l'ambra solo per album, selezione, download in corso e
+     una sola azione primaria per schermata; gli errori in un solo pannello
+     "Failed"; Jellyfin nel rail come *Library → Server*.
+   - **Voce 8, token v2** (`0430a77`): in `branding_tokens.py`, accanto ai v1
+     che restano finché le Fasi 3–4 non li sostituiscono. Primitivi
+     (`grey-*`, `paper-*`, `amber-*`, verde/rosso per tema) e semantici per
+     tema (`ground`, `surface`, `raised`, `selected`, `rule`, `rule-strong`,
+     `control-border`, `text`, `text-2`, `text-muted`, `signal`,
+     `signal-strong`, `signal-text`, `signal-ink`, `ok`, `error`); spazi su
+     griglia 4px, dimensioni, raggi, scala tipografica unica, elevazione
+     piatta, durate ≤120ms. Il segnale ha tre ruoli perché in chiaro l'ambra
+     piena non regge 3:1: riempimento, grafica/focus, testo.
+     `frontend/css/tokens.css` è **generato** (`python -m
+     mornye.branding_tokens`) e un test lo confronta byte per byte.
+     `v2_textual_theme_kwargs()` costruisce i temi TUI, **non ancora
+     registrati** (voce 24). `tests/test_brand_tokens_v2.py`: parità,
+     contrasto (4.5:1 testo, 3:1 controlli) in entrambi i temi, un solo
+     segnale, griglia, movimento, elevazione, un solo font, componenti solo
+     su token semantici.
+   - **Voce 9, styleguide** (commit sotto): `frontend/css/base.css` e
+     `components.css` sono i file **veri** della Fase 3 (bottoni, campi,
+     check/switch, display di qualità, parole di stato, meter, pannello con
+     legenda, tabella, rail, tab, notice — sostituisce i toast —, fault,
+     blank, skeleton fermo, dialog — sostituisce `confirm()` —, titlebar,
+     dock), non ancora caricati dall'app. La pagina sta in
+     **`docs/styleguide.html`** e non in `frontend/` come diceva la voce 9,
+     così non finisce nel pacchetto; si apre servendo la radice del repo
+     (configurazione `mocks`). Verificata in scuro, chiaro e a 375px (nessuno
+     scorrimento orizzontale).
+   **Da sapere per la Fase 3:** `--text` e `--surface` esistono sia nei
+   token v1 (`styles.css`) sia nei v2 con valori diversi; se i due fogli
+   convivono vince l'ordine di caricamento. Proposta per la voce 10: come
+   primo passo ridefinire i nomi v1 come alias dei v2 (es. `--surface2:
+   var(--raised)`), così tutta la GUI passa alla grafite in un colpo e le
+   viste si rifanno poi una per una. Nomi di classe nuovi verificati liberi
+   in `styles.css` (per questo `notice`/`blank`/`switch` e non
+   `toast`/`empty`/`toggle`).
+   **Prossimo:** Fase 3, voce 10 (shell: rail, titlebar, dock, player bar).
 1. **Fase 1 completa** (voci 4–6) — l'aspetto è identico per costruzione:
    stili calcolati di ogni elemento di `index.html` senza JS (1472 elementi ×
    desktop/telefono × scuro/chiaro) e della GUI in esecuzione (ogni vista e
