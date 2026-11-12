@@ -69,9 +69,9 @@ regola (una parola = un elemento).
    e `python tests/visual/capture_tui.py --compare tests/visual/baseline/tui`
    devono dire "identical", e `tests/test_frontend_dom_contract.py` deve
    passare.
-2. **Default della §2 ancora da confermare** dall'utente: segnale ambra,
-   logo invariato fino alla Fase 5, tema chiaro derivato.
-   **Già deciso:** direzione A e JetBrains Mono come unico font.
+2. **§2 tutta decisa** (2026-11-12): direzione A, JetBrains Mono come unico
+   font, segnale ambra, logo invariato fino alla Fase 5, tema chiaro
+   derivato. Nessuna scelta aperta prima della Fase 2.
 3. **F1, F6, F7, F9, M1–M6, N1–N5** — non iniziati.
 4. **F3, resto**: restano ~30 avvisi `ASYNC240`, quasi tutti un singolo
    `exists()`/`getsize()` su disco locale. Lasciati di proposito.
@@ -170,7 +170,7 @@ Bordi a linea singola squadrati (non arrotondati), badge come letture tra
 parentesi nel colore segnale invece che a fondo pieno, hint in basso
 invariati nella forma `[key] action`.
 
-### Default presi, da confermare
+### Default — **confermati dall'utente** (2026-11-12)
 - **Segnale: ambra** (tipo display al fosforo, ~`#ffb000`), non il teal
   attuale — altrimenti il cambio non si percepisce. Valori definitivi alla
   voce 8, sotto test di contrasto.
