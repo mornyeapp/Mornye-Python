@@ -92,7 +92,9 @@ def apply_windows_app_id(platform: str | None = None) -> bool:
     try:
         import ctypes
 
-        result = ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+        # `windll` only exists in the Windows build of ctypes (and its stubs).
+        windll = getattr(ctypes, "windll")
+        result = windll.shell32.SetCurrentProcessExplicitAppUserModelID(
             WINDOWS_APP_USER_MODEL_ID
         )
         return result == 0  # S_OK

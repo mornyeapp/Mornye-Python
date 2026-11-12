@@ -19,6 +19,7 @@ from typing_extensions import Self
 
 from .console import print_track_progress
 from .cross_loop_lock import CrossLoopLock
+from .loop_runner import spawn
 from .output_sink import STDERR, STDOUT, emit, sink_active, use_thread_only_tqdm_lock
 
 # tqdm.get_lock() remains the native tqdm lock (this is not our own hack;
@@ -1112,7 +1113,7 @@ class ProgressCallback:
         self._last_reported_bytes = current_bytes
         speed_mbps = self._sample_speed(now, current_bytes)
 
-        asyncio.create_task(
+        spawn(
             DownloadManager().update_progress(
                 self._item_id,
                 current_mb,

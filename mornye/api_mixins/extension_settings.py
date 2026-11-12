@@ -48,7 +48,16 @@ def _describe(manager: Any, ext: Any) -> dict:
             public_values[key] = ""
         else:
             public_values[key] = value
+    from ..extensions import local_network
+    from ..extensions.sandbox import network_grants
+
+    allowed = local_network.is_allowed(ext.name)
     return {
+        # "Allow local network access" (extensions/local_network.py), and
+        # the hosts it lets through with the values saved now — so the
+        # switch can say what it opens rather than "the local network".
+        "local_network": allowed,
+        "local_network_hosts": network_grants(ext.manifest, values, local_network=True),
         "name": ext.name,
         "display_name": ext.display_name or ext.name,
         "version": ext.version,
@@ -108,6 +117,24 @@ class ExtensionSettingsMixin:
                 if not (key in secret_keys and value in ("", None))
             }
             manager.update_settings(ext.name, incoming)
+            _forget_running(ext.name)
+            return {"ok": True, **_describe(manager, ext)}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def set_extension_local_network(self, name: str, allowed: bool) -> dict:
+        """Turn "Allow local network access" on or off for one extension.
+
+        Takes effect at the extension's next start, which this forces.
+        """
+        try:
+            from ..extensions import local_network
+
+            manager = _manager()
+            ext = manager.get_installed(str(name or ""))
+            if ext is None:
+                return {"error": f"Extension '{name}' is not installed."}
+            local_network.set_allowed(ext.name, allowed is True)
             _forget_running(ext.name)
             return {"ok": True, **_describe(manager, ext)}
         except Exception as e:

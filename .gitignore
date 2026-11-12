@@ -30,3 +30,6 @@ htmlcov/
 /.claude
 /mornye.egg-info
 /.mornye
+
+# Fresh captures from tests/visual/capture_tui.py; the baseline is committed.
+tests/visual/out/

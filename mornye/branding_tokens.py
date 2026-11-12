@@ -69,6 +69,32 @@ LIGHT: dict[str, str] = {
     "green": "#22844a",
 }
 
+#: Colours that do not follow the theme, because what sits behind them does
+#: not: Now Playing is drawn over a tint taken from the artwork, a barcode is
+#: black on white whatever the page is. Declared once in ``:root``; the light
+#: theme must not override them (tests/test_brand_tokens.py).
+FIXED: dict[str, str] = {
+    "media-ink": "#ffffff",  # text and icons on Now Playing's artwork tint
+    "media-ink-inverse": "#222222",  # on a media-ink chip (the active tab)
+    "media-bg": "#2a1a1a",  # behind Now Playing before the tint is known
+    "media-tint-from": "#6b3b3b",  # the default tint, top left …
+    "media-tint-to": "#3a2323",  # … to bottom right
+    "paper": "#ffffff",  # a barcode's ground
+    "ink": "#000000",  # a barcode's bars; behind a spectrogram
+    "on-signal": "#ffffff",  # the glyph on a coloured status dot
+    "player-main-ink": "#0a0a0a",  # the glyph on the player's main button
+}
+
+#: The same, as ``r, g, b`` channels, for the translucent shades a design
+#: needs of them: ``rgba(var(--media-ink-rgb), .62)``. (color-mix() would
+#: read better, but older WebKitGTK builds do not have it.)
+FIXED_CHANNELS: dict[str, str] = {
+    "media-ink-rgb": "255, 255, 255",
+    "shade-rgb": "0, 0, 0",
+    "knob-shadow-rgb": "15, 23, 42",
+}
+
+
 #: The pairs that must stay readable (WCAG AA, 4.5:1 for body text). Checked
 #: by tests/test_brand_tokens.py for both modes.
 CONTRAST_PAIRS: tuple[tuple[str, str], ...] = (

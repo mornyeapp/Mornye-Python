@@ -14,7 +14,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.11', '3.12']
+        # Every version the classifiers in pyproject.toml declare.
+        python-version: ['3.11', '3.12', '3.13', '3.14']
 
     steps:
       - name: Checkout code
@@ -47,12 +48,10 @@ jobs:
       - name: Black (format check)
         run: black --check .
 
-      - name: Mypy (advisory — see [tool.mypy] in pyproject.toml)
-        # Not blocking yet: the codebase predates type checking and carries a
-        # sizeable pre-existing error backlog. Surfaced in the log so it's
-        # visible and can be tightened incrementally, without turning every
-        # unrelated PR red today.
-        run: mypy mornye || true
+      - name: Mypy
+        # Blocking since the backlog reached zero (2026-11). The settings in
+        # [tool.mypy] are still lenient; tighten them module by module.
+        run: mypy mornye
 
       - name: Pytest (with coverage)
         run: pytest -v --cov=mornye --cov-report=term-missing --cov-fail-under=30
@@ -81,11 +80,16 @@ jobs:
             node --check "$f"
           done
 
-  test-windows:
-    # A pywebview desktop app lives or dies on Windows; the matrix above only
-    # ever ran on Linux. This doesn't repeat lint/format/mypy — just the test
-    # suite, to catch path-separator/encoding/subprocess issues Linux CI can't.
-    runs-on: windows-latest
+  test-desktop:
+    # A pywebview desktop app lives or dies on Windows and macOS; the matrix
+    # above only ever ran on Linux. This doesn't repeat lint/format/mypy —
+    # just the test suite, to catch path-separator/encoding/subprocess issues
+    # (and, on macOS, the pyobjc install) that Linux CI can't.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
     steps:
       - name: Checkout code
         uses: actions/checkout@v5

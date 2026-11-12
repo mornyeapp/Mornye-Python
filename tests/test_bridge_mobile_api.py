@@ -266,3 +266,64 @@ def test_307_and_308_repeat_the_request_302_turns_it_into_a_get(net_js, server) 
         net_js(f"http.post({json.dumps(server + '/r302')}, 'a=1')")["body"]
     )
     assert (found["method"], found["body"]) == ("GET", "")
+
+
+# ---------------------------------------------------------------------------
+# fetch
+# ---------------------------------------------------------------------------
+
+
+def test_fetch_answers_at_once_the_way_mobile_extensions_read_it(
+    net_js, server
+) -> None:
+    """Not a Promise: amazon and ytmusic read `res.status` on the next line."""
+    res = net_js(
+        f"(function () {{ var res = fetch({json.dumps(server)}, "
+        "{method: 'POST', headers: {'X-Test': 'yes'}, body: 'hi'});"
+        " return [res.ok, res.status, res.json(), typeof res.text()]; })()"
+    )
+    assert res[:2] == [True, 200]
+    assert (res[2]["method"], res[2]["body"], res[2]["x"]) == ("POST", "hi", "yes")
+    assert res[3] == "string"
+
+
+def test_fetch_json_of_a_non_json_body_is_null_not_a_throw(net_js, server) -> None:
+    assert net_js(f"fetch({json.dumps(server)}, {{method: 'HEAD'}}).json()") is None
+
+
+# ---------------------------------------------------------------------------
+# What Jellyfin needed: credentials, sanitizeFilename, handleURL
+# ---------------------------------------------------------------------------
+
+
+def test_credentials_are_kept_apart_from_storage(js) -> None:
+    run, _ = js
+    assert run("credentials.get('session')") is None
+    run("credentials.store('session', {token: 't'})")
+    assert run("credentials.get('session')") == {"token": "t"}
+    assert run("credentials.has('session')") is True
+    assert run("storage.get('session')") is None
+    run("credentials.remove('session')")
+    assert run("credentials.has('session')") is False
+
+
+def test_sanitize_filename_drops_what_no_filesystem_takes(js) -> None:
+    run, _ = js
+    assert run("gobackend.sanitizeFilename('AC/DC: Back?  In * Black.')") == (
+        "AC_DC_ Back_ In _ Black"
+    )
+    assert run("utils.sanitizeFilename('...')") == "untitled"
+
+
+def test_the_link_handler_answers_to_either_spelling(tmp_path: Path) -> None:
+    ext = tmp_path / "index.js"
+    ext.write_text(
+        "registerExtension({initialize: function () {},"
+        " handleURL: function (u) { return {seen: u}; }});"
+    )
+    rt = JSRuntime(ext_path=ext)
+    rt.start()
+    try:
+        assert rt.call("handleUrl", "x") == {"seen": "x"}
+    finally:
+        rt.stop()

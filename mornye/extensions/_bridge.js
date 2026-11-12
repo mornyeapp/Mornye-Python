@@ -168,6 +168,21 @@ if (!isMainThread) {
     delete: (url, headers)       => methodCall('DELETE', url, null, headers),
   };
 
+  // The mobile runtime's `fetch(url, {method, headers, body})` answers at
+  // once, not with a Promise: extensions written for it read `res.status`
+  // on the next line. Left undefined here, the name resolved to Node's own
+  // asynchronous fetch, every such read came back undefined, and amazon and
+  // ytmusic saw each of their requests as "no result". `await fetch(...)`
+  // still works on this one — awaiting a plain value just yields it.
+  global.fetch = (url, opts) => {
+    const res = global.http.request(String(url), opts) || {};
+    const body = typeof res.body === 'string' ? res.body : '';
+    return Object.assign(res, {
+      text: () => body,
+      json: () => { try { return JSON.parse(body); } catch (_) { return null; } },
+    });
+  };
+
   // `matching`, as the mobile runtime defines it (extension_runtime_matching.go).
   // Reproduced rather than improved on: apple-music turns these numbers into
   // accept/reject thresholds tuned against the Go versions — a Levenshtein
@@ -241,6 +256,19 @@ if (!isMainThread) {
       }
       return true;
     },
+  };
+
+  // The mobile runtime's `credentials`: a second key/value store, for
+  // secrets. Here both live in the same per-extension file, which is already
+  // encrypted (extensions/storage.py), so this is storage under a prefix the
+  // extension's own keys cannot collide with. Without it Jellyfin could not
+  // keep its login token and signed in again on every start.
+  const _credKey = (k) => `__credentials__:${String(k)}`;
+  global.credentials = {
+    store:  (k, v) => global.storage.set(_credKey(k), v),
+    get:    (k)    => global.storage.get(_credKey(k)),
+    remove: (k)    => global.storage.delete(_credKey(k)),
+    has:    (k)    => global.storage.get(_credKey(k)) !== null,
   };
 
   global.file = {
@@ -541,6 +569,17 @@ if (!isMainThread) {
       return Array.from(require('crypto').createHmac('sha1', k).update(m).digest());
     },
 
+    // What may not be in a file name on any of the three desktop systems,
+    // replaced the way the mobile runtime does it. Jellyfin names a file
+    // with this when the host gave it only a folder.
+    sanitizeFilename: (name) => {
+      const cleaned = String(name == null ? '' : name)
+        .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
+        .replace(/\s+/g, ' ')
+        .replace(/^[\s.]+|[\s.]+$/g, '');
+      return cleaned || 'untitled';
+    },
+
     // Mobile exposes this as gobackend.getLocalTime; gobackend is utils here.
     getLocalTime: () => {
       const now = new Date();
@@ -674,7 +713,10 @@ if (!isMainThread) {
     _cancelledAt = 0;
     _cancelled = false;
     try {
-      const fn = _ext[call];
+      // The mobile registry's extensions spell the link handler both ways
+      // (`handleUrl`, and `handleURL` in Jellyfin); the host asks for one.
+      const alias = { handleUrl: 'handleURL', handleURL: 'handleUrl' }[call];
+      const fn = typeof _ext[call] === 'function' ? _ext[call] : _ext[alias];
       if (typeof fn !== 'function') {
         parentPort.postMessage({ id, error: `No method: ${call}` });
         return;

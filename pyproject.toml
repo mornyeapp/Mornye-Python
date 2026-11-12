@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mornye"
-version = "2.0.5"
+version = "2.0.6"
 description = "A Python module for metadata and user-configured music-provider extensions."
 readme = "README.md"
 # 3.11 is the floor because Pillow 13+ now requires it. This aligns the
@@ -124,6 +124,11 @@ dev = [
     "mypy>=1.10",
     "pre-commit>=3.0",
 ]
+# tests/visual/capture_gui.py: GUI screenshots for the redesign, driven
+# through the Google Chrome already installed (no browser download).
+visual = [
+    "playwright>=1.48",
+]
 # `web`, `hires` and `dedup` used to live here. Everything they installed is
 # part of the base install now, and pip treats a request for an extra that no
 # longer exists as a warning rather than an error, so an old
@@ -160,11 +165,9 @@ select = ["E4", "E7", "E9", "F"]
 python_version = "3.11"
 explicit_package_bases = true
 ignore_missing_imports = true
-# Baseline as of 2026-08: ~177 pre-existing errors across the codebase (most
-# of it predates type checking entirely). Kept intentionally lenient and
-# run as advisory-only in CI (see .github/workflows/ci.yml) rather than
-# blocking, so it can be tightened module-by-module over time instead of
-# requiring one large cleanup pass up front.
+# The pre-existing backlog (~177 errors in 2026-08) is cleared and the CI
+# step is blocking. The settings below are still the lenient ones it was
+# cleared under: tighten them module by module.
 check_untyped_defs = false
 disallow_untyped_defs = false
 warn_unused_ignores = false

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mock · TUI Download</title>
+<link rel="stylesheet" href="console.css">
+<style>
+  body { display: grid; place-items: center; min-height: 100vh; padding: 24px; }
+  .term { background: var(--g-0); border: 1px solid var(--rule-strong); padding: 10px 12px; }
+  pre { margin: 0; font: 400 13px/1.2 var(--font); color: var(--text); font-variant-ligatures: none; }
+  .r { color: var(--rule-strong); } .m { color: var(--muted); } .t { color: var(--text); }
+  .tb { color: var(--text); font-weight: 700; }
+  .s { color: var(--signal); } .ok { color: var(--ok); } .e { color: var(--err); }
+  .k { color: var(--text-2); }
+  .cap { color: var(--muted); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; margin: 0 0 8px; }
+</style>
+</head>
+<body>
+<div>
+  <p class="cap">TUI · Download panel · 120×40</p>
+  <div class="term"><pre><span class="tb">MORNYE</span><span class="m"> 2.0.6 </span><span class="r">──────────────────────────────────────────────────────────────────────────────</span><span class="s"> ● downloading 3/12 </span><span class="r">──</span><span class="m"> 0:42 </span><span class="r">─</span>
+                                                                                                                        
+<span class="r">┌─ </span><span class="t">MODES</span><span class="r"> </span><span class="r">───────────</span><span class="r">─┐</span> <span class="s">┌─ </span><span class="s">CONFIGURATION</span><span class="s"> </span><span class="s">────────────────────────────────────────────────────────────────</span><span class="s"> </span><span class="m">[ctrl+r] run</span><span class="s"> ─┐</span>
+<span class="r">│ </span><span class="s">▸ Download</span>        <span class="r"> │</span> <span class="s">│ </span>                                                                                             <span class="s"> │</span>
+<span class="r">│ </span><span class="t">  Search</span>          <span class="r"> │</span> <span class="s">│ </span><span class="m">URL      </span><span class="r">│ </span><span class="t">https://open.spotify.com/album/5d1Kc0Q7pX3vXa</span>                                     <span class="s"> │</span>
+<span class="r">│ </span><span class="t">  Tracks</span>          <span class="r"> │</span> <span class="s">│ </span><span class="m">CSV      </span><span class="r">│ </span><span class="m">—</span>                                                                                 <span class="s"> │</span>
+<span class="r">│ </span><span class="t">  Queue</span><span class="s">      9</span>    <span class="r"> │</span> <span class="s">│ </span><span class="m">SOURCES  </span><span class="r">│ </span><span class="t">tidal</span><span class="m"> › </span><span class="t">qobuz</span><span class="m"> › </span><span class="t">deezer</span>                                                            <span class="s"> │</span>
+<span class="r">│ </span><span class="t">  Live</span>            <span class="r"> │</span> <span class="s">│ </span><span class="m">QUALITY  </span><span class="r">│ </span><span class="s">[24/96 FLAC]</span><span class="m">  hi-res, else lossless</span>                                               <span class="s"> │</span>
+<span class="r">│ </span><span class="t">  History</span>         <span class="r"> │</span> <span class="s">│ </span><span class="m">OUTPUT   </span><span class="r">│ </span><span class="t">~/Music/Mornye/{artist}/{album}</span>                                                   <span class="s"> │</span>
+<span class="r">│ </span><span class="t">  Session</span>         <span class="r"> │</span> <span class="s">│ </span><span class="m">LYRICS   </span><span class="r">│ </span><span class="t">apple › binilyrics › lrclib › ext:jellyfin</span>                                        <span class="s"> │</span>
+<span class="r">│ </span><span class="t">  Library</span>         <span class="r"> │</span> <span class="s">│ </span><span class="m">TAGS     </span><span class="r">│ </span><span class="t">enrich: deezer › apple · cover 3000px</span>                                             <span class="s"> │</span>
+<span class="r">│ </span><span class="t">  Server</span>          <span class="r"> │</span> <span class="s">│ </span>                                                                                             <span class="s"> │</span>
+<span class="r">│ </span><span class="t">  Extensions</span>      <span class="r"> │</span> <span class="s">└───────────────────────────────────────────────────────────────────────────────────────────────┘</span>
+<span class="r">│ </span><span class="t">  Health</span>          <span class="r"> │</span> <span class="r">┌─ </span><span class="t">DOWNLOADING</span><span class="r"> </span><span class="r">────────────────────────────────────────────────────────────────────────</span><span class="r"> </span><span class="m">3 / 12</span><span class="r"> ─┐</span>
+<span class="r">│ </span><span class="t">  Signed</span>          <span class="r"> │</span> <span class="r">│ </span>                                                                                             <span class="r"> │</span>
+<span class="r">│ </span><span class="t">  Command</span>         <span class="r"> │</span> <span class="r">│ </span><span class="m">01  </span><span class="t">Carrier Wave                  </span><span class="k">[24/96]  </span><span class="ok">▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮</span><span class="r"></span>  <span class="ok">done</span>                        <span class="r"> │</span>
+<span class="r">│ </span>                  <span class="r"> │</span> <span class="r">│ </span><span class="m">02  </span><span class="t">Static Bloom                  </span><span class="k">[24/96]  </span><span class="ok">▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮</span><span class="r"></span>  <span class="ok">done</span>                        <span class="r"> │</span>
+<span class="r">│ </span>                  <span class="r"> │</span> <span class="r">│ </span><span class="m">03  </span><span class="t">Low Hours                     </span><span class="k">[24/96]  </span><span class="s">▮▮▮▮▮▮▮▮▮▮▮▮</span><span class="r">▯▯▯▯▯▯▯▯</span>  <span class="s"> 62%</span>                        <span class="r"> │</span>
+<span class="r">│ </span>                  <span class="r"> │</span> <span class="r">│ </span><span class="m">04  </span><span class="t">Second Antenna                </span><span class="k">[24/96]  </span><span class="s"></span><span class="r">▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯</span>  <span class="m">queued</span>                      <span class="r"> │</span>
+<span class="r">│ </span>                  <span class="r"> │</span> <span class="r">│ </span><span class="m">05  </span><span class="t">Glass Harbour                 </span><span class="k">[24/96]  </span><span class="s"></span><span class="r">▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯</span>  <span class="m">queued</span>                      <span class="r"> │</span>
+<span class="r">│ </span>                  <span class="r"> │</span> <span class="r">│ </span><span class="m">06  </span><span class="t">Interference (feat. Kō)       </span><span class="k">[16/44]  </span><span class="s"></span><span class="r">▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯</span>  <span class="m">queued</span>                      <span class="r"> │</span>
+<span class="r">│ </span>                  <span class="r"> │</span> <span class="r">│ </span><span class="m">08  </span><span class="t">Dial Tone                     </span><span class="m">[  —  ]  </span><span class="e"></span><span class="r">▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯</span>  <span class="e">not found</span>                   <span class="r"> │</span>
+<span class="r">│ </span>                  <span class="r"> │</span> <span class="r">│ </span>                                                                                             <span class="r"> │</span>
+<span class="r">│ </span>                  <span class="r"> │</span> <span class="r">│ </span><span class="m">tidal-web · 4.2 MB/s · 18.4 / 29.6 MB · 0:03 left</span>                                            <span class="r"> │</span>
+<span class="r">│ </span>                  <span class="r"> │</span> <span class="r">└───────────────────────────────────────────────────────────────────────────────────────────────┘</span>
+<span class="r">│ </span>                  <span class="r"> │</span> <span class="r">┌─ </span><span class="t">RUN</span><span class="r"> </span><span class="r">────────────────────────────────────────────────────────────────────────────────────────</span><span class="r">─┐</span>
+<span class="r">│ </span>                  <span class="r"> │</span> <span class="r">│ </span>                                                                                             <span class="r"> │</span>
+<span class="r">│ </span>                  <span class="r"> │</span> <span class="r">│ </span><span class="m">all  </span><span class="s">▮▮▮▮▮▮▮▮▮▮▮▮</span><span class="r">▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯▯</span><span class="s">  3 / 12</span><span class="e">   1 failed</span>                     <span class="r"> │</span>
+<span class="r">│ </span>                  <span class="r"> │</span> <span class="r">│ </span>                                                                                             <span class="r"> │</span>
+<span class="r">│ </span>                  <span class="r"> │</span> <span class="r">│ </span><span class="m">last  </span><span class="t">Harbour Lights — Mira Sol · 5 / 5 · 212.6 MB</span>                                           <span class="r"> │</span>
+<span class="r">│ </span>                  <span class="r"> │</span> <span class="r">│ </span>                                                                                             <span class="r"> │</span>
+<span class="r">│ </span>                  <span class="r"> │</span> <span class="r">│ </span>                                                                                             <span class="r"> │</span>
+<span class="r">│ </span>                  <span class="r"> │</span> <span class="r">│ </span>                                                                                             <span class="r"> │</span>
+<span class="r">│ </span>                  <span class="r"> │</span> <span class="r">│ </span>                                                                                             <span class="r"> │</span>
+<span class="r">│ </span>                  <span class="r"> │</span> <span class="r">│ </span>                                                                                             <span class="r"> │</span>
+<span class="r">│ </span>                  <span class="r"> │</span> <span class="r">│ </span>                                                                                             <span class="r"> │</span>
+<span class="r">└────────────────────┘</span> <span class="r">└───────────────────────────────────────────────────────────────────────────────────────────────┘</span>
+                                                                                                                        
+<span class="s">▌</span><span class="t"> Downloading Night Signals — track 3 of 12</span>                                                                             
+<span class="k">[ctrl+r]</span><span class="m"> run   </span><span class="k">[ctrl+c]</span><span class="m"> stop   </span><span class="k">[/]</span><span class="m"> search   </span><span class="k">[ctrl+y]</span><span class="m"> copy cli   </span><span class="k">[t]</span><span class="m"> theme   </span><span class="k">[?]</span><span class="m"> help</span>                                    </pre></div>
+</div>
+</body>
+</html>

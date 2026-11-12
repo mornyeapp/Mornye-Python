@@ -194,7 +194,12 @@ class HistoryPanel(VerticalScroll):
     def _refresh(self) -> None:
         # The method, not a coroutine object: a worker cancelled before it
         # starts would otherwise leave an un-awaited coroutine behind.
-        self.run_worker(self.reload, exclusive=True, group="history")
+        # Textual's stubs type a worker callable as returning Never.
+        self.run_worker(
+            self.reload,  # type: ignore[arg-type]
+            exclusive=True,
+            group="history",
+        )
 
     # ------------------------------------------------------------------
 

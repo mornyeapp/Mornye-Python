@@ -54,6 +54,23 @@ LYRICS_PROVIDERS: tuple[str, ...] = (
     "jiosaavn",
 )
 
+
+def lyrics_provider_choices(selected: list[str] | tuple[str, ...] = ()) -> list[str]:
+    """The built-in lyrics providers, then installed extensions that supply
+    lyrics (``ext:<name>``, core/extension_lyrics.py), then any ``ext:``
+    entry already chosen whose extension is gone — kept so a missing
+    extension does not silently fall out of a saved profile."""
+    choices = list(LYRICS_PROVIDERS)
+    try:
+        from ..core.extension_lyrics import lyrics_extensions
+
+        choices += [row["id"] for row in lyrics_extensions()]
+    except Exception:
+        pass
+    choices += [p for p in selected if p.startswith("ext:") and p not in choices]
+    return choices
+
+
 #: Enrichment providers. SoundCloud is selectable but not on by default.
 ENRICH_PROVIDERS: tuple[str, ...] = ("deezer", "apple", "qobuz", "tidal", "soundcloud")
 

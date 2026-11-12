@@ -242,4 +242,8 @@ def merge_url_results(base: Any, other: Any) -> Any:
         and isinstance(other_rest[1], dict)
     ):
         rest[1] = {**other_rest[1], **rest[1]}
+    elif len(rest) <= 1 and len(other_rest) > 1 and isinstance(other_rest[1], dict):
+        # The built-in answer carried no meta dict at all; the extension's
+        # (concerts, for one) must not be lost with it.
+        rest = [rest[0] if rest else other_rest[0], other_rest[1]]
     return (name, tracks, *rest)

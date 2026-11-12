@@ -858,3 +858,87 @@ def test_no_spotify_client_leaves_the_tracks_as_they_are(monkeypatch) -> None:
     monkeypatch.setattr(spotify_module, "SpotifyMetadataClient", _Unreachable)
     tracks = [_track("밤편지")]
     assert asyncio.run(attach_isrcs(tracks, isrc_helper=_Isrc())) is tracks
+
+
+# ---------------------------------------------------------------------------
+# Which site an extension is, and the ones that only search
+# ---------------------------------------------------------------------------
+
+
+def _amazon():
+    ext = _ext_with_handler(
+        "amazon",
+        # Reaches Deezer for ISRCs; that does not make it a Deezer extension.
+        ["music.amazon.com", "api.deezer.com"],
+        {"enabled": True, "patterns": ["music.amazon.com", "music.amazon.it"]},
+    )
+    ext.display_name = "Amazon Music"
+    ext.manifest["searchBehavior"] = {"enabled": True}
+    return ext
+
+
+def test_reaching_a_site_is_not_reading_it() -> None:
+    from mornye.core.extension_metadata import site_for_extension
+
+    assert site_for_extension(_amazon()) is None
+
+
+def test_a_regex_handler_still_names_its_site() -> None:
+    from mornye.core.extension_metadata import site_for_extension
+
+    ext = _ext_with_handler(
+        "dz", ["api.deezer.com"], {"enabled": True, "patterns": [r"deezer\.com"]}
+    )
+    assert site_for_extension(ext).key == "deezer"
+
+
+def test_a_searchable_extension_outside_the_catalogues_is_a_source() -> None:
+    spotify_web = _ext_with_handler(
+        "spotify-web", ["api.deezer.com"], {"patterns": ["open.spotify.com"]}
+    )
+    spotify_web.manifest["searchBehavior"] = {"enabled": True}
+    sources = metadata_sources(_Manager(_amazon(), spotify_web))
+    assert sources == [
+        {"id": "spotify", "label": "Spotify"},
+        {"id": "amazon", "label": "Amazon Music", "site": "amazon"},
+    ]
+
+
+def test_search_falls_back_to_custom_search_and_keeps_the_extensions_links() -> None:
+    from mornye.core.errors import ErrorKind
+
+    calls = []
+
+    class _Provider:
+        def _call(self, method, *args):
+            calls.append((method, args))
+            if method == "searchTracks":
+                raise MornyeError(
+                    ErrorKind.UNAVAILABLE,
+                    "the extension does not implement searchTracks()",
+                )
+            return [
+                {
+                    "item_type": "track",
+                    "id": "B09FDRY4ZP",
+                    "name": "No Diggity",
+                    "artists": "Blackstreet",
+                    "album_id": "B09FDD5QBC",
+                    "album_url": "https://music.amazon.com/albums/B09FDD5QBC",
+                    "external_urls": "https://music.amazon.com/tracks/B09FDRY4ZP",
+                },
+                {"item_type": "album", "id": "B09FDD5QBC", "name": "Another Level"},
+            ]
+
+    client = ExtensionMetadataClient.for_source("amazon", _Manager(_amazon()))
+    client._provider_factory = lambda name: _Provider()
+    found = asyncio.run(client.search_async("no diggity", limit=5))
+
+    assert [c[0] for c in calls] == ["searchTracks", "customSearch"]
+    assert calls[1][1] == ("no diggity", {"filter": "songs"})
+    (track,) = found["tracks"]
+    assert track.id == "amazon:B09FDRY4ZP"
+    assert track.external_url == "https://music.amazon.com/tracks/B09FDRY4ZP"
+    assert found["albums"][0]["external_url"] == (
+        "https://music.amazon.com/albums/B09FDD5QBC"
+    )

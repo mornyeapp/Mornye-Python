@@ -24,6 +24,7 @@ import contextlib
 import logging
 import queue
 import re
+import shutil
 import threading
 import time
 from collections.abc import Callable
@@ -37,10 +38,12 @@ from mornye.core.errors import ErrorKind, MornyeError
 from mornye.core.models import DownloadResult, TrackMetadata
 from mornye.core.output_lock import output_path_lock
 from mornye.core.link_resolver import LinkResolver
+from mornye.core.loop_runner import spawn
 from mornye.core.text_match import track_identity_mismatch
 from mornye.core.signed_session_mobile import SignedSessionClient
 
 from .manager import ExtensionManager, InstalledExtension
+from . import local_network
 from .sandbox import network_grants
 from .storage import ExtensionStorage
 from .runtime import ExtensionRuntimeError, JSRuntime
@@ -90,6 +93,14 @@ def apply_legacy_endpoint_options(options: object) -> None:
     """
     for attr, (ext_name, key) in LEGACY_ENDPOINT_SETTINGS.items():
         set_setting_override(ext_name, key, str(getattr(options, attr, None) or ""))
+
+
+def _concatenate_files(parts: list[Any], destination: Path) -> None:
+    """Appends `parts` in order into `destination`, one buffer at a time."""
+    with open(destination, "wb") as out_f:
+        for part in parts:
+            with open(part, "rb") as part_f:
+                shutil.copyfileobj(part_f, out_f, 1024 * 1024)
 
 
 class _TransferProgress:
@@ -290,7 +301,11 @@ class JSExtensionProvider(BaseProvider):
             ),
             cancelled_probe=self._stop_requested,
             ext_name=self._ext.name,
-            granted_hosts=network_grants(self._ext.manifest, self._settings),
+            granted_hosts=network_grants(
+                self._ext.manifest,
+                self._settings,
+                local_network=local_network.is_allowed(self._ext.name),
+            ),
             storage=self._storage,
         )
         rt.start()
@@ -344,9 +359,16 @@ class JSExtensionProvider(BaseProvider):
             with self._acquire_runtime() as rt:
                 return rt.call(method, *args, timeout=self._timeout_s, **kw)
         except ExtensionRuntimeError as e:
+            # An extension that has no such function is not a network
+            # problem: nothing was sent, and trying again cannot help.
+            missing = f"No method: {method}" in str(e)
             raise MornyeError(
-                kind=ErrorKind.NETWORK_ERROR,
-                message=str(e),
+                kind=ErrorKind.UNAVAILABLE if missing else ErrorKind.NETWORK_ERROR,
+                message=(
+                    f"the extension does not implement {method}()"
+                    if missing
+                    else str(e)
+                ),
                 provider=self.name,
             ) from e
         finally:
@@ -390,10 +412,11 @@ class JSExtensionProvider(BaseProvider):
 
         if self._signed_session is not None:
             try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(self._signed_session.aclose())
+                asyncio.get_running_loop()
             except RuntimeError:
                 asyncio.run(self._signed_session.aclose())
+            else:
+                spawn(self._signed_session.aclose())
 
     def __enter__(self) -> Self:
         return self
@@ -607,6 +630,19 @@ class JSExtensionProvider(BaseProvider):
             publisher=str(item.get("label") or item.get("publisher") or ""),
             composer=str(item.get("composer") or ""),
             genre=str(item.get("genre") or ""),
+            # The album's barcode, for the card's UPC row. Extensions that
+            # know it (Qobuz, Beatport, YT Music...) send it on the track or
+            # on the collection; it used to be dropped here.
+            upc=str(
+                item.get("upc")
+                or item.get("barcode")
+                or (
+                    collection.get("upc") or collection.get("barcode")
+                    if from_album
+                    else ""
+                )
+                or ""
+            ).strip(),
             is_explicit=bool(item.get("explicit")),
             preview_url=str(item.get("preview_url") or ""),
             extra_info={"provider_id": provider_id} if provider_id else {},
@@ -620,7 +656,12 @@ class JSExtensionProvider(BaseProvider):
             artist_url=str(item.get("artist_url") or ""),
         )
 
-    def get_url(self, url: str, **_: Any) -> tuple[str, list[TrackMetadata], str]:
+    def get_url(
+        self, url: str, **_: Any
+    ) -> (
+        tuple[str, list[TrackMetadata], str]
+        | tuple[str, list[TrackMetadata], str, dict[str, Any]]
+    ):
         """Adapt an extension's handleUrl result to the metadata client contract."""
         response = self.handle_url(url)
         if not isinstance(response, dict) or response.get("success") is False:
@@ -678,6 +719,18 @@ class JSExtensionProvider(BaseProvider):
         collection_cover = self._url_metadata_cover(collection) or (
             tracks[0].cover_url if tracks else ""
         )
+        if kind == "artist":
+            from ..core.concerts import normalize_concerts
+
+            concerts = normalize_concerts(collection.get("concerts"))
+            if concerts:
+                # The artist card's concerts badge reads this.
+                return (
+                    collection_name,
+                    tracks,
+                    collection_cover,
+                    {"concerts": concerts},
+                )
         return collection_name, tracks, collection_cover
 
     def get_track(self, track_id: str) -> dict:
@@ -1332,10 +1385,9 @@ class JSExtensionProvider(BaseProvider):
 
         raw_concat = output_path.with_suffix(".raw.tmp")
         try:
-            with open(raw_concat, "wb") as out_f:
-                for seg_path in segments:
-                    with open(seg_path, "rb") as seg_f:
-                        out_f.write(seg_f.read())
+            # Off the event loop: this copies the whole track, and on the
+            # loop it would freeze every other download's progress meanwhile.
+            await asyncio.to_thread(_concatenate_files, segments, raw_concat)
         except Exception as e:
             logger.exception("[%s] Segment concatenation failed: %s", self.name, e)
             if raw_concat.exists():

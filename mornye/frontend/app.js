@@ -36,23 +36,23 @@ function showSkeletonTracks(count = 5) {
   
   // Clear the table and insert skeletons using the SAME grid as real tracks
   container.innerHTML = Array(count).fill(0).map(() => `
-    <div class="track-row" style="pointer-events: none; border-bottom: 1px solid var(--border);">
-      <div><div class="skeleton" style="width:14px; height:14px; border-radius:2px;"></div></div>
-      <div><div class="skeleton" style="width:16px; height:14px;"></div></div>
+    <div class="track-row u-border-bottom-1-solid-border" style="pointer-events:none;">
+      <div><div class="skeleton u-w-14 u-h-14 u-r-2"></div></div>
+      <div><div class="skeleton u-w-16 u-h-14"></div></div>
       <div class="tr-title-cell">
-        <div class="skeleton" style="width:44px; height:44px; border-radius:6px; flex-shrink:0;"></div>
-        <div style="display:flex; flex-direction:column; gap:6px; width:100%;">
-          <div class="skeleton skeleton-text" style="margin:0; width:70%;"></div>
-          <div class="skeleton skeleton-text short" style="margin:0; width:40%;"></div>
+        <div class="skeleton u-w-44 u-h-44 u-r-6 u-shrink-0"></div>
+        <div class="u-dir-column u-gap-6 u-w-100pct" style="display:flex;">
+          <div class="skeleton skeleton-text u-m-0 u-w-70pct"></div>
+          <div class="skeleton skeleton-text short u-m-0 u-w-40pct"></div>
         </div>
       </div>
-      <div><div class="skeleton skeleton-text" style="margin:0 auto; width:50%;"></div></div>
-      <div><div class="skeleton skeleton-text" style="margin:0 22px 0 auto; width:40px;"></div></div>
+      <div><div class="skeleton skeleton-text u-m-0-auto u-w-50pct"></div></div>
+      <div><div class="skeleton skeleton-text u-m-0-22-0-auto u-w-40"></div></div>
       <div class="tr-actions">
-        <div class="skeleton" style="width:30px; height:30px; border-radius:6px;"></div>
-        <div class="skeleton" style="width:30px; height:30px; border-radius:6px;"></div>
-        <div class="skeleton" style="width:30px; height:30px; border-radius:6px;"></div>
-        <div class="skeleton" style="width:30px; height:30px; border-radius:6px;"></div>
+        <div class="skeleton u-w-30 u-h-30 u-r-6"></div>
+        <div class="skeleton u-w-30 u-h-30 u-r-6"></div>
+        <div class="skeleton u-w-30 u-h-30 u-r-6"></div>
+        <div class="skeleton u-w-30 u-h-30 u-r-6"></div>
       </div>
     </div>
   `).join("");
@@ -80,10 +80,10 @@ function updateSaveButtonVisual() {
     if (isDirty) {
         btn.style.opacity = "1";
         btn.textContent = "Save Changes (Unsaved)";
-        btn.style.borderColor = "var(--red)"; // Visual cue
+        btn.dataset.dirty = "true"; // red border: styles.css
     } else {
         btn.textContent = "Save Changes";
-        btn.style.borderColor = "var(--yellow-d)";
+        btn.dataset.dirty = "false";
     }
 }
 
@@ -119,6 +119,8 @@ function switchView(name) {
   if (name === 'local') loadNetworkShares();
   if (name === 'queue') { loadStaged(); window.dismissDownloadToast?.(); }
   if (name === 'history') loadHistory();
+  if (name === 'following') loadWeeklyReleases(false);
+  if (name === 'player') initPlayerView();
 }
 
 // Mounted network shares as one-click picks under the library path field:
@@ -501,6 +503,7 @@ function applySettings(settings = {}) {
   }
   lastAppliedServices = Array.isArray(cfg.services) ? cfg.services : lastAppliedServices;
   applyListState('services-list', cfg.services);
+  if (Array.isArray(cfg.lyrics_providers)) lastAppliedLyrics = cfg.lyrics_providers;
   applyListState('lyrics-list', cfg.lyrics_providers);
   applyListState('enrich-list', cfg.enrich_providers);
   updateAllApiConfigDisplays();
@@ -925,7 +928,7 @@ function showServicesPlaceholder(message, withLink = false) {
   const link = withLink
     ? ` <a href="#" onclick="openExtensionsSettings(); return false;">Settings → Extensions</a>.`
     : '';
-  el.innerHTML = `<div class="s-label" style="font-size:11.5px;padding:6px 2px;">${escHtml(message)}${link}</div>`;
+  el.innerHTML = `<div class="s-label u-fs-11_5 u-p-6-2">${escHtml(message)}${link}</div>`;
 }
 
 function openExtensionsSettings() {
@@ -948,11 +951,45 @@ populateList('enrich-list',   ALL_ENRICH.map(x => ({ ...x, badge: null })));
 // registry was added): the provider list and the Extensions page re-read.
 window.app_extensions_changed = function () {
   refreshInstalledServices();
+  refreshLyricsExtensions();
   if ($('tc-extensions')?.classList.contains('active')) {
     loadExtensionSettings?.();
     loadExtensionHealth?.();
   }
 };
+
+// The lyrics providers saved last, so an extension's entry ("ext:jellyfin")
+// keeps its place and tick even though the list is drawn before the backend
+// has said which extensions are installed.
+let lastAppliedLyrics = null;
+
+// Extensions of type lyrics_provider (core/extension_lyrics.py) join the
+// built-in lyrics providers, off by default, ranked like any other.
+async function refreshLyricsExtensions() {
+  const api = window.pywebview?.api;
+  if (typeof api?.get_lyrics_extensions !== 'function' || !$('lyrics-list')) return;
+  let rows;
+  try {
+    rows = (await api.get_lyrics_extensions())?.extensions || [];
+  } catch (e) {
+    return;
+  }
+  const el = $('lyrics-list');
+  const shown = [...el.querySelectorAll('.sort-item')].map((x) => x.dataset.value);
+  const wanted = getChecked('lyrics-list');
+  (lastAppliedLyrics || []).forEach((id, i) => {
+    if (!shown.includes(id) && rows.some((r) => r.id === id)) {
+      wanted.splice(Math.min(i, wanted.length), 0, id);
+    }
+  });
+  const builtIn = ALL_LYRICS.map((x) => ({ ...x, badge: null }));
+  const fromExtensions = rows.map((r) => ({
+    id: r.id, label: escHtml(r.label), on: false, icon: 'EX', iconClass: 'ext',
+    title: `the ${r.label} extension`,
+  }));
+  populateList('lyrics-list', [...builtIn, ...fromExtensions]);
+  applyListState('lyrics-list', wanted);
+}
 
 async function refreshInstalledServices() {
   if (typeof window.pywebview?.api?.get_download_services !== 'function') {
@@ -1051,7 +1088,7 @@ function renderExtensionQualityRows() {
       svc.quality_options.map(o =>
         `<option value="${regEscapeHtml(o.id)}" ${o.id === current ? 'selected' : ''} title="${regEscapeHtml(o.description || '')}">${regEscapeHtml(o.label || o.id)}</option>`)
     ).join('');
-    return `<div class="s-row" style="padding-left:16px;border-left:2px solid var(--border2);margin-left:4px;">
+    return `<div class="s-row u-pl-16 u-bl-2-solid-border2 u-ml-4">
       <span class="s-label">${regEscapeHtml(svc.label || svc.id)}<small>${regEscapeHtml(svc.primary || '')}</small></span>
       <select data-service="${regEscapeHtml(svc.id)}" onchange="onExtensionQualityChange(this)">${opts}</select>
     </div>`;
@@ -1206,7 +1243,7 @@ function renderExtensionStatusGrid() {
   const grid = $('status-extensions-grid');
   if (!grid) return;
   if (!extensionStatusRows.length) {
-    grid.innerHTML = `<div class="s-label" style="font-size:11.5px;grid-column:1/-1;">${
+    grid.innerHTML = `<div class="s-label u-fs-11_5 u-grid-column-1-n1">${
       extensionStatusLoaded
         ? 'No installed extension declares a health check.'
         : 'Loading the installed extensions…'}</div>`;
@@ -1217,7 +1254,7 @@ function renderExtensionStatusGrid() {
       const state = c.ok === true ? '✓' : c.ok === false ? '✗' : '·';
       const latency = c.latency >= 0 ? ` · ${c.latency} ms` : '';
       const detail = c.detail ? ` — ${c.detail}` : '';
-      return `<div class="s-label" style="font-size:11px;" title="${regEscapeHtml(c.url)}">${state} ${regEscapeHtml(c.label)}${regEscapeHtml(detail)}${latency}</div>`;
+      return `<div class="s-label u-fs-11" title="${regEscapeHtml(c.url)}">${state} ${regEscapeHtml(c.label)}${regEscapeHtml(detail)}${latency}</div>`;
     }).join('');
     return `<div class="status-card" title="${regEscapeHtml(row.name)}">
       <div class="status-card-header">
@@ -1531,6 +1568,8 @@ window.app_set_metadata = (data) => {
       d.artist_url,
       d.artists_data
     );
+    g_artistConcerts = Array.isArray(d.artist_concerts) ? d.artist_concerts : [];
+    renderConcertsButton(d.artist);
   } catch(e) {}
 };
 window.updateFolderLabel = (path) => {
@@ -1865,6 +1904,61 @@ function artistsCreditHtml(artistsData, joinedNames, fallbackUrl) {
 let g_albumArtistUrl = '';
 let g_albumArtistsData = [];
 
+// "See more…" toggle for long artist bios. The bio is line-clamped in CSS; the
+// button only shows while the text is actually truncated (or already expanded),
+// and is re-evaluated on resize since the card may be hidden when this runs.
+let _bioObserver = null;
+function setupBioToggle(subtitle, enabled) {
+  let btn = document.getElementById('artist-bio-toggle');
+  if (_bioObserver) { _bioObserver.disconnect(); _bioObserver = null; }
+  if (!enabled) { btn?.remove(); return; }
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.id = 'artist-bio-toggle';
+    btn.type = 'button';
+    btn.className = 'artist-bio-toggle';
+    subtitle.insertAdjacentElement('afterend', btn);
+  }
+  btn.onclick = () => {
+    const expanded = subtitle.classList.toggle('expanded');
+    btn.textContent = expanded ? 'See less' : 'See more…';
+    btn.setAttribute('aria-expanded', String(expanded));
+  };
+  btn.textContent = 'See more…';
+  btn.setAttribute('aria-expanded', 'false');
+  btn.hidden = true;
+  const update = () => {
+    if (!subtitle.clientHeight) return; // card not laid out yet
+    const expanded = subtitle.classList.contains('expanded');
+    btn.hidden = !(expanded || subtitle.scrollHeight > subtitle.clientHeight + 1);
+  };
+  if (typeof ResizeObserver !== 'undefined') {
+    _bioObserver = new ResizeObserver(update);
+    _bioObserver.observe(subtitle);
+  }
+  requestAnimationFrame(update);
+}
+
+// Providers join the © and ℗ lines with " · "; when both say the same thing
+// show it once (mirrors collapse_copyright in core/models.py).
+function collapseCopyright(value) {
+  const mark = /^\s*(?:[©℗]|\([cp]\))\s*/i;
+  const parts = String(value || '').split(' · ').map(p => p.trim()).filter(Boolean);
+  if (parts.length < 2) return String(value || '').trim();
+  const seen = new Map();
+  const marks = new Set();
+  for (const part of parts) {
+    const m = part.match(mark);
+    if (m) marks.add(m[0].trim().toUpperCase());
+    const key = part.replace(mark, '').toLowerCase().split(/\s+/).join(' ');
+    if (!seen.has(key)) seen.set(key, part);
+  }
+  if (seen.size === 1 && marks.has('©') && marks.has('℗')) {
+    return '©℗ ' + [...seen.values()][0].replace(mark, '');
+  }
+  return [...seen.values()].join(' · ');
+}
+
 function setAlbumCard(title, artist, coverUrl, quality, description, followers, owner, ownerAvatar, source, artistListeners, artistRank, artistVerified, artistBiography, releaseDate, trackCount, artistUrl, artistsData) {
   g_albumReleaseDate = releaseDate || '';
   g_albumTrackCount = trackCount || 0;
@@ -1928,6 +2022,7 @@ function setAlbumCard(title, artist, coverUrl, quality, description, followers, 
     subtitle.className = '';
     subtitle.style.display = (description || quality) ? '' : 'none';
   }
+  setupBioToggle(subtitle, isArtistCard);
 
   const ownerEl = $('album-owner');
   const followersEl = $('album-followers');
@@ -2162,7 +2257,7 @@ function updateAlbumMeta(trackCount) {
       ['Total time', formatLongDuration(totalMs)],
       ['Label', t0.publisher || t0.label],
       ['UPC', t0.upc],
-      ['Copyright', t0.copyright],
+      ['Copyright', collapseCopyright(t0.copyright)],
     ]);
   } else if (badgeType !== 'TRACK') {
     // ARTIST / SEARCH — showSingleTrackCard owns the TRACK case.
@@ -2219,7 +2314,8 @@ function showSingleTrackCard(t) {
     ['Genre', t.genre],
     ['ISRC', t.isrc],
     ['Label', t.publisher || t.label],
-    ['Copyright', t.copyright],
+    ['UPC', t.upc],
+    ['Copyright', collapseCopyright(t.copyright)],
   ]);
 
   // Bottoni azione specifici per la track
@@ -2386,10 +2482,63 @@ function renderAlbumTech(rows) {
   });
   el.innerHTML = clean.map(([k, v]) => {
     const val = String(v);
+    const barcode = k === 'UPC' ? retailBarcodeSvg(val) : '';
+    if (barcode) {
+      return `<div class="tech-row"><div class="tech-k">${escHtml(k)}</div>` +
+        `<button type="button" class="tech-barcode" data-copy="${escHtml(val)}" ` +
+        `title="Click to copy ${escHtml(val)}" aria-label="UPC ${escHtml(val)}, click to copy">` +
+        `${barcode}<span class="tech-barcode-num">${escHtml(val)}</span></button></div>`;
+    }
     return `<div class="tech-row"><div class="tech-k">${escHtml(k)}</div>` +
       `<div class="tech-v" title="${escHtml(val)}">${escHtml(val)}</div></div>`;
   }).join('');
   el.classList.toggle('hidden', clean.length === 0);
+}
+
+// Clicking a rendered barcode copies the number it encodes.
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest?.('.tech-barcode');
+  if (!btn) return;
+  const text = btn.dataset.copy || '';
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(
+      () => toastMgr.success('UPC copied'),
+      () => toastMgr.warning('Could not copy the UPC'));
+  }
+});
+
+// UPC-A (12 digits) / EAN-13 (13 digits) as an inline SVG, like the mobile
+// app's metadata screen. Anything that is not a valid retail code (wrong
+// length, bad check digit) returns '' and the caller shows plain text.
+const _EAN_L = ['0001101','0011001','0010011','0111101','0100011','0110001','0101111','0111011','0110111','0001011'];
+const _EAN_G = ['0100111','0110011','0011011','0100001','0011101','0111001','0000101','0010001','0001001','0010111'];
+const _EAN_R = ['1110010','1100110','1101100','1000010','1011100','1001110','1010000','1000100','1001000','1110100'];
+const _EAN_PARITY = ['LLLLLL','LLGLGG','LLGGLG','LLGGGL','LGLLGG','LGGLLG','LGGGLL','LGLGLG','LGLGGL','LGGLGL'];
+
+function retailBarcodeSvg(value) {
+  const digits = String(value || '').replace(/[\s-]/g, '');
+  if (!/^\d{12,13}$/.test(digits)) return '';
+  const ean = digits.length === 12 ? '0' + digits : digits;
+  const d = [...ean].map(Number);
+  const sum = d.slice(0, 12).reduce((a, n, i) => a + n * (i % 2 ? 3 : 1), 0);
+  if ((10 - (sum % 10)) % 10 !== d[12]) return '';
+  const parity = _EAN_PARITY[d[0]];
+  let modules = '101';
+  for (let i = 0; i < 6; i++) modules += (parity[i] === 'L' ? _EAN_L : _EAN_G)[d[i + 1]];
+  modules += '01010';
+  for (let i = 7; i < 13; i++) modules += _EAN_R[d[i]];
+  modules += '101';
+  const quiet = 9;
+  let path = '';
+  for (let i = 0; i < modules.length; ) {
+    if (modules[i] !== '1') { i++; continue; }
+    let j = i;
+    while (modules[j] === '1') j++;
+    path += `M${quiet + i} 0h${j - i}v1h-${j - i}z`;
+    i = j;
+  }
+  return `<svg class="tech-barcode-svg" viewBox="0 0 ${modules.length + quiet * 2} 1" ` +
+    `preserveAspectRatio="none" aria-hidden="true"><path d="${path}"/></svg>`;
 }
 
 function injectArtistTabs(tracks) {
@@ -2626,7 +2775,7 @@ function renderTracks(tracks, page = 1) {
         ? `<button class="ta-btn ta-link" data-tip="Open in Spotify" onclick="openExternal(${globalIndex})">
              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
            </button>`
-        : `<button class="ta-btn" data-tip="No link" disabled style="opacity:.3">
+        : `<button class="ta-btn" data-tip="No link" disabled style="opacity:.3;">
              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
            </button>`;
 
@@ -3365,10 +3514,10 @@ function renderCodeResults(results) {
     const row = document.createElement('div');
     row.className = 'track-row';
     row.id = `code-row-${idx}`;
-    const pathHtml = `<div style="font-family: 'JetBrains Mono', monospace; color: var(--text2); font-size:12px;">${escHtml(r.path)}:${r.line}</div>`;
-    const snippet = `<pre style="white-space:pre-wrap;margin:6px 0 0;color:var(--text);font-size:13px;">${escHtml(r.snippet)}</pre>`;
+    const pathHtml = `<div class="u-ff-jetbrains-mono-monospace u-c-text2 u-fs-12">${escHtml(r.path)}:${r.line}</div>`;
+    const snippet = `<pre class="u-ws-pre-wrap u-m-6-0-0 u-c-text u-fs-13">${escHtml(r.snippet)}</pre>`;
     row.innerHTML = `
-      <div style="padding:10px 12px; grid-column: 1 / -1;">
+      <div class="u-p-10-12 u-grid-column-1-n1">
         ${pathHtml}
         ${snippet}
       </div>
@@ -3576,6 +3725,15 @@ function describeError(message, what) {
       detail: text,
     };
   }
+  if (/does not implement \w+\(\)|No method: /i.test(text)) {
+    return {
+      kind: 'error',
+      title: `${what} is not available here`,
+      body: 'The extension behind this source has no such feature. Pick another source, or update the extension from Settings → Extensions.',
+      action: { label: 'Open Extensions', onclick: 'openExtensionsSettings()' },
+      detail: text,
+    };
+  }
   if (/timed? ?out|network|connection|ENOTFOUND|getaddrinfo|unreachable/i.test(text)) {
     return {
       kind: 'network',
@@ -3623,13 +3781,16 @@ window.app_handle_provider_search_error = function(message) {
     message = message.message;
   }
   clearSearchUI();
-  setFetchingState('error');
+  // 'hide', not 'error': the card below says what happened, and the generic
+  // "Unable to retrieve data" toast on top of it said the same thing less well.
+  setFetchingState('hide');
   const info = describeError(message, 'Search');
   $('track-rows').innerHTML = errorStateHTML(info, info.kind === 'setup' ? '' : 'onFetch()');
   $('track-controls').classList.add('hidden');
   $('track-table-wrap').classList.remove('hidden');
   setStatus(info.title + '.', false);
-  logMessage(`Provider search error: ${message}`, 'error');
+  // Quiet: into the Logs panel, without a second toast for the same failure.
+  logMessage(`Provider search error: ${message}`, 'error-quiet');
   $('urlInput').disabled = false;
   $('fetchBtn').disabled = false;
 };
@@ -3728,7 +3889,7 @@ function renderRecent(hist) {
   // Artwork tiles, not the one-line rows renderRecentSearches() builds.
   grid.classList.remove('searches');
   if (!hist || !hist.length) {
-    grid.innerHTML = `<div style="grid-column:1/-1;">${emptyState(
+    grid.innerHTML = `<div class="u-grid-column-1-n1">${emptyState(
       'disc',
       'No recent fetches yet',
       'Paste a Spotify track, album or playlist link above — what you fetch shows up here.',
@@ -3828,9 +3989,16 @@ function addToQueue(indices) {
       // Deduped on the track's own identity, never on its position: a
       // second fetch puts a *different* track at index 0, and matching on
       // the index there silently refused to download it.
+      //
+      // And only within the list it came from. A track a different playlist
+      // already queued must not be dropped here: the backend downloads the
+      // list as a playlist (own folder + M3U) only when every one of its
+      // tracks is selected, so a playlist sharing songs with an earlier one
+      // lost them and fell back to loose files in the download folder.
+      const sameList = q => (q.source || '') === (currentUrl || '');
       const duplicate = spotifyId
-        ? queue.find(q => q.spotify_id === spotifyId)
-        : queue.find(q => q.index === realIndex && q.title === t.title);
+        ? queue.find(q => sameList(q) && q.spotify_id === spotifyId)
+        : queue.find(q => sameList(q) && q.index === realIndex && q.title === t.title);
       if (duplicate) {
         console.warn('Track already in queue', spotifyId || realIndex);
         skipped.push(duplicate);
@@ -3839,6 +4007,7 @@ function addToQueue(indices) {
       queue.push({
         id: itemId,
         spotify_id: spotifyId,
+        source: currentUrl || '',
         index: realIndex,
         title: t.title,
         artist: t.artist || t.artists || '',
@@ -5225,7 +5394,7 @@ function openApiConfigPopup(target) {
   $('api-config-desc').textContent = description;
   $('api-config-value').value = existingValue || '';
   status.textContent = 'Enter a URL and press Check.';
-  status.style.color = '';
+  status.dataset.tone = '';
   const helpLink = $('api-config-help');
   if (helpLink) {
     helpLink.href = 'https://github.com/m8tec/apple-music-animated-artworks';
@@ -5254,22 +5423,22 @@ async function checkApiConfig() {
   const button = $('api-config-check-btn');
   if (!url) {
     status.textContent = 'Enter a URL first.';
-    status.style.color = 'var(--red)';
+    status.dataset.tone = 'error';
     return;
   }
   if (rawValue.trim() !== url) {
     status.textContent = 'Multiple URLs detected; only the first will be tested.';
-    status.style.color = 'var(--yellow)';
+    status.dataset.tone = 'warn';
     $('api-config-value').value = url;
   } else {
     status.textContent = 'Checking…';
-    status.style.color = '';
+    status.dataset.tone = '';
   }
   button.disabled = true;
   try {
     if (!window.pywebview?.api) {
       status.textContent = 'API check unavailable in this environment.';
-      status.style.color = 'var(--red)';
+      status.dataset.tone = 'error';
       return;
     }
     let result = null;
@@ -5278,14 +5447,14 @@ async function checkApiConfig() {
     }
     if (result?.ok) {
       status.textContent = 'Reachable ✓';
-      status.style.color = 'var(--green)';
+      status.dataset.tone = 'ok';
     } else {
       status.textContent = `Check failed: ${result?.error || 'invalid response'}`;
-      status.style.color = 'var(--red)';
+      status.dataset.tone = 'error';
     }
   } catch (e) {
     status.textContent = `Check failed: ${e?.message || e}`;
-    status.style.color = 'var(--red)';
+    status.dataset.tone = 'error';
   } finally {
     button.disabled = false;
   }
@@ -5297,12 +5466,12 @@ function clearApiConfigValue() {
   const current = normalizeApiInput(input.value);
   if (!current) {
     status.textContent = 'No API configured to clear.';
-    status.style.color = 'var(--red)';
+    status.dataset.tone = 'error';
     return;
   }
   input.value = '';
   status.textContent = 'API cleared from the field. Save to remove it from settings.';
-  status.style.color = 'var(--green)';
+  status.dataset.tone = 'ok';
 }
 
 function saveApiConfig() {
@@ -5315,7 +5484,7 @@ function saveApiConfig() {
   if (rawValue.trim() !== value) {
     const status = $('api-config-status');
     status.textContent = 'Only the first URL was saved.';
-    status.style.color = 'var(--yellow)';
+    status.dataset.tone = 'warn';
   }
   updateAllApiConfigDisplays();
   closeApiConfigPopup();
@@ -5418,13 +5587,12 @@ function renderHealthResults(data) {
     const okCount = rows.filter(r => r.ok).length;
     const totalCount = rows.length;
     const group  = document.createElement('div');
-    group.className = 'hc-prov-group s-section';
-    group.style.padding = '10px 12px';
+    group.className = 'hc-prov-group s-section u-p-10-12';
     group.innerHTML = `
       <div class="hc-prov-name">
         <span class="hc-dot ${anyOk ? 'ok' : 'err'}"></span>
         ${prov}
-        <span style="font-size:10px;font-weight:400;color:var(--muted)">${okCount}/${totalCount} endpoints OK</span>
+        <span class="u-fs-10 u-fw-400 u-c-muted">${okCount}/${totalCount} endpoints OK</span>
       </div>
     `;
     container.appendChild(group);
@@ -5436,14 +5604,12 @@ function renderHealthResults(data) {
     const okCount = extRows.filter(r => r.ok).length;
     const totalCount = extRows.length;
     const group = document.createElement('div');
-    group.className = 'hc-prov-group hc-ext-group s-section';
-    group.style.padding = '10px 12px';
-    group.style.marginTop = '10px';
+    group.className = 'hc-prov-group hc-ext-group s-section u-p-10-12 u-mt-10';
     group.innerHTML = `
       <div class="hc-prov-name">
         <span class="hc-dot ${anyOk ? 'ok' : 'err'}"></span>
         Extensions
-        <span style="font-size:10px;font-weight:400;color:var(--muted)">${okCount}/${totalCount} OK</span>
+        <span class="u-fs-10 u-fw-400 u-c-muted">${okCount}/${totalCount} OK</span>
       </div>
     `;
     container.appendChild(group);
@@ -5475,14 +5641,14 @@ async function loadRegistries() {
   const list = $('registry-list');
   if (!list) return;
   if (!window.pywebview?.api?.get_registries) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">Registry management is unavailable in this build.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5">Registry management is unavailable in this build.</div>';
     return;
   }
   try {
     const registries = await window.pywebview.api.get_registries();
     renderRegistries(registries);
   } catch (e) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Unable to load registries.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Unable to load registries.</div>';
   }
 }
 
@@ -5491,12 +5657,12 @@ function renderRegistries(registries) {
   if (!list) return;
 
   if (registries?.error) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Failed to load registries: ' + regEscapeHtml(registries.message || 'unknown error') + '</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Failed to load registries: ' + regEscapeHtml(registries.message || 'unknown error') + '</div>';
     return;
   }
 
   if (!registries || !registries.length) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">No registry links configured yet.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5">No registry links configured yet.</div>';
     return;
   }
 
@@ -5566,14 +5732,14 @@ async function loadDirectories() {
   const list = $('directory-list');
   if (!list) return;
   if (!window.pywebview?.api?.get_registry_directories) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">Directory management is unavailable in this build.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5">Directory management is unavailable in this build.</div>';
     return;
   }
   try {
     const directories = await window.pywebview.api.get_registry_directories();
     renderDirectories(directories);
   } catch (e) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Unable to load directories.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Unable to load directories.</div>';
   }
 }
 
@@ -5582,11 +5748,11 @@ function renderDirectories(directories) {
   if (!list) return;
 
   if (directories?.error) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Failed to load directories: ' + regEscapeHtml(directories.error) + '</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Failed to load directories: ' + regEscapeHtml(directories.error) + '</div>';
     return;
   }
   if (!directories || !directories.length) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">No directory links configured yet.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5">No directory links configured yet.</div>';
     return;
   }
 
@@ -5657,12 +5823,12 @@ async function runDiscovery() {
     return;
   }
   if (btn) { btn.disabled = true; btn.textContent = 'Discovering…'; }
-  results.innerHTML = '<div class="s-label" style="font-size:11.5px;">Probing registries…</div>';
+  results.innerHTML = '<div class="s-label u-fs-11_5">Probing registries…</div>';
   try {
     const byDirectory = await window.pywebview.api.discover_registries();
     renderDiscoveryResults(byDirectory);
   } catch (e) {
-    results.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Discovery failed.</div>';
+    results.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Discovery failed.</div>';
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Discover Registries'; }
   }
@@ -5673,13 +5839,13 @@ function renderDiscoveryResults(byDirectory) {
   if (!results) return;
 
   if (byDirectory?.error) {
-    results.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">' + regEscapeHtml(byDirectory.error) + '</div>';
+    results.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">' + regEscapeHtml(byDirectory.error) + '</div>';
     return;
   }
 
   const directoryUrls = Object.keys(byDirectory || {});
   if (!directoryUrls.length) {
-    results.innerHTML = '<div class="s-label" style="font-size:11.5px;">No directories configured, or none reachable.</div>';
+    results.innerHTML = '<div class="s-label u-fs-11_5">No directories configured, or none reachable.</div>';
     return;
   }
 
@@ -5700,7 +5866,7 @@ function renderDiscoveryResults(byDirectory) {
           </button>
         </div>`;
     }).join('');
-    return `<div class="s-label" style="font-size:11px;margin:8px 0 4px;">${regEscapeHtml(dirUrl)}</div>${rows}`;
+    return `<div class="s-label u-fs-11 u-m-8-0-4">${regEscapeHtml(dirUrl)}</div>${rows}`;
   }).join('');
 }
 
@@ -5728,14 +5894,14 @@ async function loadTrustedKeys() {
   const list = $('trust-key-list');
   if (!list) return;
   if (!window.pywebview?.api?.get_trusted_keys) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">Trust management is unavailable in this build.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5">Trust management is unavailable in this build.</div>';
     return;
   }
   try {
     const keys = await window.pywebview.api.get_trusted_keys();
     renderTrustedKeys(keys);
   } catch (e) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Unable to load trusted keys.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Unable to load trusted keys.</div>';
   }
 }
 
@@ -5744,11 +5910,11 @@ function renderTrustedKeys(keys) {
   if (!list) return;
 
   if (keys?.error) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Failed to load trusted keys: ' + regEscapeHtml(keys.error) + '</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Failed to load trusted keys: ' + regEscapeHtml(keys.error) + '</div>';
     return;
   }
   if (!keys || !keys.length) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">No trusted keys yet.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5">No trusted keys yet.</div>';
     return;
   }
 
@@ -5870,15 +6036,15 @@ function renderDuplicateGroups(groups) {
   if (!wrap || !container) return;
 
   if (!groups.length) {
-    container.innerHTML = '<div class="s-label" style="font-size:11.5px;">No duplicates found.</div>';
+    container.innerHTML = '<div class="s-label u-fs-11_5">No duplicates found.</div>';
     wrap.classList.remove('hidden');
     toastMgr.success('No duplicates found.');
     return;
   }
 
   container.innerHTML = groups.map((group, i) => `
-    <div class="sort-item" style="flex-direction:column;align-items:stretch;gap:6px;cursor:default;">
-      <div class="s-label" style="font-size:11px;">Group ${i + 1} (${group.length} files)</div>
+    <div class="sort-item u-dir-column u-items-stretch u-gap-6 u-cursor-default">
+      <div class="s-label u-fs-11">Group ${i + 1} (${group.length} files)</div>
       ${group.map((path) => `<span class="reg-url" title="${regEscapeHtml(path)}">${regEscapeHtml(path)}</span>`).join('')}
     </div>`).join('');
   wrap.classList.remove('hidden');
@@ -6017,35 +6183,35 @@ function renderLibraryDedup(report) {
   });
 
   if (!libDedupGroups.length) {
-    container.innerHTML = '<div class="s-label" style="font-size:11.5px;">No duplicates found.</div>';
+    container.innerHTML = '<div class="s-label u-fs-11_5">No duplicates found.</div>';
     actions?.classList.add('hidden');
     toastMgr.success('No duplicates found.');
     return;
   }
 
   container.innerHTML = libDedupGroups.map((group, i) => `
-    <div class="sort-item" style="flex-direction:column;align-items:stretch;gap:6px;cursor:default;">
-      <div class="s-label" style="font-size:11px;">
+    <div class="sort-item u-dir-column u-items-stretch u-gap-6 u-cursor-default">
+      <div class="s-label u-fs-11">
         ${regEscapeHtml(group.label)} — ${group.files.length} copies, ${formatLibDedupSize(group.reclaimable)} reclaimable, matched by ${regEscapeHtml(group.matchedBy)}
       </div>
       ${group.files.map((file, j) => {
         const isKeeper = file.path === group.keepPath;
         return `
-        <div style="display:flex;align-items:center;gap:8px;">
+        <div class="u-items-center u-gap-8" style="display:flex;">
           <input type="radio" name="libdedup-keep-${i}" ${isKeeper ? 'checked' : ''}
                  onchange="setLibDedupKeeper(${i}, ${j})" title="Keep this copy">
           <input type="checkbox" ${group.selected.has(file.path) ? 'checked' : ''}
                  ${isKeeper ? 'disabled' : ''}
                  onchange="toggleLibDedupFile(${i}, ${j}, this.checked)"
                  title="${isKeeper ? 'The kept copy is never removed' : 'Remove this copy'}">
-          <span class="reg-url" style="flex:1;min-width:0;" title="${regEscapeHtml(file.path)}">${regEscapeHtml(file.path)}</span>
-          <span class="s-label" style="font-size:10.5px;white-space:nowrap;">${regEscapeHtml(file.quality || '')}</span>
+          <span class="reg-url u-flex-1 u-minw-0" title="${regEscapeHtml(file.path)}">${regEscapeHtml(file.path)}</span>
+          <span class="s-label u-fs-10_5 u-ws-nowrap">${regEscapeHtml(file.quality || '')}</span>
         </div>`;
       }).join('')}
     </div>`).join('');
 
   if (report.shown_groups !== undefined && report.shown_groups < report.groups) {
-    container.innerHTML += `<div class="s-label" style="font-size:11px;">Showing ${report.shown_groups} of ${report.groups} groups — resolve these, then scan again for the rest.</div>`;
+    container.innerHTML += `<div class="s-label u-fs-11">Showing ${report.shown_groups} of ${report.groups} groups — resolve these, then scan again for the rest.</div>`;
   }
   actions?.classList.remove('hidden');
   updateLibDedupCount();
@@ -6252,16 +6418,53 @@ async function doLogout() {
 }
 
 // --- EXPLORE LOGIC ---
+// Explore's feed comes from Spotify or from any installed extension with a
+// home feed (core/extension_home_feed.py) — Jellyfin's "Recently added" and
+// "Most played" from the user's own server among them. The choice is a
+// per-browser convenience, so localStorage is enough.
+const EXPLORE_SOURCE_KEY = 'mornye-explore-source';
+
+function savedExploreSource() {
+  try { return localStorage.getItem(EXPLORE_SOURCE_KEY) || 'spotify'; } catch (e) { return 'spotify'; }
+}
+
+function setExploreSource(value) {
+  try { localStorage.setItem(EXPLORE_SOURCE_KEY, value); } catch (e) { /* private mode */ }
+  loadExploreData();
+}
+
+/** Fills the source picker; returns the source to load (falls back to
+ *  Spotify when the saved one is no longer installed). */
+async function refreshExploreSources() {
+  const select = $('explore-source');
+  let wanted = savedExploreSource();
+  const api = window.pywebview?.api;
+  if (!select || typeof api?.get_home_feed_sources !== 'function') return 'spotify';
+  try {
+    const sources = (await api.get_home_feed_sources())?.sources || [];
+    if (sources.length) {
+      select.innerHTML = sources.map((s) =>
+        `<option value="${escHtml(s.id)}">${escHtml(s.label)}</option>`).join('');
+    }
+  } catch (e) { /* keep what is there */ }
+  if (![...select.options].some((o) => o.value === wanted)) wanted = 'spotify';
+  select.value = wanted;
+  return wanted;
+}
+
 async function loadExploreData() {
   const sectionsContainer = $('explore-sections');
   const greetingEl = $('explore-greeting');
   
   if (!sectionsContainer) return;
   
-  sectionsContainer.innerHTML = '<div style="text-align:center; padding: 40px; color: var(--muted);">Loading feed...</div>';
+  sectionsContainer.innerHTML = '<div class="u-ta-center u-p-40 u-c-muted">Loading feed...</div>';
+  const source = await refreshExploreSources();
   if (window.pywebview?.api?.get_spotify_home_feed) {
     try {
-      const homeData = await window.pywebview.api.get_spotify_home_feed();
+      const homeData = source === 'spotify' || !window.pywebview.api.get_extension_home_feed
+        ? await window.pywebview.api.get_spotify_home_feed()
+        : await window.pywebview.api.get_extension_home_feed(source);
       
       if (homeData && homeData.success) {
         if (greetingEl) greetingEl.textContent = homeData.greeting || 'Explore';
@@ -6278,7 +6481,7 @@ async function loadExploreData() {
   } else {
     // Demo Mode
     if (greetingEl) greetingEl.textContent = 'Explore (Demo)';
-    sectionsContainer.innerHTML = '<div style="color:var(--muted);">Python backend not connected. Unable to load recommendations.</div>';
+    sectionsContainer.innerHTML = '<div class="u-c-muted">Python backend not connected. Unable to load recommendations.</div>';
   }
 }
 
@@ -6324,7 +6527,9 @@ function renderHomeSections(sections) {
         // Insert the URI
         const input = $('urlInput');
         if (input) {
-          input.value = item.uri || `spotify:${item.type}:${item.id}`;
+          // open_url: a link the URL box can open, built by the backend for
+          // extension feeds (a Jellyfin item becomes <server>/web/#/details?id=…).
+          input.value = item.open_url || item.uri || `spotify:${item.type}:${item.id}`;
           // Scatena la ricerca
           onFetch(); 
         }
@@ -6360,6 +6565,7 @@ window.addEventListener('pywebviewready', async () => {
   // saved settings yet never calls applySettings() at all, which is exactly
   // the fresh install that most needs to be told what it can download from.
   await refreshInstalledServices();
+  await refreshLyricsExtensions();
   initSettingsTracking();
   updateSearchMode();
   initPasteButton();
@@ -6611,6 +6817,7 @@ function onLocalDrop(e) {
 // ── Folder Browser for Local Auto-Tagger ──────────────────────────────────
 
 let currentFolderBrowserPath = null;
+let folderBrowserTarget = 'local';   // which page asked for a folder: 'local' | 'player'
 let currentFolderBrowserParent = null;
 
 // Wrapper for the "← Back" button: navigateFolderBrowser() needs the real
@@ -6623,7 +6830,8 @@ function goFolderBrowserBack() {
     }
 }
 
-async function openFolderBrowser() {
+async function openFolderBrowser(target) {
+    folderBrowserTarget = target === 'player' ? 'player' : 'local';
     const modal = $('folder-browser-modal');
     modal.classList.remove('hidden');
     modal.focus();
@@ -6638,14 +6846,19 @@ async function openFolderBrowser() {
     modal.dataset.escapeAttached = 'true';
 
     currentFolderBrowserParent = null;
-    const currentPath = $('local-path-input').value.trim() || null;
+    const currentPath = $(folderBrowserTarget === 'player' ? 'player-path-input' : 'local-path-input').value.trim() || null;
 
     if (window.pywebview?.api) {
         const api = window.pywebview.api;
         try {
-            const homePath = typeof api.get_home_dir === 'function' ? await api.get_home_dir() : '/';
-            await navigateFolderBrowser(homePath || currentPath || '/');
-            return;
+            // Start where the field already points; the home folder is the
+            // fallback. (Starting at '/' is refused in the web build, which
+            // only browses inside the approved folders.)
+            const homePath = typeof api.get_home_dir === 'function' ? await api.get_home_dir() : null;
+            if (currentPath || homePath) {
+                await navigateFolderBrowser(currentPath || homePath);
+                return;
+            }
         } catch (err) {
             console.warn('pywebview folder browse fallback failed:', err);
         }
@@ -6744,10 +6957,7 @@ async function navigateFolderBrowser(path) {
                         return;
                     }
 
-                    $('local-path-input').value = item.path;
-                    closeFolderBrowser();
-                    toastMgr.success(`Selected: ${item.path}`);
-                    startLocalScan();
+                    applyFolderBrowserChoice(item.path);
                 };
 
                 entriesDiv.appendChild(div);
@@ -6766,12 +6976,20 @@ async function navigateFolderBrowser(path) {
 }
 
 function setFolderPath() {
-    if (currentFolderBrowserPath) {
-        $('local-path-input').value = currentFolderBrowserPath;
-        closeFolderBrowser();
-        toastMgr.success(`Selected: ${currentFolderBrowserPath}`);
-        startLocalScan();
+    if (currentFolderBrowserPath) applyFolderBrowserChoice(currentFolderBrowserPath);
+}
+
+// The folder picker is shared: Fix Local Files and the Player both open it.
+function applyFolderBrowserChoice(path) {
+    closeFolderBrowser();
+    if (folderBrowserTarget === 'player') {
+        $('player-path-input').value = path;
+        scanPlayerLibrary();
+        return;
     }
+    $('local-path-input').value = path;
+    toastMgr.success(`Selected: ${path}`);
+    startLocalScan();
 }
 
 async function startLocalScan() {
@@ -6837,7 +7055,7 @@ function renderLocalTracks() {
     container.innerHTML = '';
     
     if (!localScanData.length) {
-        container.innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--muted);font-size:14px;">No supported audio files found in this folder (FLAC, MP3, M4A/AAC, OGG, Opus, WAV, AIFF, WMA, WavPack, APE and more).</div>';
+        container.innerHTML = '<div class="u-p-40-20 u-ta-center u-c-muted u-fs-14">No supported audio files found in this folder (FLAC, MP3, M4A/AAC, OGG, Opus, WAV, AIFF, WMA, WavPack, APE and more).</div>';
         return;
     }
     
@@ -6854,7 +7072,7 @@ function renderLocalTracks() {
         const oldTitle = item.old_title || item.guessed_title || fileName;
         const oldArtist = item.old_artist || item.guessed_artist || "Unknown Artist";
         
-        let newCol = `<div style="color:var(--muted); font-size:12.5px; font-style:italic;">No match found</div>`;
+        let newCol = `<div class="u-c-muted u-fs-12_5 u-fst-italic">No match found</div>`;
         let scoreCol = `<span class="local-badge err">No Match</span>`;
         let checkbox = `<input type="checkbox" class="local-cb" value="${i}" data-file-path="${escHtml(item.file_path)}" disabled>`;
 
@@ -6901,13 +7119,11 @@ function renderLocalTracks() {
             checkbox = `<input type="checkbox" class="local-cb" value="${i}" data-file-path="${escHtml(item.file_path)}" ${isSafe ? 'checked' : ''} onchange="updateLocalSelection()">`;
         } else if (item.error) {
             scoreCol = `<span class="local-badge err">Error</span>`;
-            newCol = `<div style="color:var(--red); font-size:11px;">${escHtml(item.error)}</div>`;
+            newCol = `<div class="u-c-red u-fs-11">${escHtml(item.error)}</div>`;
         }
 
         const row = document.createElement('div');
-        row.className = 'track-row local-row';
-        row.style.gridTemplateColumns = "24px 1fr 80px 1fr";
-        row.style.cursor = "default";
+        row.className = 'track-row local-row u-cols-24-1fr-80-1fr u-cursor-default';
         
         row.innerHTML = `
             <div class="tr-check">${checkbox}</div>
@@ -6916,15 +7132,1431 @@ function renderLocalTracks() {
                 <div class="local-info">
                     <div class="local-title" title="Current: ${escHtml(oldTitle)}">${escHtml(oldTitle)}</div>
                     <div class="local-artist">${escHtml(oldArtist)}</div>
-                    <div style="font-family:'JetBrains Mono', monospace; font-size:9.5px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:3px;" title="${escHtml(item.file_path)}">${escHtml(fileName)}</div>
+                    <div class="u-ff-jetbrains-mono-monospace u-fs-9_5 u-c-muted u-o-hidden u-text-overflow-ellipsis u-ws-nowrap u-mt-3" title="${escHtml(item.file_path)}">${escHtml(fileName)}</div>
+                    <div class="local-actions">
+                      <button type="button" class="local-convert-btn" title="Play this file as it is stored" onclick="playLocal(${i})">Play</button>
+                      <button type="button" class="local-convert-btn" title="Edit the tags, cover and lyrics of this file" onclick="openTagEditor(${i})">Edit</button>
+                      <button type="button" class="local-convert-btn" title="Convert this file to another format" onclick="openConvertDialog([${i}])">Convert</button>
+                      <button type="button" class="local-convert-btn" title="Show technical details and a spectrogram" onclick="openAnalyze(${i})">Analyze</button>
+                    </div>
                 </div>
             </div>
-            <div style="text-align:center;">${scoreCol}</div>
+            <div class="u-ta-center">${scoreCol}</div>
             ${newCol}
         `;
         container.appendChild(row);
     });
 }
+
+// ── Convert files to another format ─────────────────────────────────────────
+let convertPaths = [];
+let convertFormats = null;
+
+async function openConvertDialog(indices) {
+  const idx = Array.isArray(indices)
+    ? indices
+    : Array.from(document.querySelectorAll('.local-cb:checked')).map(cb => parseInt(cb.value));
+  convertPaths = idx.map(i => localScanData[i]?.file_path).filter(Boolean);
+  if (!convertPaths.length) {
+    toastMgr.info('Tick at least one file to convert.');
+    return;
+  }
+  if (!convertFormats) {
+    try {
+      convertFormats = (await window.pywebview?.api?.get_convert_formats?.()) || [];
+    } catch (e) { convertFormats = []; }
+  }
+  if (!convertFormats.length) {
+    toastMgr.error('Could not load the list of formats.');
+    return;
+  }
+  const sel = $('convert-format');
+  if (!sel.options.length) {
+    sel.innerHTML = convertFormats.map(f =>
+      `<option value="${escHtml(f.value)}">${escHtml(f.label)} — ${escHtml(f.hint)}</option>`).join('');
+    $('convert-bitrate').innerHTML = [320, 256, 192, 160, 128, 96, 64]
+      .map(b => `<option value="${b}">${b} kbps</option>`).join('');
+  }
+  $('convert-desc').textContent = convertPaths.length === 1
+    ? convertPaths[0].split(/[\\/]/).pop()
+    : `${convertPaths.length} files`;
+  updateConvertOptions();
+  $('convert-modal').classList.remove('hidden');
+}
+
+function closeConvertDialog() {
+  $('convert-modal').classList.add('hidden');
+}
+
+function updateConvertOptions() {
+  const f = (convertFormats || []).find(x => x.value === $('convert-format').value);
+  const lossless = !!f?.lossless;
+  $('convert-lossy-opts').classList.toggle('hidden', lossless);
+  $('convert-lossless-opts').classList.toggle('hidden', !lossless);
+  $('convert-lossless-opts').style.display = lossless ? 'flex' : 'none';
+  $('convert-note').textContent = lossless
+    ? 'Lossless targets only work on lossless sources (FLAC, ALAC, WAV, AIFF…): converting an MP3 or AAC file would only make it bigger.'
+    : 'Tags, cover art and lyrics are carried over to the new file.';
+}
+
+async function startConvert() {
+  const btn = $('convert-start-btn');
+  const options = {
+    format: $('convert-format').value,
+    bitrate: $('convert-bitrate').value,
+    keep_original: $('convert-keep').checked,
+    max_bit_depth: parseInt($('convert-depth').value) || 0,
+    max_sample_rate: parseInt($('convert-rate').value) || 0,
+  };
+  btn.disabled = true;
+  btn.textContent = `Converting 0/${convertPaths.length}…`;
+  const res = await window.pywebview?.api?.convert_local_files?.(convertPaths, options);
+  if (!res || res.status !== 'started') {
+    btn.disabled = false;
+    btn.textContent = 'Convert';
+    toastMgr.error(res?.error || 'Could not start the conversion.');
+  }
+}
+
+window.app_local_convert_progress = function(payload) {
+  $('convert-start-btn').textContent = `Converting ${payload.done}/${payload.total}…`;
+  const last = payload.last || {};
+  if (!last.success) {
+    toastMgr.error(`${(last.file_path || '').split(/[\\/]/).pop()}: ${last.error}`);
+  }
+};
+
+window.app_local_convert_finished = function(payload) {
+  const btn = $('convert-start-btn');
+  btn.disabled = false;
+  btn.textContent = 'Convert';
+  closeConvertDialog();
+  const results = payload.results || [];
+  const ok = results.filter(r => r.success);
+  // Point each converted row at its new file so a follow-up "Apply tags"
+  // does not aim at a source that has just been removed.
+  ok.forEach(r => {
+    const item = localScanData.find(e => e.file_path === r.file_path);
+    if (item && r.output_path) item.file_path = r.output_path;
+  });
+  if (ok.length) renderLocalTracks(), updateLocalSelection();
+  if (ok.length) toastMgr.success(`Converted ${ok.length} of ${results.length} file(s).`);
+};
+
+window.app_local_convert_error = function(err) {
+  const btn = $('convert-start-btn');
+  btn.disabled = false;
+  btn.textContent = 'Convert';
+  toastMgr.error('Conversion failed: ' + err);
+};
+
+// ── Tag editor ──────────────────────────────────────────────────────────────
+const TAG_LABELS = {
+  TITLE: 'Title', ARTIST: 'Artist', ALBUM: 'Album', ALBUMARTIST: 'Album artist',
+  DATE: 'Date', GENRE: 'Genre', TRACKNUMBER: 'Track #', DISCNUMBER: 'Disc #',
+  COMPOSER: 'Composer', ISRC: 'ISRC', COPYRIGHT: 'Copyright',
+};
+let tagEditState = null;
+
+async function openTagEditor(index) {
+  const item = localScanData[index];
+  if (!item) return;
+  const res = await window.pywebview?.api?.read_file_tags?.(item.file_path);
+  if (!res || res.status !== 'ok') {
+    toastMgr.error(res?.error || 'Could not read the tags.');
+    return;
+  }
+  tagEditState = { path: item.file_path, index, cover: undefined, removeCover: false, original: res.tags, lyrics: res.lyrics };
+  $('tagedit-file').textContent = item.file_path.split(/[\\/]/).pop();
+  $('tagedit-fields').innerHTML = res.fields.map(f => `
+    <div style="${f === 'TITLE' || f === 'COPYRIGHT' ? 'grid-column:1/-1;' : ''}">
+      <label class="u-fs-12 u-c-muted" for="tagedit-${f}">${escHtml(TAG_LABELS[f] || f)}</label>
+      <input class="u-w-100pct u-mt-3" type="text" id="tagedit-${f}" data-tag="${f}" value="${escHtml(res.tags[f] || '')}">
+    </div>`).join('');
+  $('tagedit-lyrics').value = res.lyrics || '';
+  $('tagedit-translation-wrap').classList.add('hidden');
+  $('tagedit-translation').value = '';
+  await ensureTranslationLanguages();
+  const img = $('tagedit-cover');
+  img.src = res.cover || '';
+  img.style.visibility = res.cover ? 'visible' : 'hidden';
+  $('tagedit-modal').classList.remove('hidden');
+}
+
+function closeTagEditor() { $('tagedit-modal').classList.add('hidden'); tagEditState = null; }
+
+function pickTagEditorCover(input) {
+  const file = input.files && input.files[0];
+  if (!file || !tagEditState) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    tagEditState.cover = reader.result;
+    tagEditState.removeCover = false;
+    $('tagedit-cover').src = reader.result;
+    $('tagedit-cover').style.visibility = 'visible';
+  };
+  reader.readAsDataURL(file);
+  input.value = '';
+}
+
+function removeTagEditorCover() {
+  if (!tagEditState) return;
+  tagEditState.cover = undefined;
+  tagEditState.removeCover = true;
+  $('tagedit-cover').style.visibility = 'hidden';
+}
+
+async function saveTagEditor() {
+  if (!tagEditState) return;
+  const edits = {};
+  document.querySelectorAll('#tagedit-fields [data-tag]').forEach(el => {
+    const key = el.dataset.tag;
+    if (el.value.trim() !== (tagEditState.original[key] || '')) edits[key] = el.value;
+  });
+  const lyricsNow = $('tagedit-lyrics').value;
+  const lyrics = lyricsNow !== (tagEditState.lyrics || '') ? lyricsNow : null;
+  if (!Object.keys(edits).length && lyrics === null && !tagEditState.cover && !tagEditState.removeCover) {
+    closeTagEditor();
+    return;
+  }
+  const btn = $('tagedit-save-btn');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  const res = await window.pywebview?.api?.save_file_tags?.(
+    tagEditState.path, edits, lyrics, tagEditState.cover || '', tagEditState.removeCover);
+  btn.disabled = false;
+  btn.textContent = 'Save';
+  if (!res || res.status !== 'ok') {
+    toastMgr.error(res?.error || 'Could not save the tags.');
+    return;
+  }
+  const item = localScanData[tagEditState.index];
+  if (item) {
+    if ('TITLE' in edits) item.old_title = edits.TITLE;
+    if ('ARTIST' in edits) item.old_artist = edits.ARTIST;
+    if ('ALBUM' in edits) item.old_album = edits.ALBUM;
+    if (tagEditState.cover) item.old_cover_base64 = tagEditState.cover;
+    if (tagEditState.removeCover) item.old_cover_base64 = '';
+  }
+  toastMgr.success('Tags saved.');
+  closeTagEditor();
+  renderLocalTracks();
+  updateLocalSelection();
+}
+
+// ── Audio analysis ──────────────────────────────────────────────────────────
+async function openAnalyze(index) {
+  const item = localScanData[index];
+  if (!item) return;
+  $('analyze-file').textContent = item.file_path.split(/[\\/]/).pop();
+  $('analyze-info').innerHTML = '';
+  $('analyze-img').classList.add('hidden');
+  $('analyze-status').textContent = 'Drawing the spectrogram…';
+  $('analyze-status').classList.remove('hidden');
+  $('analyze-modal').classList.remove('hidden');
+  const res = await window.pywebview?.api?.analyze_audio_file?.(item.file_path);
+  if ($('analyze-modal').classList.contains('hidden')) return;
+  if (!res || res.status !== 'ok') {
+    $('analyze-status').textContent = res?.error || 'Analysis failed.';
+    return;
+  }
+  const i = res.info || {};
+  const mb = i.size_bytes ? (i.size_bytes / 1048576).toFixed(1) + ' MB' : '';
+  const dur = i.duration_s ? `${Math.floor(i.duration_s / 60)}:${String(Math.round(i.duration_s % 60)).padStart(2, '0')}` : '';
+  const facts = [
+    ['Format', i.format], ['Sample rate', i.sample_rate ? (i.sample_rate / 1000) + ' kHz' : ''],
+    ['Bit depth', i.bit_depth ? i.bit_depth + '-bit' : ''], ['Channels', i.channels],
+    ['Bitrate', i.bitrate ? Math.round(i.bitrate / 1000) + ' kbps' : ''], ['Duration', dur], ['Size', mb],
+  ].filter(f => f[1]);
+  $('analyze-info').innerHTML = facts.map(([k, v]) =>
+    `<span><span class="u-c-muted">${escHtml(k)}</span> ${escHtml(String(v))}</span>`).join('');
+  $('analyze-img').src = res.spectrogram;
+  $('analyze-img').classList.remove('hidden');
+  $('analyze-status').classList.add('hidden');
+}
+
+function closeAnalyze() { $('analyze-modal').classList.add('hidden'); }
+
+// ── Library reorganiser ─────────────────────────────────────────────────────
+let reorgPlan = null;
+let reorgRoot = '';
+
+async function openReorganizeDialog() {
+  reorgRoot = ($('local-path-input')?.value || '').trim();
+  if (!reorgRoot) { toastMgr.info('Scan a folder first.'); return; }
+  const defaults = await window.pywebview?.api?.get_reorganize_defaults?.();
+  if (!defaults) { toastMgr.error('Could not load the organizer.'); return; }
+  if (!$('reorg-template').value) $('reorg-template').value = defaults.template;
+  $('reorg-hint').textContent = 'Placeholders: ' + defaults.placeholders.map(p => '{' + p + '}').join(' ');
+  $('reorg-root').textContent = reorgRoot;
+  invalidateReorganizePlan();
+  $('reorg-modal').classList.remove('hidden');
+}
+
+function closeReorganize() { $('reorg-modal').classList.add('hidden'); }
+
+function invalidateReorganizePlan() {
+  reorgPlan = null;
+  $('reorg-apply-btn').disabled = true;
+  $('reorg-summary').textContent = '';
+  $('reorg-list').innerHTML = '';
+}
+
+async function previewReorganize() {
+  const btn = $('reorg-preview-btn');
+  btn.disabled = true;
+  const res = await window.pywebview?.api?.plan_library_reorganize?.(reorgRoot, $('reorg-template').value);
+  btn.disabled = false;
+  if (!res || res.status !== 'ok') {
+    $('reorg-summary').textContent = res?.error || 'Could not build the plan.';
+    return;
+  }
+  reorgPlan = res.moves;
+  const count = s => reorgPlan.filter(m => m.status === s).length;
+  $('reorg-summary').textContent =
+    `${count('move')} to move · ${count('same')} already in place · ${count('conflict')} skipped (destination exists)`;
+  const rel = p => p.startsWith(reorgRoot) ? p.slice(reorgRoot.length).replace(/^[\\/]/, '') : p;
+  $('reorg-list').innerHTML = reorgPlan.filter(m => m.status !== 'same').slice(0, 300).map(m =>
+    `<div${m.status === 'conflict' ? ' data-tone="error"' : ''}>${escHtml(rel(m.src))} → ${escHtml(rel(m.dest))}</div>`).join('');
+  $('reorg-apply-btn').disabled = count('move') === 0;
+}
+
+async function applyReorganize() {
+  if (!reorgPlan) return;
+  const btn = $('reorg-apply-btn');
+  btn.disabled = true;
+  btn.textContent = 'Moving…';
+  const res = await window.pywebview?.api?.apply_library_reorganize?.(reorgRoot, reorgPlan);
+  btn.textContent = 'Move files';
+  if (!res || res.status !== 'ok') {
+    toastMgr.error(res?.error || 'Could not move the files.');
+    return;
+  }
+  const ok = res.results.filter(r => r.success);
+  res.results.filter(r => !r.success).slice(0, 3).forEach(r => toastMgr.error(`${r.src.split(/[\\/]/).pop()}: ${r.error}`));
+  ok.forEach(r => {
+    const item = localScanData.find(e => e.file_path === r.src);
+    if (item) item.file_path = r.dest;
+  });
+  toastMgr.success(`Moved ${ok.length} file(s).`);
+  closeReorganize();
+  renderLocalTracks();
+  updateLocalSelection();
+}
+
+// ── Weekly releases (Following page) ────────────────────────────────────────
+let weeklyLoading = false;
+
+async function loadWeeklyReleases(refresh) {
+  const status = $('weekly-status');
+  const list = $('weekly-list');
+  if (!status || !list || weeklyLoading) return;
+  if (!window.pywebview?.api?.get_weekly_releases) {
+    status.textContent = 'Not available in this build.';
+    return;
+  }
+  weeklyLoading = true;
+  $('weekly-refresh-btn').disabled = true;
+  status.textContent = 'Checking the artists you follow…';
+  list.innerHTML = '';
+  try {
+    const res = await window.pywebview.api.get_weekly_releases(parseInt($('weekly-days').value) || 7, !!refresh);
+    if (!res || res.status !== 'ok') {
+      status.textContent = res?.error || 'Could not load the releases.';
+      return;
+    }
+    if (!res.followed) {
+      status.textContent = 'Follow an artist below to see their new releases here.';
+      return;
+    }
+    status.textContent = res.releases.length
+      ? `${res.releases.length} release(s) from ${res.followed} followed artist(s).`
+      : `Nothing new from the ${res.followed} artist(s) you follow in this period.`;
+    if (res.unavailable?.length) {
+      status.textContent += ` Could not check: ${res.unavailable.join(', ')}.`;
+    }
+    list.innerHTML = res.releases.map((r, i) => `
+      <div class="weekly-row">
+        <div class="weekly-day">${escHtml(r.day)}</div>
+        <div class="weekly-info">
+          <div class="weekly-title">${escHtml(r.title || '—')}</div>
+          <div class="weekly-artist">${escHtml(r.artist)} · ${escHtml(r.type)}</div>
+        </div>
+        <button type="button" class="act-btn secondary u-p-5-12 u-fs-12" data-weekly="${i}">Open</button>
+      </div>`).join('');
+    list.querySelectorAll('[data-weekly]').forEach(btn => btn.addEventListener('click', () => {
+      const rel = res.releases[parseInt(btn.dataset.weekly)];
+      if (rel) { switchView('home'); goToUrl(rel.url); }
+    }));
+  } catch (e) {
+    status.textContent = 'Could not load the releases.';
+  } finally {
+    weeklyLoading = false;
+    $('weekly-refresh-btn').disabled = false;
+  }
+}
+
+// ── Artist concerts ─────────────────────────────────────────────────────────
+let g_artistConcerts = [];
+
+function renderConcertsButton(artistName) {
+  document.getElementById('concerts-btn')?.remove();
+  if (!g_artistConcerts.length) return;
+  const actions = $('album-actions');
+  if (!actions) return;
+  const btn = document.createElement('button');
+  btn.id = 'concerts-btn';
+  btn.type = 'button';
+  btn.className = 'act-btn secondary';
+  btn.title = 'Upcoming concerts';
+  btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Concerts (${g_artistConcerts.length})`;
+  btn.onclick = () => openConcerts($('album-title')?.textContent?.trim());
+  actions.appendChild(btn);
+}
+
+// The venue's own wall-clock date and time, not the viewer's.
+function concertWhen(c) {
+  const hasZone = c.has_time && c.time_zone && /(Z|[+-]\d{2}:?\d{2})$/.test(c.start_at);
+  const d = new Date(c.has_time ? c.start_at : c.start_at + 'T00:00:00Z');
+  try {
+    const opts = { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' };
+    if (c.has_time) { opts.hour = '2-digit'; opts.minute = '2-digit'; }
+    opts.timeZone = hasZone ? c.time_zone : (c.has_time ? undefined : 'UTC');
+    return new Intl.DateTimeFormat(undefined, opts).format(d);
+  } catch (e) {
+    return c.start_at;
+  }
+}
+
+function concertIcs(c, artist) {
+  const esc = t => String(t || '').replace(/[\\,;]/g, m => '\\' + m).replace(/\n/g, '\\n');
+  const fmt = dt => dt.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Mornye//Concerts//EN', 'BEGIN:VEVENT',
+    `UID:${esc(c.id)}@mornye`, `DTSTAMP:${fmt(new Date())}`];
+  if (c.has_time) {
+    const start = new Date(c.start_at);
+    lines.push(`DTSTART:${fmt(start)}`, `DTEND:${fmt(new Date(start.getTime() + 3 * 3600e3))}`);
+  } else {
+    const day = c.start_at.replace(/-/g, '');
+    const next = new Date(c.start_at + 'T00:00:00Z'); next.setUTCDate(next.getUTCDate() + 1);
+    lines.push(`DTSTART;VALUE=DATE:${day}`, `DTEND;VALUE=DATE:${next.toISOString().slice(0, 10).replace(/-/g, '')}`);
+  }
+  lines.push(`SUMMARY:${esc(artist || 'Concert')}`, `LOCATION:${esc([c.venue, c.location].filter(Boolean).join(', '))}`);
+  if (c.url) lines.push(`URL:${c.url}`);
+  lines.push('END:VEVENT', 'END:VCALENDAR');
+  return lines.join('\r\n');
+}
+
+function downloadConcertIcs(index) {
+  const c = g_artistConcerts[index];
+  if (!c) return;
+  const blob = new Blob([concertIcs(c, $('album-title')?.textContent?.trim())], { type: 'text/calendar' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'concert.ics';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function openConcerts(artistName) {
+  $('concerts-title').textContent = `Concerts${artistName ? ' — ' + artistName : ''}`;
+  $('concerts-list').innerHTML = g_artistConcerts.map((c, i) => `
+    <div class="weekly-row">
+      <div class="weekly-info">
+        <div class="weekly-title">${escHtml(concertWhen(c))}</div>
+        <div class="weekly-artist">${escHtml([c.venue, c.location].filter(Boolean).join(' · '))}</div>
+      </div>
+      <button type="button" class="act-btn secondary u-p-5-12 u-fs-12" onclick="downloadConcertIcs(${i})" title="Download a calendar event">Add to calendar</button>
+      ${c.url ? `<button type="button" class="act-btn secondary u-p-5-12 u-fs-12" onclick="openExternalUrl(${escHtml(JSON.stringify(c.url))})">Details</button>` : ''}
+    </div>`).join('');
+  $('concerts-modal').classList.remove('hidden');
+}
+
+function closeConcerts() { $('concerts-modal').classList.add('hidden'); }
+
+function openExternalUrl(url) {
+  const safe = httpUrlOrNull(url);
+  if (!safe) return;
+  if (window.pywebview?.api?.open_url) window.pywebview.api.open_url(safe);
+  else window.open(safe, '_blank', 'noopener');
+}
+
+// ── Lyrics translation ──────────────────────────────────────────────────────
+let aiConfig = null;
+
+async function ensureTranslationLanguages() {
+  const sel = $('tagedit-lang');
+  if (!sel || sel.options.length) return;
+  aiConfig = await window.pywebview?.api?.get_lyrics_ai_config?.();
+  if (!aiConfig) return;
+  sel.innerHTML = aiConfig.languages.map(l => `<option value="${escHtml(l.code)}">${escHtml(l.name)}</option>`).join('');
+  const prefer = (navigator.language || 'en').slice(0, 2);
+  if ([...sel.options].some(o => o.value === prefer)) sel.value = prefer;
+}
+
+async function translateTagEditorLyrics() {
+  const lyrics = $('tagedit-lyrics').value;
+  if (!lyrics.trim()) { toastMgr.info('There are no lyrics to translate.'); return; }
+  aiConfig = await window.pywebview?.api?.get_lyrics_ai_config?.();
+  if (!aiConfig?.configured) { toastMgr.info('Set up an AI provider first.'); openAiConfig(); return; }
+  const btn = $('tagedit-translate-btn');
+  btn.disabled = true;
+  btn.textContent = 'Translating…';
+  const res = await window.pywebview.api.translate_lyrics(lyrics, $('tagedit-lang').value);
+  btn.disabled = false;
+  btn.textContent = 'Translate';
+  if (!res || res.status !== 'ok') { toastMgr.error(res?.error || 'Translation failed.'); return; }
+  $('tagedit-translation').value = res.lyrics;
+  $('tagedit-translation-wrap').classList.remove('hidden');
+}
+
+async function saveTagEditorTranslation() {
+  if (!tagEditState) return;
+  const res = await window.pywebview.api.save_translated_lyrics(
+    tagEditState.path, $('tagedit-lang').value, $('tagedit-translation').value);
+  if (res?.status === 'ok') toastMgr.success('Saved ' + res.path.split(/[\\/]/).pop());
+  else toastMgr.error(res?.error || 'Could not save the translation.');
+}
+
+async function openAiConfig() {
+  aiConfig = await window.pywebview?.api?.get_lyrics_ai_config?.();
+  if (!aiConfig) return;
+  $('aiconf-provider').innerHTML = aiConfig.providers.map(p =>
+    `<option value="${escHtml(p.id)}">${escHtml(p.label)}</option>`).join('');
+  $('aiconf-provider').value = aiConfig.provider;
+  $('aiconf-model').value = aiConfig.model;
+  $('aiconf-url').value = aiConfig.base_url;
+  $('aiconf-key').value = '';
+  updateAiConfigFields();
+  $('aiconf-modal').classList.remove('hidden');
+}
+
+function closeAiConfig() { $('aiconf-modal').classList.add('hidden'); }
+
+function updateAiConfigFields() {
+  const p = aiConfig?.providers.find(x => x.id === $('aiconf-provider').value);
+  if (!p) return;
+  $('aiconf-model').placeholder = p.model || 'model name';
+  $('aiconf-url-wrap').classList.toggle('hidden', p.id !== 'custom');
+  $('aiconf-key-note').textContent = aiConfig.has_key
+    ? 'A key is stored. Leave this empty to keep it.'
+    : (p.key ? 'Required.' : 'Optional for a local server.');
+}
+
+async function saveAiConfig() {
+  const key = $('aiconf-key').value;
+  const res = await window.pywebview.api.save_lyrics_ai_config(
+    $('aiconf-provider').value, $('aiconf-model').value, $('aiconf-url').value,
+    key ? key : null);
+  if (res?.status === 'ok') {
+    toastMgr.success(res.configured ? 'AI provider saved.' : 'Saved — still missing a key or model.');
+    closeAiConfig();
+  } else {
+    toastMgr.error(res?.error || 'Could not save the settings.');
+  }
+}
+
+// ── Player ──────────────────────────────────────────────────────────────────
+// Plays the file as stored: no EQ, no normalisation, no Web Audio graph, so the
+// bytes reach the output untouched. Formats the window cannot decode are played
+// from a lossless FLAC copy made by the backend (see core/playback.py).
+let playerQueue = [];
+let playerIndex = -1;       // index into playerQueue of the track that is loaded
+let playerOrder = [];       // indices into playerQueue, in the order they play
+let playerPos = -1;         // where playerIndex sits in playerOrder
+let playerShuffle = false;
+let playerRepeat = 'off';   // 'off' | 'all' | 'one'
+let playerToken = 0;
+let playerSeeking = false;
+
+try {
+  const saved = JSON.parse(localStorage.getItem('mornye-player-modes') || '{}');
+  playerShuffle = !!saved.shuffle;
+  if (['off', 'all', 'one'].includes(saved.repeat)) playerRepeat = saved.repeat;
+} catch (e) { /* a per-browser convenience only */ }
+
+function fmtTime(sec) {
+  if (!Number.isFinite(sec) || sec < 0) return '0:00';
+  return `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
+}
+
+// The play order: the queue as it is, or — with shuffle — a random permutation
+// with the chosen track first, so shuffling never skips the one you picked.
+function playerBuildOrder(first) {
+  const idx = playerQueue.map((_, i) => i);
+  if (playerShuffle) {
+    for (let i = idx.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [idx[i], idx[j]] = [idx[j], idx[i]];
+    }
+    if (first != null && first >= 0) {
+      const at = idx.indexOf(first);
+      [idx[0], idx[at]] = [idx[at], idx[0]];
+    } else if (idx.length > 1 && idx[0] === playerIndex) {
+      [idx[0], idx[1]] = [idx[1], idx[0]];       // a new round must not open with the last track
+    }
+  }
+  playerOrder = idx;
+  playerPos = first != null && first >= 0 ? idx.indexOf(first) : 0;
+}
+
+function updatePlayerModes() {
+  document.querySelectorAll('#pl-shuffle, #np-shuffle').forEach(b => b.classList.toggle('on', playerShuffle));
+  document.querySelectorAll('#pl-repeat, #np-repeat').forEach(b => {
+    b.dataset.mode = playerRepeat;
+    b.classList.toggle('on', playerRepeat !== 'off');
+    b.title = { off: 'Repeat: off', all: 'Repeat all', one: 'Repeat this track' }[playerRepeat];
+  });
+  try { localStorage.setItem('mornye-player-modes', JSON.stringify({ shuffle: playerShuffle, repeat: playerRepeat })); } catch (e) {}
+}
+
+function playerToggleShuffle() {
+  playerShuffle = !playerShuffle;
+  if (playerQueue.length) playerBuildOrder(playerIndex >= 0 ? playerIndex : null);
+  updatePlayerModes();
+  if (!$('np-queue').classList.contains('hidden')) npRenderQueue();
+}
+
+function playerCycleRepeat() {
+  playerRepeat = { off: 'all', all: 'one', one: 'off' }[playerRepeat];
+  updatePlayerModes();
+}
+
+// `shuffle`: true/false sets the mode (the Play all / Shuffle buttons); leave
+// it undefined to keep whatever the player is set to (clicking a row).
+function startPlayback(items, index, shuffle, openView) {
+  if (!items.length) return;
+  playerQueue = items;
+  if (shuffle === true || shuffle === false) playerShuffle = shuffle;
+  updatePlayerModes();
+  const first = shuffle === true ? Math.floor(Math.random() * items.length) : index;
+  playerIndex = -1;
+  playerBuildOrder(first);
+  if (openView) openNowPlaying();
+  loadPlayerTrack(first);
+}
+
+function playLocal(index) {
+  const items = localScanData.map(e => ({
+    path: e.file_path,
+    title: e.old_title || e.guessed_title || e.file_path.split(/[\\/]/).pop(),
+    artist: e.old_artist || e.guessed_artist || '',
+  }));
+  startPlayback(items, index, undefined, true);
+}
+
+async function loadPlayerTrack(index) {
+  const item = playerQueue[index];
+  if (!item) return;
+  playerIndex = index;
+  if (playerOrder.length !== playerQueue.length) playerBuildOrder(index);
+  else playerPos = playerOrder.indexOf(index);
+  const token = ++playerToken;
+  const audio = $('player-audio');
+  $('player-bar').classList.remove('hidden');
+  document.body.classList.add('has-player');
+  $('pl-title').textContent = item.artist ? `${item.title} — ${item.artist}` : item.title;
+  $('pl-quality').textContent = 'Preparing…';
+  markPlayingRow();
+  audio.pause();
+  const res = await window.pywebview?.api?.prepare_playback?.(item.path, !window.__mornyeWeb);
+  if (token !== playerToken) return; // another track was chosen meanwhile
+  if (!res || res.status !== 'ok') {
+    $('pl-quality').textContent = 'Cannot play this file';
+    toastMgr.error(res?.error || 'Could not play the file.');
+    return;
+  }
+  audio.src = res.url || ('/api/media?path=' + encodeURIComponent(res.path));
+  $('pl-quality').textContent = res.quality;
+  fillNowPlaying(item, res);
+  try { await audio.play(); } catch (e) { /* autoplay blocked: the play button works */ }
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.metadata = new MediaMetadata({ title: item.title, artist: item.artist, album: item.album || '' });
+    navigator.mediaSession.setActionHandler('previoustrack', () => playerPrev());
+    navigator.mediaSession.setActionHandler('nexttrack', () => playerNext());
+  }
+}
+
+function playerToggle() {
+  const audio = $('player-audio');
+  if (!audio.src) return;
+  audio.paused ? audio.play() : audio.pause();
+}
+
+// `auto` is true only when a track ended by itself: then the end of the queue
+// stops the music, while the Next button at the end simply does nothing.
+function playerNext(auto) {
+  if (!playerOrder.length) return;
+  if (playerPos + 1 < playerOrder.length) return loadPlayerTrack(playerOrder[playerPos + 1]);
+  if (playerRepeat === 'all') {
+    if (playerShuffle) playerBuildOrder(null);
+    return loadPlayerTrack(playerOrder[0]);
+  }
+}
+function playerEnded() {
+  const audio = $('player-audio');
+  if (playerRepeat === 'one') { audio.currentTime = 0; audio.play(); return; }
+  playerNext(true);
+}
+function playerPrev() {
+  const audio = $('player-audio');
+  if (audio.currentTime > 3 || !playerOrder.length) { audio.currentTime = 0; return; }
+  if (playerPos > 0) return loadPlayerTrack(playerOrder[playerPos - 1]);
+  if (playerRepeat === 'all') return loadPlayerTrack(playerOrder[playerOrder.length - 1]);
+  audio.currentTime = 0;
+}
+function closePlayer() {
+  playerToken++;
+  const audio = $('player-audio');
+  audio.pause();
+  audio.removeAttribute('src');
+  audio.load();
+  $('player-bar').classList.add('hidden');
+  document.body.classList.remove('has-player');
+  playerIndex = -1;
+  markPlayingRow();
+}
+
+(function initPlayer() {
+  const audio = $('player-audio');
+  if (!audio) return;
+  const seek = $('pl-seek');
+  audio.addEventListener('timeupdate', () => {
+    $('pl-cur').textContent = fmtTime(audio.currentTime);
+    if (!playerSeeking && audio.duration) seek.value = Math.round(audio.currentTime / audio.duration * 1000);
+  });
+  audio.addEventListener('loadedmetadata', () => { $('pl-dur').textContent = fmtTime(audio.duration); });
+  audio.addEventListener('ended', playerEnded);
+  const icon = $('pl-play-icon');
+  const PLAY = '<path d="M8 5v14l11-7z"/>', PAUSE = '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>';
+  audio.addEventListener('play', () => { icon.innerHTML = PAUSE; });
+  audio.addEventListener('pause', () => { icon.innerHTML = PLAY; });
+  audio.addEventListener('error', () => {
+    if (audio.getAttribute('src')) $('pl-quality').textContent = 'This window cannot decode the file';
+  });
+  seek.addEventListener('input', () => { playerSeeking = true; });
+  seek.addEventListener('change', () => {
+    if (audio.duration) audio.currentTime = seek.value / 1000 * audio.duration;
+    playerSeeking = false;
+  });
+  $('pl-vol').addEventListener('input', e => { audio.volume = e.target.value / 100; $('np-vol').value = e.target.value; });
+  updatePlayerModes();
+  $('np-vol').addEventListener('input', e => { audio.volume = e.target.value / 100; $('pl-vol').value = e.target.value; });
+
+  // Full-screen view: same audio element, its own controls.
+  const npSeek = $('np-seek');
+  const npIcon = $('np-play-icon');
+  audio.addEventListener('timeupdate', () => {
+    $('np-cur').textContent = fmtTime(audio.currentTime);
+    $('np-rem').textContent = '-' + fmtTime((audio.duration || 0) - audio.currentTime);
+    if (!playerSeeking && audio.duration) npSeek.value = Math.round(audio.currentTime / audio.duration * 1000);
+    npSyncLyrics(audio.currentTime);
+  });
+  audio.addEventListener('play', () => { npIcon.innerHTML = PAUSE; npStartTick(); });
+  audio.addEventListener('pause', () => { npIcon.innerHTML = PLAY; });
+  npSeek.addEventListener('input', () => { playerSeeking = true; });
+  npSeek.addEventListener('change', () => {
+    if (audio.duration) audio.currentTime = npSeek.value / 1000 * audio.duration;
+    playerSeeking = false;
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !$('np-view').classList.contains('hidden')) closeNowPlaying();
+  });
+})();
+
+// ── Now playing: cover, synced lyrics, queue ────────────────────────────────
+let npLines = [];       // [{t: seconds|null, text}]
+let npSynced = false;
+let npWordSynced = false;
+let npActive = -1;
+
+function openNowPlaying() {
+  $('np-view').classList.remove('hidden');
+  npStartTick();
+  if (npLines.length) { npLayoutLyrics(); NP.focus = -2; NP.first = true; npUpdate($('player-audio').currentTime, true); }
+}
+function closeNowPlaying() { $('np-view').classList.add('hidden'); }
+
+function npShow(which) {
+  $('np-lyrics').classList.toggle('hidden', which !== 'lyrics');
+  $('np-queue').classList.toggle('hidden', which !== 'queue');
+  $('np-tab-lyrics').classList.toggle('active', which === 'lyrics');
+  $('np-tab-queue').classList.toggle('active', which === 'queue');
+  if (which === 'queue') npRenderQueue();
+}
+
+// Lyrics in any LRC flavour:
+//   [mm:ss.xx]text                      line-synced
+//   [mm:ss.xx]v1:<t>Word <t_end><t>Next  enhanced (word-by-word), "v1:/v2:" is
+//                                         the singer, as written by Apple/lrc.red
+//   [bg:(backing vocals)]               attached to the line before it
+//   [x-translation:N:...] [x-romaji:N:...]  optional extra line under line N
+// A tag between two words is both the end of the first and the start of the
+// second; when there are two (end, then start) the pair can differ by a gap.
+function parseLyrics(text) {
+  const WORD_SPLIT = /(<\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?>)/;
+  const WORD_TS = /<(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?>/;
+  const LEAD_TS = /^((?:\[\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?\]\s*)+)/;
+  const ONE_TS = /\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]/g;
+  const VOICE = /^((?:\s*<[^>]*>)*)\s*(v[1-9]\d*):[ \t]*/i;
+  const ID_TAG = /^\[(ti|ar|al|by|offset|length|re|ve|tool|au|la|encoder|instrumental):.*\]$/i;
+  const SUPP = /^\[x-(romaji-words|romaji|translation):(\d+):([^\]]*)\]$/i;
+  const BG = /^\[bg:(.*)\]$/i;
+  const sec = m => Number(m[1]) * 60 + Number(m[2]) + (m[3] ? Number('0.' + m[3]) : 0);
+  const stripWordTags = t => t.replace(/<\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?>/g, '').replace(/\s+/g, ' ').trim();
+
+  const synced = [], plain = [];
+  let last = null;
+  const supplements = [];
+  for (const raw of String(text || '').replace(/\r/g, '').split('\n')) {
+    const line = raw.trim();
+    if (!line || ID_TAG.test(line)) continue;
+    let m = SUPP.exec(line);
+    if (m) { supplements.push({ idx: Number(m[2]), kind: m[1].toLowerCase(), text: m[3].trim() }); continue; }
+    m = BG.exec(line);
+    if (m) { if (last) last.bg = stripWordTags(m[1]); continue; }
+
+    const lead = LEAD_TS.exec(line);
+    if (!lead) { plain.push({ t: null, text: stripWordTags(line), words: null, voice: 1 }); continue; }
+    const stamps = [...lead[1].matchAll(ONE_TS)].map(sec);
+    let body = line.slice(lead[0].length);
+    let voice = 1;
+    const v = VOICE.exec(body);
+    if (v) {
+      voice = Number(v[2].slice(1)) || 1;
+      body = v[1].replace(/\s+/g, '') + body.slice(v[0].length);
+    }
+
+    // Words with their own times, if the line carries any.
+    let words = null;
+    if (WORD_TS.test(body)) {
+      words = [];
+      let run = [];
+      let prev = null;
+      for (const part of body.split(WORD_SPLIT)) {
+        const tag = WORD_TS.exec(part);
+        if (tag && part.startsWith('<')) { run.push(sec(tag)); continue; }
+        if (!part) continue;
+        if (!part.trim()) { if (prev) prev.text += part; continue; }
+        const start = run.length ? run[run.length - 1] : (prev ? (prev.e ?? prev.s) : stamps[0]);
+        if (prev && prev.e == null) prev.e = run.length ? run[0] : start;
+        prev = { s: start, e: null, text: words.length ? part : part.replace(/^\s+/, '') };
+        words.push(prev);
+        run = [];
+      }
+      if (prev && prev.e == null) {
+        if (run.length) prev.e = run[0];
+        // No closing stamp: a guess, which fillNowPlaying() refines once
+        // it knows when the next line starts.
+        else { prev.e = prev.s + 0.6; prev.open = true; }
+      }
+      if (!words.length) words = null;
+    }
+    const lineText = words ? words.map(w => w.text).join('').trim() : stripWordTags(body);
+    for (const t of stamps) {
+      const entry = { t, text: lineText, words, voice, bg: '', tr: '', rom: '' };
+      synced.push(entry);
+      last = entry;
+    }
+  }
+  if (synced.length) {
+    supplements.forEach(sup => {
+      const target = synced[sup.idx];
+      if (!target) return;
+      if (sup.kind === 'translation') target.tr = sup.text;
+      else if (sup.kind === 'romaji') target.rom = sup.text;
+    });
+    return { lines: synced.sort((a, b) => a.t - b.t), synced: true, wordSynced: synced.some(l => l.words) };
+  }
+  while (plain.length && !plain[0].text) plain.shift();
+  return { lines: plain, synced: false, wordSynced: false };
+}
+
+// A timed piece can hold several words: a provider that times phrases, or a
+// line with a single stamp (`[00:51.00]<00:51.00>I don't know how … stay`).
+// The lit copy of a piece is laid over it on one row and cannot wrap with
+// it, so a phrase longer than the row ran off the right edge ("…you to trea")
+// while the dim copy underneath wrapped and stayed grey. Each word becomes a
+// piece of its own, the phrase's time shared out by length, so the lit copy
+// wraps word by word with the text it covers.
+function npSplitTimedPhrases(words) {
+  const out = [];
+  for (const w of words) {
+    const tokens = w.text.match(/\S+\s*/g);
+    if (!tokens || tokens.length < 2) { out.push(w); continue; }
+    const lead = w.text.match(/^\s*/)[0];
+    const total = tokens.reduce((n, t) => n + t.trim().length, 0) || 1;
+    const span = Math.max(0, (w.e ?? w.s) - w.s);
+    let at = w.s;
+    tokens.forEach((t, k) => {
+      const share = span * t.trim().length / total;
+      const last = k === tokens.length - 1;
+      out.push({ s: at, e: last ? w.e : at + share, text: (k === 0 ? lead : '') + t });
+      at += share;
+    });
+  }
+  return out;
+}
+
+function npTechLabel(res) {
+  const i = res.info || {};
+  const parts = [(i.format || '').toUpperCase()];
+  if (i.bit_depth) parts.push(`${i.bit_depth}-bit`);
+  if (i.sample_rate) parts.push(`${i.sample_rate / 1000} kHz`);
+  if (!i.bit_depth && i.bitrate) parts.push(`${Math.round(i.bitrate / 1000)} kbps`);
+  let label = parts.filter(Boolean).join(' · ');
+  if (res.mode === 'flac-copy') label += ' · lossless copy';
+  return label;
+}
+
+function npApplyColors(src) {
+  const bg = $('np-bg');
+  if (!src) { bg.style.setProperty('--np-bg', 'linear-gradient(135deg, #5a3a3a, #2c1f1f)'); return; }
+  const img = new Image();
+  img.onload = () => {
+    try {
+      const c = document.createElement('canvas');
+      c.width = c.height = 8;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0, 8, 8);
+      const d = ctx.getImageData(0, 0, 8, 8).data;
+      let r = 0, g = 0, b = 0;
+      for (let k = 0; k < d.length; k += 4) { r += d[k]; g += d[k + 1]; b += d[k + 2]; }
+      const n = d.length / 4;
+      const tone = (f) => `rgb(${Math.round(r / n * f)}, ${Math.round(g / n * f)}, ${Math.round(b / n * f)})`;
+      bg.style.setProperty('--np-bg', `linear-gradient(135deg, ${tone(0.62)}, ${tone(0.32)})`);
+    } catch (e) { /* the default tint stays */ }
+  };
+  img.src = src;
+}
+
+function fillNowPlaying(item, res) {
+  $('np-title').textContent = res.title || item.title;
+  $('np-artist').textContent = [res.artist || item.artist, res.album].filter(Boolean).join(' · ');
+  $('np-explicit').classList.toggle('hidden', !res.explicit);
+  const cover = $('np-cover');
+  cover.parentElement.classList.toggle('empty', !res.cover);
+  cover.src = res.cover || '';
+  npApplyColors(res.cover);
+  $('np-tech').textContent = npTechLabel(res);
+  $('np-seek').value = 0;
+  $('np-cur').textContent = '0:00';
+  $('np-rem').textContent = '-0:00';
+  const parsed = parseLyrics(res.lyrics);
+  // Before the first line there is an intro: three dots stand in for it and
+  // fill up until the words start, like in the mobile app.
+  if (parsed.synced && parsed.lines.length && parsed.lines[0].t > 3) {
+    parsed.lines.unshift({ t: 0, text: '', words: null, voice: 1, bg: '', tr: '', rom: '' });
+  }
+  npLines = parsed.lines;
+  npSynced = parsed.synced;
+  npWordSynced = parsed.wordSynced;
+  npActive = -1;
+  NP.set = new Set(); NP.focus = -2; NP.first = true; NP.lastTime = 0;
+  npClearMotion();
+  const box = $('np-lyrics');
+  box.classList.toggle('plain', !npSynced);
+  box.scrollTop = 0;
+  if (!npLines.length) {
+    box.style.paddingBottom = '';
+    box.innerHTML = '<div class="np-empty">No lyrics for this track.<br><small>Save a .lrc next to the file, or add them with Edit.</small></div>';
+  } else {
+    // A line ends when its last word does, else when the next one starts.
+    npLines.forEach((l, i) => {
+      const next = npLines[i + 1];
+      if (l.words) {
+        // A last piece with no end of its own — one stamp for a whole line,
+        // say — lasts about a third of a second a word, never past the
+        // next line, before it is shared out word by word.
+        const last = l.words[l.words.length - 1];
+        if (last.open) {
+          const count = (last.text.match(/\S+/g) || []).length;
+          const until = next && next.t != null && next.t > last.s ? next.t : Infinity;
+          last.e = Math.min(until, last.s + Math.max(0.6, 0.32 * count));
+        }
+        l.words = npSplitTimedPhrases(l.words);
+      }
+      l.end = l.words ? l.words[l.words.length - 1].e : (next && next.t != null ? next.t : (l.t ?? 0) + 4);
+      if (l.words && next && next.t != null && l.end > next.t + 8) l.end = next.t;
+    });
+    box.innerHTML = npLines.map((l, i) => {
+      if (npSynced && !l.text) {
+        return `<div class="np-line gap" data-i="${i}"><span class="gd"></span><span class="gd"></span><span class="gd"></span></div>`;
+      }
+      const body = l.words
+        ? l.words.map(w => {
+            // Spaces stay outside the word: inside, they would be part of
+            // what the lit copy draws and of the box the line wraps around.
+            const lead = w.text.match(/^\s*/)[0];
+            const core = w.text.trim();
+            const tail = w.text.slice(lead.length + core.length);
+            return `${escHtml(lead)}<span class="w" data-s="${w.s}" data-e="${w.e}" data-t="${escHtml(core)}">${escHtml(core)}</span>${escHtml(tail)}`;
+          }).join('')
+        : escHtml(l.text);
+      const extra = (l.rom ? `<div class="np-sub">${escHtml(l.rom)}</div>` : '')
+        + (l.tr ? `<div class="np-sub">${escHtml(l.tr)}</div>` : '')
+        + (l.bg ? `<div class="np-sub bg">${escHtml(l.bg)}</div>` : '');
+      return `<div class="np-line${l.words ? ' wsync' : ''}${l.voice === 2 ? ' v2' : ''}" data-i="${i}">${body}${extra}</div>`;
+    }).join('');
+    box.querySelectorAll('.np-line').forEach(el => el.addEventListener('click', () => {
+      const l = npLines[parseInt(el.dataset.i)];
+      if (npSynced && l && l.t != null) { $('player-audio').currentTime = l.t; $('player-audio').play(); }
+    }));
+    npLayoutLyrics();
+  }
+  if (!$('np-queue').classList.contains('hidden')) npRenderQueue();
+  if (npSynced) npUpdate($('player-audio').currentTime, true);
+}
+
+// ── Lyrics engine ───────────────────────────────────────────────────────────
+// The view logic of the mobile app's lyrics screen, ported:
+//  * the sung line sits near the TOP of the pane (6% of the height, 16–48 px),
+//    not in the middle, so what comes next is what you see;
+//  * moving to a new line is a critically damped spring (550 ms, no overshoot);
+//    the rows after it follow a softer spring one after another (35 ms apart),
+//    so the list ripples instead of sliding as a block;
+//  * lines other than the sung one are defocused by distance (2.4 / 3.6 / 4.8);
+//  * a line stays in focus while the previous one is still being sung (duets);
+//  * words fill with a soft edge, rise a little, and a held word glows;
+//  * a blank stretch shows three dots that fill with the gap;
+//  * scrolling by hand pauses the follow for 4 s.
+const NP = { set: new Set(), focus: -2, first: true, lastTime: 0, userScrolling: false, userTimer: 0,
+  motion: new Map(), motionRaf: 0 };
+
+// The mobile app's defocus (2.4 / 3.6 / 4.8) scaled down: the same values
+// look much heavier at desktop size, so this keeps the depth without the smear.
+const NP_BLUR = 0.5;
+const NP_SCROLL_S = 0.55, NP_TOTAL_S = 0.8;
+const npCrit = s => 1 - (1 + 14 * s) * Math.exp(-14 * s);              // stiffness 196, ratio 1
+const npScrollCurve = u => npCrit(u * NP_SCROLL_S) / npCrit(NP_SCROLL_S);
+const npSoft = s => {                                                  // stiffness 121, ratio .85
+  if (s <= 0) return 0;
+  const w = 11, z = 0.85, wd = w * Math.sqrt(1 - z * z);
+  return 1 - Math.exp(-z * w * s) * (Math.cos(wd * s) + (z * w / wd) * Math.sin(wd * s));
+};
+const npEase = v => { const t = Math.min(1, Math.max(0, v)); return t * t * (3 - 2 * t); };
+
+function npInset() { return Math.min(48, Math.max(16, window.innerHeight * 0.06)); }
+
+function npLayoutLyrics() {
+  const box = $('np-lyrics');
+  const inset = npInset();
+  box.style.paddingTop = inset + 'px';
+  const last = box.lastElementChild;
+  // Enough room under the last line for it to reach the same focus position.
+  box.style.paddingBottom = Math.max(inset, box.clientHeight - (last ? last.offsetHeight : 0) - inset) + 'px';
+}
+window.addEventListener('resize', () => { if (!$('np-view').classList.contains('hidden')) npLayoutLyrics(); });
+
+function npClearMotion() {
+  cancelAnimationFrame(NP.motionRaf); NP.motionRaf = 0;
+  NP.motion.forEach((m, el) => { el.style.transform = ''; });
+  NP.motion.clear();
+}
+
+function npOffsetNow(m, now) {
+  const elapsed = (now - m.t0) / 1000;
+  if (m.kind === 'seek') {
+    const u = Math.min(1, elapsed / 0.22);
+    return (m.init + m.D) * Math.pow(1 - u, 3);                        // ease-out cubic
+  }
+  if (elapsed >= NP_TOTAL_S) return 0;
+  const s = npScrollCurve(Math.min(1, elapsed / NP_SCROLL_S));
+  const inherited = m.init * (1 - s);
+  let off = inherited + m.D * (1 - s);
+  if (m.k > 0) {
+    const d = Math.max(-96, Math.min(96, m.D));
+    const delay = Math.min(6, m.k) * 0.035;
+    const f = elapsed <= delay ? 0 : npSoft(elapsed - delay);
+    off = inherited + m.D * (1 - s) + d * (s - f);
+  }
+  return off;
+}
+
+function npMotionTick(now) {
+  NP.motionRaf = 0;
+  let live = false;
+  NP.motion.forEach((m, el) => {
+    const done = (now - m.t0) / 1000 >= (m.kind === 'seek' ? 0.22 : NP_TOTAL_S);
+    if (done) { el.style.transform = ''; NP.motion.delete(el); return; }
+    el.style.transform = `translateY(${npOffsetNow(m, now).toFixed(2)}px)`;
+    live = true;
+  });
+  if (live) NP.motionRaf = requestAnimationFrame(npMotionTick);
+}
+
+function npScrollToFocus(focus, mode) {
+  const box = $('np-lyrics');
+  const el = box.children[focus];
+  if (!el || !box.clientHeight) return;
+  const target = Math.max(0, Math.min(el.offsetTop - npInset(), box.scrollHeight - box.clientHeight));
+  const D = target - box.scrollTop;
+  if (mode === 'instant' || Math.abs(D) < 0.5) { box.scrollTop = target; npClearMotion(); return; }
+  const now = performance.now();
+  const rows = [...box.children].slice(Math.max(0, focus - 6), focus + 24);
+  rows.forEach((row, n) => {
+    const idx = Math.max(0, focus - 6) + n;
+    const prev = NP.motion.get(row);
+    row.style.transform = '';
+    NP.motion.set(row, { t0: now, D, k: idx - focus, init: prev ? npOffsetNow(prev, now) : 0, kind: mode });
+  });
+  box.scrollTop = target;
+  rows.forEach(row => {
+    const m = NP.motion.get(row);
+    row.style.transform = `translateY(${npOffsetNow(m, now).toFixed(2)}px)`;
+  });
+  if (!NP.motionRaf) NP.motionRaf = requestAnimationFrame(npMotionTick);
+}
+
+function npFocusFor(active, set, time) {
+  const start = npLines[active].t;
+  for (let i = active - 1; i >= 0; i--) {
+    const line = npLines[i];
+    if (line.t >= start) continue;
+    if (!line.text) return active;
+    return set.has(i) && line.end > time ? i : active;
+  }
+  return active;
+}
+
+// Lift and glow envelopes of a timed word, as in the mobile app.
+function npLift(elapsed, duration) {
+  const normal = npEase((elapsed + 180) / 720);
+  const held = Math.min(1, Math.max(0, (duration - 1000) / 1500));
+  if (held === 0) return normal;
+  const rise = npEase((elapsed - 400) / Math.min(1200, (duration - 400) * 0.6));
+  const settle = npEase((duration - elapsed) / 600);
+  return normal + 1.3 * held * rise * settle;
+}
+function npGlow(elapsed, duration) {
+  const strength = Math.min(1, Math.max(0, (duration - 900) / 1100));
+  if (strength === 0) return 0;
+  return strength * npEase((elapsed - 250) / Math.min(900, duration * 0.5)) * npEase((duration + 500 - elapsed) / 500);
+}
+
+function npUpdate(time, force) {
+  if (!npSynced || !npLines.length) return;
+  const box = $('np-lyrics');
+  const els = box.children;
+  if (els.length !== npLines.length) return;
+
+  let idx = -1;
+  for (let i = 0; i < npLines.length; i++) { if (npLines[i].t <= time) idx = i; else break; }
+  const set = new Set();
+  if (idx >= 0) {
+    set.add(idx);
+    for (let i = idx - 1; i >= 0 && i > idx - 4; i--) if (npLines[i].text && npLines[i].end > time) set.add(i);
+  }
+  const focus = idx < 0 ? -1 : npFocusFor(idx, set, time);
+  const sig = [...set].join(',');
+  if (force || focus !== NP.focus || sig !== NP.sig) {
+    const leaving = [...(NP.set || [])].filter(i => !set.has(i));
+    NP.set = set; NP.sig = sig;
+    for (let i = 0; i < els.length; i++) {
+      const active = set.has(i);
+      els[i].classList.toggle('active', active);
+      const dist = focus < 0 ? 9 : Math.abs(i - focus);
+      const blur = active || i === focus ? 0 : NP_BLUR * (focus < 0 ? 4.8 : dist === 1 ? 2.4 : dist === 2 ? 3.6 : 4.8);
+      els[i].style.setProperty('--b', blur.toFixed(2) + 'px');
+    }
+    leaving.forEach(i => els[i] && els[i].querySelectorAll('.w').forEach(w => {
+      w.style.removeProperty('--p'); w.style.removeProperty('--l'); w.style.removeProperty('--g');
+    }));
+    leaving.forEach(i => els[i] && els[i].querySelectorAll('.gd').forEach(d => { d.style.opacity = ''; d.style.transform = ''; }));
+    if (focus !== NP.focus && focus >= 0 && !NP.userScrolling) {
+      const jumped = Math.abs(time - NP.lastTime) > 0.75;
+      npScrollToFocus(focus, NP.first ? 'instant' : (jumped ? 'seek' : 'spring'));
+      NP.first = false;
+    }
+    NP.focus = focus;
+  }
+  NP.lastTime = time;
+
+  // Per-word fill, lift and glow, and the dots of a blank stretch.
+  set.forEach(i => {
+    const l = npLines[i], el = els[i];
+    if (!l.text) {
+      const span = Math.max(l.end - l.t, 0.001);
+      const p = Math.min(1, Math.max(0, (time - l.t) / span));
+      const breath = Math.sin(Math.PI * ((performance.now() % 3600) / 3600));
+      [...el.children].forEach((dot, n) => {
+        dot.style.opacity = (0.25 + 0.75 * Math.min(1, Math.max(0, p * 3 - n))).toFixed(3);
+        dot.style.transform = `scale(${(1 + 0.24 * breath * breath).toFixed(3)})`;
+      });
+      return;
+    }
+    if (!l.words) return;
+    el.querySelectorAll('.w').forEach(w => {
+      const s = Number(w.dataset.s), e = Number(w.dataset.e);
+      const dur = Math.max((e - s) * 1000, 1), elapsed = (time - s) * 1000;
+      const p = time <= s ? 0 : (time >= e ? 1 : (time - s) / Math.max(e - s, 0.05));
+      const lift = npLift(elapsed, dur), glow = npGlow(elapsed, dur);
+      w.style.setProperty('--p', p.toFixed(3));
+      w.style.setProperty('--l', (lift * 1.7).toFixed(2));
+      w.style.setProperty('--g', glow.toFixed(2));
+    });
+  });
+}
+
+(function initLyricScrollGuard() {
+  const box = $('np-lyrics');
+  if (!box) return;
+  const hold = () => {
+    NP.userScrolling = true;
+    npClearMotion();
+    clearTimeout(NP.userTimer);
+    NP.userTimer = setTimeout(() => {
+      NP.userScrolling = false;
+      NP.focus = -2;                       // follow again, with the spring
+      npUpdate($('player-audio').currentTime, true);
+    }, 4000);
+  };
+  box.addEventListener('wheel', hold, { passive: true });
+  box.addEventListener('touchmove', hold, { passive: true });
+})();
+
+// Once per frame while playing.
+let npRaf = 0;
+function npTick() {
+  npRaf = 0;
+  const audio = $('player-audio');
+  if (!audio || audio.paused || $('np-view').classList.contains('hidden')) return;
+  npUpdate(audio.currentTime);
+  npRaf = requestAnimationFrame(npTick);
+}
+function npStartTick() { if (!npRaf) npRaf = requestAnimationFrame(npTick); }
+function npSyncLyrics(time) { npUpdate(time); }
+
+function npRenderQueue() {
+  const rows = [];
+  for (let n = Math.max(0, playerPos); n < Math.min(playerOrder.length, Math.max(0, playerPos) + 200); n++) {
+    const i = playerOrder[n], q = playerQueue[i];
+    if (!q) continue;
+    rows.push(`<div class="np-queue-row${n === playerPos ? ' active' : ''}" onclick="loadPlayerTrack(${i})">
+       <span class="t">${escHtml(q.title)}</span><span class="a">${escHtml(q.artist || '')}</span></div>`);
+  }
+  $('np-queue').innerHTML = rows.join('');
+}
+
+// ── Player: browse and play a folder ────────────────────────────────────────
+const lib = { items: [], view: [], scan: null, lastScan: 0, shown: 0, loading: false, started: false, raf: 0, thumbBusy: 0 };
+const LIB_PAGE = 150;
+const LIB_FOLDERS_KEY = 'mornye-player-folders';
+
+function libRecent() {
+  try { return JSON.parse(localStorage.getItem(LIB_FOLDERS_KEY) || '[]').filter(x => typeof x === 'string'); }
+  catch (e) { return []; }
+}
+function libRemember(folder) {
+  const list = [folder, ...libRecent().filter(f => f !== folder)].slice(0, 6);
+  try { localStorage.setItem(LIB_FOLDERS_KEY, JSON.stringify(list)); } catch (e) {}
+  renderRecentFolders();
+}
+function renderRecentFolders() {
+  const box = $('player-recent');
+  const list = libRecent();
+  box.classList.toggle('hidden', list.length === 0);
+  box.innerHTML = list.length ? '<span class="share-chips-label">Recent:</span>' + list.map(f =>
+    `<button type="button" class="share-chip" data-path="${escHtml(f)}" title="${escHtml(f)}">${escHtml(f.split(/[\\/]/).filter(Boolean).pop() || f)}</button>`).join('') : '';
+  box.querySelectorAll('.share-chip').forEach(b => b.addEventListener('click', () => {
+    $('player-path-input').value = b.dataset.path;
+    scanPlayerLibrary();
+  }));
+}
+
+async function initPlayerView() {
+  if (lib.started) { markPlayingRow(); return; }
+  lib.started = true;
+  renderRecentFolders();
+  const input = $('player-path-input');
+  let folder = libRecent()[0];
+  if (!folder) {
+    try { folder = (await window.pywebview?.api?.get_library_default_folder?.())?.path; } catch (e) {}
+  }
+  if (folder) { input.value = folder; scanPlayerLibrary(); }
+}
+
+function openPlayerFolderBrowser() { openFolderBrowser('player'); }
+
+async function scanPlayerLibrary() {
+  const path = $('player-path-input').value.trim();
+  if (!path) { toastMgr.error('Enter or pick a folder first.'); return; }
+  lib.items = []; lib.view = []; lib.shown = 0; lib.scan = null; lib.loading = true;
+  $('player-list').innerHTML = '';
+  $('player-toolbar').classList.add('hidden');
+  $('player-status').textContent = 'Scanning…';
+  $('player-scan-btn').disabled = true;
+  const res = await window.pywebview?.api?.scan_music_library?.(path);
+  if (!res || res.status !== 'started') {
+    lib.loading = false;
+    $('player-scan-btn').disabled = false;
+    $('player-status').textContent = res?.error || 'Could not open that folder.';
+    return;
+  }
+  lib.lastScan = Math.max(lib.lastScan, res.scan);
+  if (lib.scan === null) lib.scan = res.scan;
+}
+
+function libAccept(p) {
+  if (lib.scan === null) { if (p.scan <= lib.lastScan) return false; lib.scan = p.scan; }
+  return p.scan === lib.scan;
+}
+
+window.app_library_scan_chunk = function(p) {
+  if (!libAccept(p)) return;
+  lib.items.push(...p.items);
+  $('player-status').textContent = `Scanning… ${p.done} / ${p.total}`;
+  if (!lib.raf) lib.raf = requestAnimationFrame(() => { lib.raf = 0; filterPlayerLibrary(true); });
+};
+
+window.app_library_scan_finished = function(p) {
+  if (!libAccept(p)) return;
+  lib.loading = false;
+  $('player-scan-btn').disabled = false;
+  filterPlayerLibrary(true);
+  if (!lib.items.length) $('player-status').textContent = 'No audio files found in this folder.';
+  else { $('player-status').textContent = ''; libRemember(p.folder); }
+};
+
+window.app_library_scan_error = function(p) {
+  if (p && p.scan != null && !libAccept(p)) return;
+  lib.loading = false;
+  $('player-scan-btn').disabled = false;
+  $('player-status').textContent = 'Scan failed: ' + (p?.error || 'unknown error');
+};
+
+function libSortKey(key) {
+  const text = v => (v || '').toString().toLowerCase();
+  switch (key) {
+    case 'title': return (a, b) => text(a.title).localeCompare(text(b.title));
+    case 'artist': return (a, b) => text(a.artist).localeCompare(text(b.artist)) || text(a.album).localeCompare(text(b.album)) || a.disc - b.disc || a.track - b.track;
+    case 'album': return (a, b) => text(a.album).localeCompare(text(b.album)) || a.disc - b.disc || a.track - b.track;
+    case 'duration': return (a, b) => b.duration_s - a.duration_s;
+    default: return null;
+  }
+}
+
+function clearPlayerSearch() {
+  $('player-search').value = '';
+  filterPlayerLibrary();
+  $('player-search').focus();
+}
+
+function filterPlayerLibrary(keepScroll) {
+  const q = ($('player-search').value || '').trim().toLowerCase();
+  $('player-search-clear').classList.toggle('hidden', !q);
+  let view = q
+    ? lib.items.filter(t => `${t.title} ${t.artist} ${t.album}`.toLowerCase().includes(q))
+    : lib.items.slice();
+  const cmp = libSortKey($('player-sort').value);
+  if (cmp) view.sort(cmp);
+  lib.view = view;
+  lib.shown = Math.min(view.length, Math.max(LIB_PAGE, keepScroll === true ? lib.shown : 0));
+  renderPlayerRows();
+  const total = view.reduce((s, t) => s + (t.duration_s || 0), 0);
+  const hours = Math.floor(total / 3600), mins = Math.round((total % 3600) / 60);
+  $('player-toolbar').classList.toggle('hidden', lib.items.length === 0);
+  $('player-count').textContent = `${view.length.toLocaleString()} track${view.length === 1 ? '' : 's'}`
+    + (total ? ` · ${hours ? hours + ' h ' : ''}${mins} min` : '');
+}
+
+function libRowHtml(t, i) {
+  const art = [t.artist, t.album].filter(Boolean).join(' — ');
+  return `<div class="pl-row" role="listitem" data-i="${i}" data-p="${escHtml(t.path)}">
+    <div class="pl-num"><span class="n">${i + 1}</span><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span></div>
+    <div class="pl-thumb"><img alt="" draggable="false"></div>
+    <div class="pl-main"><div class="pl-t">${escHtml(t.title)}</div><div class="pl-a">${escHtml(art)}</div></div>
+    <div class="pl-dur">${t.duration_s ? fmtTime(t.duration_s) : ''}</div>
+    <div class="pl-fmt">${escHtml(t.format)}</div>
+  </div>`;
+}
+
+function renderPlayerRows() {
+  const list = $('player-list');
+  list.innerHTML = lib.view.slice(0, lib.shown).map(libRowHtml).join('')
+    + (lib.shown < lib.view.length ? '<div id="player-sentinel" class="pl-more">Loading more…</div>' : '');
+  libObserve(list);
+  markPlayingRow();
+}
+
+function libAppendRows() {
+  const list = $('player-list');
+  const from = list.querySelectorAll('.pl-row').length;
+  const to = Math.min(lib.view.length, from + LIB_PAGE);
+  list.querySelector('#player-sentinel')?.remove();
+  list.insertAdjacentHTML('beforeend', lib.view.slice(from, to).map((t, k) => libRowHtml(t, from + k)).join('')
+    + (to < lib.view.length ? '<div id="player-sentinel" class="pl-more">Loading more…</div>' : ''));
+  lib.shown = to;
+  libObserve(list);
+  markPlayingRow();
+}
+
+// Thumbnails and "load more" are driven by what scrolls into view.
+const libIO = typeof IntersectionObserver === 'function' ? new IntersectionObserver(entries => {
+  entries.forEach(en => {
+    if (!en.isIntersecting) return;
+    const el = en.target;
+    if (el.id === 'player-sentinel') { libIO.unobserve(el); libAppendRows(); return; }
+    libIO.unobserve(el);
+    libLoadThumb(el);
+  });
+}, { rootMargin: '300px' }) : null;
+
+function libObserve(list) {
+  if (!libIO) return;
+  list.querySelectorAll('.pl-row:not([data-th])').forEach(r => libIO.observe(r));
+  const s = list.querySelector('#player-sentinel');
+  if (s) libIO.observe(s);
+}
+
+const libThumbQueue = [];
+function libLoadThumb(row) {
+  row.dataset.th = '1';
+  libThumbQueue.push(row);
+  libPumpThumbs();
+}
+async function libPumpThumbs() {
+  while (lib.thumbBusy < 3 && libThumbQueue.length) {
+    const row = libThumbQueue.shift();
+    if (!row.isConnected) continue;
+    lib.thumbBusy++;
+    (async () => {
+      try {
+        const url = await window.pywebview?.api?.get_track_thumb?.(row.dataset.p);
+        const img = row.querySelector('img');
+        if (url && img && row.isConnected) { img.src = url; row.classList.add('has-cover'); }
+      } catch (e) { /* a missing cover is fine */ }
+      lib.thumbBusy--;
+      libPumpThumbs();
+    })();
+  }
+}
+
+function playFromLibrary(index, shuffle) {
+  const items = lib.view.map(t => ({ path: t.path, title: t.title, artist: t.artist, album: t.album }));
+  startPlayback(items, index, shuffle, false);
+}
+
+function markPlayingRow() {
+  const list = $('player-list');
+  if (!list) return;
+  list.querySelectorAll('.pl-row.playing').forEach(r => r.classList.remove('playing'));
+  const cur = playerQueue[playerIndex];
+  if (!cur) return;
+  list.querySelectorAll('.pl-row').forEach(r => { if (r.dataset.p === cur.path) r.classList.add('playing'); });
+}
+
+(function initPlayerList() {
+  const list = $('player-list');
+  if (!list) return;
+  list.addEventListener('click', e => {
+    const row = e.target.closest('.pl-row');
+    if (row) playFromLibrary(Number(row.dataset.i));
+  });
+  const audio = $('player-audio');
+  audio.addEventListener('play', () => $('player-list').classList.remove('paused'));
+  audio.addEventListener('pause', () => $('player-list').classList.add('paused'));
+})();
 
 function toggleAllLocal(cb) {
     document.querySelectorAll('.local-cb:not([disabled])').forEach(c => c.checked = cb.checked);
@@ -6943,6 +8575,8 @@ function updateLocalSelection() {
     
     $('local-selected-count').textContent = `${checked} file(s) selected`;
     $('btn-apply-local').disabled = checked === 0;
+    const convertBtn = $('btn-convert-local');
+    if (convertBtn) convertBtn.disabled = checked === 0;
 }
 
 function applyLocalTags() {
@@ -7081,13 +8715,13 @@ async function loadSubscriptions() {
     intervalSelect.innerHTML = subIntervalOptions(0);
   }
   if (!window.pywebview?.api?.get_subscriptions) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">Following is unavailable in this build.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5">Following is unavailable in this build.</div>';
     return;
   }
   try {
     renderSubscriptions(await window.pywebview.api.get_subscriptions());
   } catch (e) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Unable to load subscriptions.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Unable to load subscriptions.</div>';
   }
 }
 
@@ -7096,7 +8730,7 @@ function renderSubscriptions(subs) {
   if (!list) return;
 
   if (subs?.error) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Failed to load: ' + regEscapeHtml(subs.error) + '</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Failed to load: ' + regEscapeHtml(subs.error) + '</div>';
     return;
   }
   if (!subs || !subs.length) {
@@ -7112,7 +8746,7 @@ function renderSubscriptions(subs) {
     const name = regEscapeHtml(s.name || s.url);
     const isPlaylist = s.kind === 'playlist';
     const err = s.last_error
-      ? `<div class="s-label" style="font-size:11px;color:var(--red);">Last check failed: ${regEscapeHtml(s.last_error)}</div>`
+      ? `<div class="s-label u-fs-11 u-c-red">Last check failed: ${regEscapeHtml(s.last_error)}</div>`
       : '';
     const what = isPlaylist
       ? `Playlist · ${s.seen_count} track(s) seen`
@@ -7125,12 +8759,12 @@ function renderSubscriptions(subs) {
       <div class="sort-item reg-item${s.enabled ? '' : ' reg-item-disabled'}">
         <div class="reg-item-main">
           <span class="reg-url" title="${regEscapeHtml(s.url)}">${name}</span>
-          <div class="s-label" style="font-size:11px;">
+          <div class="s-label u-fs-11">
             ${what} · checked ${regEscapeHtml(subFormatDate(s.last_checked_at))}${next}
           </div>
           ${err}
         </div>
-        <select style="max-width:140px;padding:5px 8px;font-size:var(--fs-75);flex-shrink:0;"
+        <select class="u-maxw-140 u-p-5-8 u-fs-fs-75 u-shrink-0"
                 title="Check this ${target} automatically and download what is new"
                 onchange="setSubscriptionInterval('${regEscapeHtml(s.id)}', this.value)">
           ${subIntervalOptions(s.interval_minutes)}
@@ -7294,7 +8928,7 @@ async function resetSubscription(id) {
 async function checkSubscriptions(download) {
   const results = $('subscription-results');
   if (results) {
-    results.innerHTML = '<div class="s-label" style="font-size:11.5px;">Checking…</div>';
+    results.innerHTML = '<div class="s-label u-fs-11_5">Checking…</div>';
     $('subscription-results-section').style.display = '';
   }
   try {
@@ -7316,13 +8950,13 @@ function subscriptionsChecked(payload) {
   section.style.display = '';
 
   if (payload?.error) {
-    results.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">' + regEscapeHtml(payload.error) + '</div>';
+    results.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">' + regEscapeHtml(payload.error) + '</div>';
     return;
   }
 
   const rows = payload?.results || [];
   if (!rows.length) {
-    results.innerHTML = '<div class="s-label" style="font-size:11.5px;">Nothing is being followed yet.</div>';
+    results.innerHTML = '<div class="s-label u-fs-11_5">Nothing is being followed yet.</div>';
     return;
   }
 
@@ -7333,23 +8967,23 @@ function subscriptionsChecked(payload) {
     if (r.error) {
       return `<div class="sort-item reg-item"><div class="reg-item-main">
         <span class="reg-url">${artist}</span>
-        <div class="s-label" style="font-size:11px;color:var(--red);">${regEscapeHtml(r.error)}</div>
+        <div class="s-label u-fs-11 u-c-red">${regEscapeHtml(r.error)}</div>
       </div></div>`;
     }
     if (r.watermarked) {
       return `<div class="sort-item reg-item"><div class="reg-item-main">
         <span class="reg-url">${artist}</span>
-        <div class="s-label" style="font-size:11px;">First check — ${r.total_releases} ${unit}(s) recorded as seen. Only ${isPlaylist ? 'tracks added later' : 'later releases'} will be fetched.</div>
+        <div class="s-label u-fs-11">First check — ${r.total_releases} ${unit}(s) recorded as seen. Only ${isPlaylist ? 'tracks added later' : 'later releases'} will be fetched.</div>
       </div></div>`;
     }
     const releases = (r.new_releases || []).map((rel) =>
       isPlaylist
-        ? `<div class="s-label" style="font-size:11px;">· ${regEscapeHtml(rel.title)}</div>`
-        : `<div class="s-label" style="font-size:11px;">· ${regEscapeHtml(rel.title)}${rel.year ? ' (' + regEscapeHtml(rel.year) + ')' : ''} [${regEscapeHtml(rel.type)}]</div>`
+        ? `<div class="s-label u-fs-11">· ${regEscapeHtml(rel.title)}</div>`
+        : `<div class="s-label u-fs-11">· ${regEscapeHtml(rel.title)}${rel.year ? ' (' + regEscapeHtml(rel.year) + ')' : ''} [${regEscapeHtml(rel.type)}]</div>`
     ).join('');
     return `<div class="sort-item reg-item"><div class="reg-item-main">
       <span class="reg-url">${artist}</span>
-      <div class="s-label" style="font-size:11px;">${(r.new_releases || []).length} new ${unit}(s)${payload?.scheduled ? ' · scheduled check' : ''}</div>
+      <div class="s-label u-fs-11">${(r.new_releases || []).length} new ${unit}(s)${payload?.scheduled ? ' · scheduled check' : ''}</div>
       ${releases}
     </div></div>`;
   }).join('');
@@ -7365,24 +8999,25 @@ function healthRate(rate) {
   return rate === null || rate === undefined ? '—' : Math.round(rate * 100) + '%';
 }
 
-function healthColour(row) {
-  if (!row.attempts) return 'var(--muted)';
-  if (row.success_rate >= 0.9) return 'var(--green, #1ed760)';
-  if (row.success_rate >= 0.5) return 'var(--yellow, #f0c674)';
-  return 'var(--red)';
+/** The tone (see [data-tone] in styles.css) of an extension's success rate. */
+function healthTone(row) {
+  if (!row.attempts) return 'muted';
+  if (row.success_rate >= 0.9) return 'ok';
+  if (row.success_rate >= 0.5) return 'warn';
+  return 'error';
 }
 
 async function loadExtensionHealth() {
   const list = $('ext-health-list');
   if (!list) return;
   if (!window.pywebview?.api?.get_extension_health) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">Extension health is unavailable in this build.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5">Extension health is unavailable in this build.</div>';
     return;
   }
   try {
     renderExtensionHealth(await window.pywebview.api.get_extension_health());
   } catch (e) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Unable to load extension health.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Unable to load extension health.</div>';
   }
 }
 
@@ -7391,12 +9026,12 @@ function renderExtensionHealth(data) {
   if (!list) return;
 
   if (data?.error) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">' + regEscapeHtml(data.error) + '</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">' + regEscapeHtml(data.error) + '</div>';
     return;
   }
   const rows = data?.providers || [];
   if (!rows.length) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">No extensions installed, and nothing has been downloaded yet.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5">No extensions installed, and nothing has been downloaded yet.</div>';
     return;
   }
 
@@ -7406,16 +9041,16 @@ function renderExtensionHealth(data) {
       ? `${r.successes}/${r.attempts} succeeded · ~${r.avg_duration_s}s each`
       : 'never tried';
     const err = r.last_error
-      ? `<div class="s-label" style="font-size:11px;color:var(--red);">Last error: ${regEscapeHtml(r.last_error)}</div>`
+      ? `<div class="s-label u-fs-11 u-c-red">Last error: ${regEscapeHtml(r.last_error)}</div>`
       : '';
     return `
       <div class="sort-item reg-item">
         <div class="reg-item-main">
           <span class="reg-url">${regEscapeHtml(r.provider)}${version}</span>
-          <div class="s-label" style="font-size:11px;">${regEscapeHtml(detail)}</div>
+          <div class="s-label u-fs-11">${regEscapeHtml(detail)}</div>
           ${err}
         </div>
-        <span style="font-weight:600;font-size:13px;color:${healthColour(r)};">${healthRate(r.success_rate)}</span>
+        <span class="u-fw-600 u-fs-13" data-tone="${healthTone(r)}">${healthRate(r.success_rate)}</span>
       </div>`;
   }).join('');
 }
@@ -7540,13 +9175,13 @@ async function loadExtensionSettings() {
   const list = $('ext-settings-list');
   if (!list) return;
   if (!window.pywebview?.api?.list_extension_settings) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">Extension settings are unavailable in this build.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5">Extension settings are unavailable in this build.</div>';
     return;
   }
   try {
     renderExtensionSettings(await window.pywebview.api.list_extension_settings());
   } catch (e) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Unable to load extension settings.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Unable to load extension settings.</div>';
   }
 }
 
@@ -7561,7 +9196,7 @@ function extSettingFieldHtml(ext, entry, cardIdx) {
 
   if (entry.type === 'button') {
     return `<div class="s-row">${label}
-      <button class="act-btn secondary" type="button" style="padding:6px 14px;font-size:12px;"
+      <button class="act-btn secondary u-p-6-14 u-fs-12" type="button"
         onclick="runExtensionSettingAction('${regEscapeHtml(ext.name)}','${regEscapeHtml(entry.key)}')">${regEscapeHtml(entry.label)}</button>
     </div>`;
   }
@@ -7580,7 +9215,7 @@ function extSettingFieldHtml(ext, entry, cardIdx) {
     const isSet = (ext.secrets_set || []).includes(entry.key);
     return `<div class="s-row">${label}
       <input type="password" class="full" autocomplete="off" ${attrs}
-        placeholder="${isSet ? 'Saved — leave empty to keep it' : 'Not set'}" style="flex:1;max-width:320px;">
+        placeholder="${isSet ? 'Saved — leave empty to keep it' : 'Not set'}" style="flex:1;min-width:200px;max-width:320px;">
     </div>`;
   }
   // Free text, optionally with suggestions (e.g. a storefront list).
@@ -7591,35 +9226,69 @@ function extSettingFieldHtml(ext, entry, cardIdx) {
   const type = entry.type === 'number' ? 'number' : 'text';
   return `<div class="s-row">${label}
     <input type="${type}" class="full" ${attrs} ${listId ? `list="${listId}"` : ''}
-      value="${regEscapeHtml(value ?? '')}" placeholder="${regEscapeHtml(entry.default ?? '')}" style="flex:1;max-width:320px;">
+      value="${regEscapeHtml(value ?? '')}" placeholder="${regEscapeHtml(entry.default ?? '')}" style="flex:1;min-width:200px;max-width:320px;">
     ${suggestions}
   </div>`;
+}
+
+// "Allow local network access" (extensions/local_network.py). Extensions
+// are kept off private addresses; this lets one reach the server typed into
+// its own settings — a Jellyfin on 192.168.x.x — and nothing else on the LAN.
+// Shown only where a text setting holds a URL: elsewhere it would open nothing.
+function extLocalNetworkRowHtml(ext) {
+  const hosts = ext.local_network_hosts || [];
+  if (!hosts.length && !ext.local_network) return '';
+  const what = hosts.length
+    ? `Lets it reach ${hosts.map(regEscapeHtml).join(', ')} even on your home network. Nothing else on the local network is opened.`
+    : 'No server address is saved yet.';
+  return `<div class="s-row">
+    <span class="s-label">Allow local network access<small>${what}</small></span>
+    <label class="toggle"><input type="checkbox" ${ext.local_network ? 'checked' : ''}
+      onchange="setExtensionLocalNetwork('${regEscapeHtml(ext.name)}', this)"><span class="toggle-sl"></span></label>
+  </div>`;
+}
+
+async function setExtensionLocalNetwork(name, input) {
+  const api = window.pywebview?.api;
+  if (!api?.set_extension_local_network) return;
+  const wanted = !!input.checked;
+  try {
+    const res = await api.set_extension_local_network(name, wanted);
+    if (res?.error) throw new Error(res.error);
+    showToast(wanted
+      ? `${res.display_name || name} may now reach ${(res.local_network_hosts || []).join(', ') || 'its server'}.`
+      : `${res.display_name || name} is kept off the local network again.`);
+  } catch (e) {
+    input.checked = !wanted;
+    showToast(e?.message || 'Could not change local network access.', 'error');
+  }
 }
 
 function renderExtensionSettings(data) {
   const list = $('ext-settings-list');
   if (!list) return;
   if (data?.error) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">' + regEscapeHtml(data.error) + '</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">' + regEscapeHtml(data.error) + '</div>';
     return;
   }
   const rows = data?.extensions || [];
   if (!rows.length) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">No installed extension has settings.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5">No installed extension has settings.</div>';
     return;
   }
   list.innerHTML = rows.map((ext, idx) => `
     <details class="sort-item reg-item" data-ext="${regEscapeHtml(ext.name)}" style="display:block;">
-      <summary style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;">
+      <summary class="u-cursor-pointer u-justify-space-between u-items-center u-gap-8" style="display:flex;">
         <span class="reg-url">${regEscapeHtml(ext.display_name)}</span>
-        <span class="s-label" style="font-size:11px;">${regEscapeHtml(ext.name)} · v${regEscapeHtml(ext.version || '?')}</span>
+        <span class="s-label u-fs-11">${regEscapeHtml(ext.name)} · v${regEscapeHtml(ext.version || '?')}</span>
       </summary>
-      <div style="margin-top:10px;">
+      <div class="u-mt-10">
         ${ext.settings.map((entry) => extSettingFieldHtml(ext, entry, idx)).join('')}
-        <div class="s-row" style="justify-content:flex-end;gap:8px;">
-          <button class="act-btn secondary" type="button" style="padding:6px 14px;font-size:12px;"
+        ${extLocalNetworkRowHtml(ext)}
+        <div class="s-row u-justify-flex-end u-gap-8">
+          <button class="act-btn secondary u-p-6-14 u-fs-12" type="button"
             onclick="resetExtensionSettings('${regEscapeHtml(ext.name)}')">Reset to defaults</button>
-          <button class="act-btn primary" type="button" style="padding:6px 14px;font-size:12px;"
+          <button class="act-btn primary u-p-6-14 u-fs-12" type="button"
             onclick="saveExtensionSettings('${regEscapeHtml(ext.name)}', this)">Save</button>
         </div>
       </div>
@@ -7691,11 +9360,11 @@ async function runExtensionSettingAction(name, key) {
 let signedSessionsTimer = null;
 
 const SIGNED_STATE = {
-  active: ['active', 'var(--green, #1ed760)'],
-  refresh_due: ['refresh due', 'var(--yellow, #f0c674)'],
-  expired: ['expired', 'var(--red)'],
-  unverified: ['not verified', 'var(--muted)'],
-  orphaned: ['orphaned', 'var(--muted)'],
+  active: ['active', 'ok'],
+  refresh_due: ['refresh due', 'warn'],
+  expired: ['expired', 'error'],
+  unverified: ['not verified', 'muted'],
+  orphaned: ['orphaned', 'muted'],
 };
 
 function signedDuration(seconds) {
@@ -7715,13 +9384,13 @@ async function loadSignedSessions() {
   const list = $('signed-sessions-list');
   if (!list) return;
   if (!window.pywebview?.api?.get_signed_sessions) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">Signed sessions are unavailable in this build.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5">Signed sessions are unavailable in this build.</div>';
     return;
   }
   try {
     renderSignedSessions(await window.pywebview.api.get_signed_sessions());
   } catch (e) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Unable to load signed sessions.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Unable to load signed sessions.</div>';
   }
 }
 
@@ -7731,18 +9400,18 @@ function renderSignedSessions(data) {
   if (signedSessionsTimer) { clearInterval(signedSessionsTimer); signedSessionsTimer = null; }
 
   if (data?.error) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">' + regEscapeHtml(data.error) + '</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">' + regEscapeHtml(data.error) + '</div>';
     return;
   }
   const rows = data?.sessions || [];
   if (!rows.length) {
-    list.innerHTML = '<div class="s-label" style="font-size:11.5px;">No signed sessions stored yet — one is created the first time an extension needs it.</div>';
+    list.innerHTML = '<div class="s-label u-fs-11_5">No signed sessions stored yet — one is created the first time an extension needs it.</div>';
     return;
   }
 
   const loadedAt = Date.now();
   list.innerHTML = rows.map((r, i) => {
-    const [stateLabel, colour] = SIGNED_STATE[r.state] || [r.state, 'var(--muted)'];
+    const [stateLabel, tone] = SIGNED_STATE[r.state] || [r.state, 'muted'];
     const version = r.version ? ' · v' + regEscapeHtml(r.version) : '';
     const details = [];
     if (r.kind !== 'gateway' && r.extensions?.length) details.push('used by ' + r.extensions.join(', '));
@@ -7750,16 +9419,16 @@ function renderSignedSessions(data) {
     if (r.capabilities?.length) details.push(r.capabilities.join(', '));
     if (r.auth_paused_s) details.push('verification paused ' + signedDuration(r.auth_paused_s));
     const clearBtn = r.state === 'unverified' ? '' :
-      `<button class="act-btn secondary" type="button" style="padding:4px 10px;font-size:11px;" data-signed-clear="${regEscapeHtml(r.key)}" title="Drop this session so the next request verifies again.">Clear</button>`;
+      `<button class="act-btn secondary u-p-4-10 u-fs-11" type="button" data-signed-clear="${regEscapeHtml(r.key)}" title="Drop this session so the next request verifies again.">Clear</button>`;
     return `
       <div class="sort-item reg-item">
         <div class="reg-item-main">
           <span class="reg-url">${regEscapeHtml(r.label)}${version}</span>
-          <div class="s-label" style="font-size:11px;" data-signed-expiry="${i}"></div>
-          ${details.length ? `<div class="s-label" style="font-size:11px;">${regEscapeHtml(details.join(' · '))}</div>` : ''}
+          <div class="s-label u-fs-11" data-signed-expiry="${i}"></div>
+          ${details.length ? `<div class="s-label u-fs-11">${regEscapeHtml(details.join(' · '))}</div>` : ''}
         </div>
-        <span style="display:flex;align-items:center;gap:8px;">
-          <span style="font-weight:600;font-size:12px;color:${colour};">${regEscapeHtml(stateLabel)}</span>
+        <span class="u-items-center u-gap-8" style="display:flex;">
+          <span class="u-fw-600 u-fs-12" data-tone="${tone}">${regEscapeHtml(stateLabel)}</span>
           ${clearBtn}
         </span>
       </div>`;
@@ -7877,7 +9546,7 @@ function statsTile(label, value, hint) {
 // relative to the largest value so the shape of the list is readable at a
 // glance rather than needing the numbers to be compared by eye.
 function statsBars(rows, formatValue) {
-  if (!rows.length) return '<div class="s-label" style="font-size:11.5px;">Nothing here yet.</div>';
+  if (!rows.length) return '<div class="s-label u-fs-11_5">Nothing here yet.</div>';
   const peak = Math.max(...rows.map((row) => row.value)) || 1;
   return rows.map((row) => `
     <div class="stat-bar-row">
@@ -7891,7 +9560,7 @@ function statsSection(title, inner, note) {
   return `
     <div class="s-section">
       <div class="s-title">${regEscapeHtml(title)}</div>
-      ${note ? `<div class="s-label" style="font-size:11px;margin:-2px 0 10px;">${regEscapeHtml(note)}</div>` : ''}
+      ${note ? `<div class="s-label u-fs-11 u-m-n2-0-10">${regEscapeHtml(note)}</div>` : ''}
       ${inner}
     </div>`;
 }
@@ -7952,7 +9621,7 @@ async function scanSmbLibrary() {
   button.disabled = true;
   button.classList.add('ta-loading');
   setStatsSmbStatus(`Connecting to ${protocol} library…`);
-  $('stats-body').innerHTML = `<div class="s-label" style="font-size:11.5px;">Scanning ${protocol} library…</div>`;
+  $('stats-body').innerHTML = `<div class="s-label u-fs-11_5">Scanning ${protocol} library…</div>`;
   try {
     const result = await window.pywebview.api.scan_smb_library(profileId);
     if (result?.status === 'error') throw new Error(result.error || 'Could not start network scan.');
@@ -7994,15 +9663,15 @@ async function loadStats() {
   if (!body) return;
   void loadStatsSmbDestinations();
   if (!window.pywebview?.api?.get_stats) {
-    body.innerHTML = '<div class="s-label" style="font-size:11.5px;">Statistics are unavailable in this build.</div>';
+    body.innerHTML = '<div class="s-label u-fs-11_5">Statistics are unavailable in this build.</div>';
     return;
   }
-  body.innerHTML = '<div class="s-label" style="font-size:11.5px;">Loading…</div>';
+  body.innerHTML = '<div class="s-label u-fs-11_5">Loading…</div>';
   try {
     const [year, days] = statsPeriodArgs();
     renderStats(await window.pywebview.api.get_stats(year, days, 10));
   } catch (e) {
-    body.innerHTML = '<div class="s-label" style="font-size:11.5px;color:var(--red);">Could not read the download log.</div>';
+    body.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Could not read the download log.</div>';
   }
 }
 
@@ -8010,7 +9679,7 @@ function renderStats(doc) {
   const body = $('stats-body');
   if (!body) return;
   if (!doc || doc.error) {
-    body.innerHTML = `<div class="s-label" style="font-size:11.5px;color:var(--red);">${regEscapeHtml(doc?.error || 'No data.')}</div>`;
+    body.innerHTML = `<div class="s-label u-fs-11_5 u-c-red">${regEscapeHtml(doc?.error || 'No data.')}</div>`;
     return;
   }
 
@@ -8134,7 +9803,7 @@ function renderStats(doc) {
   if (facts.length) {
     sections.push(statsSection(
       'Highlights',
-      facts.map((fact) => `<div class="s-label" style="font-size:12px;line-height:1.9;">${regEscapeHtml(fact)}</div>`).join(''),
+      facts.map((fact) => `<div class="s-label u-fs-12 u-lh-1_9">${regEscapeHtml(fact)}</div>`).join(''),
     ));
   }
 

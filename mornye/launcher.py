@@ -61,6 +61,38 @@ from .extensions.trust import TRUST_TIERS
 MornyeDownloader: Any | None = None
 
 
+#: Lyrics providers built in (core/lyrics.py). An installed extension of type
+#: lyrics_provider is named ext:<name> (core/extension_lyrics.py).
+_BUILTIN_LYRICS_PROVIDERS = (
+    "spotify",
+    "apple",
+    "deezer",
+    "genius",
+    "netease",
+    "qq",
+    "youtube",
+    "kugou",
+    "musixmatch",
+    "amazon",
+    "lrclib",
+    "binilyrics",
+    "unison",
+    "jiosaavn",
+)
+
+
+def _lyrics_provider_arg(value: str) -> str:
+    value = str(value).strip()
+    if value in _BUILTIN_LYRICS_PROVIDERS:
+        return value
+    if value.startswith("ext:") and len(value) > len("ext:"):
+        return value
+    raise argparse.ArgumentTypeError(
+        f"invalid choice: {value!r} (choose from "
+        f"{', '.join(_BUILTIN_LYRICS_PROVIDERS)}, or ext:<extension name>)"
+    )
+
+
 def _legacy_adapter(options: DownloadOptions) -> LegacyDownloadAdapter:
     if MornyeDownloader is not None:
         return LegacyDownloadAdapter(MornyeDownloader(options), options=options)
@@ -855,22 +887,12 @@ def parse_args(profile_defaults: dict | None = None) -> argparse.Namespace:
         nargs="+",
         default=pd.get("lyrics_providers", ["apple", "binilyrics", "lrclib"]),
         dest="lyrics_providers",
-        choices=[
-            "spotify",
-            "apple",
-            "deezer",
-            "genius",
-            "netease",
-            "qq",
-            "youtube",
-            "kugou",
-            "musixmatch",
-            "amazon",
-            "lrclib",
-            "binilyrics",
-            "unison",
-            "jiosaavn",
-        ],
+        type=_lyrics_provider_arg,
+        metavar="PROVIDER",
+        help=(
+            f"in order of preference: {', '.join(_BUILTIN_LYRICS_PROVIDERS)}, "
+            "or ext:<name> for an installed extension that supplies lyrics"
+        ),
     )
     lyrics_grp.add_argument(
         "--apple-lyrics-line-synced",

@@ -67,7 +67,7 @@ def _first(tags, key: str) -> str:
     return str(value or "").strip()
 
 
-def _read_local_tags(path: Path) -> dict[str, object]:
+def _read_local_tags(path: Path) -> dict[str, str | int]:
     try:
         from mutagen import File as MutagenFile
 

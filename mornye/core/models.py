@@ -10,6 +10,34 @@ from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
+_COPYRIGHT_MARK = re.compile(r"^\s*(?:[©℗]|\([cp]\))\s*", re.IGNORECASE)
+
+
+def collapse_copyright(value: str) -> str:
+    """Merge a © line and a ℗ line that say the same thing into one.
+
+    Providers that expose the composition and the recording rights separately
+    (Spotify's C / P entries) often join them with " · ", and for most
+    releases both read "2026 Label, distributed by X", so the same sentence
+    showed up twice in the UI and in the written COPYRIGHT tag.
+    """
+    parts = [p.strip() for p in str(value or "").split(" · ") if p.strip()]
+    if len(parts) < 2:
+        return str(value or "").strip()
+    seen: dict[str, str] = {}
+    marks: set[str] = set()
+    for part in parts:
+        mark = _COPYRIGHT_MARK.match(part)
+        if mark:
+            marks.add(mark.group(0).strip().upper())
+        key = " ".join(_COPYRIGHT_MARK.sub("", part).casefold().split())
+        seen.setdefault(key, part)
+    if len(seen) == 1 and {"©", "℗"} <= marks:
+        text = _COPYRIGHT_MARK.sub("", next(iter(seen.values())))
+        return f"©℗ {text}"
+    return " · ".join(seen.values())
+
+
 # ---------------------------------------------------------------------------
 # Track / Metadata
 # ---------------------------------------------------------------------------
@@ -58,6 +86,12 @@ class TrackMetadata(BaseModel):
     is_explicit: bool = False
     status: str = ""
     rank: str = ""
+
+    @field_validator("copyright", mode="after")
+    @classmethod
+    def _collapse_copyright(cls, v: str) -> str:
+        return collapse_copyright(v)
+
     description: str = ""
     avatar_url: str = ""
     header_url: str = ""

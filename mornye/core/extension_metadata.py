@@ -215,9 +215,37 @@ def _host_covers(declared: str, site_host: str) -> bool:
     return declared == site_host or declared.endswith("." + site_host)
 
 
+def _handler_patterns(ext: Any) -> list[str]:
+    """An extension's `urlHandler.patterns`, lower-cased and unescaped.
+
+    They are hosts, host/path prefixes or regexes (`soundcloud\\.com`); with
+    the backslashes gone a plain substring test finds a host in any of them.
+    """
+    manifest = getattr(ext, "manifest", None) or {}
+    handler = manifest.get("urlHandler")
+    patterns = handler.get("patterns") if isinstance(handler, dict) else None
+    if not isinstance(patterns, list):
+        return []
+    return [str(p).lower().replace("\\", "") for p in patterns if p]
+
+
 def site_for_extension(ext: Any) -> CatalogueSite | None:
-    """The site an installed extension reads, judged by its manifest."""
+    """The site an installed extension reads, judged by its manifest.
+
+    By the links it says it handles, when it says so. `permissions.network`
+    is only what it may talk to: amazon, spotify-web and ytmusic all list
+    api.deezer.com (they borrow ISRCs from it), and reading that as "this is
+    a Deezer extension" offered each of them as a search source whose
+    results carried Deezer ids and Deezer links. The network list is the
+    fallback for a manifest with no `urlHandler` at all.
+    """
     if "metadata_provider" not in (getattr(ext, "types", None) or []):
+        return None
+    handled = _handler_patterns(ext)
+    if handled:
+        for site in SITES:
+            if any(host in pattern for host in site.hosts for pattern in handled):
+                return site
         return None
     manifest = getattr(ext, "manifest", None) or {}
     permissions = manifest.get("permissions") or {}
@@ -274,10 +302,61 @@ def catalogue_extensions(manager: Any = None) -> list[tuple[Any, CatalogueSite]]
     return found
 
 
+def search_only_extensions(manager: Any = None) -> list[tuple[Any, CatalogueSite]]:
+    """Extensions that can be searched but read none of `SITES`.
+
+    Amazon Music, YouTube Music, SoundCloud…: a manifest with
+    `searchBehavior.enabled`, written for the mobile app's search box. Their
+    links are not catalogue links — fetching one goes through the extension's
+    own `handleUrl`, as it always has — so the site each is paired with here
+    is a stand-in with no link shapes: it only names the source, and
+    `to_track` keeps the links the extension itself gives its results.
+
+    spotify-web is left out: the built-in Spotify search already merges it.
+    """
+    if manager is None:
+        from ..extensions.manager import ExtensionManager
+
+        manager = ExtensionManager(auto_install_downloads=False)
+    try:
+        installed = manager.list_installed()
+    except Exception as exc:
+        logger.debug("[catalogue] could not list extensions: %s", exc)
+        return []
+    found = []
+    for ext in installed:
+        if "metadata_provider" not in (getattr(ext, "types", None) or []):
+            continue
+        manifest = getattr(ext, "manifest", None) or {}
+        behaviour = manifest.get("searchBehavior")
+        if not isinstance(behaviour, dict) or not behaviour.get("enabled"):
+            continue
+        if site_for_extension(ext) is not None:
+            continue
+        if any("spotify" in pattern for pattern in _handler_patterns(ext)):
+            continue
+        label = getattr(ext, "display_name", "") or ext.name
+        found.append(
+            (
+                ext,
+                CatalogueSite(
+                    key=ext.name,
+                    label=label,
+                    hosts=(),
+                    patterns=(),
+                    track_url="",
+                    album_url="",
+                ),
+            )
+        )
+    return found
+
+
 def metadata_sources(manager: Any = None) -> list[dict[str, str]]:
-    """What a search can be sent to: Spotify, then each catalogue extension."""
+    """What a search can be sent to: Spotify, each catalogue extension, then
+    the extensions that only search."""
     sources = [{"id": "spotify", "label": "Spotify"}]
-    for ext, site in catalogue_extensions(manager):
+    for ext, site in catalogue_extensions(manager) + search_only_extensions(manager):
         sources.append(
             {
                 "id": ext.name,
@@ -312,6 +391,17 @@ def _first_image(item: dict) -> str:
             url = image.get("url") if isinstance(image, dict) else image
             if url:
                 return str(url)
+    return ""
+
+
+def _own_link(item: dict) -> str:
+    """The link an extension put on one of its results, however it spelt it."""
+    for key in ("external_url", "external_urls", "url", "link"):
+        value = item.get(key)
+        if isinstance(value, dict):
+            value = next((v for v in value.values() if v), "")
+        if isinstance(value, str) and value.startswith(("http://", "https://")):
+            return value
     return ""
 
 
@@ -481,9 +571,12 @@ def to_track(
         cover_url=_first_image(item)
         or album_node.get("cover_url", "")
         or _first_image(collection),
-        external_url=site.url_for("track", raw_id),
+        # A site with no link shapes (a search-only source) keeps the links
+        # the extension gave: they are what its own handleUrl understands.
+        external_url=site.url_for("track", raw_id) or _own_link(item),
         album_id=album_id,
-        album_url=site.url_for("album", album_id),
+        album_url=site.url_for("album", album_id)
+        or str(item.get("album_url") or album_node.get("external_url") or ""),
         album_type=str(collection.get("album_type") or ""),
     )
 
@@ -662,7 +755,9 @@ class ExtensionMetadataClient:
 
     @classmethod
     def for_source(cls, name: str, manager: Any = None) -> ExtensionMetadataClient:
-        for ext, site in catalogue_extensions(manager):
+        for ext, site in catalogue_extensions(manager) + search_only_extensions(
+            manager
+        ):
             if ext.name == name:
                 return cls(ext.name, site)
         raise MornyeError(
@@ -860,11 +955,27 @@ class ExtensionMetadataClient:
         # The limit as a number: the mobile contract is
         # `searchTracks(query, limit)`, and apple-music passes what it gets
         # straight into its API request, which answers an object with a 400.
-        response = await self._call("searchTracks", query, limit)
+        try:
+            response = await self._call("searchTracks", query, limit)
+        except MornyeError as exc:
+            if exc.kind is not ErrorKind.UNAVAILABLE or "searchTracks" not in str(exc):
+                raise
+            # Extensions written for the in-app search box (a manifest with
+            # `searchBehavior`) expose `customSearch(query, {filter})` and no
+            # `searchTracks`. Same question, the other entry point.
+            response = await self._call("customSearch", query, {"filter": "songs"})
         if isinstance(response, dict):
             items = response.get("tracks") or response.get("items") or []
         else:
             items = response or []
+        # customSearch can mix kinds; keep what is, or may be, a track.
+        items = [
+            item
+            for item in items
+            if isinstance(item, dict)
+            and str(item.get("item_type") or item.get("type") or "track").lower()
+            in ("track", "song", "songs")
+        ]
 
         tracks = [t for item in items if (t := to_track(item, self.site))][:limit]
 

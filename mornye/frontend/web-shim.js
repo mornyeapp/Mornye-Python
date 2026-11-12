@@ -15,6 +15,8 @@
 
 (function () {
   'use strict';
+  // The page is served by webapp.py: audio streams through /api/media.
+  window.__mornyeWeb = true;
 
   async function callApi(name, args) {
     const res = await fetch('/api/' + name, {
@@ -159,13 +161,13 @@
   const REMOTE_METHODS = [
     'get_version', 'get_latest_version', 'get_pypi_version', 'get_network_shares', 'get_staged_queue', 'add_to_staged_queue', 'remove_staged_items', 'clear_staged_queue', 'retry_staged_items', 'start_staged_items', 'get_download_history', 'remove_download_history', 'clear_download_history', 'clear_fetch_history', 'get_artist_images', 'get_ffmpeg_status', 'get_node_status',
     'save_settings', 'save_theme', 'load_settings', 'get_registries', 'add_registry', 'remove_registry',
-    'get_history', 'get_profiles', 'load_profile_data', 'cache_image', 'get_spotify_home_feed',
+    'get_history', 'get_profiles', 'load_profile_data', 'cache_image', 'get_home_feed_sources', 'get_extension_home_feed', 'get_spotify_home_feed',
     'search_provider', 'search_provider_async', 'get_metadata_sources', 'remove_history_item',
     'save_profile_data', 'delete_profile_data', 'check_animated_artwork_api',
     'get_download_dir', 'open_config_folder', 'open_url', 'download_track_lyrics',
     'download_track_cover', 'download_cover', 'download_album_cover', 'download_all_covers',
     'download_all_lyrics', 'get_track_preview', 'fetch_metadata', 'download_tracks',
-    'run_health_check', 'scan_local', 'apply_local_tags', 'set_download_dir',
+    'run_health_check', 'scan_local', 'apply_local_tags', 'get_convert_formats', 'convert_local_files', 'read_file_tags', 'save_file_tags', 'analyze_audio_file', 'get_reorganize_defaults', 'plan_library_reorganize', 'apply_library_reorganize', 'prepare_playback', 'get_library_default_folder', 'scan_music_library', 'get_track_thumb', 'get_weekly_releases', 'get_lyrics_ai_config', 'save_lyrics_ai_config', 'translate_lyrics', 'save_translated_lyrics', 'set_download_dir',
     'get_registry_directories', 'add_registry_directory', 'remove_registry_directory',
     'discover_registries', 'get_download_services', 'get_dedup_status',
     'scan_for_duplicates',
@@ -186,9 +188,9 @@
     // CSV import sends the file's text, read in the browser — never a path.
     'preview_csv', 'fetch_csv',
     // Each JS extension's own settings (api_mixins/extension_settings.py).
-    'list_extension_settings', 'get_extension_settings',
+    'list_extension_settings', 'get_extension_settings', 'get_lyrics_extensions',
     'save_extension_settings', 'reset_extension_settings',
-    'run_extension_setting_action',
+    'run_extension_setting_action', 'set_extension_local_network',
     // The Test buttons next to the self-hosted endpoints (admin-only).
     'test_custom_endpoint',
   ];
@@ -330,9 +332,15 @@
     'app_library_dedup_error',
     'app_library_dedup_progress',
     'app_library_dedup_results',
+    'app_library_scan_chunk',
+    'app_library_scan_error',
+    'app_library_scan_finished',
     'app_local_apply_error',
     'app_local_apply_finished',
     'app_local_apply_progress',
+    'app_local_convert_error',
+    'app_local_convert_finished',
+    'app_local_convert_progress',
     'app_local_scan_error',
     'app_local_scan_results',
     'app_log',

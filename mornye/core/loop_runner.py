@@ -44,11 +44,44 @@ from __future__ import annotations
 import asyncio
 import atexit
 import concurrent.futures
+import logging
 import threading
 from collections.abc import Coroutine
 from typing import Any, TypeVar
 
 T = TypeVar("T")
+
+logger = logging.getLogger(__name__)
+
+#: Tasks started by `spawn()`. The event loop only keeps a *weak* reference to
+#: a task, so one nobody else holds can be garbage-collected before it runs to
+#: the end; this set is the strong reference that keeps it alive.
+_spawned: set[asyncio.Task[Any]] = set()
+
+
+def _reap(task: asyncio.Task[Any]) -> None:
+    _spawned.discard(task)
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.debug(
+            "background task %s failed: %r", task.get_name(), exc, exc_info=exc
+        )
+
+
+def spawn(coro: Coroutine[Any, Any, Any]) -> asyncio.Task[Any]:
+    """`asyncio.create_task()` for work nobody awaits.
+
+    Must be called from a running loop, like `create_task`. The task is held
+    until it finishes, and an exception it raises is logged at debug level
+    instead of surfacing as "Task exception was never retrieved" whenever the
+    collector gets to it.
+    """
+    task = asyncio.get_running_loop().create_task(coro)
+    _spawned.add(task)
+    task.add_done_callback(_reap)
+    return task
 
 
 class _SharedLoop:

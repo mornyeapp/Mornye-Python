@@ -1,0 +1,153 @@
+/* docs/mocks/console.css — direction A, "Console da studio" (redesign-plan §2).
+   A static mock, not the app: values here are proposals for token v2 (voce 8). */
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('../../mornye/frontend/assets/fonts/JetBrainsMono-Variable.woff2') format('woff2');
+  font-weight: 100 800;
+}
+
+:root {
+  /* Graphite, no warm or blue cast: four surfaces, two rules. */
+  --g-0: #0d0d0d;      /* ground */
+  --g-1: #141414;      /* panel */
+  --g-2: #1b1b1b;      /* hover, field */
+  --g-3: #242424;      /* selected row */
+  --rule: #2c2c2c;
+  --rule-strong: #3d3d3d;
+  --text: #e8e8e8;
+  --text-2: #b5b5b5;
+  --muted: #858585;
+  /* The one signal: focus, selection, primary action, active level. */
+  --signal: #ffb000;
+  --signal-ink: #120d00;
+  /* State only, never decoration. */
+  --ok: #5ec46b;
+  --err: #ff5a4f;
+
+  --row: 32px;
+  --r: 2px;
+  --font: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--g-0); color: var(--text); }
+body {
+  font: 400 13px/1.4 var(--font);
+  font-variant-ligatures: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Shell ─────────────────────────────────────────────────────────────── */
+.app { display: grid; grid-template: 32px 1fr 40px / 176px 1fr; height: 100vh; }
+
+.titlebar {
+  grid-column: 1 / -1; display: flex; align-items: center; gap: 12px;
+  padding: 0 12px; border-bottom: 1px solid var(--rule); background: var(--g-1);
+}
+.wordmark { font-weight: 700; letter-spacing: .24em; font-size: 12px; }
+.wordmark small { font-weight: 400; color: var(--muted); letter-spacing: .08em; margin-left: 8px; }
+.titlebar .rule { flex: 1; height: 1px; background: var(--rule); }
+
+.rail { border-right: 1px solid var(--rule); background: var(--g-1); padding: 8px 0; overflow: hidden; }
+.rail-group { margin-bottom: 12px; }
+.rail-head, .label {
+  font-size: 10.5px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--muted);
+}
+.rail-head { padding: 8px 16px 4px; }
+.rail a {
+  display: flex; align-items: center; gap: 10px; height: var(--row); padding: 0 16px;
+  color: var(--text-2); text-decoration: none; font-size: 12px; letter-spacing: .04em;
+  border-left: 2px solid transparent;
+}
+.rail a:hover { background: var(--g-2); color: var(--text); }
+.rail a.on { border-left-color: var(--signal); color: var(--text); background: var(--g-2); }
+.rail a .ico { width: 14px; text-align: center; color: var(--muted); }
+.rail a.on .ico { color: var(--signal); }
+.rail a .count { margin-left: auto; color: var(--signal); font-size: 11px; }
+
+.main { overflow: auto; padding: 20px 20px 24px; display: flex; flex-direction: column; gap: 24px; }
+
+/* ── Panels: the label sits in the border, like a silk-screened legend ── */
+.panel { position: relative; border: 1px solid var(--rule); background: var(--g-1); border-radius: var(--r); }
+.panel > .legend {
+  position: absolute; top: -8px; left: 12px; padding: 0 6px; background: var(--g-0);
+  font-size: 10.5px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--muted);
+  line-height: 16px;
+}
+.panel > .legend b { color: var(--text); font-weight: 500; }
+.panel > .legend-r { left: auto; right: 12px; }
+.panel-body { padding: 16px; }
+
+/* ── Controls ──────────────────────────────────────────────────────────── */
+.field {
+  display: flex; align-items: center; height: var(--row); border: 1px solid var(--rule-strong);
+  background: var(--g-2); border-radius: var(--r); flex: 1; min-width: 0;
+}
+.field .pre { padding: 0 10px; color: var(--muted); border-right: 1px solid var(--rule); height: 100%; display: flex; align-items: center; font-size: 11px; letter-spacing: .12em; }
+.field input { flex: 1; min-width: 0; background: none; border: 0; color: var(--text); font: inherit; padding: 0 10px; outline: none; }
+.field:focus-within { border-color: var(--signal); }
+
+.btn {
+  height: var(--row); padding: 0 14px; border: 1px solid var(--rule-strong); background: var(--g-2);
+  color: var(--text); font: 500 12px var(--font); letter-spacing: .06em; border-radius: var(--r);
+  cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px;
+}
+.btn:hover { border-color: var(--text-2); }
+.btn.primary { background: var(--signal); border-color: var(--signal); color: var(--signal-ink); }
+.btn.ghost { background: none; }
+.btn:focus-visible, a:focus-visible { outline: 1px solid var(--signal); outline-offset: 2px; }
+.key { font-size: 10.5px; color: var(--muted); border: 1px solid var(--rule-strong); padding: 0 4px; border-radius: var(--r); }
+
+/* Signature 1 — the quality display: a readout, not a coloured badge. */
+.qd {
+  display: inline-flex; align-items: center; height: 20px; padding: 0 6px; gap: 6px;
+  border: 1px solid var(--signal); color: var(--signal); border-radius: var(--r);
+  font-size: 11px; font-weight: 500; letter-spacing: .06em; white-space: nowrap;
+}
+.qd.dim { border-color: var(--rule-strong); color: var(--text-2); }
+.state { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; white-space: nowrap; }
+.state.ok { color: var(--ok); }
+.state.err { color: var(--err); }
+.state.run { color: var(--signal); }
+.state.idle { color: var(--muted); }
+
+/* Signature 2 — the segment meter: LED steps, never a smooth fill. */
+.meter { display: inline-flex; gap: 2px; height: 10px; align-items: stretch; vertical-align: middle; }
+.meter i { width: 6px; background: var(--rule-strong); }
+.meter i.on { background: var(--signal); }
+.meter.lg { height: 14px; }
+.meter.lg i { width: 8px; }
+.meter.err i.on { background: var(--err); }
+.meter.ok i.on { background: var(--ok); }
+
+/* ── Tables: 32px rows, rules not cards ───────────────────────────────── */
+.table { width: 100%; border-collapse: collapse; }
+.table th {
+  height: 28px; text-align: left; font-size: 10.5px; font-weight: 500; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--rule); padding: 0 10px;
+}
+.table td { height: var(--row); padding: 0 10px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+.table tr:last-child td { border-bottom: 0; }
+.table tbody tr:hover td { background: var(--g-2); }
+.table tr.sel td { background: var(--g-3); }
+.table tr.sel td:first-child { box-shadow: inset 2px 0 0 var(--signal); }
+.table .num { color: var(--muted); width: 36px; text-align: right; }
+.table .t { color: var(--text); max-width: 0; overflow: hidden; text-overflow: ellipsis; width: 100%; }
+.table .t small { color: var(--muted); margin-left: 10px; font-size: 12px; }
+.table .dur { color: var(--text-2); text-align: right; }
+.check { width: 12px; height: 12px; border: 1px solid var(--rule-strong); display: inline-block; vertical-align: middle; }
+.check.on { background: var(--signal); border-color: var(--signal); }
+
+/* ── Dock ─────────────────────────────────────────────────────────────── */
+.dock {
+  grid-column: 1 / -1; display: flex; align-items: center; gap: 16px; padding: 0 12px;
+  border-top: 1px solid var(--rule); background: var(--g-1); font-size: 12px;
+}
+.dock .what { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.dock .sep { width: 1px; height: 20px; background: var(--rule); }
+.muted { color: var(--muted); }
+.signal { color: var(--signal); }
+.row { display: flex; align-items: center; gap: 10px; }
+.spacer { flex: 1; }

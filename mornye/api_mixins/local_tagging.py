@@ -252,3 +252,112 @@ class LocalTaggingMixin:
             daemon=True,
         ).start()
         return {"status": "started"}
+
+    # ── Convert existing files to another format ────────────────────────────
+
+    def get_convert_formats(self) -> list:
+        """The target formats the Convert dialog offers (see
+        core.transcode.conversion_targets())."""
+        from ..core.transcode import conversion_targets
+
+        return conversion_targets()
+
+    def _convert_local_files_thread(self, paths: list, options: dict) -> None:
+        try:
+            from pathlib import Path
+
+            from ..core.transcode import (
+                ensure_ffmpeg_available,
+                is_lossless,
+                normalize_bitrate,
+                source_is_lossless,
+                transcode_file_async,
+            )
+
+            fmt = options["format"]
+            bitrate = normalize_bitrate(options.get("bitrate"))
+            keep_original = bool(options.get("keep_original", False))
+            max_rate = int(options.get("max_sample_rate") or 0)
+            max_depth = int(options.get("max_bit_depth") or 0)
+            lossless_target = is_lossless(fmt)
+
+            approved_roots = [
+                Path(self.download_dir).resolve(),
+                Path.home().resolve(),
+            ]
+
+            def _is_path_safe(candidate: str) -> bool:
+                try:
+                    resolved = Path(candidate).resolve()
+                except Exception:
+                    return False
+                return any(resolved.is_relative_to(root) for root in approved_roots)
+
+            ensure_ffmpeg_available(fmt)
+
+            results = []
+            total = len(paths)
+            for idx, file_path in enumerate(paths, start=1):
+                result: dict = {"file_path": file_path, "success": False}
+                if not _is_path_safe(file_path):
+                    result["error"] = (
+                        "Access denied: path is outside approved directories"
+                    )
+                else:
+                    try:
+                        if lossless_target and not source_is_lossless(file_path):
+                            # Same rule as the mobile app: a lossless copy of
+                            # a lossy file is only a bigger file.
+                            raise ValueError(
+                                "Source is lossy: converting it to a lossless "
+                                "format cannot restore quality",
+                            )
+                        dest = run_sync(
+                            transcode_file_async(
+                                file_path,
+                                fmt=fmt,
+                                bitrate=bitrate,
+                                keep_original=keep_original,
+                                max_sample_rate=max_rate if lossless_target else 0,
+                                max_bit_depth=max_depth if lossless_target else 0,
+                            ),
+                        )
+                        result.update(success=True, output_path=str(dest))
+                    except Exception as e:
+                        result["error"] = str(e)
+                results.append(result)
+                self._push(
+                    "app_local_convert_progress",
+                    {"done": idx, "total": total, "last": result},
+                )
+
+            self._push("app_local_convert_finished", {"results": results})
+        except Exception as e:
+            self.log(f"[convert] failed: {e}", "error")
+            self._push("app_local_convert_error", str(e))
+
+    def convert_local_files(self, paths: list, options: dict) -> dict:
+        """Converts each file in `paths` to `options["format"]`, next to the
+        original, keeping its tags and cover. `options`: format, bitrate
+        (lossy targets), keep_original, max_sample_rate / max_bit_depth
+        (lossless targets, 0 = keep the source's). Runs in a background
+        thread; progress arrives via 'app_local_convert_progress', the summary
+        via 'app_local_convert_finished'.
+        """
+        from ..core.transcode import normalize_transcode_format
+
+        paths = [str(p) for p in (paths or []) if p]
+        if not paths:
+            return {"status": "error", "error": "Nothing to convert"}
+        try:
+            fmt = normalize_transcode_format((options or {}).get("format"))
+        except ValueError as e:
+            return {"status": "error", "error": str(e)}
+        if not fmt:
+            return {"status": "error", "error": "Choose a target format"}
+        threading.Thread(
+            target=self._convert_local_files_thread,
+            args=(paths, {**options, "format": fmt}),
+            daemon=True,
+        ).start()
+        return {"status": "started"}

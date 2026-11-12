@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mock · Home</title>
+<link rel="stylesheet" href="console.css">
+<style>
+  .fetch { display: flex; gap: 8px; }
+  .album { display: grid; grid-template-columns: 168px 1fr; gap: 20px; }
+  .art { width: 168px; height: 168px; display: block; }
+  .meta { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .meta h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; line-height: 1.2; }
+  .meta .by { color: var(--text-2); font-size: 14px; }
+  .facts { display: flex; color: var(--muted); font-size: 12px; }
+  .facts span + span::before { content: '·'; padding: 0 8px; color: var(--rule-strong); }
+  .spec { display: grid; grid-template-columns: repeat(4, auto); justify-content: start; column-gap: 24px; row-gap: 2px; margin-top: 2px; }
+  .spec .label { font-size: 10px; }
+  .spec .v { font-size: 12px; color: var(--text); }
+  .actions { margin-top: auto; display: flex; gap: 8px; align-items: center; }
+  .sel-count { color: var(--muted); font-size: 12px; margin-left: 8px; }
+  .table td.q { width: 1%; }
+  .table td.act { width: 1%; color: var(--muted); }
+  .btn.primary .key { border-color: rgba(0,0,0,.35); color: inherit; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="titlebar">
+    <span class="wordmark">MORNYE<small>2.0.6</small></span>
+    <span class="rule"></span>
+    <span class="state run">● downloading 3 / 12</span>
+  </header>
+
+  <nav class="rail">
+    <div class="rail-group">
+      <div class="rail-head">Discover</div>
+      <a class="on" href="#"><span class="ico">⌂</span>Home</a>
+      <a href="#"><span class="ico">◇</span>Explore</a>
+    </div>
+    <div class="rail-group">
+      <div class="rail-head">Library</div>
+      <a href="queue.html"><span class="ico">≡</span>Queue<span class="count">9</span></a>
+      <a href="#"><span class="ico">↺</span>History</a>
+      <a href="#"><span class="ico">▶</span>Player</a>
+      <a href="#"><span class="ico">⌗</span>Local files</a>
+      <a href="#"><span class="ico">＋</span>Following</a>
+      <a href="#"><span class="ico">▤</span>Server</a>
+    </div>
+    <div class="rail-group">
+      <div class="rail-head">System</div>
+      <a href="#"><span class="ico">∿</span>Stats</a>
+      <a href="#"><span class="ico">›</span>Logs</a>
+      <a href="#"><span class="ico">⚙</span>Settings</a>
+    </div>
+  </nav>
+
+  <main class="main">
+    <div class="fetch">
+      <label class="field"><span class="pre">URL</span><input value="https://open.spotify.com/album/5d1Kc0Q7pX3vXa" aria-label="Link or search"></label>
+      <button class="btn">Fetch <span class="key">⏎</span></button>
+      <button class="btn ghost">Search <span class="key">⌘K</span></button>
+    </div>
+
+    <section class="panel">
+      <span class="legend">Album · <b>Spotify</b></span>
+      <span class="legend legend-r">Tidal → Qobuz → Deezer</span>
+      <div class="panel-body album">
+        <svg class="art" viewBox="0 0 168 168" role="img" aria-label="Cover">
+          <defs>
+            <linearGradient id="a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1d3d6b"/><stop offset="1" stop-color="#c2492b"/></linearGradient>
+          </defs>
+          <rect width="168" height="168" fill="url(#a)"/>
+          <circle cx="112" cy="58" r="34" fill="#f2c14e"/>
+          <rect y="118" width="168" height="50" fill="#0f1e33" opacity=".85"/>
+          <path d="M0 118 L40 92 L78 112 L120 80 L168 108 L168 118Z" fill="#0f1e33"/>
+        </svg>
+        <div class="meta">
+          <h1>Night Signals</h1>
+          <div class="by">Arden Vale</div>
+          <div class="facts"><span>Album</span><span>2026</span><span>12 tracks</span><span>41:07</span><span>Explicit</span></div>
+          <div class="row"><span class="qd">24 / 96 · FLAC</span><span class="qd dim">ATMOS</span></div>
+          <div class="spec">
+            <span class="label">Label</span><span class="label">UPC</span><span class="label">Released</span><span class="label">Genre</span>
+            <span class="v">Low Hours Rec.</span><span class="v">0602567891234</span><span class="v">2026-10-03</span><span class="v">Electronic</span>
+          </div>
+          <div class="actions">
+            <button class="btn primary">Download 12</button>
+            <button class="btn">Download selected</button>
+            <button class="btn ghost">Copy as CLI</button>
+            <span class="sel-count">4 selected</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <span class="legend">Tracks <b>12</b></span>
+      <table class="table">
+        <thead><tr><th></th><th>#</th><th>Title</th><th>Quality</th><th style="text-align:right">Time</th><th>State</th></tr></thead>
+        <tbody>
+          <tr class="sel"><td><span class="check on"></span></td><td class="num">1</td><td class="t">Carrier Wave<small>Arden Vale</small></td><td class="q"><span class="qd dim">24 / 96</span></td><td class="dur">3:42</td><td class="act"><span class="state ok">done</span></td></tr>
+          <tr class="sel"><td><span class="check on"></span></td><td class="num">2</td><td class="t">Static Bloom<small>Arden Vale, Mira Sol</small></td><td class="q"><span class="qd dim">24 / 96</span></td><td class="dur">4:05</td><td class="act"><span class="state ok">done</span></td></tr>
+          <tr class="sel"><td><span class="check on"></span></td><td class="num">3</td><td class="t">Low Hours<small>Arden Vale</small></td><td class="q"><span class="qd dim">24 / 96</span></td><td class="dur">3:18</td><td class="act"><span class="meter" data-v=".62" data-n="12"></span></td></tr>
+          <tr class="sel"><td><span class="check on"></span></td><td class="num">4</td><td class="t">Second Antenna<small>Arden Vale</small></td><td class="q"><span class="qd dim">24 / 96</span></td><td class="dur">5:11</td><td class="act"><span class="state idle">queued</span></td></tr>
+          <tr><td><span class="check"></span></td><td class="num">5</td><td class="t">Glass Harbour<small>Arden Vale</small></td><td class="q"><span class="qd dim">24 / 96</span></td><td class="dur">2:57</td><td class="act"></td></tr>
+          <tr><td><span class="check"></span></td><td class="num">6</td><td class="t">Interference (feat. Kō)<small>Arden Vale, Kō</small></td><td class="q"><span class="qd dim">16 / 44.1</span></td><td class="dur">3:36</td><td class="act"></td></tr>
+          <tr><td><span class="check"></span></td><td class="num">7</td><td class="t">Northbound Signal Path — Extended Version For The Long Drive<small>Arden Vale</small></td><td class="q"><span class="qd dim">24 / 96</span></td><td class="dur">7:48</td><td class="act"></td></tr>
+          <tr><td><span class="check"></span></td><td class="num">8</td><td class="t">Dial Tone<small>Arden Vale</small></td><td class="q"><span class="qd dim">24 / 96</span></td><td class="dur">3:02</td><td class="act"><span class="state err">not found</span></td></tr>
+          <tr><td><span class="check"></span></td><td class="num">9</td><td class="t">Quiet Band<small>Arden Vale</small></td><td class="q"><span class="qd dim">24 / 96</span></td><td class="dur">2:49</td><td class="act"></td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <footer class="dock">
+    <span class="label">Downloads</span>
+    <span class="meter lg" data-v=".25" data-n="24"></span>
+    <span class="signal">3 / 12</span>
+    <span class="sep"></span>
+    <span class="what">Low Hours — Arden Vale <span class="muted">· tidal · 4.2 MB/s</span></span>
+    <span class="qd">24 / 96 · FLAC</span>
+    <button class="btn ghost">Open queue</button>
+  </footer>
+</div>
+<script>
+  // Segment meters: whole LED steps, never a partial one.
+  for (const m of document.querySelectorAll('.meter[data-v]')) {
+    const n = +m.dataset.n, lit = Math.round(+m.dataset.v * n);
+    m.innerHTML = Array.from({ length: n }, (_, i) => `<i class="${i < lit ? 'on' : ''}"></i>`).join('');
+  }
+</script>
+</body>
+</html>

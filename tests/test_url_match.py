@@ -88,3 +88,25 @@ def test_handles_url_requires_enabled():
     assert not handles_url(
         _ext("x", [r"soundcloud\.com"], enabled=None), "https://soundcloud.com/a"
     )
+
+
+def test_a_fragment_pattern_matches_a_self_hosted_app_on_any_host():
+    """Jellyfin's `#/details?id=`: no host to anchor to, so the fragment is
+    the anchor — and the `?` in it is a literal, not a regex quantifier."""
+    from mornye.extensions.url_match import url_pattern_matches
+
+    item = "details?id=0123456789abcdef0123456789abcdef"
+    assert url_pattern_matches(
+        "#/details?id=", f"http://192.168.1.10:8096/web/#/{item}"
+    )
+    assert url_pattern_matches(
+        "#!/details?id=", f"https://jf.example.com/web/#!/{item}"
+    )
+    # In the query or path, or later in the fragment, is not the fragment.
+    assert not url_pattern_matches(
+        "#/details?id=", "https://example.org/?x=%23/details?id=1"
+    )
+    assert not url_pattern_matches(
+        "#/details?id=", "https://example.org/#/other/#/details?id=1"
+    )
+    assert not url_pattern_matches("#/details?id=", "https://example.org/details?id=1")

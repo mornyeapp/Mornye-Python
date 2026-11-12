@@ -172,3 +172,36 @@ def test_run_sync_from_inside_the_shared_loop_does_not_deadlock() -> None:
         return loop_runner.run_sync(_echo("nested"))
 
     assert loop_runner.run_coro(reenter()) == "nested"
+
+
+def test_spawn_keeps_the_task_until_it_finishes() -> None:
+    """The loop holds tasks weakly; spawn() is what keeps one alive."""
+    import gc
+
+    async def scenario():
+        done = asyncio.Event()
+
+        async def work():
+            await asyncio.sleep(0)
+            done.set()
+
+        loop_runner.spawn(work())
+        assert len(loop_runner._spawned) == 1
+        gc.collect()
+        await asyncio.wait_for(done.wait(), 1)
+        await asyncio.sleep(0)
+        assert not loop_runner._spawned
+
+    asyncio.run(scenario())
+
+
+def test_spawn_swallows_a_failure_instead_of_leaking_it() -> None:
+    async def scenario():
+        async def boom():
+            raise ValueError("nope")
+
+        task = loop_runner.spawn(boom())
+        await asyncio.sleep(0.01)
+        assert task.done() and not loop_runner._spawned
+
+    asyncio.run(scenario())

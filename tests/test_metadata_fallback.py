@@ -187,7 +187,8 @@ def test_a_failing_spotify_client_hands_over_to_spotify_web(native) -> None:
 
     assert provider.calls == [("handleUrl", (SPOTIFY_ALBUM,))]
     assert provider.closed
-    assert (name, cover, meta) == ("Palette", "https://i.scdn.co/image/cover", {})
+    assert (name, cover) == ("Palette", "https://i.scdn.co/image/cover")
+    assert meta == {"link_type": "album"}
     [track] = tracks
     # The id the built-in client gives, so downstream sees the same track.
     assert track.id == "4NPARrLIbtMl29ZJv8ESr2"

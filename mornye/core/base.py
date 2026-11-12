@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from mornye.core.flac_validation import validate_flac_file
 from mornye.core.http import AsyncHttpClient, AsyncRateLimiter, RetryConfig
+from mornye.core.loop_runner import spawn
 from mornye.core.models import DownloadResult, TrackMetadata, build_filename
 
 if TYPE_CHECKING:
@@ -71,8 +72,7 @@ class BaseProvider(ABC):
             if asyncio.iscoroutine(res):
                 try:
                     # Check whether we are in the main async thread
-                    asyncio.get_running_loop()
-                    asyncio.create_task(res)
+                    spawn(res)
                 except RuntimeError:
                     # RuntimeError means we're in a worker thread (e.g. yt-dlp).
                     # Safely "teleport" execution back onto the main loop.

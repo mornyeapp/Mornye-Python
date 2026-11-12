@@ -42,7 +42,7 @@ from ..extensions.catalog import installed_service_ids
 from .config_state import (
     ENRICH_PROVIDERS,
     CANVAS_PROVIDERS,
-    LYRICS_PROVIDERS,
+    lyrics_provider_choices,
     POST_DOWNLOAD_ACTIONS,
     TRANSCODE_BITRATES,
     ConfigState,
@@ -466,7 +466,7 @@ class ConfigPanel(VerticalScroll):
             yield SelectionList[str](
                 *[
                     (provider, provider, provider in state.lyrics_providers)
-                    for provider in LYRICS_PROVIDERS
+                    for provider in lyrics_provider_choices(state.lyrics_providers)
                 ],
                 id=_field_id("lyrics_providers"),
             )
