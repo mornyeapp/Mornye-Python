@@ -103,7 +103,9 @@ def track_from_extension(
     if not raw_id or not title:
         return None
 
-    prefix = _ID_PREFIX[service]
+    # A source with no built-in client (Jellyfin, a self-hosted server) keeps
+    # the extension's own ids: there is no other client for them to match.
+    prefix = _ID_PREFIX.get(service, "")
     collection = collection or {}
     artists = _text(item.get("artists") or item.get("artist"))
     album = _text(item.get("album_name"))
@@ -211,7 +213,15 @@ class ExtensionUrlClient:
                 f"The '{self.ext_name}' extension found no tracks behind this {kind or 'link'}.",
                 provider=f"ext:{self.ext_name}",
             )
-        return name, tracks, cover, {}
+        # Which extension the tracks came from, so the download can honour
+        # what its manifest asks (skipBuiltInFallback,
+        # skipMetadataEnrichment — application/download_engine.py).
+        for track in tracks:
+            track.extra_info = {
+                **(track.extra_info or {}),
+                "source_extension": self.ext_name,
+            }
+        return name, tracks, cover, {"link_type": kind or "track"}
 
 
 class MergedSpotifySearch:

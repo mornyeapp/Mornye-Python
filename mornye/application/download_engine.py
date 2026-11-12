@@ -1651,6 +1651,78 @@ async def _replace_fake_hires_async(
     return retry
 
 
+def _installed_manifest(ext_name: str) -> dict:
+    try:
+        from ..extensions.manager import ExtensionManager
+
+        ext = ExtensionManager(auto_install_downloads=False).get_installed(ext_name)
+    except Exception as exc:
+        logger.debug("[downloader] could not read extension %s: %s", ext_name, exc)
+        return {}
+    manifest = getattr(ext, "manifest", None) if ext is not None else None
+    return manifest if isinstance(manifest, dict) else {}
+
+
+def _own_source_extension_for(url: str) -> str | None:
+    """The extension that reads a link no built-in client knows.
+
+    Only for links outside Spotify, Apple Music and Tidal — those have
+    clients of their own and merge with their extension elsewhere
+    (core/metadata_fallback.get_url_with_fallback).
+    """
+    from ..core.metadata_fallback import fallback_extension_for, native_service_for
+
+    if native_service_for(url) is not None:
+        return None
+    if url_host_matches(
+        url,
+        "soundcloud.com",
+        "youtube.com",
+        "youtu.be",
+        "pandora.com",
+        "pandora.app.link",
+    ):
+        return None
+    try:
+        return fallback_extension_for(url)
+    except Exception as exc:
+        logger.debug("[downloader] no extension for %s: %s", url, exc)
+        return None
+
+
+def _honour_source_extension(
+    metadata: TrackMetadata,
+    providers: list[BaseProvider],
+    opts: DownloadOptions,
+) -> tuple[list[BaseProvider], DownloadOptions]:
+    """What the manifest of the extension a track came from asks of its download.
+
+    ``skipBuiltInFallback``: the track is downloaded by that extension alone,
+    never looked up on the other services — a song from the user's own
+    Jellyfin library must come from that library, and when the server is
+    down the right answer is a failure, not a near match from Tidal.
+    ``skipMetadataEnrichment``: its tags are the source's own and are not
+    "improved" from Deezer, Apple or Qobuz.
+    """
+    source = str((metadata.extra_info or {}).get("source_extension") or "").strip()
+    if not source:
+        return providers, opts
+    manifest = _installed_manifest(source)
+    if manifest.get("skipMetadataEnrichment") is True and opts.enrich_metadata:
+        opts = replace(opts, enrich_metadata=False)
+    if manifest.get("skipBuiltInFallback") is True:
+        own_name = f"ext:{source}"
+        own = [p for p in providers if getattr(p, "name", "") == own_name]
+        if not own:
+            try:
+                own = list(_build_providers_for_name(own_name, opts))
+            except Exception as exc:
+                logger.debug("[downloader] could not build %s: %s", own_name, exc)
+                own = []
+        providers = own
+    return providers, opts
+
+
 async def download_one_async(
     metadata: TrackMetadata,
     output_dir: str,
@@ -1668,6 +1740,8 @@ async def download_one_async(
     -download hooks, the playlist writer and the run summary all see) is
     the file the user actually ends up with.
     """
+    providers, opts = _honour_source_extension(metadata, providers, opts)
+
     # Taken before any provider runs, so the replacement pass can be given
     # the request rather than the rejected download's version of it.
     snapshot = metadata.model_copy(deep=True)
@@ -2704,10 +2778,28 @@ class MornyeDownloader:
         )
 
         catalogue = parse_catalogue_url(url)
+        own_source = None if catalogue else _own_source_extension_for(url)
+        own_meta: dict = {}
 
         try:
             client: Any
-            if catalogue:
+            if own_source:
+                from ..core.metadata_fallback import ExtensionUrlClient
+
+                # A link to a source no built-in client reads — a Jellyfin
+                # server's `…/web/#/details?id=…` — that an installed
+                # extension's urlHandler claims. Asking the Spotify client
+                # first, as the last branch does, could only fail.
+                (
+                    collection_name,
+                    tracks,
+                    *own_rest,
+                ) = await ExtensionUrlClient(
+                    own_source, own_source
+                ).get_url_async(url)
+                if len(own_rest) > 1 and isinstance(own_rest[1], dict):
+                    own_meta = own_rest[1]
+            elif catalogue:
                 client = ExtensionMetadataClient.for_url(url)
                 (
                     collection_name,
@@ -2796,7 +2888,9 @@ class MornyeDownloader:
         if not tracks:
             return collection_name, [], {}
 
-        if catalogue:
+        if own_source:
+            info = {"type": str(own_meta.get("link_type") or "track"), "id": url}
+        elif catalogue:
             info = {"type": catalogue.kind, "id": catalogue.item_id}
         elif is_tidal:
             info = parse_tidal_url(url)
