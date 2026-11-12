@@ -321,8 +321,7 @@ def v2_tokens(mode: str) -> dict[str, str]:
 def v2_textual_theme_kwargs(mode: str) -> dict:
     """``textual.theme.Theme`` arguments for the console look (Fase 4).
 
-    Not registered yet: the TUI moves to it in voce 24, with its new
-    stylesheet. ``$primary`` (focus, active mode, panel title) is the
+    Registered first by mornye/tui/app.py (voce 24). ``$primary`` (focus, active mode, panel title) is the
     signal; ``$panel`` is the selected row, one step above the surface.
     """
     dark = mode != "light"

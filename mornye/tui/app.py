@@ -46,7 +46,7 @@ from textual.widgets import (
 )
 
 from .banner import Banner, HintBar
-from ..branding_tokens import textual_theme_kwargs
+from ..branding_tokens import textual_theme_kwargs, v2_textual_theme_kwargs
 from ..core.paths import default_download_dir
 from .branding import mode_glyph, notice, panel_tag, panel_title
 from .clipboard import TERMINAL_ONLY_NOTE, copy_text
@@ -82,17 +82,22 @@ MODES: tuple[tuple[str, str], ...] = (
     ("command", "Command"),
 )
 
-#: Mornye's own two themes, built from the palette the GUI uses too
-#: (mornye/branding_tokens.py), so both interfaces share one identity.
+#: Mornye's own themes, built from the palette the GUI uses too
+#: (mornye/branding_tokens.py), so both interfaces share one identity: the
+#: console look first, then the earlier teal pair, still offered by `t`.
 MORNYE_THEMES: tuple[Theme, ...] = (
+    Theme(**v2_textual_theme_kwargs("dark")),
+    Theme(**v2_textual_theme_kwargs("light")),
     Theme(**textual_theme_kwargs("dark")),
     Theme(**textual_theme_kwargs("light")),
 )
 
-#: Cycled by `t`. Mornye's dark theme first — it is the default and the
-#: palette this screen is drawn against — then its light one, then the nine
-#: built-in alternatives MovieBox offers, in its order.
+#: Cycled by `t`. The console dark theme first — it is the default and the
+#: palette this screen is drawn against — then its light one, the earlier
+#: teal pair, then the nine built-in alternatives MovieBox offers.
 THEMES: tuple[str, ...] = (
+    "mornye-console-dark",
+    "mornye-console-light",
     "mornye-dark",
     "mornye-light",
     "catppuccin-mocha",

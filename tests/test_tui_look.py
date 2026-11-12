@@ -209,18 +209,25 @@ async def test_every_panel_tag_actually_draws() -> None:
             assert expected in drawn, f"#{key}'s tag never reached the screen"
 
 
-def test_a_badge_is_padded_so_the_colour_reads_as_a_label() -> None:
-    # The subject here is the padding, not the wording: a background colour
-    # flush against the text reads as a highlight rather than a label. The
-    # label is read back from the table instead of spelled out again, so
-    # renaming a tier is a one-line change there and not a test failure.
+def test_a_badge_is_a_bracketed_readout() -> None:
+    # The console look draws badges as readouts in a state colour, never as
+    # filled pills, so the brackets are the badge in every terminal. The
+    # label is read back from the table instead of spelled out again.
     label, expected_css = branding.QUALITY_BADGES["HI_RES_LOSSLESS"]
 
     text, css = branding.quality_badge("HI_RES_LOSSLESS", plain=False)
-    assert text == f" {label} "
+    assert text == f"[{label}]"
     assert css == expected_css == "badge-gold"
-    # Bracketed instead when there is no colour to pad.
-    assert branding.quality_badge("HI_RES_LOSSLESS", plain=True)[0] == f"[{label}]"
+    assert branding.quality_badge("HI_RES_LOSSLESS", plain=True)[0] == text
+
+
+def test_the_masthead_is_one_line_that_never_wraps() -> None:
+    line = branding.header_line(200, plain=False)
+    assert line.startswith("MORNYE ")
+    assert branding.TAGLINE in line
+    assert "\n" not in line
+    assert len(branding.header_line(20, plain=False)) <= 20
+    assert "──" not in branding.header_line(200, plain=True)
 
 
 def test_an_unknown_quality_still_gets_a_badge() -> None:
@@ -252,7 +259,7 @@ def test_the_key_is_the_coloured_part_of_a_hint() -> None:
 @drives_the_ui
 async def test_the_default_theme_is_the_one_the_screen_was_drawn_against() -> None:
     async with MornyeTui(_ready_state()).run_test() as pilot:
-        assert app_of(pilot).theme == "mornye-dark"
+        assert app_of(pilot).theme == "mornye-console-dark"
 
 
 def test_every_offered_theme_exists() -> None:
@@ -274,23 +281,18 @@ async def test_the_banner_and_hint_bar_replace_the_default_chrome() -> None:
         assert isinstance(app_of(pilot).query_one("#banner"), Banner)
         assert isinstance(app_of(pilot).query_one("#hints"), HintBar)
 
-        wordmark = str(app_of(pilot).query_one("#wordmark").content)
-        assert wordmark == branding.WORDMARK_FULL
-
-        # The version hangs off the wordmark's right edge, as MovieBox tucks
-        # its own under the last letter — not centred under the whole block.
-        subtitle = str(app_of(pilot).query_one("#wordmark-subtitle").content)
-        assert subtitle.strip().startswith("v")
-        assert subtitle.startswith(" "), "the version is positioned by padding"
+        masthead = str(app_of(pilot).query_one("#wordmark").content)
+        assert masthead.startswith("MORNYE ")
+        assert branding.TAGLINE in masthead
+        assert not app_of(pilot).query_one("#wordmark-subtitle").display
 
 
 @drives_the_ui
-async def test_the_banner_leaves_room_for_its_subtitle() -> None:
-    """It was sized to the art alone, and the subtitle fell off the bottom."""
-    async with MornyeTui(_ready_state()).run_test(size=(110, 40)) as pilot:
+async def test_the_masthead_takes_one_row() -> None:
+    """The block wordmark took six rows an 80x24 terminal could not spare."""
+    async with MornyeTui(_ready_state()).run_test(size=(80, 24)) as pilot:
         banner = app_of(pilot).query_one("#banner", Banner)
-        rows = len(branding.WORDMARK_FULL.split("\n"))
-        assert banner.size.height >= rows + 1
+        assert banner.size.height == 1
 
 
 @drives_the_ui
@@ -302,7 +304,7 @@ async def test_every_panel_is_a_titled_card() -> None:
             panel = app_of(pilot).query_one(f"#{key}")
             assert str(panel.border_title).strip(), f"#{key} has no title"
             assert panel.border_subtitle, f"#{key} has no tag"
-            assert panel.styles.border.top[0] == "round"
+            assert panel.styles.border.top[0] == "solid"
 
 
 @drives_the_ui
