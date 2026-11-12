@@ -198,8 +198,66 @@ regola (una parola = un elemento).
      `sw.js` (SHELL_FILES), `MANIFEST.in`/package-data, aggiornare
      `test_brand_tokens.py`, `test_frontend_inline_styles.py` (utility
      `u-*` → dove finiscono), i font Inter/Fraunces da `assets/fonts/`.
-   **Prossimo:** Fase 4 (TUI, voci 23–26). Aperte: voce 22, F7
-   (`confirm()`), riorganizzazione di Settings.
+   **Prossimo:** Fase 4 (TUI, voci 23–26) — fatta, vedi sotto.
+0. **Fasi 4, 5 e 6 fatte** (2026-11-12), su `redesign`, commit locali non
+   pushati. Prima, fuori dal redesign, la **issue #277** (playlist):
+   - `e74767e` — un brano fallito ricorda la playlist (colonna
+     `failed_tracks.playlist_name`, migrazione db v8) e il retry lo rimanda
+     nella cartella della playlist e nella sua M3U, non sciolto nella radice.
+   - `cc1846e` — un brano trovato in una *Existing library folder* (#272)
+     fuori dalla libreria non finisce più nella M3U come `../../altrove/…`
+     (Navidrome non lo segue): viene messo nella cartella della playlist con
+     un hard link (o una copia su un altro disco). Dentro la libreria resta
+     il collegamento relativo di #267.
+   Redesign:
+   - **voci 23–24** (`cf3340b`): TUI con intestazione su una riga
+     (`branding.header_line`), badge come letture tra parentesi
+     (`[HI-RES]`, mai pillole piene), bordi `solid` ovunque, legende a
+     `$text-muted` che diventano segnale sul pannello attivo; temi
+     `mornye-console-dark/light` registrati per primi e di default; la
+     coppia teal resta nel giro di `t`.
+   - **voce 25** (`bdb3fb4`): passata sui 12 pannelli a 80×24 e 120×40,
+     scuro e chiaro (`tests/visual/capture_tui.py`, ora sui temi console).
+     Intro che vanno a capo, pulsanti larghi quanto l'etichetta (la History
+     a 80×24 non taglia più), pulsanti warning/success a filetto: nel tema
+     console `$warning` è il segnale e sembravano un secondo primario.
+   - **voce 26 / F9** (`6c4fce4`): il tema scelto con `t` è salvato in
+     `~/.mornye/tui-theme` e riletto all'avvio; `MORNYE_TUI_THEME_FILE` lo
+     sposta (i test lo puntano in una cartella temporanea, `conftest.py`).
+   - **voce 27** (`df01cbb`): `theme-color`, manifest e finestra pywebview
+     sul fondo v2 (`#0d0d0d` / `#f2f2f0`). Logo invariato: una versione mono
+     non è stata fatta.
+   - **voce 28** (`3f035aa`): gli accenti cambiano solo il segnale
+     (`css/accents.css`, quattro token `--signal*` per accento, tolti i
+     preset da `styles.css`); ambra è il default e il primo del selettore;
+     un `teal`/`green` salvato (vecchio default non toccato) passa ad ambra
+     una volta, `BRAND_VERSION` 3.
+   - **voce 29** (`761acb8`): `docs/site.css` sulla palette console
+     (grafite, ambra, JetBrains Mono, raggi 3px, niente bagliori teal);
+     `CHANGELOG.md` aggiornato. README e guide non hanno screenshot
+     dell'app: niente da sostituire.
+   - **voce 30** (`eed9df8`, `4b28c76`): contrasto AA di ogni accento in
+     entrambi i temi, con test (chiaro: testo green più scuro, inchiostro
+     scuro su orange e cyan); un solo anello di focus da 1px nel segnale
+     (`layout.css`) al posto del 2px di `styles.css`; percorso col Tab di
+     Home, Settings e Queue: ogni fermata ha anello o bordo segnale.
+     Nessuno sbordo orizzontale a 375px e 1280px, scuro e chiaro, in tutte
+     le viste (corretta la toolbar del Player sul telefono).
+   - **voce 31 — verificata solo in parte, qui non si può fare di più:**
+     macOS sì per la GUI web (Chromium del pannello). **Da fare a mano:**
+     finestra pywebview su macOS (WKWebView), Windows (WebView2), Linux
+     (WebKitGTK); `--web` in Docker (qui il demone Docker è spento); PWA
+     su un telefono vero (installazione, barra di stato con `theme-color`).
+     Controllo statico dei fogli nuovi: nessun `@layer`, `@container`,
+     `color-mix()`, `oklch()`; usano `:has()` in 4 regole (WebKitGTK ≥ 2.36,
+     Safari 15.4, Chromium 105) — senza, Home lascia "Fetch" primario
+     accanto alla scheda album e la coda mostra una riga vuota sotto i
+     brani in attesa/errore: estetico, nessuna funzione persa;
+     `text-wrap: pretty` viene ignorato dove manca.
+   **Aperte:** voce 22 (togliere `styles.css`, metodo sopra), F7
+   (`confirm()` nativi), riorganizzazione di Settings, quality display
+   dell'album, toast "fetching metadata…" che resta durante la ricerca,
+   verifica con dati veri (Jellyfin, scansione Local, seguiti, download).
 0. **Fase 2 completa** — sul branch **`redesign`** (creato da `2.0.6` dopo
    i mock, come da §5: dalla Fase 2 in poi un branch dedicato e un rilascio
    unico). Commit locali, non pushati.
@@ -264,12 +322,12 @@ regola (una parola = un elemento).
 2. **§2 tutta decisa** (2026-11-12): direzione A, JetBrains Mono come unico
    font, segnale ambra, logo invariato fino alla Fase 5, tema chiaro
    derivato. Nessuna scelta aperta prima della Fase 2.
-3. **F1, F6, F7, F9, M1–M6, N1–N5** — non iniziati.
+3. **F1, F6, F7, M1–M6, N1–N5** — non iniziati (F9 fatta nella voce 26).
 4. **F3, resto**: restano ~30 avvisi `ASYNC240`, quasi tutti un singolo
    `exists()`/`getsize()` su disco locale. Lasciati di proposito.
 5. **Jellyfin con un server vero** — vedi sopra.
-6. **Note emerse:** a 80×24 il pannello History della TUI taglia il testo a
-   destra (si vede negli snapshot). `mypy mornye` nella venv locale 3.14
+6. **Note emerse:** a 80×24 il pannello History della TUI tagliava il testo
+   a destra (corretto nella voce 25). `mypy mornye` nella venv locale 3.14
    si ferma su uno stub di `numpy` (`python_version = "3.11"`); con
    `--python-version 3.12` resta 1 errore preesistente in
    `core/hires_check.py:469`. `hc-summary` è aggiornato da `app.js` ma non
