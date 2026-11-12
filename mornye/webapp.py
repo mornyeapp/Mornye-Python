@@ -168,6 +168,23 @@ ALLOWED_METHODS: set[str] = {
     "run_health_check",
     "scan_local",
     "apply_local_tags",
+    "get_convert_formats",
+    "convert_local_files",
+    "read_file_tags",
+    "save_file_tags",
+    "analyze_audio_file",
+    "get_reorganize_defaults",
+    "plan_library_reorganize",
+    "apply_library_reorganize",
+    "prepare_playback",
+    "get_library_default_folder",
+    "scan_music_library",
+    "get_track_thumb",
+    "get_weekly_releases",
+    "get_lyrics_ai_config",
+    "save_lyrics_ai_config",
+    "translate_lyrics",
+    "save_translated_lyrics",
     "get_dedup_status",
     "scan_for_duplicates",
     "scan_library_duplicates",
@@ -1122,6 +1139,30 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
             headers=_private_headers,
         )
 
+    @app.get("/api/media")
+    async def media(request: Request, path: str):
+        """Streams an audio file (or a player copy of it) with Range support,
+        so the in-page player can seek. Same approved roots as the folder
+        browser: in multi-user mode only the caller's own download folder."""
+        from .core.media_server import content_type_for
+        from .core.paths import cache_path
+
+        target_api = api_for(request)
+        try:
+            resolved = Path(path).expanduser().resolve()
+        except Exception:
+            return PlainTextResponse("Bad path", status_code=400)
+        roots = [Path(target_api.download_dir).resolve(), cache_path("playback").resolve()]
+        if not multiuser:
+            roots.append(Path.home().resolve())
+        if not resolved.is_file() or not any(resolved.is_relative_to(r) for r in roots):
+            return PlainTextResponse("Not found", status_code=404)
+        return FileResponse(
+            resolved,
+            media_type=content_type_for(resolved),
+            headers={"Cache-Control": "no-store"},
+        )
+
     @app.get("/api/get-home-dir")
     async def get_home_dir(request: Request) -> JSONResponse:
         """Where the folder browser should start.
@@ -1270,17 +1311,22 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
         html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
         inject = (
             "<script>window.__MORNYE_WEB_MODE__ = true;</script>\n"
-            '<script src="/web-shim.js?v=20261106"></script>\n'
+            '<script src="/web-shim.js"></script>\n'
         )
-        # Before the first app script, whatever its cache-busting version:
-        # matching one exact `?v=` string silently dropped the shim (and with
-        # it every API call) the first time index.html bumped the version.
-        html = re.sub(
-            r'(<script src="toast-system\.js[^"]*"></script>)',
-            lambda m: inject + m.group(1),
-            html,
-            count=1,
-        )
+        # Before the first app script. index.html marks the spot with a
+        # comment, because matching the script tag itself silently dropped the
+        # shim (and with it every API call) whenever that tag changed shape —
+        # a bumped `?v=` once, the timestamped loader another time.
+        marker = "<!--MORNYE-APP-SCRIPTS"
+        if marker in html:
+            html = html.replace(marker, inject + marker, 1)
+        else:
+            html = re.sub(
+                r'(<script src="toast-system\.js[^"]*"></script>)',
+                lambda m: inject + m.group(1),
+                html,
+                count=1,
+            )
         # Marks the document as browser-served before the first paint, so CSS
         # can drop the chrome that only makes sense in the pywebview window
         # (the frameless titlebar and its traffic-light buttons, which call

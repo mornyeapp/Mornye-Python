@@ -687,6 +687,18 @@ class JSExtensionProvider(BaseProvider):
         collection_cover = self._url_metadata_cover(collection) or (
             tracks[0].cover_url if tracks else ""
         )
+        if kind == "artist":
+            from ..core.concerts import normalize_concerts
+
+            concerts = normalize_concerts(collection.get("concerts"))
+            if concerts:
+                # The artist card's concerts badge reads this.
+                return (
+                    collection_name,
+                    tracks,
+                    collection_cover,
+                    {"concerts": concerts},
+                )
         return collection_name, tracks, collection_cover
 
     def get_track(self, track_id: str) -> dict:

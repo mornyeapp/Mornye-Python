@@ -29,7 +29,9 @@ from .api_mixins.discovery import DiscoveryMixin
 from .api_mixins.extension_health import ExtensionHealthMixin
 from .api_mixins.extension_settings import ExtensionSettingsMixin
 from .api_mixins.failed_tracks import FailedTracksMixin
+from .api_mixins.library_tools import LibraryToolsMixin
 from .api_mixins.local_tagging import LocalTaggingMixin
+from .api_mixins.music_extras import MusicExtrasMixin
 from .api_mixins.search import SearchMixin
 from .api_mixins.signed_sessions import SignedSessionsMixin
 from .api_mixins.stats import StatsMixin
@@ -198,6 +200,8 @@ class UILogHandler(CallbackLogHandler):
 class MornyeAPI(
     SearchMixin,
     LocalTaggingMixin,
+    LibraryToolsMixin,
+    MusicExtrasMixin,
     CoversLyricsMixin,
     DiscoveryMixin,
     DedupMixin,
@@ -517,6 +521,7 @@ class MornyeAPI(
         track_count=None,
         artist_url="",
         artists_data=None,
+        artist_concerts=None,
     ) -> None:
         payload = {
             "title": title,
@@ -546,6 +551,8 @@ class MornyeAPI(
             payload["artist_verified"] = artist_verified
         if artist_biography:
             payload["artist_biography"] = artist_biography
+        if artist_concerts:
+            payload["artist_concerts"] = artist_concerts
         if release_date:
             payload["release_date"] = release_date
         if track_count is not None:
@@ -1461,6 +1468,7 @@ class MornyeAPI(
                     artist_rank=collection_meta.get("rank"),
                     artist_verified=collection_meta.get("verified", False),
                     artist_biography=collection_meta.get("biography", ""),
+                    artist_concerts=collection_meta.get("concerts"),
                 )
             else:
                 self.set_metadata(

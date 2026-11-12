@@ -85,6 +85,9 @@ class Release:
     title: str = ""
     type: str = "single"
     year: str = ""
+    #: Full release date (ISO "YYYY-MM-DD" or with a time) when the listing
+    #: carries one, else "". `year` alone cannot say what came out this week.
+    date: str = ""
 
     @property
     def url(self) -> str:
@@ -97,6 +100,7 @@ class Release:
             "title": self.title,
             "type": self.type,
             "year": self.year,
+            "date": self.date,
             "url": self.url,
         }
 
@@ -624,6 +628,7 @@ async def list_releases_async(
                 title=str(release.get("name") or ""),
                 type=release_type,
                 year=_release_year(release),
+                date=_release_date(release),
             )
         )
 
@@ -674,6 +679,22 @@ def _track_release(track) -> Release:
         title=f"{title} — {artists}" if artists else title,
         type="track",
     )
+
+
+def _release_date(release: dict) -> str:
+    """The most precise release date the listing carries, or ""."""
+    date = release.get("date")
+    if isinstance(date, dict):
+        iso = date.get("isoString")
+        if isinstance(iso, str) and len(iso) >= 10:
+            return iso
+        year, month, day = date.get("year"), date.get("month"), date.get("day")
+        if year and month and day:
+            return f"{int(year):04d}-{int(month):02d}-{int(day):02d}"
+        return ""
+    if isinstance(date, str) and len(date) >= 10:
+        return date
+    return ""
 
 
 def _release_year(release: dict) -> str:

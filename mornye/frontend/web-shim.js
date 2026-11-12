@@ -15,6 +15,8 @@
 
 (function () {
   'use strict';
+  // The page is served by webapp.py: audio streams through /api/media.
+  window.__mornyeWeb = true;
 
   async function callApi(name, args) {
     const res = await fetch('/api/' + name, {
@@ -165,7 +167,7 @@
     'get_download_dir', 'open_config_folder', 'open_url', 'download_track_lyrics',
     'download_track_cover', 'download_cover', 'download_album_cover', 'download_all_covers',
     'download_all_lyrics', 'get_track_preview', 'fetch_metadata', 'download_tracks',
-    'run_health_check', 'scan_local', 'apply_local_tags', 'set_download_dir',
+    'run_health_check', 'scan_local', 'apply_local_tags', 'get_convert_formats', 'convert_local_files', 'read_file_tags', 'save_file_tags', 'analyze_audio_file', 'get_reorganize_defaults', 'plan_library_reorganize', 'apply_library_reorganize', 'prepare_playback', 'get_library_default_folder', 'scan_music_library', 'get_track_thumb', 'get_weekly_releases', 'get_lyrics_ai_config', 'save_lyrics_ai_config', 'translate_lyrics', 'save_translated_lyrics', 'set_download_dir',
     'get_registry_directories', 'add_registry_directory', 'remove_registry_directory',
     'discover_registries', 'get_download_services', 'get_dedup_status',
     'scan_for_duplicates',
@@ -330,9 +332,15 @@
     'app_library_dedup_error',
     'app_library_dedup_progress',
     'app_library_dedup_results',
+    'app_library_scan_chunk',
+    'app_library_scan_error',
+    'app_library_scan_finished',
     'app_local_apply_error',
     'app_local_apply_finished',
     'app_local_apply_progress',
+    'app_local_convert_error',
+    'app_local_convert_finished',
+    'app_local_convert_progress',
     'app_local_scan_error',
     'app_local_scan_results',
     'app_log',

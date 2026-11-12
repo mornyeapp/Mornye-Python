@@ -72,6 +72,29 @@ TRANSCODE_CHOICES: tuple[tuple[str, str | None], ...] = (
 )
 
 
+def conversion_targets() -> list[dict[str, object]]:
+    """The formats a user can convert a file *to*, for the "Convert" dialog.
+
+    Derived from TRANSCODE_CHOICES (minus "no conversion") so the dialog can
+    never offer something the encoder table does not know. `label` is the
+    short name (the text before the dash), `hint` the rest of the menu line.
+    """
+    targets: list[dict[str, object]] = []
+    for label, value in TRANSCODE_CHOICES:
+        if not value:
+            continue
+        name, _, hint = label.partition(" — ")
+        targets.append(
+            {
+                "value": value,
+                "label": name,
+                "hint": hint,
+                "lossless": is_lossless(value),
+            },
+        )
+    return targets
+
+
 def transcode_label(fmt: str | None) -> str:
     """Menu label for a stored format name, falling back to 'no conversion'."""
     for label, value in TRANSCODE_CHOICES:
@@ -438,6 +461,16 @@ def _probe_depth_with_ffprobe(src: Path) -> int:
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         logger.debug("[transcode] ffprobe could not probe %s: %s", src.name, exc)
         return 0
+
+
+def source_is_lossless(src: Path | str) -> bool:
+    """True when the file at `src` carries a lossless signal.
+
+    Public wrapper over the probe transcode_file_async() already runs, so a
+    caller can refuse "MP3 → FLAC" up front instead of producing a bigger
+    file that is no better than the source.
+    """
+    return _probe_source(Path(src))[1]
 
 
 def _probe_source(src: Path) -> tuple[int, bool]:

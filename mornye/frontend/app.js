@@ -119,6 +119,8 @@ function switchView(name) {
   if (name === 'local') loadNetworkShares();
   if (name === 'queue') { loadStaged(); window.dismissDownloadToast?.(); }
   if (name === 'history') loadHistory();
+  if (name === 'following') loadWeeklyReleases(false);
+  if (name === 'player') initPlayerView();
 }
 
 // Mounted network shares as one-click picks under the library path field:
@@ -1531,6 +1533,8 @@ window.app_set_metadata = (data) => {
       d.artist_url,
       d.artists_data
     );
+    g_artistConcerts = Array.isArray(d.artist_concerts) ? d.artist_concerts : [];
+    renderConcertsButton(d.artist);
   } catch(e) {}
 };
 window.updateFolderLabel = (path) => {
@@ -6721,6 +6725,7 @@ function onLocalDrop(e) {
 // ── Folder Browser for Local Auto-Tagger ──────────────────────────────────
 
 let currentFolderBrowserPath = null;
+let folderBrowserTarget = 'local';   // which page asked for a folder: 'local' | 'player'
 let currentFolderBrowserParent = null;
 
 // Wrapper for the "← Back" button: navigateFolderBrowser() needs the real
@@ -6733,7 +6738,8 @@ function goFolderBrowserBack() {
     }
 }
 
-async function openFolderBrowser() {
+async function openFolderBrowser(target) {
+    folderBrowserTarget = target === 'player' ? 'player' : 'local';
     const modal = $('folder-browser-modal');
     modal.classList.remove('hidden');
     modal.focus();
@@ -6748,14 +6754,19 @@ async function openFolderBrowser() {
     modal.dataset.escapeAttached = 'true';
 
     currentFolderBrowserParent = null;
-    const currentPath = $('local-path-input').value.trim() || null;
+    const currentPath = $(folderBrowserTarget === 'player' ? 'player-path-input' : 'local-path-input').value.trim() || null;
 
     if (window.pywebview?.api) {
         const api = window.pywebview.api;
         try {
-            const homePath = typeof api.get_home_dir === 'function' ? await api.get_home_dir() : '/';
-            await navigateFolderBrowser(homePath || currentPath || '/');
-            return;
+            // Start where the field already points; the home folder is the
+            // fallback. (Starting at '/' is refused in the web build, which
+            // only browses inside the approved folders.)
+            const homePath = typeof api.get_home_dir === 'function' ? await api.get_home_dir() : null;
+            if (currentPath || homePath) {
+                await navigateFolderBrowser(currentPath || homePath);
+                return;
+            }
         } catch (err) {
             console.warn('pywebview folder browse fallback failed:', err);
         }
@@ -6854,10 +6865,7 @@ async function navigateFolderBrowser(path) {
                         return;
                     }
 
-                    $('local-path-input').value = item.path;
-                    closeFolderBrowser();
-                    toastMgr.success(`Selected: ${item.path}`);
-                    startLocalScan();
+                    applyFolderBrowserChoice(item.path);
                 };
 
                 entriesDiv.appendChild(div);
@@ -6876,12 +6884,20 @@ async function navigateFolderBrowser(path) {
 }
 
 function setFolderPath() {
-    if (currentFolderBrowserPath) {
-        $('local-path-input').value = currentFolderBrowserPath;
-        closeFolderBrowser();
-        toastMgr.success(`Selected: ${currentFolderBrowserPath}`);
-        startLocalScan();
+    if (currentFolderBrowserPath) applyFolderBrowserChoice(currentFolderBrowserPath);
+}
+
+// The folder picker is shared: Fix Local Files and the Player both open it.
+function applyFolderBrowserChoice(path) {
+    closeFolderBrowser();
+    if (folderBrowserTarget === 'player') {
+        $('player-path-input').value = path;
+        scanPlayerLibrary();
+        return;
     }
+    $('local-path-input').value = path;
+    toastMgr.success(`Selected: ${path}`);
+    startLocalScan();
 }
 
 async function startLocalScan() {
@@ -7027,6 +7043,12 @@ function renderLocalTracks() {
                     <div class="local-title" title="Current: ${escHtml(oldTitle)}">${escHtml(oldTitle)}</div>
                     <div class="local-artist">${escHtml(oldArtist)}</div>
                     <div style="font-family:'JetBrains Mono', monospace; font-size:9.5px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:3px;" title="${escHtml(item.file_path)}">${escHtml(fileName)}</div>
+                    <div class="local-actions">
+                      <button type="button" class="local-convert-btn" title="Play this file as it is stored" onclick="playLocal(${i})">Play</button>
+                      <button type="button" class="local-convert-btn" title="Edit the tags, cover and lyrics of this file" onclick="openTagEditor(${i})">Edit</button>
+                      <button type="button" class="local-convert-btn" title="Convert this file to another format" onclick="openConvertDialog([${i}])">Convert</button>
+                      <button type="button" class="local-convert-btn" title="Show technical details and a spectrogram" onclick="openAnalyze(${i})">Analyze</button>
+                    </div>
                 </div>
             </div>
             <div style="text-align:center;">${scoreCol}</div>
@@ -7035,6 +7057,1369 @@ function renderLocalTracks() {
         container.appendChild(row);
     });
 }
+
+// ── Convert files to another format ─────────────────────────────────────────
+let convertPaths = [];
+let convertFormats = null;
+
+async function openConvertDialog(indices) {
+  const idx = Array.isArray(indices)
+    ? indices
+    : Array.from(document.querySelectorAll('.local-cb:checked')).map(cb => parseInt(cb.value));
+  convertPaths = idx.map(i => localScanData[i]?.file_path).filter(Boolean);
+  if (!convertPaths.length) {
+    toastMgr.info('Tick at least one file to convert.');
+    return;
+  }
+  if (!convertFormats) {
+    try {
+      convertFormats = (await window.pywebview?.api?.get_convert_formats?.()) || [];
+    } catch (e) { convertFormats = []; }
+  }
+  if (!convertFormats.length) {
+    toastMgr.error('Could not load the list of formats.');
+    return;
+  }
+  const sel = $('convert-format');
+  if (!sel.options.length) {
+    sel.innerHTML = convertFormats.map(f =>
+      `<option value="${escHtml(f.value)}">${escHtml(f.label)} — ${escHtml(f.hint)}</option>`).join('');
+    $('convert-bitrate').innerHTML = [320, 256, 192, 160, 128, 96, 64]
+      .map(b => `<option value="${b}">${b} kbps</option>`).join('');
+  }
+  $('convert-desc').textContent = convertPaths.length === 1
+    ? convertPaths[0].split(/[\\/]/).pop()
+    : `${convertPaths.length} files`;
+  updateConvertOptions();
+  $('convert-modal').classList.remove('hidden');
+}
+
+function closeConvertDialog() {
+  $('convert-modal').classList.add('hidden');
+}
+
+function updateConvertOptions() {
+  const f = (convertFormats || []).find(x => x.value === $('convert-format').value);
+  const lossless = !!f?.lossless;
+  $('convert-lossy-opts').classList.toggle('hidden', lossless);
+  $('convert-lossless-opts').classList.toggle('hidden', !lossless);
+  $('convert-lossless-opts').style.display = lossless ? 'flex' : 'none';
+  $('convert-note').textContent = lossless
+    ? 'Lossless targets only work on lossless sources (FLAC, ALAC, WAV, AIFF…): converting an MP3 or AAC file would only make it bigger.'
+    : 'Tags, cover art and lyrics are carried over to the new file.';
+}
+
+async function startConvert() {
+  const btn = $('convert-start-btn');
+  const options = {
+    format: $('convert-format').value,
+    bitrate: $('convert-bitrate').value,
+    keep_original: $('convert-keep').checked,
+    max_bit_depth: parseInt($('convert-depth').value) || 0,
+    max_sample_rate: parseInt($('convert-rate').value) || 0,
+  };
+  btn.disabled = true;
+  btn.textContent = `Converting 0/${convertPaths.length}…`;
+  const res = await window.pywebview?.api?.convert_local_files?.(convertPaths, options);
+  if (!res || res.status !== 'started') {
+    btn.disabled = false;
+    btn.textContent = 'Convert';
+    toastMgr.error(res?.error || 'Could not start the conversion.');
+  }
+}
+
+window.app_local_convert_progress = function(payload) {
+  $('convert-start-btn').textContent = `Converting ${payload.done}/${payload.total}…`;
+  const last = payload.last || {};
+  if (!last.success) {
+    toastMgr.error(`${(last.file_path || '').split(/[\\/]/).pop()}: ${last.error}`);
+  }
+};
+
+window.app_local_convert_finished = function(payload) {
+  const btn = $('convert-start-btn');
+  btn.disabled = false;
+  btn.textContent = 'Convert';
+  closeConvertDialog();
+  const results = payload.results || [];
+  const ok = results.filter(r => r.success);
+  // Point each converted row at its new file so a follow-up "Apply tags"
+  // does not aim at a source that has just been removed.
+  ok.forEach(r => {
+    const item = localScanData.find(e => e.file_path === r.file_path);
+    if (item && r.output_path) item.file_path = r.output_path;
+  });
+  if (ok.length) renderLocalTracks(), updateLocalSelection();
+  if (ok.length) toastMgr.success(`Converted ${ok.length} of ${results.length} file(s).`);
+};
+
+window.app_local_convert_error = function(err) {
+  const btn = $('convert-start-btn');
+  btn.disabled = false;
+  btn.textContent = 'Convert';
+  toastMgr.error('Conversion failed: ' + err);
+};
+
+// ── Tag editor ──────────────────────────────────────────────────────────────
+const TAG_LABELS = {
+  TITLE: 'Title', ARTIST: 'Artist', ALBUM: 'Album', ALBUMARTIST: 'Album artist',
+  DATE: 'Date', GENRE: 'Genre', TRACKNUMBER: 'Track #', DISCNUMBER: 'Disc #',
+  COMPOSER: 'Composer', ISRC: 'ISRC', COPYRIGHT: 'Copyright',
+};
+let tagEditState = null;
+
+async function openTagEditor(index) {
+  const item = localScanData[index];
+  if (!item) return;
+  const res = await window.pywebview?.api?.read_file_tags?.(item.file_path);
+  if (!res || res.status !== 'ok') {
+    toastMgr.error(res?.error || 'Could not read the tags.');
+    return;
+  }
+  tagEditState = { path: item.file_path, index, cover: undefined, removeCover: false, original: res.tags, lyrics: res.lyrics };
+  $('tagedit-file').textContent = item.file_path.split(/[\\/]/).pop();
+  $('tagedit-fields').innerHTML = res.fields.map(f => `
+    <div style="${f === 'TITLE' || f === 'COPYRIGHT' ? 'grid-column:1/-1;' : ''}">
+      <label for="tagedit-${f}" style="font-size:12px;color:var(--muted);">${escHtml(TAG_LABELS[f] || f)}</label>
+      <input type="text" id="tagedit-${f}" data-tag="${f}" style="width:100%;margin-top:3px;" value="${escHtml(res.tags[f] || '')}">
+    </div>`).join('');
+  $('tagedit-lyrics').value = res.lyrics || '';
+  $('tagedit-translation-wrap').classList.add('hidden');
+  $('tagedit-translation').value = '';
+  await ensureTranslationLanguages();
+  const img = $('tagedit-cover');
+  img.src = res.cover || '';
+  img.style.visibility = res.cover ? 'visible' : 'hidden';
+  $('tagedit-modal').classList.remove('hidden');
+}
+
+function closeTagEditor() { $('tagedit-modal').classList.add('hidden'); tagEditState = null; }
+
+function pickTagEditorCover(input) {
+  const file = input.files && input.files[0];
+  if (!file || !tagEditState) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    tagEditState.cover = reader.result;
+    tagEditState.removeCover = false;
+    $('tagedit-cover').src = reader.result;
+    $('tagedit-cover').style.visibility = 'visible';
+  };
+  reader.readAsDataURL(file);
+  input.value = '';
+}
+
+function removeTagEditorCover() {
+  if (!tagEditState) return;
+  tagEditState.cover = undefined;
+  tagEditState.removeCover = true;
+  $('tagedit-cover').style.visibility = 'hidden';
+}
+
+async function saveTagEditor() {
+  if (!tagEditState) return;
+  const edits = {};
+  document.querySelectorAll('#tagedit-fields [data-tag]').forEach(el => {
+    const key = el.dataset.tag;
+    if (el.value.trim() !== (tagEditState.original[key] || '')) edits[key] = el.value;
+  });
+  const lyricsNow = $('tagedit-lyrics').value;
+  const lyrics = lyricsNow !== (tagEditState.lyrics || '') ? lyricsNow : null;
+  if (!Object.keys(edits).length && lyrics === null && !tagEditState.cover && !tagEditState.removeCover) {
+    closeTagEditor();
+    return;
+  }
+  const btn = $('tagedit-save-btn');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  const res = await window.pywebview?.api?.save_file_tags?.(
+    tagEditState.path, edits, lyrics, tagEditState.cover || '', tagEditState.removeCover);
+  btn.disabled = false;
+  btn.textContent = 'Save';
+  if (!res || res.status !== 'ok') {
+    toastMgr.error(res?.error || 'Could not save the tags.');
+    return;
+  }
+  const item = localScanData[tagEditState.index];
+  if (item) {
+    if ('TITLE' in edits) item.old_title = edits.TITLE;
+    if ('ARTIST' in edits) item.old_artist = edits.ARTIST;
+    if ('ALBUM' in edits) item.old_album = edits.ALBUM;
+    if (tagEditState.cover) item.old_cover_base64 = tagEditState.cover;
+    if (tagEditState.removeCover) item.old_cover_base64 = '';
+  }
+  toastMgr.success('Tags saved.');
+  closeTagEditor();
+  renderLocalTracks();
+  updateLocalSelection();
+}
+
+// ── Audio analysis ──────────────────────────────────────────────────────────
+async function openAnalyze(index) {
+  const item = localScanData[index];
+  if (!item) return;
+  $('analyze-file').textContent = item.file_path.split(/[\\/]/).pop();
+  $('analyze-info').innerHTML = '';
+  $('analyze-img').classList.add('hidden');
+  $('analyze-status').textContent = 'Drawing the spectrogram…';
+  $('analyze-status').classList.remove('hidden');
+  $('analyze-modal').classList.remove('hidden');
+  const res = await window.pywebview?.api?.analyze_audio_file?.(item.file_path);
+  if ($('analyze-modal').classList.contains('hidden')) return;
+  if (!res || res.status !== 'ok') {
+    $('analyze-status').textContent = res?.error || 'Analysis failed.';
+    return;
+  }
+  const i = res.info || {};
+  const mb = i.size_bytes ? (i.size_bytes / 1048576).toFixed(1) + ' MB' : '';
+  const dur = i.duration_s ? `${Math.floor(i.duration_s / 60)}:${String(Math.round(i.duration_s % 60)).padStart(2, '0')}` : '';
+  const facts = [
+    ['Format', i.format], ['Sample rate', i.sample_rate ? (i.sample_rate / 1000) + ' kHz' : ''],
+    ['Bit depth', i.bit_depth ? i.bit_depth + '-bit' : ''], ['Channels', i.channels],
+    ['Bitrate', i.bitrate ? Math.round(i.bitrate / 1000) + ' kbps' : ''], ['Duration', dur], ['Size', mb],
+  ].filter(f => f[1]);
+  $('analyze-info').innerHTML = facts.map(([k, v]) =>
+    `<span><span style="color:var(--muted);">${escHtml(k)}</span> ${escHtml(String(v))}</span>`).join('');
+  $('analyze-img').src = res.spectrogram;
+  $('analyze-img').classList.remove('hidden');
+  $('analyze-status').classList.add('hidden');
+}
+
+function closeAnalyze() { $('analyze-modal').classList.add('hidden'); }
+
+// ── Library reorganiser ─────────────────────────────────────────────────────
+let reorgPlan = null;
+let reorgRoot = '';
+
+async function openReorganizeDialog() {
+  reorgRoot = ($('local-path-input')?.value || '').trim();
+  if (!reorgRoot) { toastMgr.info('Scan a folder first.'); return; }
+  const defaults = await window.pywebview?.api?.get_reorganize_defaults?.();
+  if (!defaults) { toastMgr.error('Could not load the organizer.'); return; }
+  if (!$('reorg-template').value) $('reorg-template').value = defaults.template;
+  $('reorg-hint').textContent = 'Placeholders: ' + defaults.placeholders.map(p => '{' + p + '}').join(' ');
+  $('reorg-root').textContent = reorgRoot;
+  invalidateReorganizePlan();
+  $('reorg-modal').classList.remove('hidden');
+}
+
+function closeReorganize() { $('reorg-modal').classList.add('hidden'); }
+
+function invalidateReorganizePlan() {
+  reorgPlan = null;
+  $('reorg-apply-btn').disabled = true;
+  $('reorg-summary').textContent = '';
+  $('reorg-list').innerHTML = '';
+}
+
+async function previewReorganize() {
+  const btn = $('reorg-preview-btn');
+  btn.disabled = true;
+  const res = await window.pywebview?.api?.plan_library_reorganize?.(reorgRoot, $('reorg-template').value);
+  btn.disabled = false;
+  if (!res || res.status !== 'ok') {
+    $('reorg-summary').textContent = res?.error || 'Could not build the plan.';
+    return;
+  }
+  reorgPlan = res.moves;
+  const count = s => reorgPlan.filter(m => m.status === s).length;
+  $('reorg-summary').textContent =
+    `${count('move')} to move · ${count('same')} already in place · ${count('conflict')} skipped (destination exists)`;
+  const rel = p => p.startsWith(reorgRoot) ? p.slice(reorgRoot.length).replace(/^[\\/]/, '') : p;
+  $('reorg-list').innerHTML = reorgPlan.filter(m => m.status !== 'same').slice(0, 300).map(m =>
+    `<div style="${m.status === 'conflict' ? 'color:var(--red);' : ''}">${escHtml(rel(m.src))} → ${escHtml(rel(m.dest))}</div>`).join('');
+  $('reorg-apply-btn').disabled = count('move') === 0;
+}
+
+async function applyReorganize() {
+  if (!reorgPlan) return;
+  const btn = $('reorg-apply-btn');
+  btn.disabled = true;
+  btn.textContent = 'Moving…';
+  const res = await window.pywebview?.api?.apply_library_reorganize?.(reorgRoot, reorgPlan);
+  btn.textContent = 'Move files';
+  if (!res || res.status !== 'ok') {
+    toastMgr.error(res?.error || 'Could not move the files.');
+    return;
+  }
+  const ok = res.results.filter(r => r.success);
+  res.results.filter(r => !r.success).slice(0, 3).forEach(r => toastMgr.error(`${r.src.split(/[\\/]/).pop()}: ${r.error}`));
+  ok.forEach(r => {
+    const item = localScanData.find(e => e.file_path === r.src);
+    if (item) item.file_path = r.dest;
+  });
+  toastMgr.success(`Moved ${ok.length} file(s).`);
+  closeReorganize();
+  renderLocalTracks();
+  updateLocalSelection();
+}
+
+// ── Weekly releases (Following page) ────────────────────────────────────────
+let weeklyLoading = false;
+
+async function loadWeeklyReleases(refresh) {
+  const status = $('weekly-status');
+  const list = $('weekly-list');
+  if (!status || !list || weeklyLoading) return;
+  if (!window.pywebview?.api?.get_weekly_releases) {
+    status.textContent = 'Not available in this build.';
+    return;
+  }
+  weeklyLoading = true;
+  $('weekly-refresh-btn').disabled = true;
+  status.textContent = 'Checking the artists you follow…';
+  list.innerHTML = '';
+  try {
+    const res = await window.pywebview.api.get_weekly_releases(parseInt($('weekly-days').value) || 7, !!refresh);
+    if (!res || res.status !== 'ok') {
+      status.textContent = res?.error || 'Could not load the releases.';
+      return;
+    }
+    if (!res.followed) {
+      status.textContent = 'Follow an artist below to see their new releases here.';
+      return;
+    }
+    status.textContent = res.releases.length
+      ? `${res.releases.length} release(s) from ${res.followed} followed artist(s).`
+      : `Nothing new from the ${res.followed} artist(s) you follow in this period.`;
+    if (res.unavailable?.length) {
+      status.textContent += ` Could not check: ${res.unavailable.join(', ')}.`;
+    }
+    list.innerHTML = res.releases.map((r, i) => `
+      <div class="weekly-row">
+        <div class="weekly-day">${escHtml(r.day)}</div>
+        <div class="weekly-info">
+          <div class="weekly-title">${escHtml(r.title || '—')}</div>
+          <div class="weekly-artist">${escHtml(r.artist)} · ${escHtml(r.type)}</div>
+        </div>
+        <button type="button" class="act-btn secondary" style="padding:5px 12px;font-size:12px;" data-weekly="${i}">Open</button>
+      </div>`).join('');
+    list.querySelectorAll('[data-weekly]').forEach(btn => btn.addEventListener('click', () => {
+      const rel = res.releases[parseInt(btn.dataset.weekly)];
+      if (rel) { switchView('home'); goToUrl(rel.url); }
+    }));
+  } catch (e) {
+    status.textContent = 'Could not load the releases.';
+  } finally {
+    weeklyLoading = false;
+    $('weekly-refresh-btn').disabled = false;
+  }
+}
+
+// ── Artist concerts ─────────────────────────────────────────────────────────
+let g_artistConcerts = [];
+
+function renderConcertsButton(artistName) {
+  document.getElementById('concerts-btn')?.remove();
+  if (!g_artistConcerts.length) return;
+  const actions = $('album-actions');
+  if (!actions) return;
+  const btn = document.createElement('button');
+  btn.id = 'concerts-btn';
+  btn.type = 'button';
+  btn.className = 'act-btn secondary';
+  btn.title = 'Upcoming concerts';
+  btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Concerts (${g_artistConcerts.length})`;
+  btn.onclick = () => openConcerts($('album-title')?.textContent?.trim());
+  actions.appendChild(btn);
+}
+
+// The venue's own wall-clock date and time, not the viewer's.
+function concertWhen(c) {
+  const hasZone = c.has_time && c.time_zone && /(Z|[+-]\d{2}:?\d{2})$/.test(c.start_at);
+  const d = new Date(c.has_time ? c.start_at : c.start_at + 'T00:00:00Z');
+  try {
+    const opts = { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' };
+    if (c.has_time) { opts.hour = '2-digit'; opts.minute = '2-digit'; }
+    opts.timeZone = hasZone ? c.time_zone : (c.has_time ? undefined : 'UTC');
+    return new Intl.DateTimeFormat(undefined, opts).format(d);
+  } catch (e) {
+    return c.start_at;
+  }
+}
+
+function concertIcs(c, artist) {
+  const esc = t => String(t || '').replace(/[\\,;]/g, m => '\\' + m).replace(/\n/g, '\\n');
+  const fmt = dt => dt.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Mornye//Concerts//EN', 'BEGIN:VEVENT',
+    `UID:${esc(c.id)}@mornye`, `DTSTAMP:${fmt(new Date())}`];
+  if (c.has_time) {
+    const start = new Date(c.start_at);
+    lines.push(`DTSTART:${fmt(start)}`, `DTEND:${fmt(new Date(start.getTime() + 3 * 3600e3))}`);
+  } else {
+    const day = c.start_at.replace(/-/g, '');
+    const next = new Date(c.start_at + 'T00:00:00Z'); next.setUTCDate(next.getUTCDate() + 1);
+    lines.push(`DTSTART;VALUE=DATE:${day}`, `DTEND;VALUE=DATE:${next.toISOString().slice(0, 10).replace(/-/g, '')}`);
+  }
+  lines.push(`SUMMARY:${esc(artist || 'Concert')}`, `LOCATION:${esc([c.venue, c.location].filter(Boolean).join(', '))}`);
+  if (c.url) lines.push(`URL:${c.url}`);
+  lines.push('END:VEVENT', 'END:VCALENDAR');
+  return lines.join('\r\n');
+}
+
+function downloadConcertIcs(index) {
+  const c = g_artistConcerts[index];
+  if (!c) return;
+  const blob = new Blob([concertIcs(c, $('album-title')?.textContent?.trim())], { type: 'text/calendar' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'concert.ics';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function openConcerts(artistName) {
+  $('concerts-title').textContent = `Concerts${artistName ? ' — ' + artistName : ''}`;
+  $('concerts-list').innerHTML = g_artistConcerts.map((c, i) => `
+    <div class="weekly-row">
+      <div class="weekly-info">
+        <div class="weekly-title">${escHtml(concertWhen(c))}</div>
+        <div class="weekly-artist">${escHtml([c.venue, c.location].filter(Boolean).join(' · '))}</div>
+      </div>
+      <button type="button" class="act-btn secondary" style="padding:5px 12px;font-size:12px;" onclick="downloadConcertIcs(${i})" title="Download a calendar event">Add to calendar</button>
+      ${c.url ? `<button type="button" class="act-btn secondary" style="padding:5px 12px;font-size:12px;" onclick="openExternalUrl(${escHtml(JSON.stringify(c.url))})">Details</button>` : ''}
+    </div>`).join('');
+  $('concerts-modal').classList.remove('hidden');
+}
+
+function closeConcerts() { $('concerts-modal').classList.add('hidden'); }
+
+function openExternalUrl(url) {
+  const safe = httpUrlOrNull(url);
+  if (!safe) return;
+  if (window.pywebview?.api?.open_url) window.pywebview.api.open_url(safe);
+  else window.open(safe, '_blank', 'noopener');
+}
+
+// ── Lyrics translation ──────────────────────────────────────────────────────
+let aiConfig = null;
+
+async function ensureTranslationLanguages() {
+  const sel = $('tagedit-lang');
+  if (!sel || sel.options.length) return;
+  aiConfig = await window.pywebview?.api?.get_lyrics_ai_config?.();
+  if (!aiConfig) return;
+  sel.innerHTML = aiConfig.languages.map(l => `<option value="${escHtml(l.code)}">${escHtml(l.name)}</option>`).join('');
+  const prefer = (navigator.language || 'en').slice(0, 2);
+  if ([...sel.options].some(o => o.value === prefer)) sel.value = prefer;
+}
+
+async function translateTagEditorLyrics() {
+  const lyrics = $('tagedit-lyrics').value;
+  if (!lyrics.trim()) { toastMgr.info('There are no lyrics to translate.'); return; }
+  aiConfig = await window.pywebview?.api?.get_lyrics_ai_config?.();
+  if (!aiConfig?.configured) { toastMgr.info('Set up an AI provider first.'); openAiConfig(); return; }
+  const btn = $('tagedit-translate-btn');
+  btn.disabled = true;
+  btn.textContent = 'Translating…';
+  const res = await window.pywebview.api.translate_lyrics(lyrics, $('tagedit-lang').value);
+  btn.disabled = false;
+  btn.textContent = 'Translate';
+  if (!res || res.status !== 'ok') { toastMgr.error(res?.error || 'Translation failed.'); return; }
+  $('tagedit-translation').value = res.lyrics;
+  $('tagedit-translation-wrap').classList.remove('hidden');
+}
+
+async function saveTagEditorTranslation() {
+  if (!tagEditState) return;
+  const res = await window.pywebview.api.save_translated_lyrics(
+    tagEditState.path, $('tagedit-lang').value, $('tagedit-translation').value);
+  if (res?.status === 'ok') toastMgr.success('Saved ' + res.path.split(/[\\/]/).pop());
+  else toastMgr.error(res?.error || 'Could not save the translation.');
+}
+
+async function openAiConfig() {
+  aiConfig = await window.pywebview?.api?.get_lyrics_ai_config?.();
+  if (!aiConfig) return;
+  $('aiconf-provider').innerHTML = aiConfig.providers.map(p =>
+    `<option value="${escHtml(p.id)}">${escHtml(p.label)}</option>`).join('');
+  $('aiconf-provider').value = aiConfig.provider;
+  $('aiconf-model').value = aiConfig.model;
+  $('aiconf-url').value = aiConfig.base_url;
+  $('aiconf-key').value = '';
+  updateAiConfigFields();
+  $('aiconf-modal').classList.remove('hidden');
+}
+
+function closeAiConfig() { $('aiconf-modal').classList.add('hidden'); }
+
+function updateAiConfigFields() {
+  const p = aiConfig?.providers.find(x => x.id === $('aiconf-provider').value);
+  if (!p) return;
+  $('aiconf-model').placeholder = p.model || 'model name';
+  $('aiconf-url-wrap').classList.toggle('hidden', p.id !== 'custom');
+  $('aiconf-key-note').textContent = aiConfig.has_key
+    ? 'A key is stored. Leave this empty to keep it.'
+    : (p.key ? 'Required.' : 'Optional for a local server.');
+}
+
+async function saveAiConfig() {
+  const key = $('aiconf-key').value;
+  const res = await window.pywebview.api.save_lyrics_ai_config(
+    $('aiconf-provider').value, $('aiconf-model').value, $('aiconf-url').value,
+    key ? key : null);
+  if (res?.status === 'ok') {
+    toastMgr.success(res.configured ? 'AI provider saved.' : 'Saved — still missing a key or model.');
+    closeAiConfig();
+  } else {
+    toastMgr.error(res?.error || 'Could not save the settings.');
+  }
+}
+
+// ── Player ──────────────────────────────────────────────────────────────────
+// Plays the file as stored: no EQ, no normalisation, no Web Audio graph, so the
+// bytes reach the output untouched. Formats the window cannot decode are played
+// from a lossless FLAC copy made by the backend (see core/playback.py).
+let playerQueue = [];
+let playerIndex = -1;       // index into playerQueue of the track that is loaded
+let playerOrder = [];       // indices into playerQueue, in the order they play
+let playerPos = -1;         // where playerIndex sits in playerOrder
+let playerShuffle = false;
+let playerRepeat = 'off';   // 'off' | 'all' | 'one'
+let playerToken = 0;
+let playerSeeking = false;
+
+try {
+  const saved = JSON.parse(localStorage.getItem('mornye-player-modes') || '{}');
+  playerShuffle = !!saved.shuffle;
+  if (['off', 'all', 'one'].includes(saved.repeat)) playerRepeat = saved.repeat;
+} catch (e) { /* a per-browser convenience only */ }
+
+function fmtTime(sec) {
+  if (!Number.isFinite(sec) || sec < 0) return '0:00';
+  return `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
+}
+
+// The play order: the queue as it is, or — with shuffle — a random permutation
+// with the chosen track first, so shuffling never skips the one you picked.
+function playerBuildOrder(first) {
+  const idx = playerQueue.map((_, i) => i);
+  if (playerShuffle) {
+    for (let i = idx.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [idx[i], idx[j]] = [idx[j], idx[i]];
+    }
+    if (first != null && first >= 0) {
+      const at = idx.indexOf(first);
+      [idx[0], idx[at]] = [idx[at], idx[0]];
+    } else if (idx.length > 1 && idx[0] === playerIndex) {
+      [idx[0], idx[1]] = [idx[1], idx[0]];       // a new round must not open with the last track
+    }
+  }
+  playerOrder = idx;
+  playerPos = first != null && first >= 0 ? idx.indexOf(first) : 0;
+}
+
+function updatePlayerModes() {
+  document.querySelectorAll('#pl-shuffle, #np-shuffle').forEach(b => b.classList.toggle('on', playerShuffle));
+  document.querySelectorAll('#pl-repeat, #np-repeat').forEach(b => {
+    b.dataset.mode = playerRepeat;
+    b.classList.toggle('on', playerRepeat !== 'off');
+    b.title = { off: 'Repeat: off', all: 'Repeat all', one: 'Repeat this track' }[playerRepeat];
+  });
+  try { localStorage.setItem('mornye-player-modes', JSON.stringify({ shuffle: playerShuffle, repeat: playerRepeat })); } catch (e) {}
+}
+
+function playerToggleShuffle() {
+  playerShuffle = !playerShuffle;
+  if (playerQueue.length) playerBuildOrder(playerIndex >= 0 ? playerIndex : null);
+  updatePlayerModes();
+  if (!$('np-queue').classList.contains('hidden')) npRenderQueue();
+}
+
+function playerCycleRepeat() {
+  playerRepeat = { off: 'all', all: 'one', one: 'off' }[playerRepeat];
+  updatePlayerModes();
+}
+
+// `shuffle`: true/false sets the mode (the Play all / Shuffle buttons); leave
+// it undefined to keep whatever the player is set to (clicking a row).
+function startPlayback(items, index, shuffle, openView) {
+  if (!items.length) return;
+  playerQueue = items;
+  if (shuffle === true || shuffle === false) playerShuffle = shuffle;
+  updatePlayerModes();
+  const first = shuffle === true ? Math.floor(Math.random() * items.length) : index;
+  playerIndex = -1;
+  playerBuildOrder(first);
+  if (openView) openNowPlaying();
+  loadPlayerTrack(first);
+}
+
+function playLocal(index) {
+  const items = localScanData.map(e => ({
+    path: e.file_path,
+    title: e.old_title || e.guessed_title || e.file_path.split(/[\\/]/).pop(),
+    artist: e.old_artist || e.guessed_artist || '',
+  }));
+  startPlayback(items, index, undefined, true);
+}
+
+async function loadPlayerTrack(index) {
+  const item = playerQueue[index];
+  if (!item) return;
+  playerIndex = index;
+  if (playerOrder.length !== playerQueue.length) playerBuildOrder(index);
+  else playerPos = playerOrder.indexOf(index);
+  const token = ++playerToken;
+  const audio = $('player-audio');
+  $('player-bar').classList.remove('hidden');
+  document.body.classList.add('has-player');
+  $('pl-title').textContent = item.artist ? `${item.title} — ${item.artist}` : item.title;
+  $('pl-quality').textContent = 'Preparing…';
+  markPlayingRow();
+  audio.pause();
+  const res = await window.pywebview?.api?.prepare_playback?.(item.path, !window.__mornyeWeb);
+  if (token !== playerToken) return; // another track was chosen meanwhile
+  if (!res || res.status !== 'ok') {
+    $('pl-quality').textContent = 'Cannot play this file';
+    toastMgr.error(res?.error || 'Could not play the file.');
+    return;
+  }
+  audio.src = res.url || ('/api/media?path=' + encodeURIComponent(res.path));
+  $('pl-quality').textContent = res.quality;
+  fillNowPlaying(item, res);
+  try { await audio.play(); } catch (e) { /* autoplay blocked: the play button works */ }
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.metadata = new MediaMetadata({ title: item.title, artist: item.artist, album: item.album || '' });
+    navigator.mediaSession.setActionHandler('previoustrack', () => playerPrev());
+    navigator.mediaSession.setActionHandler('nexttrack', () => playerNext());
+  }
+}
+
+function playerToggle() {
+  const audio = $('player-audio');
+  if (!audio.src) return;
+  audio.paused ? audio.play() : audio.pause();
+}
+
+// `auto` is true only when a track ended by itself: then the end of the queue
+// stops the music, while the Next button at the end simply does nothing.
+function playerNext(auto) {
+  if (!playerOrder.length) return;
+  if (playerPos + 1 < playerOrder.length) return loadPlayerTrack(playerOrder[playerPos + 1]);
+  if (playerRepeat === 'all') {
+    if (playerShuffle) playerBuildOrder(null);
+    return loadPlayerTrack(playerOrder[0]);
+  }
+}
+function playerEnded() {
+  const audio = $('player-audio');
+  if (playerRepeat === 'one') { audio.currentTime = 0; audio.play(); return; }
+  playerNext(true);
+}
+function playerPrev() {
+  const audio = $('player-audio');
+  if (audio.currentTime > 3 || !playerOrder.length) { audio.currentTime = 0; return; }
+  if (playerPos > 0) return loadPlayerTrack(playerOrder[playerPos - 1]);
+  if (playerRepeat === 'all') return loadPlayerTrack(playerOrder[playerOrder.length - 1]);
+  audio.currentTime = 0;
+}
+function closePlayer() {
+  playerToken++;
+  const audio = $('player-audio');
+  audio.pause();
+  audio.removeAttribute('src');
+  audio.load();
+  $('player-bar').classList.add('hidden');
+  document.body.classList.remove('has-player');
+  playerIndex = -1;
+  markPlayingRow();
+}
+
+(function initPlayer() {
+  const audio = $('player-audio');
+  if (!audio) return;
+  const seek = $('pl-seek');
+  audio.addEventListener('timeupdate', () => {
+    $('pl-cur').textContent = fmtTime(audio.currentTime);
+    if (!playerSeeking && audio.duration) seek.value = Math.round(audio.currentTime / audio.duration * 1000);
+  });
+  audio.addEventListener('loadedmetadata', () => { $('pl-dur').textContent = fmtTime(audio.duration); });
+  audio.addEventListener('ended', playerEnded);
+  const icon = $('pl-play-icon');
+  const PLAY = '<path d="M8 5v14l11-7z"/>', PAUSE = '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>';
+  audio.addEventListener('play', () => { icon.innerHTML = PAUSE; });
+  audio.addEventListener('pause', () => { icon.innerHTML = PLAY; });
+  audio.addEventListener('error', () => {
+    if (audio.getAttribute('src')) $('pl-quality').textContent = 'This window cannot decode the file';
+  });
+  seek.addEventListener('input', () => { playerSeeking = true; });
+  seek.addEventListener('change', () => {
+    if (audio.duration) audio.currentTime = seek.value / 1000 * audio.duration;
+    playerSeeking = false;
+  });
+  $('pl-vol').addEventListener('input', e => { audio.volume = e.target.value / 100; $('np-vol').value = e.target.value; });
+  updatePlayerModes();
+  $('np-vol').addEventListener('input', e => { audio.volume = e.target.value / 100; $('pl-vol').value = e.target.value; });
+
+  // Full-screen view: same audio element, its own controls.
+  const npSeek = $('np-seek');
+  const npIcon = $('np-play-icon');
+  audio.addEventListener('timeupdate', () => {
+    $('np-cur').textContent = fmtTime(audio.currentTime);
+    $('np-rem').textContent = '-' + fmtTime((audio.duration || 0) - audio.currentTime);
+    if (!playerSeeking && audio.duration) npSeek.value = Math.round(audio.currentTime / audio.duration * 1000);
+    npSyncLyrics(audio.currentTime);
+  });
+  audio.addEventListener('play', () => { npIcon.innerHTML = PAUSE; npStartTick(); });
+  audio.addEventListener('pause', () => { npIcon.innerHTML = PLAY; });
+  npSeek.addEventListener('input', () => { playerSeeking = true; });
+  npSeek.addEventListener('change', () => {
+    if (audio.duration) audio.currentTime = npSeek.value / 1000 * audio.duration;
+    playerSeeking = false;
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !$('np-view').classList.contains('hidden')) closeNowPlaying();
+  });
+})();
+
+// ── Now playing: cover, synced lyrics, queue ────────────────────────────────
+let npLines = [];       // [{t: seconds|null, text}]
+let npSynced = false;
+let npWordSynced = false;
+let npActive = -1;
+
+function openNowPlaying() {
+  $('np-view').classList.remove('hidden');
+  npStartTick();
+  if (npLines.length) { npLayoutLyrics(); NP.focus = -2; NP.first = true; npUpdate($('player-audio').currentTime, true); }
+}
+function closeNowPlaying() { $('np-view').classList.add('hidden'); }
+
+function npShow(which) {
+  $('np-lyrics').classList.toggle('hidden', which !== 'lyrics');
+  $('np-queue').classList.toggle('hidden', which !== 'queue');
+  $('np-tab-lyrics').classList.toggle('active', which === 'lyrics');
+  $('np-tab-queue').classList.toggle('active', which === 'queue');
+  if (which === 'queue') npRenderQueue();
+}
+
+// Lyrics in any LRC flavour:
+//   [mm:ss.xx]text                      line-synced
+//   [mm:ss.xx]v1:<t>Word <t_end><t>Next  enhanced (word-by-word), "v1:/v2:" is
+//                                         the singer, as written by Apple/lrc.red
+//   [bg:(backing vocals)]               attached to the line before it
+//   [x-translation:N:...] [x-romaji:N:...]  optional extra line under line N
+// A tag between two words is both the end of the first and the start of the
+// second; when there are two (end, then start) the pair can differ by a gap.
+function parseLyrics(text) {
+  const WORD_SPLIT = /(<\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?>)/;
+  const WORD_TS = /<(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?>/;
+  const LEAD_TS = /^((?:\[\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?\]\s*)+)/;
+  const ONE_TS = /\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]/g;
+  const VOICE = /^((?:\s*<[^>]*>)*)\s*(v[1-9]\d*):[ \t]*/i;
+  const ID_TAG = /^\[(ti|ar|al|by|offset|length|re|ve|tool|au|la|encoder|instrumental):.*\]$/i;
+  const SUPP = /^\[x-(romaji-words|romaji|translation):(\d+):([^\]]*)\]$/i;
+  const BG = /^\[bg:(.*)\]$/i;
+  const sec = m => Number(m[1]) * 60 + Number(m[2]) + (m[3] ? Number('0.' + m[3]) : 0);
+  const stripWordTags = t => t.replace(/<\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?>/g, '').replace(/\s+/g, ' ').trim();
+
+  const synced = [], plain = [];
+  let last = null;
+  const supplements = [];
+  for (const raw of String(text || '').replace(/\r/g, '').split('\n')) {
+    const line = raw.trim();
+    if (!line || ID_TAG.test(line)) continue;
+    let m = SUPP.exec(line);
+    if (m) { supplements.push({ idx: Number(m[2]), kind: m[1].toLowerCase(), text: m[3].trim() }); continue; }
+    m = BG.exec(line);
+    if (m) { if (last) last.bg = stripWordTags(m[1]); continue; }
+
+    const lead = LEAD_TS.exec(line);
+    if (!lead) { plain.push({ t: null, text: stripWordTags(line), words: null, voice: 1 }); continue; }
+    const stamps = [...lead[1].matchAll(ONE_TS)].map(sec);
+    let body = line.slice(lead[0].length);
+    let voice = 1;
+    const v = VOICE.exec(body);
+    if (v) {
+      voice = Number(v[2].slice(1)) || 1;
+      body = v[1].replace(/\s+/g, '') + body.slice(v[0].length);
+    }
+
+    // Words with their own times, if the line carries any.
+    let words = null;
+    if (WORD_TS.test(body)) {
+      words = [];
+      let run = [];
+      let prev = null;
+      for (const part of body.split(WORD_SPLIT)) {
+        const tag = WORD_TS.exec(part);
+        if (tag && part.startsWith('<')) { run.push(sec(tag)); continue; }
+        if (!part) continue;
+        if (!part.trim()) { if (prev) prev.text += part; continue; }
+        const start = run.length ? run[run.length - 1] : (prev ? (prev.e ?? prev.s) : stamps[0]);
+        if (prev && prev.e == null) prev.e = run.length ? run[0] : start;
+        prev = { s: start, e: null, text: words.length ? part : part.replace(/^\s+/, '') };
+        words.push(prev);
+        run = [];
+      }
+      if (prev && prev.e == null) prev.e = run.length ? run[0] : prev.s + 0.6;
+      if (!words.length) words = null;
+    }
+    const lineText = words ? words.map(w => w.text).join('').trim() : stripWordTags(body);
+    for (const t of stamps) {
+      const entry = { t, text: lineText, words, voice, bg: '', tr: '', rom: '' };
+      synced.push(entry);
+      last = entry;
+    }
+  }
+  if (synced.length) {
+    supplements.forEach(sup => {
+      const target = synced[sup.idx];
+      if (!target) return;
+      if (sup.kind === 'translation') target.tr = sup.text;
+      else if (sup.kind === 'romaji') target.rom = sup.text;
+    });
+    return { lines: synced.sort((a, b) => a.t - b.t), synced: true, wordSynced: synced.some(l => l.words) };
+  }
+  while (plain.length && !plain[0].text) plain.shift();
+  return { lines: plain, synced: false, wordSynced: false };
+}
+
+function npTechLabel(res) {
+  const i = res.info || {};
+  const parts = [(i.format || '').toUpperCase()];
+  if (i.bit_depth) parts.push(`${i.bit_depth}-bit`);
+  if (i.sample_rate) parts.push(`${i.sample_rate / 1000} kHz`);
+  if (!i.bit_depth && i.bitrate) parts.push(`${Math.round(i.bitrate / 1000)} kbps`);
+  let label = parts.filter(Boolean).join(' · ');
+  if (res.mode === 'flac-copy') label += ' · lossless copy';
+  return label;
+}
+
+function npApplyColors(src) {
+  const bg = $('np-bg');
+  if (!src) { bg.style.setProperty('--np-bg', 'linear-gradient(135deg, #5a3a3a, #2c1f1f)'); return; }
+  const img = new Image();
+  img.onload = () => {
+    try {
+      const c = document.createElement('canvas');
+      c.width = c.height = 8;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0, 8, 8);
+      const d = ctx.getImageData(0, 0, 8, 8).data;
+      let r = 0, g = 0, b = 0;
+      for (let k = 0; k < d.length; k += 4) { r += d[k]; g += d[k + 1]; b += d[k + 2]; }
+      const n = d.length / 4;
+      const tone = (f) => `rgb(${Math.round(r / n * f)}, ${Math.round(g / n * f)}, ${Math.round(b / n * f)})`;
+      bg.style.setProperty('--np-bg', `linear-gradient(135deg, ${tone(0.62)}, ${tone(0.32)})`);
+    } catch (e) { /* the default tint stays */ }
+  };
+  img.src = src;
+}
+
+function fillNowPlaying(item, res) {
+  $('np-title').textContent = res.title || item.title;
+  $('np-artist').textContent = [res.artist || item.artist, res.album].filter(Boolean).join(' · ');
+  $('np-explicit').classList.toggle('hidden', !res.explicit);
+  const cover = $('np-cover');
+  cover.parentElement.classList.toggle('empty', !res.cover);
+  cover.src = res.cover || '';
+  npApplyColors(res.cover);
+  $('np-tech').textContent = npTechLabel(res);
+  $('np-seek').value = 0;
+  $('np-cur').textContent = '0:00';
+  $('np-rem').textContent = '-0:00';
+  const parsed = parseLyrics(res.lyrics);
+  // Before the first line there is an intro: three dots stand in for it and
+  // fill up until the words start, like in the mobile app.
+  if (parsed.synced && parsed.lines.length && parsed.lines[0].t > 3) {
+    parsed.lines.unshift({ t: 0, text: '', words: null, voice: 1, bg: '', tr: '', rom: '' });
+  }
+  npLines = parsed.lines;
+  npSynced = parsed.synced;
+  npWordSynced = parsed.wordSynced;
+  npActive = -1;
+  NP.set = new Set(); NP.focus = -2; NP.first = true; NP.lastTime = 0;
+  npClearMotion();
+  const box = $('np-lyrics');
+  box.classList.toggle('plain', !npSynced);
+  box.scrollTop = 0;
+  if (!npLines.length) {
+    box.style.paddingBottom = '';
+    box.innerHTML = '<div class="np-empty">No lyrics for this track.<br><small>Save a .lrc next to the file, or add them with Edit.</small></div>';
+  } else {
+    // A line ends when its last word does, else when the next one starts.
+    npLines.forEach((l, i) => {
+      const next = npLines[i + 1];
+      l.end = l.words ? l.words[l.words.length - 1].e : (next && next.t != null ? next.t : (l.t ?? 0) + 4);
+      if (l.words && next && next.t != null && l.end > next.t + 8) l.end = next.t;
+    });
+    box.innerHTML = npLines.map((l, i) => {
+      if (npSynced && !l.text) {
+        return `<div class="np-line gap" data-i="${i}"><span class="gd"></span><span class="gd"></span><span class="gd"></span></div>`;
+      }
+      const body = l.words
+        ? l.words.map(w => {
+            const core = w.text.replace(/\s+$/, '');
+            return `<span class="w" data-s="${w.s}" data-e="${w.e}" data-t="${escHtml(core)}">${escHtml(core)}</span>${escHtml(w.text.slice(core.length))}`;
+          }).join('')
+        : escHtml(l.text);
+      const extra = (l.rom ? `<div class="np-sub">${escHtml(l.rom)}</div>` : '')
+        + (l.tr ? `<div class="np-sub">${escHtml(l.tr)}</div>` : '')
+        + (l.bg ? `<div class="np-sub bg">${escHtml(l.bg)}</div>` : '');
+      return `<div class="np-line${l.words ? ' wsync' : ''}${l.voice === 2 ? ' v2' : ''}" data-i="${i}">${body}${extra}</div>`;
+    }).join('');
+    box.querySelectorAll('.np-line').forEach(el => el.addEventListener('click', () => {
+      const l = npLines[parseInt(el.dataset.i)];
+      if (npSynced && l && l.t != null) { $('player-audio').currentTime = l.t; $('player-audio').play(); }
+    }));
+    npLayoutLyrics();
+  }
+  if (!$('np-queue').classList.contains('hidden')) npRenderQueue();
+  if (npSynced) npUpdate($('player-audio').currentTime, true);
+}
+
+// ── Lyrics engine ───────────────────────────────────────────────────────────
+// The view logic of the mobile app's lyrics screen, ported:
+//  * the sung line sits near the TOP of the pane (6% of the height, 16–48 px),
+//    not in the middle, so what comes next is what you see;
+//  * moving to a new line is a critically damped spring (550 ms, no overshoot);
+//    the rows after it follow a softer spring one after another (35 ms apart),
+//    so the list ripples instead of sliding as a block;
+//  * lines other than the sung one are defocused by distance (2.4 / 3.6 / 4.8);
+//  * a line stays in focus while the previous one is still being sung (duets);
+//  * words fill with a soft edge, rise a little, and a held word glows;
+//  * a blank stretch shows three dots that fill with the gap;
+//  * scrolling by hand pauses the follow for 4 s.
+const NP = { set: new Set(), focus: -2, first: true, lastTime: 0, userScrolling: false, userTimer: 0,
+  motion: new Map(), motionRaf: 0 };
+
+// The mobile app's defocus (2.4 / 3.6 / 4.8) scaled down: the same values
+// look much heavier at desktop size, so this keeps the depth without the smear.
+const NP_BLUR = 0.5;
+const NP_SCROLL_S = 0.55, NP_TOTAL_S = 0.8;
+const npCrit = s => 1 - (1 + 14 * s) * Math.exp(-14 * s);              // stiffness 196, ratio 1
+const npScrollCurve = u => npCrit(u * NP_SCROLL_S) / npCrit(NP_SCROLL_S);
+const npSoft = s => {                                                  // stiffness 121, ratio .85
+  if (s <= 0) return 0;
+  const w = 11, z = 0.85, wd = w * Math.sqrt(1 - z * z);
+  return 1 - Math.exp(-z * w * s) * (Math.cos(wd * s) + (z * w / wd) * Math.sin(wd * s));
+};
+const npEase = v => { const t = Math.min(1, Math.max(0, v)); return t * t * (3 - 2 * t); };
+
+function npInset() { return Math.min(48, Math.max(16, window.innerHeight * 0.06)); }
+
+function npLayoutLyrics() {
+  const box = $('np-lyrics');
+  const inset = npInset();
+  box.style.paddingTop = inset + 'px';
+  const last = box.lastElementChild;
+  // Enough room under the last line for it to reach the same focus position.
+  box.style.paddingBottom = Math.max(inset, box.clientHeight - (last ? last.offsetHeight : 0) - inset) + 'px';
+}
+window.addEventListener('resize', () => { if (!$('np-view').classList.contains('hidden')) npLayoutLyrics(); });
+
+function npClearMotion() {
+  cancelAnimationFrame(NP.motionRaf); NP.motionRaf = 0;
+  NP.motion.forEach((m, el) => { el.style.transform = ''; });
+  NP.motion.clear();
+}
+
+function npOffsetNow(m, now) {
+  const elapsed = (now - m.t0) / 1000;
+  if (m.kind === 'seek') {
+    const u = Math.min(1, elapsed / 0.22);
+    return (m.init + m.D) * Math.pow(1 - u, 3);                        // ease-out cubic
+  }
+  if (elapsed >= NP_TOTAL_S) return 0;
+  const s = npScrollCurve(Math.min(1, elapsed / NP_SCROLL_S));
+  const inherited = m.init * (1 - s);
+  let off = inherited + m.D * (1 - s);
+  if (m.k > 0) {
+    const d = Math.max(-96, Math.min(96, m.D));
+    const delay = Math.min(6, m.k) * 0.035;
+    const f = elapsed <= delay ? 0 : npSoft(elapsed - delay);
+    off = inherited + m.D * (1 - s) + d * (s - f);
+  }
+  return off;
+}
+
+function npMotionTick(now) {
+  NP.motionRaf = 0;
+  let live = false;
+  NP.motion.forEach((m, el) => {
+    const done = (now - m.t0) / 1000 >= (m.kind === 'seek' ? 0.22 : NP_TOTAL_S);
+    if (done) { el.style.transform = ''; NP.motion.delete(el); return; }
+    el.style.transform = `translateY(${npOffsetNow(m, now).toFixed(2)}px)`;
+    live = true;
+  });
+  if (live) NP.motionRaf = requestAnimationFrame(npMotionTick);
+}
+
+function npScrollToFocus(focus, mode) {
+  const box = $('np-lyrics');
+  const el = box.children[focus];
+  if (!el || !box.clientHeight) return;
+  const target = Math.max(0, Math.min(el.offsetTop - npInset(), box.scrollHeight - box.clientHeight));
+  const D = target - box.scrollTop;
+  if (mode === 'instant' || Math.abs(D) < 0.5) { box.scrollTop = target; npClearMotion(); return; }
+  const now = performance.now();
+  const rows = [...box.children].slice(Math.max(0, focus - 6), focus + 24);
+  rows.forEach((row, n) => {
+    const idx = Math.max(0, focus - 6) + n;
+    const prev = NP.motion.get(row);
+    row.style.transform = '';
+    NP.motion.set(row, { t0: now, D, k: idx - focus, init: prev ? npOffsetNow(prev, now) : 0, kind: mode });
+  });
+  box.scrollTop = target;
+  rows.forEach(row => {
+    const m = NP.motion.get(row);
+    row.style.transform = `translateY(${npOffsetNow(m, now).toFixed(2)}px)`;
+  });
+  if (!NP.motionRaf) NP.motionRaf = requestAnimationFrame(npMotionTick);
+}
+
+function npFocusFor(active, set, time) {
+  const start = npLines[active].t;
+  for (let i = active - 1; i >= 0; i--) {
+    const line = npLines[i];
+    if (line.t >= start) continue;
+    if (!line.text) return active;
+    return set.has(i) && line.end > time ? i : active;
+  }
+  return active;
+}
+
+// Lift and glow envelopes of a timed word, as in the mobile app.
+function npLift(elapsed, duration) {
+  const normal = npEase((elapsed + 180) / 720);
+  const held = Math.min(1, Math.max(0, (duration - 1000) / 1500));
+  if (held === 0) return normal;
+  const rise = npEase((elapsed - 400) / Math.min(1200, (duration - 400) * 0.6));
+  const settle = npEase((duration - elapsed) / 600);
+  return normal + 1.3 * held * rise * settle;
+}
+function npGlow(elapsed, duration) {
+  const strength = Math.min(1, Math.max(0, (duration - 900) / 1100));
+  if (strength === 0) return 0;
+  return strength * npEase((elapsed - 250) / Math.min(900, duration * 0.5)) * npEase((duration + 500 - elapsed) / 500);
+}
+
+function npUpdate(time, force) {
+  if (!npSynced || !npLines.length) return;
+  const box = $('np-lyrics');
+  const els = box.children;
+  if (els.length !== npLines.length) return;
+
+  let idx = -1;
+  for (let i = 0; i < npLines.length; i++) { if (npLines[i].t <= time) idx = i; else break; }
+  const set = new Set();
+  if (idx >= 0) {
+    set.add(idx);
+    for (let i = idx - 1; i >= 0 && i > idx - 4; i--) if (npLines[i].text && npLines[i].end > time) set.add(i);
+  }
+  const focus = idx < 0 ? -1 : npFocusFor(idx, set, time);
+  const sig = [...set].join(',');
+  if (force || focus !== NP.focus || sig !== NP.sig) {
+    const leaving = [...(NP.set || [])].filter(i => !set.has(i));
+    NP.set = set; NP.sig = sig;
+    for (let i = 0; i < els.length; i++) {
+      const active = set.has(i);
+      els[i].classList.toggle('active', active);
+      const dist = focus < 0 ? 9 : Math.abs(i - focus);
+      const blur = active || i === focus ? 0 : NP_BLUR * (focus < 0 ? 4.8 : dist === 1 ? 2.4 : dist === 2 ? 3.6 : 4.8);
+      els[i].style.setProperty('--b', blur.toFixed(2) + 'px');
+    }
+    leaving.forEach(i => els[i] && els[i].querySelectorAll('.w').forEach(w => {
+      w.style.removeProperty('--p'); w.style.removeProperty('--l'); w.style.removeProperty('--g');
+    }));
+    leaving.forEach(i => els[i] && els[i].querySelectorAll('.gd').forEach(d => { d.style.opacity = ''; d.style.transform = ''; }));
+    if (focus !== NP.focus && focus >= 0 && !NP.userScrolling) {
+      const jumped = Math.abs(time - NP.lastTime) > 0.75;
+      npScrollToFocus(focus, NP.first ? 'instant' : (jumped ? 'seek' : 'spring'));
+      NP.first = false;
+    }
+    NP.focus = focus;
+  }
+  NP.lastTime = time;
+
+  // Per-word fill, lift and glow, and the dots of a blank stretch.
+  set.forEach(i => {
+    const l = npLines[i], el = els[i];
+    if (!l.text) {
+      const span = Math.max(l.end - l.t, 0.001);
+      const p = Math.min(1, Math.max(0, (time - l.t) / span));
+      const breath = Math.sin(Math.PI * ((performance.now() % 3600) / 3600));
+      [...el.children].forEach((dot, n) => {
+        dot.style.opacity = (0.25 + 0.75 * Math.min(1, Math.max(0, p * 3 - n))).toFixed(3);
+        dot.style.transform = `scale(${(1 + 0.24 * breath * breath).toFixed(3)})`;
+      });
+      return;
+    }
+    if (!l.words) return;
+    el.querySelectorAll('.w').forEach(w => {
+      const s = Number(w.dataset.s), e = Number(w.dataset.e);
+      const dur = Math.max((e - s) * 1000, 1), elapsed = (time - s) * 1000;
+      const p = time <= s ? 0 : (time >= e ? 1 : (time - s) / Math.max(e - s, 0.05));
+      const lift = npLift(elapsed, dur), glow = npGlow(elapsed, dur);
+      w.style.setProperty('--p', p.toFixed(3));
+      w.style.setProperty('--l', (lift * 1.7).toFixed(2));
+      w.style.setProperty('--g', glow.toFixed(2));
+    });
+  });
+}
+
+(function initLyricScrollGuard() {
+  const box = $('np-lyrics');
+  if (!box) return;
+  const hold = () => {
+    NP.userScrolling = true;
+    npClearMotion();
+    clearTimeout(NP.userTimer);
+    NP.userTimer = setTimeout(() => {
+      NP.userScrolling = false;
+      NP.focus = -2;                       // follow again, with the spring
+      npUpdate($('player-audio').currentTime, true);
+    }, 4000);
+  };
+  box.addEventListener('wheel', hold, { passive: true });
+  box.addEventListener('touchmove', hold, { passive: true });
+})();
+
+// Once per frame while playing.
+let npRaf = 0;
+function npTick() {
+  npRaf = 0;
+  const audio = $('player-audio');
+  if (!audio || audio.paused || $('np-view').classList.contains('hidden')) return;
+  npUpdate(audio.currentTime);
+  npRaf = requestAnimationFrame(npTick);
+}
+function npStartTick() { if (!npRaf) npRaf = requestAnimationFrame(npTick); }
+function npSyncLyrics(time) { npUpdate(time); }
+
+function npRenderQueue() {
+  const rows = [];
+  for (let n = Math.max(0, playerPos); n < Math.min(playerOrder.length, Math.max(0, playerPos) + 200); n++) {
+    const i = playerOrder[n], q = playerQueue[i];
+    if (!q) continue;
+    rows.push(`<div class="np-queue-row${n === playerPos ? ' active' : ''}" onclick="loadPlayerTrack(${i})">
+       <span class="t">${escHtml(q.title)}</span><span class="a">${escHtml(q.artist || '')}</span></div>`);
+  }
+  $('np-queue').innerHTML = rows.join('');
+}
+
+// ── Player: browse and play a folder ────────────────────────────────────────
+const lib = { items: [], view: [], scan: null, lastScan: 0, shown: 0, loading: false, started: false, raf: 0, thumbBusy: 0 };
+const LIB_PAGE = 150;
+const LIB_FOLDERS_KEY = 'mornye-player-folders';
+
+function libRecent() {
+  try { return JSON.parse(localStorage.getItem(LIB_FOLDERS_KEY) || '[]').filter(x => typeof x === 'string'); }
+  catch (e) { return []; }
+}
+function libRemember(folder) {
+  const list = [folder, ...libRecent().filter(f => f !== folder)].slice(0, 6);
+  try { localStorage.setItem(LIB_FOLDERS_KEY, JSON.stringify(list)); } catch (e) {}
+  renderRecentFolders();
+}
+function renderRecentFolders() {
+  const box = $('player-recent');
+  const list = libRecent();
+  box.classList.toggle('hidden', list.length === 0);
+  box.innerHTML = list.length ? '<span class="share-chips-label">Recent:</span>' + list.map(f =>
+    `<button type="button" class="share-chip" data-path="${escHtml(f)}" title="${escHtml(f)}">${escHtml(f.split(/[\\/]/).filter(Boolean).pop() || f)}</button>`).join('') : '';
+  box.querySelectorAll('.share-chip').forEach(b => b.addEventListener('click', () => {
+    $('player-path-input').value = b.dataset.path;
+    scanPlayerLibrary();
+  }));
+}
+
+async function initPlayerView() {
+  if (lib.started) { markPlayingRow(); return; }
+  lib.started = true;
+  renderRecentFolders();
+  const input = $('player-path-input');
+  let folder = libRecent()[0];
+  if (!folder) {
+    try { folder = (await window.pywebview?.api?.get_library_default_folder?.())?.path; } catch (e) {}
+  }
+  if (folder) { input.value = folder; scanPlayerLibrary(); }
+}
+
+function openPlayerFolderBrowser() { openFolderBrowser('player'); }
+
+async function scanPlayerLibrary() {
+  const path = $('player-path-input').value.trim();
+  if (!path) { toastMgr.error('Enter or pick a folder first.'); return; }
+  lib.items = []; lib.view = []; lib.shown = 0; lib.scan = null; lib.loading = true;
+  $('player-list').innerHTML = '';
+  $('player-toolbar').classList.add('hidden');
+  $('player-status').textContent = 'Scanning…';
+  $('player-scan-btn').disabled = true;
+  const res = await window.pywebview?.api?.scan_music_library?.(path);
+  if (!res || res.status !== 'started') {
+    lib.loading = false;
+    $('player-scan-btn').disabled = false;
+    $('player-status').textContent = res?.error || 'Could not open that folder.';
+    return;
+  }
+  lib.lastScan = Math.max(lib.lastScan, res.scan);
+  if (lib.scan === null) lib.scan = res.scan;
+}
+
+function libAccept(p) {
+  if (lib.scan === null) { if (p.scan <= lib.lastScan) return false; lib.scan = p.scan; }
+  return p.scan === lib.scan;
+}
+
+window.app_library_scan_chunk = function(p) {
+  if (!libAccept(p)) return;
+  lib.items.push(...p.items);
+  $('player-status').textContent = `Scanning… ${p.done} / ${p.total}`;
+  if (!lib.raf) lib.raf = requestAnimationFrame(() => { lib.raf = 0; filterPlayerLibrary(true); });
+};
+
+window.app_library_scan_finished = function(p) {
+  if (!libAccept(p)) return;
+  lib.loading = false;
+  $('player-scan-btn').disabled = false;
+  filterPlayerLibrary(true);
+  if (!lib.items.length) $('player-status').textContent = 'No audio files found in this folder.';
+  else { $('player-status').textContent = ''; libRemember(p.folder); }
+};
+
+window.app_library_scan_error = function(p) {
+  if (p && p.scan != null && !libAccept(p)) return;
+  lib.loading = false;
+  $('player-scan-btn').disabled = false;
+  $('player-status').textContent = 'Scan failed: ' + (p?.error || 'unknown error');
+};
+
+function libSortKey(key) {
+  const text = v => (v || '').toString().toLowerCase();
+  switch (key) {
+    case 'title': return (a, b) => text(a.title).localeCompare(text(b.title));
+    case 'artist': return (a, b) => text(a.artist).localeCompare(text(b.artist)) || text(a.album).localeCompare(text(b.album)) || a.disc - b.disc || a.track - b.track;
+    case 'album': return (a, b) => text(a.album).localeCompare(text(b.album)) || a.disc - b.disc || a.track - b.track;
+    case 'duration': return (a, b) => b.duration_s - a.duration_s;
+    default: return null;
+  }
+}
+
+function clearPlayerSearch() {
+  $('player-search').value = '';
+  filterPlayerLibrary();
+  $('player-search').focus();
+}
+
+function filterPlayerLibrary(keepScroll) {
+  const q = ($('player-search').value || '').trim().toLowerCase();
+  $('player-search-clear').classList.toggle('hidden', !q);
+  let view = q
+    ? lib.items.filter(t => `${t.title} ${t.artist} ${t.album}`.toLowerCase().includes(q))
+    : lib.items.slice();
+  const cmp = libSortKey($('player-sort').value);
+  if (cmp) view.sort(cmp);
+  lib.view = view;
+  lib.shown = Math.min(view.length, Math.max(LIB_PAGE, keepScroll === true ? lib.shown : 0));
+  renderPlayerRows();
+  const total = view.reduce((s, t) => s + (t.duration_s || 0), 0);
+  const hours = Math.floor(total / 3600), mins = Math.round((total % 3600) / 60);
+  $('player-toolbar').classList.toggle('hidden', lib.items.length === 0);
+  $('player-count').textContent = `${view.length.toLocaleString()} track${view.length === 1 ? '' : 's'}`
+    + (total ? ` · ${hours ? hours + ' h ' : ''}${mins} min` : '');
+}
+
+function libRowHtml(t, i) {
+  const art = [t.artist, t.album].filter(Boolean).join(' — ');
+  return `<div class="pl-row" role="listitem" data-i="${i}" data-p="${escHtml(t.path)}">
+    <div class="pl-num"><span class="n">${i + 1}</span><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span></div>
+    <div class="pl-thumb"><img alt="" draggable="false"></div>
+    <div class="pl-main"><div class="pl-t">${escHtml(t.title)}</div><div class="pl-a">${escHtml(art)}</div></div>
+    <div class="pl-dur">${t.duration_s ? fmtTime(t.duration_s) : ''}</div>
+    <div class="pl-fmt">${escHtml(t.format)}</div>
+  </div>`;
+}
+
+function renderPlayerRows() {
+  const list = $('player-list');
+  list.innerHTML = lib.view.slice(0, lib.shown).map(libRowHtml).join('')
+    + (lib.shown < lib.view.length ? '<div id="player-sentinel" class="pl-more">Loading more…</div>' : '');
+  libObserve(list);
+  markPlayingRow();
+}
+
+function libAppendRows() {
+  const list = $('player-list');
+  const from = list.querySelectorAll('.pl-row').length;
+  const to = Math.min(lib.view.length, from + LIB_PAGE);
+  list.querySelector('#player-sentinel')?.remove();
+  list.insertAdjacentHTML('beforeend', lib.view.slice(from, to).map((t, k) => libRowHtml(t, from + k)).join('')
+    + (to < lib.view.length ? '<div id="player-sentinel" class="pl-more">Loading more…</div>' : ''));
+  lib.shown = to;
+  libObserve(list);
+  markPlayingRow();
+}
+
+// Thumbnails and "load more" are driven by what scrolls into view.
+const libIO = typeof IntersectionObserver === 'function' ? new IntersectionObserver(entries => {
+  entries.forEach(en => {
+    if (!en.isIntersecting) return;
+    const el = en.target;
+    if (el.id === 'player-sentinel') { libIO.unobserve(el); libAppendRows(); return; }
+    libIO.unobserve(el);
+    libLoadThumb(el);
+  });
+}, { rootMargin: '300px' }) : null;
+
+function libObserve(list) {
+  if (!libIO) return;
+  list.querySelectorAll('.pl-row:not([data-th])').forEach(r => libIO.observe(r));
+  const s = list.querySelector('#player-sentinel');
+  if (s) libIO.observe(s);
+}
+
+const libThumbQueue = [];
+function libLoadThumb(row) {
+  row.dataset.th = '1';
+  libThumbQueue.push(row);
+  libPumpThumbs();
+}
+async function libPumpThumbs() {
+  while (lib.thumbBusy < 3 && libThumbQueue.length) {
+    const row = libThumbQueue.shift();
+    if (!row.isConnected) continue;
+    lib.thumbBusy++;
+    (async () => {
+      try {
+        const url = await window.pywebview?.api?.get_track_thumb?.(row.dataset.p);
+        const img = row.querySelector('img');
+        if (url && img && row.isConnected) { img.src = url; row.classList.add('has-cover'); }
+      } catch (e) { /* a missing cover is fine */ }
+      lib.thumbBusy--;
+      libPumpThumbs();
+    })();
+  }
+}
+
+function playFromLibrary(index, shuffle) {
+  const items = lib.view.map(t => ({ path: t.path, title: t.title, artist: t.artist, album: t.album }));
+  startPlayback(items, index, shuffle, false);
+}
+
+function markPlayingRow() {
+  const list = $('player-list');
+  if (!list) return;
+  list.querySelectorAll('.pl-row.playing').forEach(r => r.classList.remove('playing'));
+  const cur = playerQueue[playerIndex];
+  if (!cur) return;
+  list.querySelectorAll('.pl-row').forEach(r => { if (r.dataset.p === cur.path) r.classList.add('playing'); });
+}
+
+(function initPlayerList() {
+  const list = $('player-list');
+  if (!list) return;
+  list.addEventListener('click', e => {
+    const row = e.target.closest('.pl-row');
+    if (row) playFromLibrary(Number(row.dataset.i));
+  });
+  const audio = $('player-audio');
+  audio.addEventListener('play', () => $('player-list').classList.remove('paused'));
+  audio.addEventListener('pause', () => $('player-list').classList.add('paused'));
+})();
 
 function toggleAllLocal(cb) {
     document.querySelectorAll('.local-cb:not([disabled])').forEach(c => c.checked = cb.checked);
@@ -7053,6 +8438,8 @@ function updateLocalSelection() {
     
     $('local-selected-count').textContent = `${checked} file(s) selected`;
     $('btn-apply-local').disabled = checked === 0;
+    const convertBtn = $('btn-convert-local');
+    if (convertBtn) convertBtn.disabled = checked === 0;
 }
 
 function applyLocalTags() {
