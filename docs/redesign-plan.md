@@ -230,6 +230,20 @@ regola (una parola = un elemento).
         Confronto: 0 differenze (escluso un elemento di History → Fetches
         che cambia da solo tra due esecuzioni: il caricamento asincrono
         corre contro il cambio di scheda).
+     3. **Utility in `css/utilities.css`.** Le 148 classi `u-*` e i toni
+        `[data-tone]` passano in un foglio nuovo, caricato **per ultimo**
+        (in `index.html`, `sw.js` SHELL_FILES, `CACHE_NAME` v20). Metterlo
+        al posto di `styles.css` avrebbe girato 578 coppie di regole, per
+        ultimo 253, quasi tutte la stessa tinta con due nomi (`--muted` /
+        `--text-muted`): il controllo statico (coppie di regole il cui
+        ordine si inverte, proprietà che si toccano, stessa importanza e
+        specificità, elementi in comune nella sonda a runtime, valori
+        diversi anche dopo gli alias del bridge) ne lascia 2. Una era reale:
+        `.s-section > .s-row` di `settings.css` azzera già `u-pl-16` su
+        cinque righe di Settings, che perdono la classe in `index.html`
+        (le righe di `#ext-quality-rows`, non figlie dirette, la tengono).
+        `test_frontend_inline_styles.py` legge `css/utilities.css`.
+        Confronto: 0 differenze.
    **Prossimo:** Fase 4 (TUI, voci 23–26) — fatta, vedi sotto.
 0. **Fasi 4, 5 e 6 fatte** (2026-11-12), su `redesign`, commit locali non
    pushati. Prima, fuori dal redesign, la **issue #277** (playlist):

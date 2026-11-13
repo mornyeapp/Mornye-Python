@@ -60,6 +60,8 @@
   <script>document.write('<link rel="stylesheet" href="css/views/stats.css?_=' + Date.now() + '">');</script>
   <script>document.write('<link rel="stylesheet" href="css/views/player.css?_=' + Date.now() + '">');</script>
   <script>document.write('<link rel="stylesheet" href="css/views/logs.css?_=' + Date.now() + '">');</script>
+  <!-- css/utilities.css: the u-* classes and the status tones, last so they win. -->
+  <script>document.write('<link rel="stylesheet" href="css/utilities.css?_=' + Date.now() + '">');</script>
   <script>
     // Theme, applied before the first paint. app.js used to do this only from
     // its 'pywebviewready' handler, which meant the window painted light and
@@ -827,7 +829,7 @@
                 <span class="toggle-sl"></span>
               </label>
             </div>
-            <div class="s-row verify-hires-opt u-pl-16 u-bl-2-solid-border2 u-ml-4" style="display:none;">
+            <div class="s-row verify-hires-opt u-bl-2-solid-border2 u-ml-4" style="display:none;">
               <span class="s-label">Replace fake Hi-Res<small>Off = a finding is only reported. On = the flagged file is set aside, the track is re-downloaded as LOSSLESS, and the flagged file is deleted only once the replacement is on disk</small></span>
               <label class="toggle">
                 <input type="checkbox" id="config-redownload-fake-hires">
@@ -1034,7 +1036,7 @@
                 </optgroup>
               </select>
             </div>
-            <div class="s-row transcode-lossy u-pl-16 u-bl-2-solid-border2 u-ml-4" style="display:none;">
+            <div class="s-row transcode-lossy u-bl-2-solid-border2 u-ml-4" style="display:none;">
               <span class="s-label">Bitrate</span>
               <select id="config-transcode-bitrate">
                 <option value="320k">320 kbps</option>
@@ -1043,7 +1045,7 @@
                 <option value="128k">128 kbps</option>
               </select>
             </div>
-            <div class="s-row transcode-opt u-pl-16 u-bl-2-solid-border2 u-ml-4" style="display:none;">
+            <div class="s-row transcode-opt u-bl-2-solid-border2 u-ml-4" style="display:none;">
               <span class="s-label">Keep original file<small>Off = the downloaded source is deleted after conversion</small></span>
               <label class="toggle">
                 <input type="checkbox" id="config-transcode-keep">
@@ -1137,7 +1139,7 @@
                 <span class="toggle-sl"></span>
               </label>
             </div>
-            <div class="s-row u-pl-16 u-bl-2-solid-border2 u-ml-4" id="album-track-row" style="display:none;">
+            <div class="s-row u-bl-2-solid-border2 u-ml-4" id="album-track-row" style="display:none;">
               <span class="s-label">Use original album track number</span>
               <label class="toggle">
                 <input type="checkbox" id="config-album-track-numbers">
@@ -1180,7 +1182,7 @@
                 <span class="toggle-sl"></span>
               </label>
             </div>
-            <div class="s-row u-pl-16 u-bl-2-solid-border2 u-ml-4" id="config-artist-sep-row">
+            <div class="s-row u-bl-2-solid-border2 u-ml-4" id="config-artist-sep-row">
               <span class="s-label">Artist Separator<small>(e.g. ", " or " / ")</small></span>
               <input class="u-w-160" type="text" id="config-artist-separator" placeholder="None (Standard Vorbis array)">
             </div>

@@ -1,15 +1,14 @@
 """index.html keeps its look in stylesheets, not in style="" attributes.
 
 Fase 1 of docs/redesign-plan.md moved every inline declaration into a class
-(the ``u-*`` utilities at the end of styles.css), so that a new stylesheet
-can reach all of it. What is left inline is there on purpose:
+(the ``u-*`` utilities, in css/utilities.css since voce 22), so that a
+stylesheet can reach all of it. What is left inline is there on purpose:
 
 * properties app.js clears at runtime (``el.style.display = ''``) — in a
   class, clearing them would bring the class value back instead of the
   default; voce 5 turns them into state classes;
-* a few declarations an id or attribute rule in styles.css would otherwise
-  override (``#album-card > *``, ``.s-row > input[type="text"]`` on phones),
-  kept until Fase 3 rewrites those rules.
+* a few declarations an id or attribute rule would otherwise override
+  (``#album-card > *``, ``.s-row > input[type="text"]`` on phones).
 
 This test fails when a new inline style appears outside those cases.
 """
@@ -68,17 +67,16 @@ def test_inline_styles_hold_only_what_must_stay_inline() -> None:
             prop = declaration.split(":", 1)[0].strip().lower()
             if prop not in allowed:
                 offending.append(f"{prop} in {tag[:90]}")
-    assert (
-        not offending
-    ), 'Put these in a class (styles.css) instead of style="":\n  ' + "\n  ".join(
-        offending
+    assert not offending, (
+        'Put these in a class (css/utilities.css) instead of style="":\n  '
+        + "\n  ".join(offending)
     )
 
 
 def test_every_utility_class_used_in_the_markup_exists() -> None:
     html = INDEX.read_text(encoding="utf-8")
     html += (INDEX.parent / "app.js").read_text(encoding="utf-8")
-    css = (INDEX.parent / "styles.css").read_text(encoding="utf-8")
+    css = (INDEX.parent / "css" / "utilities.css").read_text(encoding="utf-8")
     used = set(re.findall(r'class="[^"]*|className\s*=\s*[\'`][^\'`]*', html))
     names = {n for chunk in used for n in re.findall(r"\bu-[\w-]+", chunk)}
     defined = set(re.findall(r"^\.(u-[\w-]+)\.\1 \{", css, re.M))
