@@ -198,6 +198,27 @@ regola (una parola = un elemento).
      `sw.js` (SHELL_FILES), `MANIFEST.in`/package-data, aggiornare
      `test_brand_tokens.py`, `test_frontend_inline_styles.py` (utility
      `u-*` → dove finiscono), i font Inter/Fraunces da `assets/fonts/`.
+   - **voce 22 — in corso** (2026-11-13, sessione dedicata, branch
+     `claude/zen-curran-97cf7a` da `redesign`, un commit per passo).
+     Strumenti ricostruiti nella cartella temporanea della sessione: un
+     modello CSS che conserva gli offset (regole, contesti `@media`,
+     specificità) e il confronto a runtime degli stili calcolati —
+     Playwright, `mornye --web` su una HOME vuota, 140 scenari: le 10 viste,
+     le 6 schede di Settings, la scheda Fetches di History e 18 stati con
+     dati sintetici passati alle funzioni di `app.js` (album, album con
+     selezione, playlist, artista, brano singolo, ricerca, recenti, coda con
+     ogni stato e falliti, staged, cronologia, statistiche, Explore,
+     Following, Local, toast, modali, drawer, rail chiusa), ciascuno a
+     1280×800 e 375×812, scuro e chiaro. Per ogni elemento (e `::before`,
+     `::after`, `::placeholder`, `::marker`) ogni proprietà calcolata,
+     custom property comprese, più il riquadro; animazioni ferme a t=0.
+     Due esecuzioni senza modifiche: 0 differenze.
+     1. **Dichiarazioni morte.** 1134 delle 5055 dichiarazioni di
+        `styles.css` sono ridichiarate più avanti con lo stesso identico
+        selettore, in un contesto uguale o più largo, con importanza pari o
+        maggiore e un valore che ogni motore legge (niente `dvh`, prefissi,
+        `text-wrap`): non vincono mai. Tolte, con i commenti che
+        descrivevano solo loro. Confronto: 0 differenze.
    **Prossimo:** Fase 4 (TUI, voci 23–26) — fatta, vedi sotto.
 0. **Fasi 4, 5 e 6 fatte** (2026-11-12), su `redesign`, commit locali non
    pushati. Prima, fuori dal redesign, la **issue #277** (playlist):
