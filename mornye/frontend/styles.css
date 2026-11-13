@@ -228,7 +228,17 @@
       -webkit-font-smoothing: antialiased;
     }
     /* Display face for the few titles that name a place or a record. */
-    .hero-title, #album-title, .s-header h1, #explore-greeting {
+    .hero-title, #album-title {
+      font-family: var(--font-display);
+      font-optical-sizing: auto;
+      font-variation-settings: 'SOFT' 50;
+    }
+    .s-header h1 {
+      font-family: var(--font-display);
+      font-optical-sizing: auto;
+      font-variation-settings: 'SOFT' 50;
+    }
+    #explore-greeting {
       font-family: var(--font-display);
       font-optical-sizing: auto;
       font-variation-settings: 'SOFT' 50;
@@ -311,7 +321,9 @@
     .update-badge:hover {
       transform: translateY(-1px);
     }
-    .hero-update-badge,
+    .hero-update-badge {
+      cursor: pointer;
+    }
     .clickable-version {
       cursor: pointer;
     }
@@ -1527,10 +1539,13 @@
       }
       /* A hover that moves the thing under the pointer is the part that
          causes trouble; the colour change alone still answers "am I on it". */
-      .nav-btn:hover, .nav-btn:active,
-      #fetchBtn:hover, #fetchBtn:active,
-      .act-btn:hover, .act-btn:active,
-      .recent-card:hover {
+      .nav-btn:hover, .nav-btn:active {
+        transform: none;
+      }
+      #fetchBtn:hover, #fetchBtn:active, .recent-card:hover {
+        transform: none;
+      }
+      .act-btn:hover, .act-btn:active {
         transform: none;
       }
     }
@@ -1902,7 +1917,11 @@
     }
 
     .page-list { display: flex; flex-direction: column; gap: var(--sp-2); }
-    .page-list > .empty-state, .page-list > .error-state {
+    .page-list > .empty-state {
+      padding: var(--sp-10) var(--sp-6);
+      border-radius: var(--radius-lg);
+    }
+    .page-list > .error-state {
       padding: var(--sp-10) var(--sp-6);
       border-radius: var(--radius-lg);
     }
@@ -1942,7 +1961,8 @@
       cursor: pointer; transition: background var(--t), color var(--t), border-color var(--t);
     }
     .row-btn svg { width: 15px; height: 15px; }
-    .row-btn:focus-visible, .seg-tab:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 1px; }
+    .row-btn:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 1px; }
+    .seg-tab:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 1px; }
 
     .status-pill {
       display: inline-flex; align-items: center; gap: 6px;
@@ -2288,7 +2308,8 @@
       box-shadow: 0 0 0 3px var(--ring);
     }
     input[type="number"] { width: 70px; text-align: center; }
-    input[type="text"].full, input[type="password"].full { width: 100%; }
+    input[type="text"].full { width: 100%; }
+    input[type="password"].full { width: 100%; }
 
     input[type="checkbox"], input[type="radio"], progress {
       accent-color: var(--yellow);
@@ -2453,13 +2474,36 @@
        Canvas. A visible border in that mode is enough to keep every
        button legible as a button without touching normal-mode styling. */
     @media (forced-colors: active) {
-      .act-btn, .nav-btn, #fetchBtn, .mode-btn, .ta-btn, .page-btn,
-      .fb-select, #fb-back, .toggle-sl, input, select, textarea {
+      .act-btn, .page-btn, input, select, textarea {
         forced-color-adjust: none;
         border: 1px solid ButtonText;
       }
-      .act-btn.primary, .nav-btn.active, #fetchBtn, .mode-btn.active,
-      .fb-select, .ta-btn.dl {
+      .nav-btn {
+        forced-color-adjust: none;
+        border: 1px solid ButtonText;
+      }
+      #fetchBtn, .mode-btn, .ta-btn {
+        forced-color-adjust: none;
+        border: 1px solid ButtonText;
+      }
+      .fb-select, #fb-back {
+        forced-color-adjust: none;
+        border: 1px solid ButtonText;
+      }
+      .toggle-sl {
+        forced-color-adjust: none;
+        border: 1px solid ButtonText;
+      }
+      .act-btn.primary, .mode-btn.active {
+        background: Highlight; color: HighlightText; border-color: HighlightText;
+      }
+      .nav-btn.active {
+        background: Highlight; color: HighlightText; border-color: HighlightText;
+      }
+      #fetchBtn, .ta-btn.dl {
+        background: Highlight; color: HighlightText; border-color: HighlightText;
+      }
+      .fb-select {
         background: Highlight; color: HighlightText; border-color: HighlightText;
       }
     }
@@ -2680,10 +2724,10 @@
    table ~102px too early compared to the old @media behaviour. */
 @container tracktable (max-width: 798px) {
   /* Nascondi Playcount e Duration in modo forzato sia nell'header che nelle righe */
-  .track-table-header > div:nth-child(4),
-  .track-table-header > div:nth-child(5),
-  .track-row > div:nth-child(4),
-  .track-row > div:nth-child(5) {
+  .track-table-header > div:nth-child(4), .track-row > div:nth-child(4) {
+    display: none !important;
+  }
+  .track-table-header > div:nth-child(5), .track-row > div:nth-child(5) {
     display: none !important;
   }
 
@@ -3030,9 +3074,19 @@
      Declaring that these never zoom removes the wait, which is most of what
      makes the UI feel slower under a finger than the same buttons feel
      under a mouse. */
-  button, .nav-btn, .mode-btn, .act-btn, .ta-btn, .stab, .page-btn,
-  .track-row, .toggle, .recent-card, .explore-card, .artist-album-card,
-  select, summary, [onclick] {
+  button, .act-btn, .page-btn, .track-row, select, summary, [onclick] {
+    touch-action: manipulation;
+  }
+  .nav-btn {
+    touch-action: manipulation;
+  }
+  .mode-btn, .ta-btn, .recent-card, .artist-album-card {
+    touch-action: manipulation;
+  }
+  .stab, .toggle {
+    touch-action: manipulation;
+  }
+  .explore-card {
     touch-action: manipulation;
   }
   /* The grey flash Android paints on tap lands on top of our own :active
@@ -3042,7 +3096,16 @@
   }
   /* Rubber-banding the page behind a scrolled panel is how a modal ends up
      scrolling the list underneath it. */
-  #content, .s-body, #track-table-wrap, .queue-list, .api-modal-card, #fb-entries {
+  #content {
+    overscroll-behavior: contain;
+  }
+  .s-body, .queue-list {
+    overscroll-behavior: contain;
+  }
+  #track-table-wrap {
+    overscroll-behavior: contain;
+  }
+  .api-modal-card, #fb-entries {
     overscroll-behavior: contain;
   }
 }
@@ -3059,9 +3122,13 @@
   /* iOS zooms the page when a control smaller than 16px takes focus — the
      single most disorienting thing the app does on a phone, because nothing
      zooms it back out. 16px is the threshold, not a preference. */
-  input[type="text"], input[type="password"], input[type="number"],
-  input[type="search"], input[type="email"], input[type="url"],
-  select, textarea, #urlInput {
+  input[type="text"], input[type="password"], input[type="number"], input[type="search"], input[type="email"], select, textarea {
+    font-size: 16px;
+  }
+  input[type="url"] {
+    font-size: 16px;
+  }
+  #urlInput {
     font-size: 16px;
   }
 
@@ -3087,7 +3154,11 @@
      minmax(180px, 1fr) inside a ~330px content box resolves to exactly one
      column, so each card drew at double its design size and the view became
      a very long single file. 140px gives two. */
-  .explore-grid, .artist-gallery-grid {
+  .explore-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: var(--sp-3);
+  }
+  .artist-gallery-grid {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
     gap: var(--sp-3);
   }
@@ -3120,12 +3191,13 @@
      space-between parked it on the left, where it no longer read as
      belonging to the label above it. */
   .s-row > .s-label { flex: 1 1 55%; }
-  .s-row > select,
-  .s-row > input[type="text"],
-  .s-row > input[type="password"],
-  .s-row > input[type="number"],
-  .s-row > .accent-picker,
-  .s-row > .volume-control {
+  .s-row > select, .s-row > input[type="text"] {
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: none;
+    min-height: 44px;
+  }
+  .s-row > input[type="password"], .s-row > input[type="number"], .s-row > .accent-picker, .s-row > .volume-control {
     flex: 1 1 100%;
     min-width: 0;
     max-width: none;
@@ -3411,7 +3483,8 @@
 @media (max-height: 480px) and (orientation: landscape) and (pointer: coarse) {
   body.web-mode { --nav-h: 46px; }
   body.web-mode .nav-btn { height: 38px; }
-  .api-modal-card, .queue-panel, .fb-card { max-height: 96dvh; }
+  .api-modal-card, .fb-card { max-height: 96dvh; }
+  .queue-panel { max-height: 96dvh; }
 }
 
 /* Mornye surfaces: grouped iOS neutrals, compact controls, and system-like
@@ -3474,10 +3547,10 @@ body {
   margin-bottom: 14px;
 }
 
-.act-btn,
-.page-btn,
-.mode-btn,
-.s-actions .act-btn {
+.act-btn, .page-btn, .s-actions .act-btn {
+  box-shadow: none;
+}
+.mode-btn {
   box-shadow: none;
 }
 
@@ -3514,24 +3587,31 @@ textarea {
   border-radius: 10px;
 }
 
-.api-modal-card,
-.queue-panel,
-.fb-card {
+.api-modal-card, .fb-card {
+  border-radius: 16px;
+  box-shadow: var(--elev-2);
+}
+.queue-panel {
   border-radius: 16px;
   box-shadow: var(--elev-2);
 }
 
 @media (max-width: 700px) {
-  .api-modal-card,
-  .queue-panel,
-  .fb-card {
+  .api-modal-card, .fb-card {
+    border-radius: 32px 32px 0 0;
+  }
+  .queue-panel {
     border-radius: 32px 32px 0 0;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .nav-btn:hover,
-  .act-btn:hover,
+  .nav-btn:hover {
+    transform: none;
+  }
+  .act-btn:hover {
+    transform: none;
+  }
   .recent-card:hover {
     transform: none;
   }
@@ -3590,7 +3670,8 @@ textarea {
   background: var(--np-bg, linear-gradient(135deg, var(--media-tint-from), var(--media-tint-to)));
 }
 #np-view > * { position: relative; z-index: 1; }
-#np-view > #np-bg, #np-view > .np-close, #np-view > .np-volume, #np-view > .np-tabs { position: absolute; }
+#np-view > #np-bg { position: absolute; }
+#np-view > .np-close, #np-view > .np-volume, #np-view > .np-tabs { position: absolute; }
 #np-view > #np-bg { inset: 0; z-index: 0; }
 .np-close {
   position: absolute; top: 16px; left: 16px; width: 40px; height: 40px; border: 0;
@@ -3702,7 +3783,8 @@ textarea {
 /* shuffle / repeat */
 .np-mode { opacity: .65; }
 .np-mode.on { opacity: 1; color: var(--media-ink); background: rgba(var(--media-ink-rgb), .2); }
-.pl-btn.pl-mode, .np-btn.np-mode { position: relative; }
+.pl-btn.pl-mode { position: relative; }
+.np-btn.np-mode { position: relative; }
 [id$="repeat"] .rep1 { display: none; position: absolute; right: 3px; bottom: 1px; font-size: 9px; font-weight: 700; line-height: 1; }
 [id$="repeat"][data-mode="one"] .rep1 { display: block; }
 

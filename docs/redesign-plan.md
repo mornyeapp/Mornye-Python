@@ -244,6 +244,15 @@ regola (una parola = un elemento).
         (le righe di `#ext-quality-rows`, non figlie dirette, la tengono).
         `test_frontend_inline_styles.py` legge `css/utilities.css`.
         Confronto: 0 differenze.
+     4. **Liste di selettori divise per vista.** 21 regole con una lista
+        che tocca più fogli di destinazione (es. `.explore-grid,
+        .artist-gallery-grid` sul telefono, i blocchi `forced-colors` e
+        `prefers-reduced-motion` che nominano pulsanti di ogni vista)
+        diventano regole consecutive con lo stesso corpo, una per foglio:
+        così ogni override resta nello stesso file della regola base, dopo
+        di essa. Non divise le liste con `:has()`, `:is()`, `:where()` o
+        pseudo con prefisso, dove un motore che non le capisce scarta
+        l'intera regola. Confronto: 0 differenze.
    **Prossimo:** Fase 4 (TUI, voci 23–26) — fatta, vedi sotto.
 0. **Fasi 4, 5 e 6 fatte** (2026-11-12), su `redesign`, commit locali non
    pushati. Prima, fuori dal redesign, la **issue #277** (playlist):
