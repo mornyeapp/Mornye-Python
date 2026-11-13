@@ -219,6 +219,17 @@ regola (una parola = un elemento).
         maggiore e un valore che ogni motore legge (niente `dvh`, prefissi,
         `text-wrap`): non vincono mai. Tolte, con i commenti che
         descrivevano solo loro. Confronto: 0 differenze.
+     2. **Selettori senza markup.** 80 regole (e un selettore di una lista)
+        chiedevano una classe che né `index.html`, né gli script, né il
+        Python scrivono più: la vecchia scheda dettaglio brano
+        (`.track-detail-*`), le righe del vecchio health check (`.hc-*`),
+        `.save-toast`, `.queue-toolbar`, `.queue-stats-bar`, `.sort-btn`,
+        `.artist-section-hdr`, `.hero-badge`, `.clear-link`/`.export-link` e
+        simili (25 nomi, cercati in tutto il repository). Restano le classi
+        composte a runtime (`reg-badge-${…}`, le posizioni dei toast).
+        Confronto: 0 differenze (escluso un elemento di History → Fetches
+        che cambia da solo tra due esecuzioni: il caricamento asincrono
+        corre contro il cambio di scheda).
    **Prossimo:** Fase 4 (TUI, voci 23–26) — fatta, vedi sotto.
 0. **Fasi 4, 5 e 6 fatte** (2026-11-12), su `redesign`, commit locali non
    pushati. Prima, fuori dal redesign, la **issue #277** (playlist):

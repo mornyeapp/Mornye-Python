@@ -228,7 +228,7 @@
       -webkit-font-smoothing: antialiased;
     }
     /* Display face for the few titles that name a place or a record. */
-    .hero-title, #album-title, .s-header h1, .track-detail-title, #explore-greeting {
+    .hero-title, #album-title, .s-header h1, #explore-greeting {
       font-family: var(--font-display);
       font-optical-sizing: auto;
       font-variation-settings: 'SOFT' 50;
@@ -281,12 +281,6 @@
 
     #tb-logo {
       display: none;
-    }
-    #tb-logo .logo-icon {
-      width: 22px; height: 22px;
-      background: var(--accent); border-radius: 6px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: var(--fs-100);
     }
     #tb-version {
       font-family: var(--font-mono);
@@ -484,11 +478,6 @@
       display: block;
       object-fit: contain; padding: var(--sp-3); box-sizing: border-box;
     }
-    .hero-badge {
-      background: var(--accent); color: var(--accent-fg); font-family: var(--font-mono);
-      font-size: var(--fs-50); font-weight: 700; letter-spacing: var(--tracking-label);
-      padding: var(--sp-2) 10px; border-radius: 999px; text-transform: uppercase;
-    }
     .hero-main {
       /* Name and version on one line, centred on each other. */
       display: flex; align-items: center; flex-wrap: nowrap;
@@ -526,8 +515,6 @@
       animation: status-spin 0.7s linear infinite;
     }
     @keyframes status-spin { to { transform: rotate(360deg); } }
-    @media (prefers-reduced-motion: reduce) {
-    }
 
     .search-container {
       width: 100%;
@@ -679,8 +666,6 @@
       border: 1px solid var(--border);
       display: flex; align-items: center; justify-content: center;
       font-size: 42px; overflow: hidden; position: relative;
-    }
-    @media (min-width: 1200px) {
     }
     #album-cover img {
       width: 100%; height: 100%; object-fit: cover;
@@ -1031,14 +1016,6 @@
       color: var(--muted); pointer-events: none; font-size: var(--fs-200);
     }
     .sort-wrap { display: flex; align-items: center; gap: 6px; }
-    .sort-btn {
-      width: 32px; height: 32px;
-      background: var(--surface2); border: 1.5px solid var(--border);
-      border-radius: var(--radius-sm); color: var(--muted); cursor: pointer;
-      display: flex; align-items: center; justify-content: center; font-size: 14px;
-      transition: all var(--t);
-    }
-    .sort-btn:hover { border-color: var(--border2); color: var(--text2); }
     #sort-select {
       padding: 6px 28px 6px 10px; background-color: var(--surface2);
       border: 1.5px solid var(--border); border-radius: var(--radius-sm);
@@ -1232,8 +1209,6 @@
     }
     .page-btn:disabled { opacity: .4; cursor: not-allowed; }
     #page-info { color: var(--muted); min-width: 120px; text-align: center; font-family: var(--font-mono); }
-    @media (min-width: 1440px) {
-    }
     /* Per-row download progress — app.js's syncTrackRowsWithQueue() mirrors
        each queue item onto its row (matched by data-spotify-id, so it
        survives a re-sort) whenever the queue re-renders, setting
@@ -1372,10 +1347,6 @@
        alignment. It also stops #album-actions wrapping its last icon button
        onto a line of its own: at 960px the three buttons are ~30px wider
        than the middle column, which is the whole reason it wrapped. */
-    @media (min-width: 1200px) {
-    }
-    @media (min-width: 1440px) {
-    }
     #recent-grid {
       display: grid;
       /* auto-FILL, not auto-fit. auto-fit collapses the empty tracks and
@@ -1502,16 +1473,7 @@
     @media (min-width: 701px) {
       body:has(#queue-dock.visible) .toast-container.bottom-right,
       body:has(#queue-dock.visible) .toast-container.bottom-left,
-      body:has(#queue-dock.visible) .toast-container.bottom-center,
-      body:has(#queue-dock.visible) .save-toast { bottom: calc(var(--dock-h) + 16px); }
-    }
-    #queue-dock .qd-icon {
-      width: 42px; height: 42px; border-radius: var(--radius-sm);
-      background: var(--brand-deep); display: grid;
-      place-items: center; color: var(--brand-mint); font-size: var(--fs-400);
-    }
-    #queue-dock .qd-icon svg {
-      width: 20px; height: 20px; display: block;
+      body:has(#queue-dock.visible) .toast-container.bottom-center { bottom: calc(var(--dock-h) + 16px); }
     }
     #queue-dock .qd-body { display: flex; min-width: 0; }
     #queue-dock .qd-downloaded {
@@ -1605,25 +1567,6 @@
       gap: 14px;
     }
     .queue-panel h3 { margin: 0; font-size: 20px; font-weight: var(--fw-bold); color: var(--text); }
-    .export-link {
-      display: inline-flex; align-items: center; gap: var(--sp-3);
-      font-size: 14px; color: var(--text2); cursor: pointer;
-      border-radius: 14px; padding: var(--sp-3) 10px;
-      background: transparent; border: none;
-      transition: background var(--t), color var(--t);
-    }
-    .export-link:hover { background: var(--surface2); color: var(--text); }
-    .export-link svg { width: 16px; height: 16px; }
-
-    .queue-actions { display: flex; align-items: center; gap: 10px; }
-    .clear-link {
-      display: inline-flex; align-items: center; gap: var(--sp-3);
-      font-size: 14px; color: var(--text2); cursor: pointer;
-      border-radius: 14px; padding: var(--sp-3) 10px; border: none; background: transparent;
-      transition: background var(--t), color var(--t);
-    }
-    .clear-link:hover { background: var(--surface2); color: var(--text); }
-    .clear-link svg { width: 16px; height: 16px; }
     .close-btn {
       width: 38px; height: 38px; border-radius: 14px;
       display: grid; place-items: center;
@@ -1654,12 +1597,6 @@
       background: var(--accent-subtle);
     }
 
-    .queue-toolbar {
-      display: flex; align-items: center; gap: var(--sp-3);
-      padding: 0 24px var(--sp-4);
-      position: relative;
-    }
-    .queue-toolbar .ts-icon { left: 36px; }
     #queue-search {
       flex: 1; min-width: 0;
       padding: 7px 11px 7px 30px;
@@ -1671,17 +1608,10 @@
     }
     #queue-search:focus { border-color: var(--accent); }
     #queue-search::placeholder { color: var(--muted); }
-    .queue-toolbar .act-btn { padding: 7px 12px; font-size: var(--fs-75); }
     .queue-no-match {
       padding: var(--sp-8) var(--sp-5);
       text-align: center; color: var(--muted); font-size: var(--fs-100);
     }
-    .queue-stats-bar {
-      padding: 0 24px 16px;
-      display: flex; gap: var(--sp-6);
-      font-size: var(--fs-200); color: var(--text2);
-    }
-    .queue-stats-bar strong { color: var(--text); font-family: var(--font-mono); }
     /* Tracks still missing (see the #failed-panel comment in index.html).
        Same surface and radius as the counters above it, so it reads as part
        of the queue rather than as a warning banner dropped on top. */
@@ -1708,16 +1638,6 @@
     .fp-item .fp-name { color: var(--text); }
     .fp-item .fp-error { font-size: var(--fs-75); color: var(--muted); }
     .fp-item .fp-attempts { font-size: var(--fs-75); color: var(--muted); font-family: var(--font-mono); white-space: nowrap; }
-    .queue-summary .qs-icon {
-      width: 34px; height: 34px; border-radius: var(--radius-md);
-      display: grid; place-items: center; background: var(--status-active-bg);
-      color: var(--status-active-fg);
-      flex-shrink: 0;
-    }
-    .queue-summary .qs-item.queued .qs-icon { background: var(--status-queued-bg); color: var(--status-queued-fg); }
-    .queue-summary .qs-item.completed .qs-icon { background: var(--status-done-bg); color: var(--status-done-fg); }
-    .queue-summary .qs-item.skipped .qs-icon { background: var(--status-skipped-bg); color: var(--status-skipped-fg); }
-    .queue-summary .qs-item.failed .qs-icon { background: var(--status-failed-bg); color: var(--status-failed-fg); }
     .queue-content {
       padding: 0 24px 20px;
       display: flex;
@@ -2183,19 +2103,6 @@
     .s-body::-webkit-scrollbar { width: 3px; }
     .s-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
     .s-footer { position: sticky; bottom: 0; display: flex; justify-content: flex-start; padding: 10px 0 0; background: transparent; }
-    .save-toast {
-      position: fixed; bottom: 24px; left: 24px;
-      min-width: 220px; padding: var(--sp-4) var(--sp-5);
-      background: var(--surface3);
-      color: var(--text); border-radius: var(--radius-md);
-      border: 1px solid var(--border2);
-      box-shadow: var(--elev-3);
-      font-size: var(--fs-200); font-weight: 600;
-      z-index: var(--z-save-toast);
-      opacity: .98;
-    }
-    .save-toast.hidden { display: none; }
-    .save-toast.show { display: block; }
     /* Volume slider + its readout as one control. The native range input is
        themed rather than replaced: accent-color is enough to make it follow
        the app's accent, and a hand-built slider would be a lot of markup to
@@ -2514,7 +2421,6 @@
       font-size: var(--fs-200); font-weight: 700; color: var(--text);
     }
     .status-section-hint { font-size: var(--fs-75); font-weight: 400; color: var(--muted); }
-    .status-grid-extensions { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
     .svc-icon.icon-glyph {
       font-size: 17px; background: var(--surface);
     }
@@ -2536,21 +2442,6 @@
     .hc-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--muted); }
     .hc-dot.ok { background: var(--green); }
     .hc-dot.err { background: var(--red); }
-    .hc-row {
-      display: flex; align-items: center; gap: 7px;
-      padding: var(--sp-2) 9px; margin-bottom: 3px;
-      background: var(--surface2); border: 1px solid var(--border);
-      border-radius: 6px; font-family: var(--font-mono); font-size: 10.5px;
-    }
-    .hc-row.ok-r  { border-left: 3px solid var(--green); }
-    .hc-row.err-r { border-left: 3px solid var(--red); }
-    .hc-ind    { font-size: var(--fs-50); flex-shrink: 0; }
-    .hc-meth   { padding: 1px 5px; background: var(--surface3); border: 1px solid var(--border); border-radius: 4px; font-size: 9px; color: var(--muted); }
-    .hc-url    { flex: 1; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .hc-detail { color: var(--text2); flex-shrink: 0; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .hc-lat    { color: var(--muted); flex-shrink: 0; width: 60px; text-align: right; }
-    .hc-lat.good { color: var(--status-done-fg); }
-    .hc-lat.slow { color: var(--status-warn-fg); }
 
     .hidden { display: none !important; }
 
@@ -2619,196 +2510,6 @@
       pointer-events: none;
     }
 
-    .track-detail-card.hidden {
-      display: none;
-    }
-
-    .track-detail-header {
-      display: flex; justify-content: flex-end;
-      padding: var(--sp-4) var(--sp-5);
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
-    }
-
-    .track-detail-close {
-      background: none; border: none;
-      color: var(--muted); cursor: pointer;
-      padding: var(--sp-2);
-      display: flex; align-items: center; justify-content: center;
-      transition: color var(--t);
-    }
-    .track-detail-close:hover { color: var(--text2); }
-
-    .track-detail-body {
-      display: flex;
-      gap: var(--sp-7);
-      padding: var(--sp-7);
-      flex-direction: row;
-    }
-
-    @media (max-width: 600px) {
-      .track-detail-body {
-        flex-direction: column;
-        gap: var(--sp-5);
-      }
-    }
-
-    .track-detail-cover-section {
-      flex-shrink: 0;
-    }
-
-    .track-detail-cover {
-      width: 200px;
-      height: 200px;
-      border-radius: 10px;
-      overflow: hidden;
-      background: var(--surface3);
-      display: flex; align-items: center; justify-content: center;
-      position: relative;
-      box-shadow: var(--elev-2);
-    }
-
-    .track-detail-cover img {
-      width: 100%; height: 100%;
-      object-fit: cover;
-      display: block;
-    }
-
-    .track-detail-duration {
-      position: absolute;
-      bottom: 8px; right: 8px;
-      background: var(--overlay);
-      color: var(--text);
-      padding: var(--sp-2) var(--sp-3);
-      border-radius: 4px;
-      font-size: var(--fs-100);
-      font-weight: 600;
-      font-family: var(--font-mono);
-    }
-
-    .track-detail-info {
-      flex: 1;
-      display: flex; flex-direction: column;
-      gap: var(--sp-5);
-      min-width: 0;
-    }
-
-    .track-detail-title-section {
-      display: flex;
-      align-items: flex-start;
-      gap: var(--sp-3);
-      flex-wrap: wrap;
-    }
-
-    .track-detail-title {
-      font-size: var(--fs-600);
-      font-weight: var(--fw-semibold);
-      color: var(--text);
-      margin: 0;
-      line-height: 1.2;
-      word-break: break-word;
-    }
-
-    .explicit-badge-lg {
-      background: var(--red);
-      color: var(--text);
-      font-size: var(--fs-50);
-      font-weight: 700;
-      padding: var(--sp-2) 6px;
-      border-radius: 3px;
-      font-family: var(--font-mono);
-      flex-shrink: 0;
-      margin-top: 2px;
-    }
-
-    .track-detail-artist {
-      font-size: 16px;
-      color: var(--text2);
-      margin: 0;
-      line-height: 1.4;
-      word-break: break-word;
-    }
-
-    .track-detail-meta-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: var(--sp-5);
-      padding: 16px 0;
-      border-top: 1px solid var(--border);
-      border-bottom: 1px solid var(--border);
-    }
-
-    .track-detail-meta-item {
-      display: flex; flex-direction: column;
-      gap: var(--sp-2);
-    }
-
-    .track-detail-meta-label {
-      font-size: var(--fs-75);
-      color: var(--muted);
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .track-detail-meta-value {
-      font-size: 14px;
-      color: var(--text);
-      margin: 0;
-      font-weight: 500;
-      word-break: break-word;
-    }
-
-    .track-detail-actions {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-
-    .track-detail-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--sp-3);
-      padding: 10px var(--sp-5);
-      border: 1px solid var(--border);
-      background: var(--surface2);
-      color: var(--text2);
-      border-radius: var(--radius-sm);
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all var(--t);
-      font-family: var(--app-font);
-      white-space: nowrap;
-    }
-
-    .track-detail-btn:hover {
-      background: var(--surface3);
-      border-color: var(--border2);
-      color: var(--text);
-    }
-
-    .track-detail-btn:active {
-      transform: scale(0.96);
-    }
-
-    .track-detail-btn.primary {
-      background: var(--accent);
-      color: var(--accent-fg);
-      border-color: var(--accent);
-      font-weight: 600;
-    }
-
-    .track-detail-btn.primary:hover {
-      opacity: 0.9;
-    }
-
-    .track-detail-btn svg {
-      width: 16px;
-      height: 16px;
-      flex-shrink: 0;
-    }
-
   /* ── SINGLE TRACK CARD ENHANCEMENTS ── */
 #album-cover .cover-duration {
   position: absolute; bottom: 6px; right: 6px;
@@ -2832,19 +2533,6 @@
    as an empty, hidden container so the JS that clears it stays harmless. */
 
 /* ── ARTIST VIEW: sections Albums + Tracks ── */
-.artist-section-hdr {
-  max-width: min(100%, 950px); margin: 16px auto 8px;
-  padding: 0 14px;
-  display: flex; align-items: center; justify-content: space-between;
-}
-.artist-section-hdr-title {
-  font-size: var(--fs-75); font-weight: var(--fw-semibold); text-transform: uppercase;
-  letter-spacing: var(--tracking-label); color: var(--muted);
-}
-.artist-section-hdr-count {
-  font-family: var(--font-mono);
-  font-size: var(--fs-75); color: var(--muted);
-}
 .artist-albums-grid {
   max-width: min(100%, 950px); margin: 0 auto 4px;
   padding: 0 14px;
@@ -3021,13 +2709,6 @@
 
 .skeleton-text { height: 16px; margin: 4px 0; width: 80%; }
 .skeleton-text.short { width: 40%; }
-.skeleton-row { 
-  display: grid; 
-  grid-template-columns: 40px 30px 1fr 80px 80px 90px; 
-  gap: 10px; 
-  padding: var(--sp-4) 10px; 
-  border-bottom: 1px solid var(--border);
-}
 
 /* ── ffmpeg warning banner ── */
 .ffmpeg-banner {
@@ -3272,11 +2953,6 @@
       min-width: 0;
       overflow: hidden;
     }
-    .stat-bar-fill {
-      height: 100%;
-      border-radius: 999px;
-      background: var(--accent);
-    }
     .stat-bar-value {
       flex: 0 0 52px;
       text-align: right;
@@ -3491,8 +3167,6 @@
     width: 100%;
     max-height: 88dvh;
   }
-  .queue-toolbar { flex-wrap: wrap; }
-  .queue-toolbar .act-btn { min-height: 40px; }
 
   #folder-browser-modal { align-items: flex-end; }
   .fb-card {
@@ -3712,12 +3386,6 @@
   body.web-mode .toast-container.bottom-left,
   body.web-mode .toast-container.bottom-center {
     bottom: calc(var(--nav-total-h) + var(--sp-3));
-  }
-  body.web-mode .save-toast {
-    left: var(--sp-3);
-    right: var(--sp-3);
-    bottom: calc(var(--nav-total-h) + var(--sp-3));
-    min-width: 0;
   }
 }
 
