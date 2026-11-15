@@ -2215,9 +2215,10 @@
       color: var(--muted); font-family: var(--font-mono);
       font-size: var(--fs-50); font-weight: 400; line-height: 1.45;
     }
-    .network-destination-field select,
-    .network-destination-field input,
-    .network-destination-retry-controls input {
+    .network-destination-field select, .network-destination-retry-controls input {
+      box-sizing: border-box; width: 100%; min-width: 0; min-height: 38px;
+    }
+    .network-destination-field input {
       box-sizing: border-box; width: 100%; min-width: 0; min-height: 38px;
     }
     .network-destination-field-wide { grid-column: 1 / -1; }
@@ -2494,7 +2495,10 @@
         forced-color-adjust: none;
         border: 1px solid ButtonText;
       }
-      .act-btn.primary, .mode-btn.active {
+      .act-btn.primary {
+        background: Highlight; color: HighlightText; border-color: HighlightText;
+      }
+      .mode-btn.active {
         background: Highlight; color: HighlightText; border-color: HighlightText;
       }
       .nav-btn.active {
