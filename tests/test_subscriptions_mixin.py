@@ -79,6 +79,7 @@ def test_a_scheduled_check_queues_only_the_added_tracks(playlist):
 
     [job] = api.jobs
     assert [t["id"] for t in job["tracks"]] == ["t2"]
+    assert [t["id"] for t in job["playlist_tracks"]] == ["t1", "t2"]
     assert job["indices"] == [0]
     assert job["source_url"] == PLAYLIST_URL
     assert job["whole"] is False
