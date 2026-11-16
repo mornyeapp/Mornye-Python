@@ -37,18 +37,18 @@ def test_save_density_merges_and_refuses_unknown_values(api):
 
 def test_reachable_from_the_web_ui():
     assert "save_density" in ALLOWED_METHODS
-    assert "'save_density'" in (FRONT / "web-shim.js").read_text()
+    assert "'save_density'" in (FRONT / "web-shim.js").read_text(encoding="utf-8")
 
 
 def test_applied_before_the_first_paint_and_on_change():
-    assert "mornye-density" in (FRONT / "boot-head.js").read_text()
-    assert "data-density" in (FRONT / "boot-body.js").read_text()
-    html = (FRONT / "index.html").read_text()
+    assert "mornye-density" in (FRONT / "boot-head.js").read_text(encoding="utf-8")
+    assert "data-density" in (FRONT / "boot-body.js").read_text(encoding="utf-8")
+    html = (FRONT / "index.html").read_text(encoding="utf-8")
     assert 'id="config-density" data-onchange="changeDensity()"' in html
 
 
 def test_compact_tokens_stay_on_the_4px_grid():
-    css = (FRONT / "css" / "layout.css").read_text()
+    css = (FRONT / "css" / "layout.css").read_text(encoding="utf-8")
     block = re.search(r':root\[data-density="compact"\] \{(.*?)\}', css, re.S)
     assert block
     values = [int(v) for v in re.findall(r":\s*(\d+)px;", block.group(1))]
@@ -58,13 +58,12 @@ def test_compact_tokens_stay_on_the_4px_grid():
 def test_large_density_is_offered_saved_and_zooms(api):
     assert api.save_density("large")["ok"]
     assert json.loads(api.settings_file.read_text())["density"] == "large"
-    html = (FRONT / "index.html").read_text()
+    html = (FRONT / "index.html").read_text(encoding="utf-8")
     assert '<option value="large">' in html
     # The CSS fallback when the window can't zoom natively.
-    assert (
-        ':root[data-zoom="css"] body { zoom:'
-        in (FRONT / "css" / "layout.css").read_text()
-    )
+    assert ':root[data-zoom="css"] body { zoom:' in (
+        FRONT / "css" / "layout.css"
+    ).read_text(encoding="utf-8")
 
 
 def test_set_page_zoom_rejects_junk_and_needs_a_window(api):

@@ -35,7 +35,9 @@ def test_manifest_is_served_and_valid() -> None:
 
 def test_manifest_icons_exist_as_real_files() -> None:
 
-    manifest = json.loads((webapp.FRONTEND_DIR / "manifest.json").read_text())
+    manifest = json.loads(
+        (webapp.FRONTEND_DIR / "manifest.json").read_text(encoding="utf-8")
+    )
     for icon in manifest["icons"]:
         icon_path = webapp.FRONTEND_DIR / icon["src"]
         assert icon_path.is_file(), f"missing icon file: {icon_path}"
@@ -55,7 +57,7 @@ def test_service_worker_is_served_with_javascript_content_type() -> None:
 
 
 def test_service_worker_never_intercepts_api_or_ws_paths() -> None:
-    sw_source = (webapp.FRONTEND_DIR / "sw.js").read_text()
+    sw_source = (webapp.FRONTEND_DIR / "sw.js").read_text(encoding="utf-8")
     assert '"/api/"' in sw_source
     assert '"/ws"' in sw_source
 
@@ -71,8 +73,8 @@ def test_index_html_declares_the_manifest_and_theme_color() -> None:
 def test_index_html_registers_the_service_worker_gated_on_web_mode() -> None:
     with TestClient(webapp.create_app()) as client:
         html = client.get("/").text
-    shim = (webapp.FRONTEND_DIR / "web-shim.js").read_text()
-    boot_tail = (webapp.FRONTEND_DIR / "boot-tail.js").read_text()
+    shim = (webapp.FRONTEND_DIR / "web-shim.js").read_text(encoding="utf-8")
+    boot_tail = (webapp.FRONTEND_DIR / "boot-tail.js").read_text(encoding="utf-8")
     # web-shim.js (injected by webapp.py's index()) sets the flag ...
     assert "window.__MORNYE_WEB_MODE__ = true" in shim
     # ... and boot-tail.js registers the worker only when it is set.
@@ -91,11 +93,13 @@ def test_the_browser_chrome_is_painted_in_the_console_ground() -> None:
     from mornye.branding_tokens import v2_tokens
 
     dark, light = v2_tokens("dark")["ground"], v2_tokens("light")["ground"]
-    html = (webapp.FRONTEND_DIR / "index.html").read_text()
-    app_js = (webapp.FRONTEND_DIR / "app.js").read_text()
+    html = (webapp.FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+    app_js = (webapp.FRONTEND_DIR / "app.js").read_text(encoding="utf-8")
     # The pre-paint script left index.html for boot-head.js (F1).
-    boot_head = (webapp.FRONTEND_DIR / "boot-head.js").read_text()
-    manifest = json.loads((webapp.FRONTEND_DIR / "manifest.json").read_text())
+    boot_head = (webapp.FRONTEND_DIR / "boot-head.js").read_text(encoding="utf-8")
+    manifest = json.loads(
+        (webapp.FRONTEND_DIR / "manifest.json").read_text(encoding="utf-8")
+    )
 
     assert f'name="theme-color" content="{dark}"' in html
     for source in (boot_head, app_js):

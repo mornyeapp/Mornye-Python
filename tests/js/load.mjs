@@ -14,7 +14,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const FRONT = path.resolve(HERE, '..', '..', 'mornye', 'frontend');
 
 export function source(name) {
-  return fs.readFileSync(path.join(FRONT, name), 'utf8');
+  return fs.readFileSync(path.join(FRONT, name), 'utf8').replace(/\r\n/g, '\n');
 }
 
 export function pick(names, globals = {}) {

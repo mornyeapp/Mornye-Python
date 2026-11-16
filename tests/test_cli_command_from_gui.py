@@ -70,8 +70,8 @@ def test_no_transcode_and_info_level_print_nothing():
 
 def test_wired_to_the_gui_and_the_web_shim():
     assert "get_cli_command" in ALLOWED_METHODS
-    assert "'get_cli_command'" in (FRONT / "web-shim.js").read_text()
-    app = (FRONT / "app.js").read_text()
+    assert "'get_cli_command'" in (FRONT / "web-shim.js").read_text(encoding="utf-8")
+    app = (FRONT / "app.js").read_text(encoding="utf-8")
     assert 'data-onclick="copyCliCommand()"' in app
     assert "async function copyCliCommand()" in app
     # Both card templates (album and single track) carry the button.
