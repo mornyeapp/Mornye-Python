@@ -22,13 +22,20 @@ from mornye import webapp
 
 FRONT = webapp.FRONTEND_DIR
 _ON_ATTR = re.compile(r"\son[a-z]+\s*=\s*[\"']", re.I)
+_INLINE_SCRIPT = re.compile(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", re.I | re.S)
 
 
 def test_index_has_no_inline_script_or_handler_attribute():
     html = (FRONT / "index.html").read_text(encoding="utf-8")
-    bodies = re.findall(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", html, re.S)
+    bodies = _INLINE_SCRIPT.findall(html)
     assert not [b for b in bodies if b.strip()], "inline <script> in index.html"
     assert not _ON_ATTR.search(re.sub(r"<!--.*?-->", "", html, flags=re.S))
+
+
+@pytest.mark.parametrize("tag", ["script", "SCRIPT", "ScRiPt"])
+def test_inline_script_check_matches_case_insensitive_html_tags(tag):
+    html = f"<{tag}>alert(1)</{tag}>"
+    assert _INLINE_SCRIPT.findall(html) == ["alert(1)"]
 
 
 @pytest.mark.parametrize("name", ["app.js", "toast-system.js"])
