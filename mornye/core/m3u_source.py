@@ -22,7 +22,6 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path, PureWindowsPath
-from typing import Any
 
 from .csv_source import CsvDocument, CsvRow, normalize_link
 from .errors import ErrorKind, MornyeError
@@ -68,7 +67,7 @@ def _first(tags, key: str) -> str:
     return str(value or "").strip()
 
 
-def _read_local_tags(path: Path) -> dict[str, Any]:
+def _read_local_tags(path: Path) -> dict[str, str | int]:
     try:
         from mutagen import File as MutagenFile
 

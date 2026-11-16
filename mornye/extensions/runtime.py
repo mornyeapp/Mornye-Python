@@ -457,10 +457,14 @@ class JSRuntime:
             return
         if msg.get("type") == "storage_write":
             if self.storage is not None:
+                key = msg.get("key")
+                if not isinstance(key, str):
+                    logger.warning("[JSRuntime] ignored storage write with invalid key")
+                    return
                 try:
                     self.storage.apply(
                         str(msg.get("op", "")),
-                        str(msg.get("key") or ""),
+                        key,
                         msg.get("value"),
                     )
                 except Exception as exc:
