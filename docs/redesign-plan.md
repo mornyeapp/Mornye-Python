@@ -654,6 +654,21 @@ regola (una parola = un elemento).
      ~246–247), uguali sul checkout di base. Prossimi lotti: `SIM`, `PERF`,
      `BLE`/`S110` (i ~50 `except Exception: pass` fuori da `app.py`), poi
      `RUF` intero.
+   - **M4 · test per il JavaScript** (commit sotto). `tests/js/*.test.mjs`
+     con `node:test`, senza dipendenze; li lancia `tests/test_js_unit.py`
+     (`node --test`, saltato senza node). `app.js` non si può importare
+     (al caricamento tocca il DOM): `tests/js/load.mjs` ritaglia dal
+     sorgente le funzioni di primo livello per nome e le esegue in un
+     contesto `vm`. Coperti: `escHtml`, `httpUrlOrNull` (rifiuta
+     `javascript:`/`data:`/`file:`), `formatEta`, `normalizeHistoryUrl`
+     (non scambia `open.spotify.com.evil.com`), `fmtTime`, `describeError`
+     (un tipo per errore), `formatAudioQuality`, e l'interprete degli
+     handler di F1 (chiamate, `if`, `expose()`, `return false`, errori mai
+     silenziosi, nessun `eval`). 12 test. Giro di fumo nel browser:
+     `tests/test_gui_smoke.py`, a richiesta (`MORNYE_TEST_BROWSER=1`,
+     extra `visual`): `mornye --web` su una HOME vuota, ogni vista e ogni
+     scheda di Settings con clic veri a 1280 e 375, sotto la CSP vera;
+     fallisce su errori di pagina, di console o violazioni CSP. Passa.
    - **Fermato qui per limite d'uso** (2026-11-16). **Ancora aperti:**
      riorganizzazione di Settings e display di qualità dell'album (domanda
      inviata alla sessione madre con una proposta, nessuna risposta
