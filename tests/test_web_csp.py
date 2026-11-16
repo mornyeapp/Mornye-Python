@@ -14,6 +14,7 @@ import json
 import re
 import shutil
 import subprocess
+from html.parser import HTMLParser
 
 import pytest
 from fastapi.testclient import TestClient
@@ -22,20 +23,63 @@ from mornye import webapp
 
 FRONT = webapp.FRONTEND_DIR
 _ON_ATTR = re.compile(r"\son[a-z]+\s*=\s*[\"']", re.I)
-_INLINE_SCRIPT = re.compile(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", re.I | re.S)
+
+
+class _InlineScriptParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.bodies = []
+        self._script_body = None
+        self._is_inline = False
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "script":
+            self._script_body = []
+            self._is_inline = not any(name == "src" for name, _ in attrs)
+
+    def handle_data(self, data):
+        if self._script_body is not None and self._is_inline:
+            self._script_body.append(data)
+
+    def handle_endtag(self, tag):
+        if tag == "script" and self._script_body is not None:
+            self._finish_script()
+
+    def close(self):
+        super().close()
+        if self._script_body is not None:
+            self._finish_script()
+
+    def _finish_script(self):
+        if self._is_inline:
+            self.bodies.append("".join(self._script_body))
+        self._script_body = None
+        self._is_inline = False
+
+
+def _inline_script_bodies(html):
+    parser = _InlineScriptParser()
+    parser.feed(html)
+    parser.close()
+    return parser.bodies
 
 
 def test_index_has_no_inline_script_or_handler_attribute():
     html = (FRONT / "index.html").read_text(encoding="utf-8")
-    bodies = _INLINE_SCRIPT.findall(html)
+    bodies = _inline_script_bodies(html)
     assert not [b for b in bodies if b.strip()], "inline <script> in index.html"
     assert not _ON_ATTR.search(re.sub(r"<!--.*?-->", "", html, flags=re.S))
 
 
 @pytest.mark.parametrize("tag", ["script", "SCRIPT", "ScRiPt"])
-def test_inline_script_check_matches_case_insensitive_html_tags(tag):
-    html = f"<{tag}>alert(1)</{tag}>"
-    assert _INLINE_SCRIPT.findall(html) == ["alert(1)"]
+def test_inline_script_check_matches_case_insensitive_tags_and_spaced_end_tag(tag):
+    html = f"<{tag}>alert(1)</{tag} >"
+    assert _inline_script_bodies(html) == ["alert(1)"]
+
+
+def test_inline_script_check_ignores_external_scripts():
+    html = '<script src="app.js"></script>'
+    assert _inline_script_bodies(html) == []
 
 
 @pytest.mark.parametrize("name", ["app.js", "toast-system.js"])
