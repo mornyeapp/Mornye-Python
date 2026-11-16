@@ -3,8 +3,9 @@
    buttons, lines in the state colours. No entrance animation per line
    (motion is for state changes only).
 
-   Over styles.css until voce 22. Semantic tokens only; ids and handlers
-   untouched. */
+   The view's structure (grids, positions, the phone layout) comes first,
+   moved out of styles.css in voce 22; the console look follows it.
+   Semantic tokens only; ids and handlers untouched. */
 
 /* ══════════ LOGS VIEW ══════════ */
 #view-logs { padding: 18px; }
@@ -15,35 +16,35 @@
   position: relative;
 }
 #log-header {
-  padding: var(--sp-4) var(--sp-5); 
-  background: var(--surface2);
+  padding: var(--space-3) var(--space-4); 
+  background: var(--raised);
   display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
 }
 #log-header span { 
-  display: flex; align-items: center; gap: var(--sp-3);
+  display: flex; align-items: center; gap: var(--space-2);
 }
 /* Pallino di stato in stile terminale/UI accanto al titolo */
 #log-header span::before {
   content: ''; display: inline-block; width: 8px; height: 8px;
 }
-.log-actions { display: flex; gap: var(--sp-3); }
+.log-actions { display: flex; gap: var(--space-2); }
 .log-btn { 
   cursor: pointer; display: flex; align-items: center; justify-content: center;
-  transition: all var(--t);
+  transition: all var(--motion) var(--ease);
 }
 #logArea {
   flex: 1; min-height: 0; overflow-y: auto;
-  padding: 14px var(--sp-5);
+  padding: 14px var(--space-4);
   line-height: 1.7; background: var(--surface); user-select: text;
 }
 #logArea::-webkit-scrollbar { width: 5px; }
-#logArea::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
-.log-line { display: flex; gap: var(--sp-4); margin-bottom: 4px; }
+#logArea::-webkit-scrollbar-thumb { background: var(--rule-strong); border-radius: 99px; }
+.log-line { display: flex; gap: var(--space-3); margin-bottom: 4px; }
 .log-ts { flex-shrink: 0; user-select: none; }
-.log-msg { color: var(--text2); word-break: break-word; }
-.log-msg.ok    { color: var(--green); }
+.log-msg { color: var(--text-2); word-break: break-word; }
+.log-msg.ok    { color: var(--ok); }
 /* Startup diagnostics: visible here, but deliberately never toasted. */
-.log-msg.debug { color: var(--muted); }
+.log-msg.debug { color: var(--text-muted); }
 
 #log-panel {
   border: 1px solid var(--rule);

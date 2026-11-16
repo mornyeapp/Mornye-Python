@@ -2,31 +2,32 @@
    (redesign voce 16). Sections, rows, buttons and the empty state come from
    the shared sheets; this adds the view's fields and the bulk-follow block.
 
-   Over styles.css until voce 22. Semantic tokens only; ids and handlers
-   untouched. */
+   The view's structure (grids, positions, the phone layout) comes first,
+   moved out of styles.css in voce 22; the console look follows it.
+   Semantic tokens only; ids and handlers untouched. */
 
 /* ── Form field: label, hint, textarea ── */
-.bulk-follow { margin-top: var(--sp-6); }
+.bulk-follow { margin-top: var(--space-5); }
 .field-label {
   display: block;
   text-transform: none; letter-spacing: -0.005em;
 }
-.field-hint { margin: 2px 0 var(--sp-3); }
+.field-hint { margin: 2px 0 var(--space-2); }
 .field-textarea {
   display: block; width: 100%; min-height: 108px; resize: vertical;
   padding: 12px 14px;
-  background: var(--input-bg); color: var(--input-text);
-  border: 1px solid var(--input-border); border-radius: var(--radius-md);
-  font-family: var(--app-font); font-size: var(--fs-200); line-height: 1.55;
-  transition: border-color var(--t), box-shadow var(--t);
+  background: var(--raised); color: var(--text);
+  border: 1px solid var(--control-border); border-radius: var(--radius-2);
+  font-family: var(--font); font-size: var(--text-lg); line-height: 1.55;
+  transition: border-color var(--motion) var(--ease), box-shadow var(--motion) var(--ease);
 }
-.field-textarea::placeholder { color: var(--text-dim); font-family: var(--font-mono); font-size: var(--fs-100); }
-.field-textarea:hover { border-color: var(--border2); }
-.field-textarea:focus { outline: none; border-color: var(--accent-border); box-shadow: 0 0 0 3px var(--accent-ring); }
+.field-textarea::placeholder { color: var(--text-muted); font-family: var(--font); font-size: var(--text-md); }
+.field-textarea:hover { border-color: var(--rule-strong); }
+.field-textarea:focus { outline: none; border-color: var(--signal-strong); box-shadow: 0 0 0 3px var(--signal-strong); }
 
 /* Extension registry list */
-.reg-item { cursor: default; align-items: center; justify-content: space-between; gap: var(--sp-4); }
-.reg-item-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+.reg-item { cursor: default; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.reg-item-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
 .reg-item-disabled { opacity: .55; }
 
 .weekly-row {

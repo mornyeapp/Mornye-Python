@@ -7,11 +7,12 @@
    tokens FIXED in branding_tokens.py) and takes the look's shapes: no
    pills or circles, a square cover, small-caps readouts.
 
-   Over styles.css until voce 22. Semantic and fixed tokens only; ids and
-   handlers untouched. */
+   The view's structure (grids, positions, the phone layout) comes first,
+   moved out of styles.css in voce 22; the console look follows it.
+   Semantic and fixed tokens only; ids and handlers untouched. */
 
 .pl-title { font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pl-time { font-family: var(--font-mono); font-size: 11px; color: var(--muted); min-width: 36px; text-align: center; }
+.pl-time { font-family: var(--font); font-size: 11px; color: var(--text-muted); min-width: 36px; text-align: center; }
 #np-view > .np-close, #np-view > .np-volume, #np-view > .np-tabs { position: absolute; }
 .np-close {
   position: absolute; top: 16px; left: 16px; width: 40px; height: 40px; border: 0;
@@ -47,8 +48,8 @@
 .np-lyrics, .np-queue {
   height: 100%; overflow-y: auto; scrollbar-width: none;
   padding-left: 28px; padding-right: 28px; margin: 0 -28px;
-  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 22px, #000 calc(100% - 90px), transparent 100%);
-          mask-image: linear-gradient(180deg, transparent 0, #000 22px, #000 calc(100% - 90px), transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, var(--ink) 22px, var(--ink) calc(100% - 90px), transparent 100%);
+          mask-image: linear-gradient(180deg, transparent 0, var(--ink) 22px, var(--ink) calc(100% - 90px), transparent 100%);
 }
 .np-queue { padding-top: 30vh; padding-bottom: 30vh; }
 .np-lyrics::-webkit-scrollbar, .np-queue::-webkit-scrollbar { display: none; }
@@ -89,8 +90,8 @@
 .np-line.wsync.active .w { color: rgba(var(--media-ink-rgb), .4); }
 .np-line.wsync.active .w::after {
   content: attr(data-t); position: absolute; left: 0; top: 0; white-space: pre; color: var(--media-ink);
-  -webkit-mask-image: linear-gradient(90deg, #000 calc(var(--p, 0) * 130% - 30%), transparent calc(var(--p, 0) * 130%));
-          mask-image: linear-gradient(90deg, #000 calc(var(--p, 0) * 130% - 30%), transparent calc(var(--p, 0) * 130%));
+  -webkit-mask-image: linear-gradient(90deg, var(--ink) calc(var(--p, 0) * 130% - 30%), transparent calc(var(--p, 0) * 130%));
+          mask-image: linear-gradient(90deg, var(--ink) calc(var(--p, 0) * 130% - 30%), transparent calc(var(--p, 0) * 130%));
   text-shadow: 0 0 6.8px rgba(var(--media-ink-rgb), var(--g, 0));
 }
 
@@ -117,7 +118,7 @@
 .pl-a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pl-dur { text-align: right; }
 .pl-fmt { text-align: center; padding: 1px 4px; }
-.pl-more { text-align: center; color: var(--muted); font-size: 12px; padding: 14px; }
+.pl-more { text-align: center; color: var(--text-muted); font-size: 12px; padding: 14px; }
 
 @media (max-width: 700px) {
   .pl-row { grid-template-columns: 30px 40px 1fr 48px; }
@@ -145,14 +146,14 @@
 #view-player .share-chip { font-size: 13px; }
 #view-player input[type="search"] {
   -webkit-appearance: none; appearance: none;
-  background: var(--input-bg);
+  background: var(--raised);
 }
 #view-player input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; }
 
 /* ── Player toolbar ── */
 .player-toolbar {
-  position: sticky; top: calc(-1 * var(--sp-4)); z-index: 6;
-  margin: 0 calc(-1 * var(--sp-5)); padding: var(--sp-4) var(--sp-5) 0;
+  position: sticky; top: calc(-1 * var(--space-3)); z-index: 6;
+  margin: 0 calc(-1 * var(--space-4)); padding: var(--space-3) var(--space-4) 0;
 }
 .player-toolbar.hidden { display: none; }
 .pt-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-bottom: 12px; }
@@ -165,18 +166,18 @@
 }
 .pt-btn:last-child { border-left-width: 0; }
 .pt-search { position: relative; flex: 1 1 220px; min-width: 180px; max-width: 460px; display: block; }
-.pt-search > svg { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.pt-search > svg { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none; }
 #view-player .pt-search input[type="search"] { width: 100%; padding: 0 36px 0 40px; }
 .pt-clear {
   position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; border: 0;
-  color: var(--text2); font-size: 16px; line-height: 1; cursor: pointer;
+  color: var(--text-2); font-size: 16px; line-height: 1; cursor: pointer;
 }
 .pt-clear:hover { color: var(--text); }
 .pt-clear.hidden { display: none; }
 .pt-sort {
   display: inline-flex; align-items: center; gap: 4px; padding-left: 14px; box-sizing: border-box;
 }
-.pt-sort > span { font-size: 13px; color: var(--muted); }
+.pt-sort > span { font-size: 13px; color: var(--text-muted); }
 #view-player .pt-sort select { background: transparent; box-shadow: none; }
 .player-count { margin-left: auto; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .pt-colhead {

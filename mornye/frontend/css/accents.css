@@ -3,9 +3,8 @@
 
    An accent changes the signal and nothing else: the four --signal tokens
    of tokens.css. Amber is the console look's own signal, the default, and
-   has no block here. Every old --accent-* name resolves through the
-   signal (styles.css "Token v2 bridge"), so the parts not yet rebuilt
-   follow too.
+   has no block here. Every sheet draws its signal from these tokens, so
+   the whole GUI follows.
 
    Set as data-accent on <html> and <body> by applyAccent() in app.js. The
    dark selectors outrank :root; the light ones carry .light-theme so they

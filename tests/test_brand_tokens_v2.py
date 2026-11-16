@@ -116,7 +116,9 @@ def test_components_use_semantic_tokens_only(sheet: str) -> None:
     """GUI and TUI consume the semantic level only (redesign-plan §3): no
     colour literal and no primitive in the stylesheets built on tokens.css."""
     css = re.sub(r"/\*.*?\*/", "", (TOKENS_CSS.parent / sheet).read_text(), flags=re.S)
-    literals = re.findall(r"#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(", css)
+    # rgba(var(--media-ink-rgb), .6) is a token's translucent shade
+    # (branding_tokens.FIXED_CHANNELS), not a colour literal.
+    literals = re.findall(r"#[0-9a-fA-F]{3,8}\b|(?:rgba?|hsla?)\(\s*(?!var\()", css)
     primitives = [
         name
         for name in re.findall(r"var\(--([\w-]+)\)", css)
@@ -129,8 +131,16 @@ def test_components_use_semantic_tokens_only(sheet: str) -> None:
 @pytest.mark.parametrize("sheet", SHEETS)
 def test_every_token_a_stylesheet_names_exists(sheet: str) -> None:
     css = (TOKENS_CSS.parent / sheet).read_text()
-    # tokens.css, plus the shell sizes a sheet declares for itself.
+    # tokens.css, the sheet's own, the shell's (layout.css: rail and dock
+    # sizes, stacking order, which its state rules change), and those app.js
+    # sets on an element (a stat bar's value, the album glow).
     defined = set(re.findall(r"--([\w-]+):", TOKENS_CSS.read_text()))
     defined |= set(re.findall(r"--([\w-]+):", css))
+    defined |= set(
+        re.findall(r"--([\w-]+):", (TOKENS_CSS.parent / "layout.css").read_text())
+    )
+    script = (TOKENS_CSS.parent.parent / "app.js").read_text(encoding="utf-8")
+    defined |= set(re.findall(r"setProperty\(\s*'--([\w-]+)'", script))
+    defined |= set(re.findall(r"--([\w-]+):\$\{", script))
     used = set(re.findall(r"var\(--([\w-]+)", css))
     assert used <= defined, sorted(used - defined)

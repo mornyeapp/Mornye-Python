@@ -1,9 +1,10 @@
 """The GUI and the TUI share one palette (mornye/branding_tokens.py).
 
-There is no build step between the token module and the stylesheet, so this
-is what keeps them one identity: every token the module defines must appear
-with the same value in styles.css (``:root`` for dark, ``.light-theme`` for
-light), and the pairs people read must stay legible.
+The GUI's stylesheets build on css/tokens.css, generated from the module
+(token v2). Since redesign voce 22 removed styles.css, no sheet names the
+old v1 tokens any more; branding_tokens.DARK/LIGHT remain the TUI's first
+themes. These tests keep that true, keep the theme-independent tokens
+declared once, and keep the pairs people read legible.
 """
 
 from __future__ import annotations
@@ -15,15 +16,26 @@ import pytest
 
 from mornye import branding_tokens as bt
 
-CSS = (
-    Path(__file__).resolve().parents[1] / "mornye" / "frontend" / "styles.css"
-).read_text(encoding="utf-8")
-
-
-def _block(selector_regex: str) -> str:
-    match = re.search(selector_regex + r"\s*\{(.*?)\n    \}", CSS, re.S)
-    assert match, f"no CSS block for {selector_regex}"
-    return match.group(1)
+FRONTEND = Path(__file__).resolve().parents[1] / "mornye" / "frontend"
+TOKENS_CSS = (FRONTEND / "css" / "tokens.css").read_text(encoding="utf-8")
+#: The GUI's own sheets: everything under css/ but the generated tokens and
+#: the accent presets, which define values rather than use them.
+SHEETS = {
+    str(p.relative_to(FRONTEND)): p.read_text(encoding="utf-8")
+    for p in sorted((FRONTEND / "css").rglob("*.css"))
+    if p.name not in ("tokens.css", "accents.css")
+}
+V2_NAMES = set(bt.V2_SEMANTIC["dark"]) | {
+    *bt.V2_SPACE,
+    *bt.V2_SIZE,
+    *bt.V2_RADIUS,
+    *bt.V2_TYPE,
+    *bt.V2_ELEVATION,
+    *bt.V2_MOTION,
+    *bt.V2_THEMED["dark"],
+    *bt.FIXED,
+    *bt.FIXED_CHANNELS,
+}
 
 
 def _vars(block: str) -> dict[str, str]:
@@ -33,47 +45,15 @@ def _vars(block: str) -> dict[str, str]:
     }
 
 
-ROOT = _vars(_block(r"\n    :root"))
-LIGHT_BLOCK = _vars(_block(r"html\.light-theme,\s*body\.light-theme"))
-LIGHT = {**ROOT, **LIGHT_BLOCK}
-
-
-BRIDGE = _vars(
-    re.search(r"\n    :root,\s*html\.light-theme,\s*body\.light-theme\s*\{(.*?)\n    \}", CSS, re.S).group(1)  # type: ignore[union-attr]
-)
-V2_NAMES = set(bt.V2_SEMANTIC["dark"]) | {
-    *bt.V2_SPACE,
-    *bt.V2_SIZE,
-    *bt.V2_RADIUS,
-    *bt.V2_TYPE,
-    *bt.V2_ELEVATION,
-    *bt.V2_MOTION,
-}
-
-
-def test_the_gui_takes_its_palette_from_token_v2() -> None:
-    """Redesign Fase 3, voce 10: styles.css's own names alias token v2.
-
-    branding_tokens.DARK/LIGHT now drive only the TUI (until Fase 4). In the
-    GUI each of those names is either a v2 name itself (and gone from the
-    old blocks, where it would shadow v2) or bridged to a v2 token.
-    """
-    for name in bt.DARK:
-        if name in V2_NAMES:
-            assert name not in ROOT and name not in LIGHT_BLOCK, name
-            continue
-        value = BRIDGE.get(name)
-        assert value, f"--{name} is not bridged to token v2"
-        ref = re.fullmatch(r"var\(--([\w-]+)\)", value)
-        assert ref and ref.group(1) in V2_NAMES, f"--{name}: {value}"
-
-
-def test_every_bridged_value_is_a_v2_token_or_neutral() -> None:
-    for name, value in BRIDGE.items():
-        if value in ("none", "transparent"):
-            continue
-        ref = re.fullmatch(r"var\(--([\w-]+)\)", value)
-        assert ref and ref.group(1) in V2_NAMES, f"--{name}: {value}"
+def test_no_sheet_names_a_v1_token() -> None:
+    """Voce 22: the bridge from the old names to token v2 is gone, so a
+    sheet that still said var(--muted) would get nothing at all."""
+    v1 = {name for name in (*bt.DARK, *bt.LIGHT) if name not in V2_NAMES}
+    left = {
+        sheet: sorted(v1 & set(re.findall(r"var\(--([\w-]+)", css)))
+        for sheet, css in SHEETS.items()
+    }
+    assert not {k: v for k, v in left.items() if v}
 
 
 @pytest.mark.parametrize(("mode", "tokens"), [("dark", bt.DARK), ("light", bt.LIGHT)])
@@ -103,7 +83,8 @@ def test_amber_is_the_default_accent_everywhere() -> None:
         assert f'html[data-accent="{accent}"]' in accents_css
         assert f'html.light-theme[data-accent="{accent}"]' in accents_css
     assert "--accent" not in accents_css.split("*/", 1)[1]
-    assert "data-accent" not in CSS, "styles.css no longer carries presets"
+    carrying = [sheet for sheet, css in SHEETS.items() if "data-accent" in css]
+    assert not carrying, f"only accents.css carries presets: {carrying}"
 
 
 @pytest.mark.parametrize("mode", ["dark", "light"])
@@ -147,29 +128,13 @@ def test_textual_themes_build_from_the_tokens() -> None:
 
 def test_theme_independent_tokens_are_declared_once() -> None:
     """Now Playing's ink, a barcode's paper: the same in both themes."""
+    root_block, light_block = TOKENS_CSS.split("html.light-theme", 1)
+    root, light = _vars(root_block), _vars(light_block)
     fixed = {**bt.FIXED, **bt.FIXED_CHANNELS}
     drift = {
-        name: (value, ROOT.get(name))
+        name: (value, root.get(name))
         for name, value in fixed.items()
-        if ROOT.get(name) != value.lower()
+        if root.get(name) != value.lower()
     }
-    assert not drift, f"token -> (branding_tokens, styles.css :root) differ: {drift}"
-    light_block = _vars(_block(r"html\.light-theme,\s*body\.light-theme"))
-    assert not set(fixed) & set(light_block), "the light theme overrides a fixed token"
-
-
-def test_declarations_use_tokens_not_raw_colours() -> None:
-    """Every colour lives in a custom property (Fase 1, voce 6).
-
-    Masks are exempt: their black is an alpha channel, not a colour.
-    """
-    body = re.sub(r"/\*.*?\*/", "", CSS, flags=re.S)
-    raw = []
-    for rule in re.finditer(r"([^{}]+)\{([^{}]*)\}", body):
-        for declaration in rule.group(2).split(";"):
-            prop = declaration.split(":", 1)[0].strip()
-            if ":" not in declaration or prop.startswith("--") or "mask" in prop:
-                continue
-            if re.search(r"#[0-9a-fA-F]{3,8}\b|rgba?\(\s*\d", declaration):
-                raw.append(" ".join(f"{rule.group(1)} {{{declaration}}}".split()))
-    assert not raw, "colours outside the tokens:\n  " + "\n  ".join(raw)
+    assert not drift, f"token -> (branding_tokens, tokens.css :root) differ: {drift}"
+    assert not set(fixed) & set(light), "the light theme overrides a fixed token"

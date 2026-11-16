@@ -1,18 +1,18 @@
 /* frontend/css/legacy.css — the old shared control classes in the console
    look (redesign Fase 3). app.js and index.html use .act-btn, .page-btn and
    .explicit-badge in every view; until each view is rebuilt on the new
-   components (components.css: .btn, .qd…) they are restyled here, after
-   styles.css, restating each property they change. Goes with styles.css in
-   voce 22. Semantic tokens only. */
+   components (components.css: .btn, .qd…) their structure comes first
+   (moved out of styles.css in voce 22) and the console look restates each
+   property it changes. Semantic tokens only. */
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 .s-header h1 {
-  font-family: var(--font-display);
+  font-family: var(--font);
   font-optical-sizing: auto;
   font-variation-settings: 'SOFT' 50;
 }
 ::selection {
-  background: var(--accent-subtle);
+  background: var(--selected);
   color: var(--text);
 }
 .clickable-version {
@@ -39,12 +39,12 @@
 }
 .api-modal-body input {
   width: 100%;
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule);
   border-radius: 12px;
-  background: var(--input-bg);
-  color: var(--input-text);
-  padding: var(--sp-4) 14px;
-  font-size: var(--fs-200);
+  background: var(--raised);
+  color: var(--text);
+  padding: var(--space-3) 14px;
+  font-size: var(--text-lg);
 }
 /* The rule above is for text fields; a checkbox in a modal must keep its
    own size or it stretches across the row and pushes its label away. */
@@ -59,7 +59,7 @@
   /* Change this line to use 1fr on the flexible columns */
   grid-template-columns: 24px 40px 1fr 1fr 80px 150px;
   align-items: center;
-  transition: background var(--t);
+  transition: background var(--motion) var(--ease);
   box-sizing: border-box; /* Assicura che il padding sia incluso nella larghezza */
 }
 .track-table-header > div:first-child { display:flex; align-items:center; justify-content:center; }
@@ -73,17 +73,17 @@
   position: relative;
 }
 .page-btn {
-  cursor: pointer; transition: all var(--t);
+  cursor: pointer; transition: all var(--motion) var(--ease);
 }
 .page-btn:disabled { opacity: .4; cursor: not-allowed; }
 
 .tr-check input { cursor: pointer; }
 /* No hover to reveal them with — keep the whole set visible. */
-.ta-btn.ta-lyrics:hover { color: var(--util-lyrics); border-color: var(--util-lyrics-bd); }
-.ta-btn.ta-preview:hover { color: var(--util-preview); border-color: var(--util-preview-bd); }
-.ta-btn.ta-preview.active { background: var(--util-preview-bg); border-color: var(--util-preview-bd); color: var(--util-preview); }
-.ta-btn.ta-cover:hover { color: var(--util-cover); border-color: var(--util-cover-bd); }
-.ta-btn.ta-link:hover { color: var(--util-link); border-color: var(--util-link-bd); }
+.ta-btn.ta-lyrics:hover { color: var(--text-2); border-color: var(--rule-strong); }
+.ta-btn.ta-preview:hover { color: var(--text-2); border-color: var(--rule-strong); }
+.ta-btn.ta-preview.active { background: transparent; border-color: var(--rule-strong); color: var(--text-2); }
+.ta-btn.ta-cover:hover { color: var(--text-2); border-color: var(--rule-strong); }
+.ta-btn.ta-link:hover { color: var(--signal-text); border-color: var(--signal-strong); }
 
 #preview-player {
   width: 100%; max-width: 100%; margin: 12px 0 12px; display: none;
@@ -97,8 +97,8 @@
 .empty-state {
   display: flex; flex-direction: column;
   justify-content: center;
-  gap: 6px; padding: 38px var(--sp-7);
-  color: var(--muted);
+  gap: 6px; padding: 38px var(--space-6);
+  color: var(--text-muted);
 }
 .empty-state .es-icon {
   width: 44px; height: 44px; margin-bottom: 6px;
@@ -123,39 +123,39 @@
 #queue-search {
   flex: 1; min-width: 0;
   padding: 7px 11px 7px 30px;
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); color: var(--text);
-  font-family: var(--app-font); font-size: var(--fs-100);
-  outline: none; transition: border-color var(--t);
+  background: var(--raised); border: 1px solid var(--rule);
+  border-radius: var(--radius-1); color: var(--text);
+  font-family: var(--font); font-size: var(--text-md);
+  outline: none; transition: border-color var(--motion) var(--ease);
   user-select: text;
 }
-#queue-search:focus { border-color: var(--accent); }
-#queue-search::placeholder { color: var(--muted); }
+#queue-search:focus { border-color: var(--signal); }
+#queue-search::placeholder { color: var(--text-muted); }
 .queue-no-match {
-  padding: var(--sp-8) var(--sp-5);
-  text-align: center; color: var(--muted); font-size: var(--fs-100);
+  padding: var(--space-8) var(--space-4);
+  text-align: center; color: var(--text-muted); font-size: var(--text-md);
 }
-.s-header { padding: var(--sp-6) var(--sp-5) var(--sp-4); flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: var(--sp-5); flex-wrap: wrap; }
+.s-header { padding: var(--space-5) var(--space-4) var(--space-3); flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
 .s-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.s-body { flex: 1; overflow-y: auto; padding: var(--sp-4) var(--sp-5) var(--sp-5); min-height: 0; }
+.s-body { flex: 1; overflow-y: auto; padding: var(--space-3) var(--space-4) var(--space-4); min-height: 0; }
 .s-search input {
   flex: 1; min-width: 0; border: none; outline: none; background: transparent;
-  color: var(--input-text); font-family: var(--app-font); font-size: var(--fs-100);
+  color: var(--text); font-family: var(--font); font-size: var(--text-md);
 }
 .s-search input::-webkit-search-cancel-button { filter: grayscale(1); }
 
 /* Mounted network shares under the local-library path field. */
-.share-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); width: 100%; }
-.share-chips-label { font-size: var(--fs-75); color: var(--muted); margin-right: var(--sp-1); }
+.share-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); width: 100%; }
+.share-chips-label { font-size: var(--text-sm); color: var(--text-muted); margin-right: 2px; }
 .share-chip {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 5px 10px; border-radius: var(--radius-pill);
-  background: var(--surface2); border: 1px solid var(--border);
-  color: var(--text2); font-family: var(--app-font); font-size: var(--fs-75); font-weight: var(--fw-medium);
-  cursor: pointer; transition: background var(--t), border-color var(--t), color var(--t);
+  padding: 5px 10px; border-radius: var(--radius-2);
+  background: var(--raised); border: 1px solid var(--rule);
+  color: var(--text-2); font-family: var(--font); font-size: var(--text-sm); font-weight: var(--weight-medium);
+  cursor: pointer; transition: background var(--motion) var(--ease), border-color var(--motion) var(--ease), color var(--motion) var(--ease);
 }
-.share-chip svg { width: 13px; height: 13px; color: var(--accent-text); }
-.share-chip:hover { background: var(--accent-subtle); border-color: var(--accent-border); color: var(--text); }
+.share-chip svg { width: 13px; height: 13px; color: var(--signal-text); }
+.share-chip:hover { background: var(--selected); border-color: var(--signal-strong); color: var(--text); }
 .act-btn svg { flex-shrink: 0; }
 .act-btn:disabled { cursor: not-allowed; transform: none !important; box-shadow: none; }
 .tb-search { width: 260px; }
@@ -163,10 +163,10 @@
 .tb-grow { flex: 1; width: auto; min-width: 200px; }
 .page-row {
   display: grid; grid-template-columns: 52px minmax(0, 1fr) auto auto;
-  align-items: center; gap: var(--sp-4);
-  transition: background var(--t), border-color var(--t);
+  align-items: center; gap: var(--space-3);
+  transition: background var(--motion) var(--ease), border-color var(--motion) var(--ease);
 }
-.page-row:hover { border-color: var(--border2); }
+.page-row:hover { border-color: var(--rule-strong); }
 .pr-cover {
   overflow: hidden;
   display: grid; place-items: center;
@@ -181,19 +181,19 @@
 .pr-actions { display: flex; gap: 4px; }
 .row-btn {
   display: grid; place-items: center;
-  cursor: pointer; transition: background var(--t), color var(--t), border-color var(--t);
+  cursor: pointer; transition: background var(--motion) var(--ease), color var(--motion) var(--ease), border-color var(--motion) var(--ease);
 }
 .row-btn svg { width: 15px; height: 15px; }
-.row-btn:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 1px; }
+.row-btn:focus-visible { outline: 2px solid var(--signal-strong); outline-offset: 1px; }
 
 .status-pill {
   display: inline-flex; align-items: center; gap: 6px;
   white-space: nowrap;
 }
-.status-pill.queued { color: var(--status-queued-fg); background: var(--status-queued-bg); }
-.status-pill.active { color: var(--status-active-fg); background: var(--status-active-bg); }
-.status-pill.done   { color: var(--status-done-fg);   background: var(--status-done-bg); }
-.status-pill.failed { color: var(--status-failed-fg); background: var(--status-failed-bg); }
+.status-pill.queued { color: var(--text-muted); background: transparent; }
+.status-pill.active { color: var(--signal-text); background: transparent; }
+.status-pill.done   { color: var(--ok);   background: transparent; }
+.status-pill.failed { color: var(--error); background: transparent; }
 .pill-spinner {
   width: 9px; height: 9px; border-radius: 50%;
   border: 2px solid currentColor; border-right-color: transparent;
@@ -218,7 +218,7 @@
   .live-search { margin-left: 0; width: 100%; }
 }
 .s-body::-webkit-scrollbar { width: 3px; }
-.s-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
+.s-body::-webkit-scrollbar-thumb { background: var(--rule-strong); border-radius: 99px; }
 .s-footer { position: sticky; bottom: 0; display: flex; justify-content: flex-start; padding: 10px 0 0; background: transparent; }
 /* Two columns of setting cards: see the note in views/settings.css. */
 .s-section {
@@ -231,7 +231,7 @@
 .s-row { display: flex; align-items: center; justify-content: space-between; min-height: 30px; margin-bottom: 8px; gap: 10px; }
 /* Rows of one group read as a list: hairline between neighbours. */
 .s-section > .s-row { margin-bottom: 0; }
-.s-row label { display: flex; align-items: center; gap: var(--sp-3); cursor: pointer; }
+.s-row label { display: flex; align-items: center; gap: var(--space-2); cursor: pointer; }
 .network-destination-field input {
   box-sizing: border-box; width: 100%; min-width: 0; min-height: 38px;
 }
@@ -248,10 +248,10 @@ select, input[type="text"], input[type="password"], input[type="number"] {
      paints its chevron as a background-image, and a shorthand here (or
      in the dark-theme override) would quietly erase it. */
   background-color: var(--surface); color: var(--text);
-  border: 1.5px solid var(--border);
+  border: 1.5px solid var(--rule);
   padding: 7px 11px; outline: none;
-  font-family: var(--app-font); font-size: 12.5px; cursor: pointer;
-  transition: border-color var(--t), box-shadow var(--t), background-color var(--t);
+  font-family: var(--font); font-size: 12.5px; cursor: pointer;
+  transition: border-color var(--motion) var(--ease), box-shadow var(--motion) var(--ease), background-color var(--motion) var(--ease);
 }
 /* A native select renders in the OS's own font and chrome — the one
    control in the window that was still being drawn by something other
@@ -269,23 +269,23 @@ select {
 }
 select:hover,
 input[type="text"]:hover, input[type="password"]:hover, input[type="number"]:hover {
-  border-color: var(--border2);
+  border-color: var(--rule-strong);
 }
 select:focus, input:focus {
-  border-color: var(--yellow);
-  box-shadow: 0 0 0 3px var(--ring);
+  border-color: var(--signal);
+  box-shadow: 0 0 0 3px var(--signal-strong);
 }
 input[type="number"] { width: 70px; text-align: center; }
 input[type="text"].full { width: 100%; }
 
 input[type="checkbox"], input[type="radio"], progress {
-  accent-color: var(--yellow);
+  accent-color: var(--signal);
 }
 
 /* Sortable lists */
-.sort-list { display: flex; flex-direction: column; gap: var(--sp-2); }
-.reg-url { font-family: var(--font-mono); font-size: 11.5px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.reg-remove-btn { padding: 5px var(--sp-4); font-size: var(--fs-75); color: var(--red); border-color: var(--status-failed-fg); flex-shrink: 0; }
+.sort-list { display: flex; flex-direction: column; gap: var(--space-1); }
+.reg-url { font-family: var(--font); font-size: 11.5px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reg-remove-btn { padding: 5px var(--space-3); font-size: var(--text-sm); color: var(--error); border-color: var(--error); flex-shrink: 0; }
 
 .hidden { display: none !important; }
 
@@ -305,20 +305,20 @@ input[type="checkbox"], input[type="radio"], progress {
 .ta-spin { animation: ta-spin .65s linear infinite; transform-origin: center; }
 .ta-btn.ta-loading, .act-btn.ta-loading {
   pointer-events: none;
-  color: var(--text2) !important;
-  border-color: var(--border2) !important;
-  background: var(--surface2) !important;
+  color: var(--text-2) !important;
+  border-color: var(--rule-strong) !important;
+  background: var(--raised) !important;
 }
 .ta-btn.ta-state-success, .act-btn.ta-state-success {
-  background: var(--status-done-bg) !important;
-  border-color: var(--status-done-fg) !important;
-  color: var(--status-done-fg) !important;
+  background: transparent !important;
+  border-color: var(--ok) !important;
+  color: var(--ok) !important;
   pointer-events: none;
 }
 .ta-btn.ta-state-error, .act-btn.ta-state-error {
-  background: var(--status-failed-bg) !important;
-  border-color: var(--status-failed-fg) !important;
-  color: var(--status-failed-fg) !important;
+  background: transparent !important;
+  border-color: var(--error) !important;
+  color: var(--error) !important;
   pointer-events: none;
 }
 
@@ -381,10 +381,10 @@ input[type="checkbox"], input[type="radio"], progress {
   /* ── Settings ──
      s-header is title-left / buttons-right; at this width its three action
      buttons wrapped into a ragged block. They take the full row instead. */
-  .s-header { padding: var(--sp-5) var(--sp-4) var(--sp-3); gap: var(--sp-4); }
+  .s-header { padding: var(--space-4) var(--space-3) var(--space-2); gap: var(--space-3); }
   .s-actions { width: 100%; }
   .s-actions .act-btn { flex: 1 1 auto; }
-  .s-body { padding: var(--sp-4) var(--sp-4) var(--sp-5); }
+  .s-body { padding: var(--space-3) var(--space-3) var(--space-4); }
 
   /* A settings row is `label` then `control`. A <select> or a text field
      next to a label that wraps to three lines has nowhere to go, so it
@@ -413,7 +413,7 @@ input[type="checkbox"], input[type="radio"], progress {
 @container tracktable (max-width: 498px) {
   .track-table-header, .track-row {
     grid-template-columns: 24px 1fr !important;
-    row-gap: var(--sp-3);
+    row-gap: var(--space-2);
   }
 }
 
@@ -442,8 +442,8 @@ textarea {
     transform: none;
   }
 }
-.s-actions .act-btn.primary[data-dirty="true"] { border-color: var(--red); }
-.s-actions .act-btn.primary[data-dirty="false"] { border-color: var(--yellow-d); }
+.s-actions .act-btn.primary[data-dirty="true"] { border-color: var(--error); }
+.s-actions .act-btn.primary[data-dirty="false"] { border-color: var(--signal-strong); }
 
 /* The focus ring (layout.css) loads before this sheet now: restated at its
    specificity for the controls above that draw their own radius or
@@ -593,9 +593,9 @@ textarea {
   text-transform: uppercase;
 }
 
-/* styles.css restates the controls under .s-actions (view headers) and in a
+/* The structure above restates the controls under .s-actions (view headers) and in a
    late rebrand layer with a 12px radius; answered at the same specificity.
-   The phone keeps its 44px height from styles.css (max-width: 700px). */
+   The phone keeps its 44px height from the phone rules (max-width: 700px). */
 .act-btn, .page-btn, .mode-btn, .s-actions .act-btn {
   border-radius: var(--radius-1);
   font-family: var(--font);

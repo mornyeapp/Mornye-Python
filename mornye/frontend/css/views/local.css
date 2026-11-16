@@ -3,29 +3,30 @@
    shared sheets (legacy.css, settings.css's .s-section, home.css's
    .track-row); this adds the drop zone and the view's own fields.
 
-   Over styles.css until voce 22. Semantic tokens only; ids and handlers
-   untouched. */
+   The view's structure (grids, positions, the phone layout) comes first,
+   moved out of styles.css in voce 22; the console look follows it.
+   Semantic tokens only; ids and handlers untouched. */
 
 /* ══════════ LOCAL AUTO-TAGGER ══════════ */
 .local-drop-zone { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.local-drop-zone svg { color: var(--muted); transition: color var(--t); }
+.local-drop-zone svg { color: var(--text-muted); transition: color var(--motion) var(--ease); }
 .local-drop-zone-text { text-align: center; }
-.local-drop-zone.drag-over svg { color: var(--status-active-fg); }
+.local-drop-zone.drag-over svg { color: var(--signal-text); }
 .local-cell-content { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.local-thumb { width: 44px; height: 44px; border-radius: 6px; background: var(--surface3); display: flex; align-items: center; justify-content: center; font-size: 16px; overflow: hidden; border: 1px solid var(--border); flex-shrink: 0; }
+.local-thumb { width: 44px; height: 44px; border-radius: 6px; background: var(--selected); display: flex; align-items: center; justify-content: center; font-size: 16px; overflow: hidden; border: 1px solid var(--rule); flex-shrink: 0; }
 .local-thumb img { width: 100%; height: 100%; object-fit: cover; }
-.local-info { min-width: 0; display: flex; flex-direction: column; flex: 1; gap: var(--sp-1); }
+.local-info { min-width: 0; display: flex; flex-direction: column; flex: 1; gap: 2px; }
 
-.local-title { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); transition: color var(--t); }
-.local-artist { font-size: var(--fs-100); color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color var(--t); }
+.local-title { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); transition: color var(--motion) var(--ease); }
+.local-artist { font-size: var(--text-md); color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color var(--motion) var(--ease); }
 
 /* Highlight for changed tags (Diffing) */
-.local-title.diff, .local-artist.diff { color: var(--diff-fg); }
+.local-title.diff, .local-artist.diff { color: var(--signal-text); }
 
-.local-badge { font-family: var(--font-mono); font-size: var(--fs-50); padding: 3px var(--sp-3); border-radius: 999px; font-weight: 700; display: inline-block; }
-.local-badge.ok { background: var(--status-done-bg); color: var(--status-done-fg); }
-.local-badge.warn { background: var(--status-warn-bg); color: var(--status-warn-fg); }
-.local-badge.err { background: var(--status-failed-bg); color: var(--status-failed-fg); }
+.local-badge { font-family: var(--font); font-size: var(--text-xs); padding: 3px var(--space-2); border-radius: 999px; font-weight: 700; display: inline-block; }
+.local-badge.ok { background: transparent; color: var(--ok); }
+.local-badge.warn { background: transparent; color: var(--signal-text); }
+.local-badge.err { background: transparent; color: var(--error); }
 
 /* ── Scrolling panels whose cards must not be squeezed ────────────────────
    #view-local's .s-body is `display:flex; flex-direction:column` (inline,
@@ -55,10 +56,10 @@
 
 .local-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .local-convert-btn {
-  padding: 1px 7px; border: 1px solid var(--border); border-radius: 6px;
-  background: transparent; color: var(--text2); font: inherit; font-size: 9.5px; cursor: pointer;
+  padding: 1px 7px; border: 1px solid var(--rule); border-radius: 6px;
+  background: transparent; color: var(--text-2); font: inherit; font-size: 9.5px; cursor: pointer;
 }
-.local-convert-btn:hover { color: var(--accent); border-color: var(--accent); }
+.local-convert-btn:hover { color: var(--signal); border-color: var(--signal); }
 
 /* The focus ring (layout.css) loads before this sheet now: restated at its
    specificity for the controls above that draw their own radius or

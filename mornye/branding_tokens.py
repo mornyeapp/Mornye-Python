@@ -7,10 +7,10 @@ thing that should glow — a Hi-Res badge, "new" — and is used sparingly.
 
 Two consumers, two mechanisms:
 
-* The GUI's ``mornye/frontend/styles.css`` declares the same values as CSS
-  custom properties (``:root`` = dark, ``.light-theme`` = light). There is no
-  build step, so ``tests/test_brand_tokens.py`` parses the stylesheet and
-  fails if a value here and its ``--token`` there drift apart.
+* The GUI's ``mornye/frontend/css/tokens.css`` is generated from the token
+  v2 tables below (``python -m mornye.branding_tokens``);
+  ``tests/test_brand_tokens_v2.py`` fails when the two differ. The v1 names
+  of DARK/LIGHT left the GUI with styles.css (redesign voce 22).
 * The TUI builds two Textual themes, ``mornye-dark`` and ``mornye-light``,
   from :func:`textual_theme_kwargs` (see ``mornye/tui/app.py``).
 
@@ -83,6 +83,15 @@ FIXED: dict[str, str] = {
     "ink": "#000000",  # a barcode's bars; behind a spectrogram
     "on-signal": "#ffffff",  # the glyph on a coloured status dot
     "player-main-ink": "#0a0a0a",  # the glyph on the player's main button
+    "brand-deep": BRAND_DEEP,  # behind the logo mark (sidebar, Home hero)
+    # The desktop window's own close/minimise/maximise dots: the platform's
+    # colours, macOS and then Windows, not the app's.
+    "dot-close": "#ff5f57",
+    "dot-min": "#febc2e",
+    "dot-max": "#28c840",
+    "dot-close-win": "#e81828",
+    "dot-min-win": "#f0ad4e",
+    "dot-max-win": "#28a745",
 }
 
 #: The same, as ``r, g, b`` channels, for the translucent shades a design
@@ -276,8 +285,35 @@ V2_TYPE: dict[str, str] = {
     "weight-medium": "500",
     "weight-bold": "700",
     "leading": "1.4",
-    "tracking-label": ".14em",
+    # 0.12em, not the .14em first planned: the GUI has shown 0.12em since the
+    # bridge (styles.css's own value won over tokens.css), and voce 22 kept
+    # the look as it was.
+    "tracking-label": "0.12em",
 }
+#: Per theme, but not a primitive: a translucent veil or an image. The scrim
+#: dims the page behind a modal or a drawer, the overlay is a chip laid over
+#: artwork, the chevron is the arrow drawn on every <select> (the one control
+#: the browser would otherwise draw in its own chrome). Values carried over
+#: unchanged from styles.css (voce 22).
+_CHEVRON = (
+    "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' "
+    "viewBox='0 0 24 24' fill='none' stroke='%23{}' stroke-width='2.4' "
+    "stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline "
+    "points='6 9 12 15 18 9'/%3E%3C/svg%3E\")"
+)
+V2_THEMED: dict[str, dict[str, str]] = {
+    "dark": {
+        "scrim": "rgba(10,8,7,.62)",
+        "overlay": "rgba(10,8,7,.72)",
+        "chevron": _CHEVRON.format("9a8f85"),
+    },
+    "light": {
+        "scrim": "rgba(40,30,22,.36)",
+        "overlay": "rgba(20,14,10,.62)",
+        "chevron": _CHEVRON.format("6f655c"),
+    },
+}
+
 #: Flat by rule: separation is a 1px rule. An overlay (menu, modal) is told
 #: apart by its border, not a shadow.
 V2_ELEVATION: dict[str, str] = {
@@ -381,10 +417,14 @@ def v2_tokens_css() -> str:
                 **FIXED,
                 **FIXED_CHANNELS,
                 **semantic("dark"),
+                **V2_THEMED["dark"],
             },
         ),
         "",
-        *block("html.light-theme,\nbody.light-theme", semantic("light")),
+        *block(
+            "html.light-theme,\nbody.light-theme",
+            {**semantic("light"), **V2_THEMED["light"]},
+        ),
         "",
     ]
     return "\n".join(lines)

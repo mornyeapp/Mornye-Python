@@ -1,5 +1,5 @@
 /* frontend/css/utilities.css — one-declaration utility classes and the
-   status tones (redesign voce 22, out of styles.css).
+   status tones (moved out of styles.css in redesign voce 22).
 
    The u-* classes hold what index.html and the markup app.js writes used to
    say in style="" attributes (Fase 1, voci 4–5), so every look decision
@@ -12,23 +12,23 @@
 .u-app-region-drag.u-app-region-drag { -webkit-app-region: drag; }
 .u-bg-ink.u-bg-ink { background: var(--ink); }
 .u-bg-none.u-bg-none { background: none; }
-.u-bg-surface2.u-bg-surface2 { background: var(--surface2); }
-.u-bg-surface3.u-bg-surface3 { background: var(--surface3); }
-.u-bl-2-solid-border2.u-bl-2-solid-border2 { border-left: 2px solid var(--border2); }
-.u-border-bottom-1-solid-border.u-border-bottom-1-solid-border { border-bottom: 1px solid var(--border); }
+.u-bg-surface2.u-bg-surface2 { background: var(--raised); }
+.u-bg-surface3.u-bg-surface3 { background: var(--selected); }
+.u-bl-2-solid-border2.u-bl-2-solid-border2 { border-left: 2px solid var(--rule-strong); }
+.u-border-bottom-1-solid-border.u-border-bottom-1-solid-border { border-bottom: 1px solid var(--rule); }
 .u-border-none.u-border-none { border: none; }
-.u-border-top-1-solid-border.u-border-top-1-solid-border { border-top: 1px solid var(--border); }
-.u-c-accent.u-c-accent { color: var(--accent); }
-.u-c-muted.u-c-muted { color: var(--muted); }
-.u-c-red.u-c-red { color: var(--red); }
+.u-border-top-1-solid-border.u-border-top-1-solid-border { border-top: 1px solid var(--rule); }
+.u-c-accent.u-c-accent { color: var(--signal); }
+.u-c-muted.u-c-muted { color: var(--text-muted); }
+.u-c-red.u-c-red { color: var(--error); }
 .u-c-text.u-c-text { color: var(--text); }
-.u-c-text2.u-c-text2 { color: var(--text2); }
+.u-c-text2.u-c-text2 { color: var(--text-2); }
 .u-cols-1fr-1fr.u-cols-1fr-1fr { grid-template-columns: 1fr 1fr; }
 .u-cols-24-1fr-80-1fr.u-cols-24-1fr-80-1fr { grid-template-columns: 24px 1fr 80px 1fr; }
 .u-cursor-default.u-cursor-default { cursor: default; }
 .u-cursor-pointer.u-cursor-pointer { cursor: pointer; }
 .u-dir-column.u-dir-column { flex-direction: column; }
-.u-ff-font-mono.u-ff-font-mono { font-family: var(--font-mono); }
+.u-ff-font-mono.u-ff-font-mono { font-family: var(--font); }
 .u-ff-jetbrains-mono-monospace.u-ff-jetbrains-mono-monospace { font-family: 'JetBrains Mono', monospace; }
 .u-ff-monospace.u-ff-monospace { font-family: monospace; }
 .u-fit-cover.u-fit-cover { object-fit: cover; }
@@ -44,7 +44,7 @@
 .u-fs-16.u-fs-16 { font-size: 16px; }
 .u-fs-28.u-fs-28 { font-size: 28px; }
 .u-fs-9_5.u-fs-9_5 { font-size: 9.5px; }
-.u-fs-fs-75.u-fs-fs-75 { font-size: var(--fs-75); }
+.u-fs-fs-75.u-fs-fs-75 { font-size: var(--text-sm); }
 .u-fst-italic.u-fst-italic { font-style: italic; }
 .u-fw-400.u-fw-400 { font-weight: 400; }
 .u-fw-600.u-fw-600 { font-weight: 600; }
@@ -160,7 +160,7 @@
 
 /* Tones: what a status word means, set by app.js as data-tone (and on the
    Save button as data-dirty) instead of a colour written into style="". */
-[data-tone="muted"] { color: var(--muted); }
-[data-tone="ok"] { color: var(--green); }
-[data-tone="warn"] { color: var(--yellow); }
-[data-tone="error"] { color: var(--red); }
+[data-tone="muted"] { color: var(--text-muted); }
+[data-tone="ok"] { color: var(--ok); }
+[data-tone="warn"] { color: var(--signal); }
+[data-tone="error"] { color: var(--error); }

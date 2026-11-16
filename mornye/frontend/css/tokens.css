@@ -58,7 +58,7 @@
   --weight-medium: 500;
   --weight-bold: 700;
   --leading: 1.4;
-  --tracking-label: .14em;
+  --tracking-label: 0.12em;
   --elevation-0: none;
   --elevation-overlay: 0 0 0 1px var(--rule-strong);
   --motion-fast: 80ms;
@@ -73,6 +73,13 @@
   --ink: #000000;
   --on-signal: #ffffff;
   --player-main-ink: #0a0a0a;
+  --brand-deep: #1f4f4f;
+  --dot-close: #ff5f57;
+  --dot-min: #febc2e;
+  --dot-max: #28c840;
+  --dot-close-win: #e81828;
+  --dot-min-win: #f0ad4e;
+  --dot-max-win: #28a745;
   --media-ink-rgb: 255, 255, 255;
   --shade-rgb: 0, 0, 0;
   --knob-shadow-rgb: 15, 23, 42;
@@ -92,6 +99,9 @@
   --signal-ink: var(--amber-ink);
   --ok: var(--green-on-dark);
   --error: var(--red-on-dark);
+  --scrim: rgba(10,8,7,.62);
+  --overlay: rgba(10,8,7,.72);
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239a8f85' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
 }
 
 html.light-theme,
@@ -112,4 +122,7 @@ body.light-theme {
   --signal-ink: var(--amber-ink);
   --ok: var(--green-on-light);
   --error: var(--red-on-light);
+  --scrim: rgba(40,30,22,.36);
+  --overlay: rgba(20,14,10,.62);
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236f655c' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
 }

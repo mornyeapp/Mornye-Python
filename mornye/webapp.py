@@ -1387,7 +1387,7 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
             FRONTEND_DIR / "web-shim.js", media_type="application/javascript"
         )
 
-    # Everything else (app.js, styles.css, assets/...) served as-is.
+    # Everything else (app.js, css/, assets/...) served as-is.
     app.mount("/", StaticFiles(directory=str(FRONTEND_DIR)), name="frontend")
 
     return app

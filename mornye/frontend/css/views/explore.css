@@ -3,11 +3,12 @@
    square covers. Artwork stays the only colour on screen; a missing cover
    is a neutral square, not another service's logo.
 
-   Over styles.css until voce 22. Semantic tokens only; ids and handlers
-   untouched. */
+   The view's structure (grids, positions, the phone layout) comes first,
+   moved out of styles.css in voce 22; the console look follows it.
+   Semantic tokens only; ids and handlers untouched. */
 
 #explore-greeting {
-  font-family: var(--font-display);
+  font-family: var(--font);
   font-optical-sizing: auto;
   font-variation-settings: 'SOFT' 50;
 }
@@ -26,7 +27,7 @@
   margin-bottom: 12px;
 }
 .explore-card:hover img {
-  box-shadow: var(--elev-2);
+  box-shadow: none;
 }
 .explore-card-title {
   margin-bottom: 4px;
@@ -58,7 +59,7 @@
      a very long single file. 140px gives two. */
   .explore-grid {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: var(--sp-3);
+    gap: var(--space-2);
   }
 }
 
@@ -71,7 +72,7 @@
 }
 #explore-source {
   height: var(--row);
-  /* Room on the right for the chevron styles.css draws on every select. */
+  /* Room on the right for the chevron (--chevron) drawn on every select. */
   padding: 0 calc(var(--space-6) + var(--space-1)) 0 var(--space-3);
   border: 1px solid var(--control-border);
   border-radius: var(--radius-1);

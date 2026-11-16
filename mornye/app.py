@@ -2604,7 +2604,7 @@ def _purge_webview_http_cache() -> None:
     That is worse than it sounds: the `?v=` cache-bust that is supposed to
     make a frontend update visible lives *inside* index.html, on the
     <script>/<link> tags. A cached index.html keeps pointing at the old
-    ?v= values, so the old app.js and styles.css stay cached too, and the
+    ?v= values, so the old app.js and stylesheets stay cached too, and the
     whole frontend freezes at whichever version WebKit saw first — through
     any number of restarts, and no matter how often the version is bumped.
     (Observed for real: a window still running a 1 September build days

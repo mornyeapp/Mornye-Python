@@ -3,8 +3,10 @@
    the panel of tracks still missing. The staged list above it is made of
    the shared page parts (css/legacy.css).
 
-   Over styles.css until voce 22. Semantic tokens only; ids and handlers
-   untouched. Reference: docs/mocks/queue.html. */
+   The view's structure (grids, positions, the phone layout) comes first,
+   moved out of styles.css in voce 22; the console look follows it.
+   Semantic tokens only; ids and handlers untouched. Reference:
+   docs/mocks/queue.html. */
 
 /* Pages that scroll with #content (Queue, History) must not shrink to
    the viewport: a shrunk .view lets its rows overflow past that padding,
@@ -14,14 +16,14 @@
 #queue-drawer {
   position: fixed; inset: 0;
   display: none; align-items: center; justify-content: center;
-  z-index: var(--z-drawer); padding: var(--sp-6);
+  z-index: var(--z-drawer); padding: var(--space-5);
   pointer-events: none;
 }
 #queue-drawer.open { display: flex; pointer-events: auto; }
 #queue-backdrop {
   position: absolute; inset: 0;
   background: var(--scrim);
-  opacity: 0; transition: opacity var(--t);
+  opacity: 0; transition: opacity var(--motion) var(--ease);
   pointer-events: none;
   z-index: var(--z-drawer-backdrop);
 }
@@ -39,63 +41,63 @@
 
 .queue-panel header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 22px var(--sp-7) var(--sp-5);
+  padding: 22px var(--space-6) var(--space-4);
   gap: 14px;
 }
-.queue-panel h3 { margin: 0; font-size: 20px; font-weight: var(--fw-bold); color: var(--text); }
+.queue-panel h3 { margin: 0; font-size: 20px; font-weight: var(--weight-bold); color: var(--text); }
 .queue-summary {
   padding: 0 24px 16px;
-  display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: var(--sp-4);
+  display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: var(--space-3);
 }
 .queue-summary .qs-item {
-  display: flex; align-items: center; gap: var(--sp-4);
-  padding: 14px var(--sp-4); background: var(--surface2);
-  border-radius: 16px; border: 1px solid var(--border);
-  color: var(--text2); font-size: var(--fs-200);
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: 14px var(--space-3); background: var(--raised);
+  border-radius: 16px; border: 1px solid var(--rule);
+  color: var(--text-2); font-size: var(--text-lg);
 }
 .queue-summary .qs-item strong { color: var(--text); font-weight: 700; }
 /* They are buttons now (each one filters the list below), so they need to
    look pressable and to show which one is holding the list down. */
 .queue-summary .qs-item {
-  cursor: pointer; font-family: var(--app-font); text-align: left;
-  transition: border-color var(--t), background var(--t);
+  cursor: pointer; font-family: var(--font); text-align: left;
+  transition: border-color var(--motion) var(--ease), background var(--motion) var(--ease);
 }
-.queue-summary .qs-item:hover { background: var(--surface3); border-color: var(--border2); }
+.queue-summary .qs-item:hover { background: var(--selected); border-color: var(--rule-strong); }
 .queue-summary .qs-item.is-filtering {
-  border-color: var(--accent);
-  background: var(--accent-subtle);
+  border-color: var(--signal);
+  background: var(--selected);
 }
 /* Tracks still missing (see the #failed-panel comment in index.html).
    Same surface and radius as the counters above it, so it reads as part
    of the queue rather than as a warning banner dropped on top. */
 .failed-panel {
-  margin: 0 24px var(--sp-4);
-  font-size: var(--fs-200); color: var(--text2);
+  margin: 0 24px var(--space-3);
+  font-size: var(--text-lg); color: var(--text-2);
 }
-.failed-panel .fp-head { display: flex; align-items: center; gap: var(--sp-4); flex-wrap: wrap; }
+.failed-panel .fp-head { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
 .failed-panel .fp-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 160px; }
-.failed-panel .fp-text strong { color: var(--status-failed-fg); font-weight: 700; }
-.failed-panel .fp-sub { font-size: var(--fs-75); color: var(--muted); }
-.failed-panel .fp-actions { display: flex; gap: var(--sp-3); flex-wrap: wrap; }
-.failed-panel .act-btn { padding: 7px 12px; font-size: var(--fs-75); }
+.failed-panel .fp-text strong { color: var(--error); font-weight: 700; }
+.failed-panel .fp-sub { font-size: var(--text-sm); color: var(--text-muted); }
+.failed-panel .fp-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.failed-panel .act-btn { padding: 7px 12px; font-size: var(--text-sm); }
 .fp-list {
   list-style: none; margin: 10px 0 0; padding: 0;
   max-height: 220px; overflow-y: auto;
   display: flex; flex-direction: column; gap: 6px;
 }
 .fp-item {
-  display: flex; align-items: center; gap: var(--sp-3);
+  display: flex; align-items: center; gap: var(--space-2);
 }
 .fp-item .fp-main { flex: 1; min-width: 0; }
 .fp-item .fp-name, .fp-item .fp-error { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fp-item .fp-name { color: var(--text); }
-.fp-item .fp-error { font-size: var(--fs-75); color: var(--muted); }
-.fp-item .fp-attempts { font-size: var(--fs-75); color: var(--muted); font-family: var(--font-mono); white-space: nowrap; }
+.fp-item .fp-error { font-size: var(--text-sm); color: var(--text-muted); }
+.fp-item .fp-attempts { font-size: var(--text-sm); color: var(--text-muted); font-family: var(--font); white-space: nowrap; }
 .queue-content {
   padding: 0 24px 20px;
   display: flex;
   flex-direction: column;
-  gap: var(--sp-5);
+  gap: var(--space-4);
   min-height: 240px;
   max-height: min(500px, 78vh); 
   overflow-y: auto;
@@ -105,74 +107,74 @@
   width: 4px;
 }
 .queue-content::-webkit-scrollbar-thumb {
-  background: var(--border2);
+  background: var(--rule-strong);
   border-radius: 99px;
 }
 
 .queue-empty {
   flex: 1; display: flex; align-items: center; justify-content: center;
-  color: var(--muted); font-size: 16px; text-align: center;
-  padding: 36px var(--sp-4);
+  color: var(--text-muted); font-size: 16px; text-align: center;
+  padding: 36px var(--space-3);
 }
 .queue-empty .q-icon { font-size: 36px; margin-bottom: 10px; opacity: .32; }
 .queue-list { display: flex; flex-direction: column; gap: 14px; }
 .queue-item {
-  display: flex; flex-direction: column; gap: var(--sp-4);
+  display: flex; flex-direction: column; gap: var(--space-3);
 }
 .queue-item .qi-title { font-size: 14px; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.queue-item .qi-artist { font-size: var(--fs-100); color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.queue-item .qi-artist { font-size: var(--text-md); color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The row the title and the status pill share. It had no rule at all, so
    it was a plain block: the pill (also a div, also block) stretched the
    full width of the item and rendered as a coloured bar under the title
    instead of a pill beside it. */
 .queue-item .qi-top {
   display: flex; align-items: flex-start; justify-content: space-between;
-  gap: var(--sp-4);
+  gap: var(--space-3);
 }
 .queue-item .qi-meta { min-width: 0; }
 .queue-item .qi-pill {
   display: inline-block; flex-shrink: 0;
   white-space: nowrap;
 }
-.queue-item .qi-bottom { font-family: var(--font-mono); font-size: var(--fs-100); color: var(--muted); }
-.queue-item .qi-bottom-meta { display: flex; flex-direction: column; gap: 3px; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
-.queue-item .qi-bottom-meta .qi-bm-path { color: var(--text-dim); font-size: var(--fs-75); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.queue-item .qi-bottom { font-family: var(--font); font-size: var(--text-md); color: var(--text-muted); }
+.queue-item .qi-bottom-meta { display: flex; flex-direction: column; gap: 3px; font-family: var(--font); font-size: 11.5px; color: var(--text-muted); }
+.queue-item .qi-bottom-meta .qi-bm-path { color: var(--text-muted); font-size: var(--text-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 
 #queue-counter {
   padding: 0 24px 22px;
-  font-family: var(--font-mono);
-  display: flex; justify-content: space-between; align-items: center; gap: var(--sp-4);
+  font-family: var(--font);
+  display: flex; justify-content: space-between; align-items: center; gap: var(--space-3);
 }
 
 /* ── Queue & History pages ──────────────────────────────────────────
    Shared page grammar: segmented type tabs with counts, one toolbar row
    (search, filter, actions — destructive in red, primary last), then a
    list of rows: artwork, title, two lines of context, status, actions. */
-.page-body { padding: 0 var(--sp-5) var(--sp-8); max-width: 1180px; width: 100%; }
+.page-body { padding: 0 var(--space-4) var(--space-8); max-width: 1180px; width: 100%; }
 
 .seg-tabs {
-  display: flex; gap: var(--sp-2); flex-wrap: wrap;
-  padding-bottom: var(--sp-4); margin-bottom: var(--sp-4);
-  border-bottom: 1px solid var(--border);
+  display: flex; gap: var(--space-1); flex-wrap: wrap;
+  padding-bottom: var(--space-3); margin-bottom: var(--space-3);
+  border-bottom: 1px solid var(--rule);
 }
 .seg-tab {
   display: inline-flex; align-items: center; gap: 8px;
-  font-weight: var(--fw-medium);
-  cursor: pointer; transition: background var(--t), color var(--t), border-color var(--t);
+  font-weight: var(--weight-medium);
+  cursor: pointer; transition: background var(--motion) var(--ease), color var(--motion) var(--ease), border-color var(--motion) var(--ease);
 }
-.seg-tab svg { width: 16px; height: 16px; color: var(--muted); }
-.seg-tab.active { font-weight: var(--fw-semibold); }
-.seg-tab.active svg { color: var(--accent-text); }
+.seg-tab svg { width: 16px; height: 16px; color: var(--text-muted); }
+.seg-tab.active { font-weight: 600; }
+.seg-tab.active svg { color: var(--signal-text); }
 .seg-count {
-  min-width: 22px; font-weight: var(--fw-semibold); text-align: center;
+  min-width: 22px; font-weight: 600; text-align: center;
 }
 
-.page-toolbar { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; margin-bottom: var(--sp-4); }
+.page-toolbar { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-3); }
 .tb-spacer { flex: 1; }
 .tb-field {
   display: inline-flex; align-items: center; gap: 8px;
-  color: var(--muted);
-  transition: border-color var(--t), box-shadow var(--t);
+  color: var(--text-muted);
+  transition: border-color var(--motion) var(--ease), box-shadow var(--motion) var(--ease);
 }
 .tb-field svg { width: 15px; height: 15px; flex-shrink: 0; }
 /* Doubled up so it outranks the global input/select theming: the field
@@ -180,7 +182,7 @@
 .tb-field.tb-field input, .tb-field.tb-field select {
   border: none; outline: none; background-color: transparent; box-shadow: none;
   border-radius: 0; min-height: 0;
-  color: var(--input-text); font-family: var(--app-font); font-size: var(--fs-100);
+  color: var(--text); font-family: var(--font); font-size: var(--text-md);
   height: 100%; min-width: 0; padding: 0;
 }
 /* .tb-field.tb-select, not .tb-select: the reset above (padding: 0)
@@ -190,28 +192,28 @@
   cursor: pointer;
 }
 
-.page-list { display: flex; flex-direction: column; gap: var(--sp-2); }
+.page-list { display: flex; flex-direction: column; gap: var(--space-1); }
 .page-list > .empty-state {
-  padding: var(--sp-10) var(--sp-6);
-  border-radius: var(--radius-lg);
+  padding: 48px var(--space-5);
+  border-radius: var(--radius-2);
 }
 /* Empty staged queue while something is downloading: one quiet line
    instead of the big placeholder, so "Downloading now" sits near the
    top and the active row is in view without scrolling. */
 #view-queue.has-live #sq-list.is-empty > .empty-state {
   flex-direction: row; justify-content: flex-start; text-align: left;
-  gap: var(--sp-3); padding: var(--sp-3) var(--sp-4);
+  gap: var(--space-2); padding: var(--space-2) var(--space-3);
 }
 #view-queue.has-live #sq-list.is-empty > .empty-state .es-icon {
   width: 28px; height: 28px; margin: 0; border-radius: 9px; flex-shrink: 0;
 }
 #view-queue.has-live #sq-list.is-empty > .empty-state .es-icon svg { width: 15px; height: 15px; }
 #view-queue.has-live #sq-list.is-empty > .empty-state .es-hint { max-width: none; }
-#view-queue.has-live #sq-list.is-empty + .page-section-title { margin-top: var(--sp-5); }
-.seg-tab:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 1px; }
+#view-queue.has-live #sq-list.is-empty + .page-section-title { margin-top: var(--space-4); }
+.seg-tab:focus-visible { outline: 2px solid var(--signal-strong); outline-offset: 1px; }
 
 .page-section-title {
-  margin: var(--sp-8) 0 var(--sp-3);
+  margin: var(--space-8) 0 var(--space-2);
 }
 /* The live download list, at home in the page instead of a modal. */
 #view-queue #queue-drawer { position: static; display: block; padding: 0; pointer-events: auto; z-index: auto; }
@@ -220,9 +222,9 @@
 #view-queue .queue-panel header h3 { display: none; }
 #view-queue .queue-panel {
   width: 100%; max-height: none; z-index: auto;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-2);
 }
-#view-queue .queue-panel header { padding: var(--sp-4) var(--sp-5) 0; justify-content: flex-end; }
+#view-queue .queue-panel header { padding: var(--space-3) var(--space-4) 0; justify-content: flex-end; }
 
 /* ── Downloading now (live list on the Queue page) ──
    One card: live numbers and list actions on the first row, the status
@@ -230,71 +232,71 @@
    the rows. Replaces the drawer's four big emoji tiles. */
 .act-btn.ghost {
   box-shadow: none;
-  font-weight: var(--fw-medium);
+  font-weight: var(--weight-medium);
 }
-.act-btn.ghost:hover { background: var(--surface2); transform: none; }
+.act-btn.ghost:hover { background: var(--raised); transform: none; }
 #view-queue .live-panel { padding: 0; overflow: hidden; }
 .live-head {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4);
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
   flex-wrap: wrap;
 }
-.live-metrics { display: flex; gap: var(--sp-8); flex-wrap: wrap; }
+.live-metrics { display: flex; gap: var(--space-8); flex-wrap: wrap; }
 .metric { display: flex; flex-direction: column; min-width: 88px; }
-.live-actions { display: flex; gap: var(--sp-1); }
+.live-actions { display: flex; gap: 2px; }
 .live-filters {
-  display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
-  padding: var(--sp-3) var(--sp-5);
-  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--rule);
 }
 #view-queue .queue-summary {
-  display: flex; gap: var(--sp-2); flex-wrap: wrap; margin: 0; padding: 0;
+  display: flex; gap: var(--space-1); flex-wrap: wrap; margin: 0; padding: 0;
   grid-template-columns: none;
 }
 #view-queue .queue-summary .qs-item {
   display: inline-flex; align-items: center; gap: 8px;
   height: 32px; padding: 0 12px; min-width: 0;
-  border-radius: var(--radius-pill);
-  background: var(--surface2); border: 1px solid transparent;
-  color: var(--text2); font-family: var(--app-font); font-size: var(--fs-100); font-weight: var(--fw-medium);
+  border-radius: var(--radius-2);
+  background: var(--raised); border: 1px solid transparent;
+  color: var(--text-2); font-family: var(--font); font-size: var(--text-md); font-weight: var(--weight-medium);
   box-shadow: none;
 }
 #view-queue .queue-summary .qs-item strong {
-  font-family: var(--font-mono); font-size: var(--fs-100); color: var(--text);
+  font-family: var(--font); font-size: var(--text-md); color: var(--text);
   font-variant-numeric: tabular-nums;
 }
-#view-queue .queue-summary .qs-item:hover { background: var(--surface3); }
+#view-queue .queue-summary .qs-item:hover { background: var(--selected); }
 #view-queue .queue-summary .qs-item.is-filtering {
-  background: var(--accent-subtle); border-color: var(--accent-border); color: var(--text);
+  background: var(--selected); border-color: var(--signal-strong); color: var(--text);
 }
 .qs-dot { background: currentColor; flex-shrink: 0; }
-.qs-item.queued .qs-dot    { color: var(--status-queued-fg); }
-.qs-item.completed .qs-dot { color: var(--status-done-fg); }
-.qs-item.skipped .qs-dot   { color: var(--status-skipped-fg); }
-.qs-item.failed .qs-dot    { color: var(--status-failed-fg); }
-#view-queue .failed-panel { margin: var(--sp-3) var(--sp-5) 0; }
-#view-queue .queue-content { max-height: none; min-height: 200px; padding: var(--sp-2) var(--sp-3); }
+.qs-item.queued .qs-dot    { color: var(--text-muted); }
+.qs-item.completed .qs-dot { color: var(--ok); }
+.qs-item.skipped .qs-dot   { color: var(--text-muted); }
+.qs-item.failed .qs-dot    { color: var(--error); }
+#view-queue .failed-panel { margin: var(--space-2) var(--space-4) 0; }
+#view-queue .queue-content { max-height: none; min-height: 200px; padding: var(--space-1) var(--space-2); }
 #view-queue .queue-empty {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 6px; padding: var(--sp-10) var(--sp-5); text-align: center; color: var(--muted);
+  gap: 6px; padding: 48px var(--space-4); text-align: center; color: var(--text-muted);
 }
 #view-queue .queue-empty .q-icon {
   width: 44px; height: 44px; margin: 0 0 6px; opacity: 1;
-  display: grid; place-items: center; border-radius: var(--radius-md);
-  background: var(--surface2); color: var(--muted); font-size: 0;
+  display: grid; place-items: center; border-radius: var(--radius-2);
+  background: var(--raised); color: var(--text-muted); font-size: 0;
 }
 #view-queue .queue-empty .q-icon svg { width: 20px; height: 20px; }
-#view-queue .queue-empty .q-title { font-size: var(--fs-200); font-weight: var(--fw-semibold); color: var(--text); }
-#view-queue .queue-empty .q-hint { font-size: var(--fs-100); max-width: 46ch; }
+#view-queue .queue-empty .q-title { font-size: var(--text-lg); font-weight: 600; color: var(--text); }
+#view-queue .queue-empty .q-hint { font-size: var(--text-md); max-width: 46ch; }
 #view-queue #queue-counter {
   display: flex; justify-content: space-between;
-  padding: var(--sp-3) var(--sp-5); border-top: 1px solid var(--border);
-  font-size: var(--fs-75); color: var(--muted); font-variant-numeric: tabular-nums;
+  padding: var(--space-2) var(--space-4); border-top: 1px solid var(--rule);
+  font-size: var(--text-sm); color: var(--text-muted); font-variant-numeric: tabular-nums;
 }
 /* "0 tracks" under an empty list says nothing the empty state does not. */
 #view-queue .live-panel:has(#queue-empty:not([style*="none"])) #queue-counter { display: none; }
 
 @media (max-width: 700px) {
-  .live-metrics { gap: var(--sp-5); }
+  .live-metrics { gap: var(--space-4); }
 }
 
 @media (max-width: 700px) {
@@ -311,7 +313,7 @@
 }
 .queue-panel {
   border-radius: 16px;
-  box-shadow: var(--elev-2);
+  box-shadow: none;
 }
 
 @media (max-width: 700px) {

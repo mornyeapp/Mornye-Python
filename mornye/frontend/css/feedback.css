@@ -4,7 +4,8 @@
    components of components.css (see docs/styleguide.html) on the class
    names app.js and toast-system.js already write.
 
-   Over styles.css until voce 22. Semantic tokens only. */
+   The structure of toasts, dialogs and banners comes first (moved out of
+   styles.css in voce 22), the console look after it. Semantic tokens only. */
 
 /* Folder browser modal — was a hardcoded rgba(0,0,0,.5) scrim plus a
    card of inline style="" in index.html, so it never picked up --scrim
@@ -18,58 +19,58 @@
   z-index: var(--z-modal);
 }
 .fb-card {
-  background: var(--surface); border: 1px solid var(--border);
+  background: var(--surface); border: 1px solid var(--rule);
   width: 90%; max-width: 500px; max-height: 80vh;
   display: flex; flex-direction: column;
 }
 .fb-header {
-  padding: var(--sp-5) var(--sp-6);
-  border-bottom: 1px solid var(--border);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--rule);
   display: flex; justify-content: space-between; align-items: center;
 }
-#folder-browser-title { font-weight: var(--fw-semibold); color: var(--text); }
+#folder-browser-title { font-weight: 600; color: var(--text); }
 .fb-close {
-  background: none; border: none; color: var(--muted); cursor: pointer;
-  font-size: var(--fs-400); padding: 0; line-height: 1;
-  transition: color var(--t);
+  background: none; border: none; color: var(--text-muted); cursor: pointer;
+  font-size: var(--text-xl); padding: 0; line-height: 1;
+  transition: color var(--motion) var(--ease);
 }
 .fb-close:hover { color: var(--text); }
 .fb-toolbar {
-  padding: var(--sp-4) var(--sp-6);
-  border-bottom: 1px solid var(--border);
-  display: flex; gap: var(--sp-3); align-items: center;
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--rule);
+  display: flex; gap: var(--space-2); align-items: center;
 }
 #fb-back {
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); padding: var(--sp-3) var(--sp-4);
-  cursor: pointer; color: var(--text); font-size: var(--fs-100);
-  font-family: var(--app-font); transition: opacity var(--t);
+  background: var(--raised); border: 1px solid var(--rule);
+  border-radius: var(--radius-1); padding: var(--space-2) var(--space-3);
+  cursor: pointer; color: var(--text); font-size: var(--text-md);
+  font-family: var(--font); transition: opacity var(--motion) var(--ease);
 }
 #fb-back.is-root { opacity: .5; }
 #fb-path {
-  flex: 1; background: var(--surface2); border: 1px solid var(--border);
-  border-radius: var(--radius-sm); padding: var(--sp-3) var(--sp-4);
-  color: var(--text2); font-size: var(--fs-75); font-family: var(--font-mono);
+  flex: 1; background: var(--raised); border: 1px solid var(--rule);
+  border-radius: var(--radius-1); padding: var(--space-2) var(--space-3);
+  color: var(--text-2); font-size: var(--text-sm); font-family: var(--font);
 }
 .fb-select {
-  background: var(--accent); border: 1px solid var(--accent);
-  border-radius: var(--radius-sm); padding: var(--sp-3) var(--sp-4);
-  cursor: pointer; color: var(--accent-fg); font-weight: var(--fw-semibold);
-  font-size: var(--fs-100); font-family: var(--app-font);
-  transition: background var(--t);
+  background: var(--signal); border: 1px solid var(--signal);
+  border-radius: var(--radius-1); padding: var(--space-2) var(--space-3);
+  cursor: pointer; color: var(--signal-ink); font-weight: 600;
+  font-size: var(--text-md); font-family: var(--font);
+  transition: background var(--motion) var(--ease);
 }
-.fb-select:hover { background: var(--accent-hover); }
-#fb-entries { flex: 1; overflow-y: auto; padding: var(--sp-3); }
+.fb-select:hover { background: var(--signal); }
+#fb-entries { flex: 1; overflow-y: auto; padding: var(--space-2); }
 .fb-entry {
-  padding: var(--sp-3) var(--sp-4); cursor: pointer;
-  border-radius: var(--radius-sm);
-  display: flex; align-items: center; gap: var(--sp-3);
-  color: var(--text); font-size: var(--fs-200);
+  padding: var(--space-2) var(--space-3); cursor: pointer;
+  border-radius: var(--radius-1);
+  display: flex; align-items: center; gap: var(--space-2);
+  color: var(--text); font-size: var(--text-lg);
   border: 1px solid transparent;
-  transition: background var(--t);
+  transition: background var(--motion) var(--ease);
 }
-.fb-entry:hover { background: var(--surface2); }
-.fb-empty { padding: var(--sp-6); text-align: center; color: var(--muted); font-size: var(--fs-100); }
+.fb-entry:hover { background: var(--raised); }
+.fb-empty { padding: var(--space-5); text-align: center; color: var(--text-muted); font-size: var(--text-md); }
 
 .api-modal {
   position: fixed;
@@ -78,7 +79,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--sp-6);
+  padding: var(--space-5);
 }
 .api-modal.hidden { display: none; }
 .api-modal-backdrop {
@@ -88,14 +89,14 @@
 .api-modal-card {
   position: relative;
   width: min(520px, 100%);
-  padding: var(--sp-6);
+  padding: var(--space-5);
   z-index: 1;
 }
 .api-modal-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: var(--sp-4);
+  gap: var(--space-3);
 }
 .api-modal-actions {
   display: flex;
@@ -119,14 +120,14 @@
   font-size: 16px;
 }
 .api-config-help {
-  font-size: var(--fs-100);
-  color: var(--yellow);
+  font-size: var(--text-md);
+  color: var(--signal);
   text-decoration: none;
   white-space: nowrap;
   border-bottom: 1px dashed transparent;
 }
 .api-config-help:hover {
-  border-bottom-color: var(--yellow);
+  border-bottom-color: var(--signal);
 }
 
 /* Toasts and the save notice float above the bar, not behind it. */
@@ -138,18 +139,18 @@
 .close-btn {
   width: 38px; height: 38px; border-radius: 14px;
   display: grid; place-items: center;
-  border: 1px solid var(--border); background: var(--surface);
-  color: var(--text2); cursor: pointer;
+  border: 1px solid var(--rule); background: var(--surface);
+  color: var(--text-2); cursor: pointer;
 }
-.close-btn:hover { background: var(--surface2); color: var(--text); }
+.close-btn:hover { background: var(--raised); color: var(--text); }
 @keyframes fadein { from { opacity:0; transform: translateY(2px); } to { opacity:1; transform: none; } }
 
 /* ── Error state ──
    One shape for "this did not work": what happened, what to do, a way to
    do it, and the raw message folded away for when it is needed. */
 .error-state {
-  display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-3);
-  max-width: 560px; margin: var(--sp-6) 0; padding: var(--sp-6);
+  display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2);
+  max-width: 560px; margin: var(--space-5) 0; padding: var(--space-5);
   text-align: left; user-select: text;
 }
 .error-state .es-icon {
@@ -158,19 +159,19 @@
 }
 .error-state .es-icon svg { width: 20px; height: 20px; }
 .error-state .es-body { margin: 0; line-height: 1.55; max-width: 60ch; }
-.error-state .es-actions { display: flex; gap: var(--sp-3); flex-wrap: wrap; margin-top: var(--sp-2); }
+.error-state .es-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-1); }
 .error-state .es-detail { width: 100%; }
 .error-state .es-detail summary { cursor: pointer; width: fit-content; }
-.error-state .es-detail summary:hover { color: var(--text2); }
+.error-state .es-detail summary:hover { color: var(--text-2); }
 .error-state .es-detail code {
-  display: block; margin-top: var(--sp-2); padding: var(--sp-3);
-  font-family: var(--font-mono); font-size: var(--fs-75); color: var(--text2);
+  display: block; margin-top: var(--space-1); padding: var(--space-2);
+  font-family: var(--font); font-size: var(--text-sm); color: var(--text-2);
   white-space: pre-wrap; overflow-wrap: anywhere;
 }
-#track-rows > .error-state { margin: var(--sp-6) auto; }
+#track-rows > .error-state { margin: var(--space-5) auto; }
 .page-list > .error-state {
-  padding: var(--sp-10) var(--sp-6);
-  border-radius: var(--radius-lg);
+  padding: 48px var(--space-5);
+  border-radius: var(--radius-2);
 }
 
 /* Forced colours: see the note in layout.css. */
@@ -192,18 +193,18 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px var(--sp-5);
-  background: var(--status-failed-bg);
-  border-bottom: 1px solid var(--status-failed-fg);
-  font-size: var(--fs-100);
-  color: var(--text2);
+  padding: 10px var(--space-4);
+  background: transparent;
+  border-bottom: 1px solid var(--error);
+  font-size: var(--text-md);
+  color: var(--text-2);
   flex-shrink: 0;
   animation: fadein .2s ease;
 }
 .ffmpeg-banner-icon {
   font-size: 16px;
   flex-shrink: 0;
-  color: var(--status-failed-fg);
+  color: var(--error);
 }
 .ffmpeg-banner-body {
   flex: 1;
@@ -212,24 +213,24 @@
   align-items: center;
   gap: 6px;
 }
-.ffmpeg-banner-body strong { color: var(--status-failed-fg); }
+.ffmpeg-banner-body strong { color: var(--error); }
 .ffmpeg-banner-link {
-  color: var(--accent-text);
+  color: var(--signal-text);
   text-decoration: underline;
   white-space: nowrap;
 }
 .ffmpeg-banner-close {
   background: none;
   border: none;
-  color: var(--muted);
+  color: var(--text-muted);
   cursor: pointer;
   font-size: 14px;
-  padding: var(--sp-1) 6px;
+  padding: 2px 6px;
   border-radius: 4px;
   flex-shrink: 0;
-  transition: color var(--t);
+  transition: color var(--motion) var(--ease);
 }
-.ffmpeg-banner-close:hover { color: var(--text2); }
+.ffmpeg-banner-close:hover { color: var(--text-2); }
 
 /* ==========================================================================
    TOAST SYSTEM
@@ -238,7 +239,7 @@
   position: fixed;
   display: flex;
   flex-direction: column;
-  gap: var(--sp-4);
+  gap: var(--space-3);
   z-index: var(--z-toast);
   pointer-events: none;
 }
@@ -254,7 +255,7 @@
 .toast {
   display: flex;
   align-items: center;
-  padding: 14px var(--sp-5);
+  padding: 14px var(--space-4);
   min-width: 280px;
   max-width: 400px;
   pointer-events: auto;
@@ -274,7 +275,7 @@
   flex-grow: 1;
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
+  gap: var(--space-1);
 }
 
 .toast-title {
@@ -341,7 +342,7 @@
     width: 100%;
     max-height: 92dvh;
     overflow-y: auto;
-    padding: var(--sp-6) var(--sp-5) calc(var(--sp-6) + env(safe-area-inset-bottom));
+    padding: var(--space-5) var(--space-4) calc(var(--space-5) + env(safe-area-inset-bottom));
   }
   .api-modal-header .close-btn { min-width: 44px; min-height: 44px; }
   /* The action row is a space-between pair: a link (or, in the login sheet,
@@ -350,7 +351,7 @@
      the primary action is a full-width target at the bottom of the sheet
      rather than a content-width one tucked into the corner. The empty
      spacer would otherwise contribute a blank row of its own. */
-  .api-modal-actions { flex-wrap: wrap; gap: var(--sp-3); }
+  .api-modal-actions { flex-wrap: wrap; gap: var(--space-2); }
   .api-modal-actions > div { flex: 1 1 100%; }
   .api-modal-actions > div:empty { display: none; }
   .api-modal-actions .act-btn { flex: 1 1 auto; min-height: 44px; }
@@ -377,14 +378,14 @@
   .toast-container.bottom-right, .toast-container.bottom-left,
   .toast-container.bottom-center, .toast-container.top-right,
   .toast-container.top-left, .toast-container.top-center {
-    left: var(--sp-3);
-    right: var(--sp-3);
+    left: var(--space-2);
+    right: var(--space-2);
     transform: none;
     max-width: none;
   }
   .toast-container.top-right, .toast-container.top-left,
   .toast-container.top-center {
-    top: calc(var(--sp-3) + env(safe-area-inset-top));
+    top: calc(var(--space-2) + env(safe-area-inset-top));
   }
   .toast { width: auto; max-width: none; }
 }
@@ -395,7 +396,7 @@
   body.web-mode:has(#queue-dock.visible) .toast-container.bottom-right,
   body.web-mode:has(#queue-dock.visible) .toast-container.bottom-left,
   body.web-mode:has(#queue-dock.visible) .toast-container.bottom-center {
-    bottom: calc(var(--nav-total-h) + 60px + var(--sp-3));
+    bottom: calc(var(--nav-total-h) + 60px + var(--space-2));
   }
 
   /* Same for anything else anchored to the bottom edge. The bottom sheets
@@ -404,7 +405,7 @@
   body.web-mode .toast-container.bottom-right,
   body.web-mode .toast-container.bottom-left,
   body.web-mode .toast-container.bottom-center {
-    bottom: calc(var(--nav-total-h) + var(--sp-3));
+    bottom: calc(var(--nav-total-h) + var(--space-2));
   }
 }
 
@@ -415,7 +416,7 @@
 
 .api-modal-card, .fb-card {
   border-radius: 16px;
-  box-shadow: var(--elev-2);
+  box-shadow: none;
 }
 
 @media (max-width: 700px) {

@@ -1,235 +1,57 @@
-/* frontend/css/layout.css — the shell in the console look (redesign voce 10):
-   titlebar, navigation rail, download dock, player bar.
+/* frontend/css/layout.css — the page and the shell in the console look:
+   reset, font, the shell's sizes and stacking order, titlebar, navigation
+   rail (a bottom bar on the phone in --web mode), download dock, player
+   bar, and the one focus ring.
 
-   Loads after styles.css, whose rules for these parts are still there and
-   go with it in voce 22; until then this file restates every property it
-   changes, shadows, blur and radii included. Semantic tokens only. The
-   ids and onclick handlers app.js relies on are untouched
-   (tests/test_frontend_dom_contract.py). */
+   The structure (moved out of styles.css in redesign voce 22) comes first;
+   the console look (voce 10) follows and restates each property it changes.
+   Colours and type come from tokens.css; the variables declared here are
+   the shell's own, changed by its state rules (rail collapsed, phone bar),
+   and the other sheets may use them. The ids and onclick handlers app.js
+   relies on are untouched (tests/test_frontend_dom_contract.py). */
 
-/* ── Fonts ── shipped with the app (SIL OFL, see assets/fonts/README.md):
-   the desktop window works offline, and a font CDN would also be one more
+/* ── Font ── shipped with the app (SIL OFL, see assets/fonts/README.md): the
+   desktop window works offline, and a font CDN would also be one more
    third-party request from a --web install. Variable weights, Latin set;
    anything outside it falls back to the system stacks in the tokens. */
-@font-face { font-family: 'Inter'; src: url('../assets/fonts/Inter-Variable.woff2') format('woff2');
-  font-weight: 100 900; font-style: normal; font-display: swap; }
-@font-face { font-family: 'Fraunces'; src: url('../assets/fonts/Fraunces-Variable.woff2') format('woff2');
-  font-weight: 100 900; font-style: normal; font-display: swap; }
 @font-face { font-family: 'JetBrains Mono'; src: url('../assets/fonts/JetBrainsMono-Variable.woff2') format('woff2');
   font-weight: 100 800; font-style: normal; font-display: swap; }
 
-/* ── Design tokens ── */
-/* :root carries the DARK values canonically — dark is the app's default
-   look. html.light-theme / body.light-theme below only overrides the
-   deltas. Declared for <html> as well as <body> because `html { background:
-   var(--bg) }` resolves tokens on the <html> element: with the theme class
-   only on <body> the page's outermost background showed the wrong theme
-   around the content. Both elements carry the theme class (see
-   setThemeClass() in app.js). */
+/* The theme class is on <html> as well as <body> (setThemeClass() in
+   app.js): `html { background: var(--ground) }` resolves on <html>, which
+   otherwise showed the wrong theme around the content. */
 :root {
   color-scheme: dark;
 
-  /* Neutrals — warm near-blacks, no blue cast ("warm dark music app").
-     The base values mirror mornye/branding_tokens.py (DARK);
-     tests/test_brand_tokens.py fails if the two drift apart. */
-  --scrim:      rgba(10,8,7,.62);
-  --overlay:    rgba(10,8,7,.72);   /* chip sopra artwork */
-  /* A <select> is the one control the browser still draws itself, in the
-     OS's own chrome and font. Owning the chevron lets it be styled like
-     every other surface in the window. */
-  --chevron:    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239a8f85' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  /* Width of the left nav rail actually on screen. Shared so anything
+     anchored to the viewport (the download dock) can sit beside it instead
+     of guessing the number and ending up underneath it. */
+  --rail-w: var(--sidebar-w);
 
-  /* Brand — the logo's petrol and mint, plus one warm highlight kept for
-     the few things that should glow (Hi-Res, "new"). */
-  --brand-deep:   #1f4f4f;
-  --brand-mint:   #a8ecec;
-
-  /* Stato / utility — tuned to sit on warm surfaces */
-  --util-link:       var(--accent-text);  --util-link-bd: var(--accent-border);
-  --log-info:  var(--blue);  --log-ok: var(--green);  --log-warn: var(--status-warn-fg);
-  --log-error: var(--red);   --log-debug: var(--muted);
-  --diff-fg: var(--status-warn-fg);
-  --dot-close: #ff5f57;  --dot-min: #febc2e;  --dot-max: #28c840;
-  --dot-close-win: #e81828;  --dot-min-win: #f0ad4e;  --dot-max-win: #28a745;
-
-  /* Spacing — griglia 4px */
-  --sp-1: 2px;  --sp-2: 4px;  --sp-3: 8px;  --sp-4: 12px;
-  --sp-5: 16px; --sp-6: 20px; --sp-7: 24px; --sp-8: 32px;
-  --sp-9: 40px; --sp-10: 48px; --sp-12: 64px; --sp-16: 96px;
-
-  /* Type: Inter for the interface, Fraunces (a soft display serif) for
-     view and album titles, JetBrains Mono for data. All three ship in
-     assets/fonts/ — the window works offline, so no font CDN. */
-  --lh-50:  1.4;
-  --lh-75:  1.45;
-  --lh-100: 1.45;
-  --lh-200: 1.4;
-  --lh-300: 1.4;   /* titoli riga, enfasi — text-base */
-  --lh-400: 1.3;   /* titoli card, H2 sezione — text-lg */
-  --lh-500: 1.2;   /* H1 vista — display */
-  --lh-600: 1.1;   /* titolo album — display */
-  --fs-700: 40px; --lh-700: 1.05;  /* wordmark hero — display */
-  --fw-regular:  400; --fw-medium: 500; --fw-semibold: 600; --fw-bold: 700;
-  --tracking-tight: -0.02em; --tracking-label: 0.12em; --tracking-wide: 0.04em;
-
-  /* Softer, roomier shapes than the old compact grouped surfaces. */
-  --radius:    var(--radius-md);
-
-  /* Elevazione — warm-tinted shadows, never pure black on warm ground */
-  --elev-0: none;
-  --shadow-soft:   var(--elev-2);  --shadow-strong: var(--elev-3);
-
-  /* Width of the left nav rail. Shared so anything anchored to the
-     viewport (the download dock) can sit beside it instead of guessing
-     the number and ending up underneath it. */
-  --rail-w: var(--sidebar-w);  /* what is actually on screen right now */
-
-  /* Z-index — preserva l'ordine attuale */
+  /* Stacking order, lowest first. */
   --z-content: 1;    --z-tooltip: 100;  --z-sidebar: 150;
   --z-titlebar: 200; --z-nav-tooltip: 250;
   --z-dock: 300; --z-drawer-backdrop: 390; --z-drawer: 400;
   --z-save-toast: 800; --z-modal: 1000; --z-toast: 1100;
 
-  /* Motion */
-  --t:      var(--dur-2) var(--ease-out);
-  --t-slow: var(--dur-4) var(--ease-out);
-
-  /* Breakpoint (documentati — le var non funzionano dentro @media):
-     --bp-sm:600  --bp-md:900  --bp-lg:1200  --bp-xl:1440 */
-
-  /* Alias back-compat verso i nuovi token — così index.html/app.js che
-     risolvono ancora --yellow/--yellow-d/--yellow-bg/--ring ottengono
-     l'accento senza bisogno di toccare JS/HTML. */
-  --yellow:    var(--accent);
-  --yellow-d:  var(--accent-press);
-  --yellow-bg: var(--accent-subtle);
-  --ring:      var(--accent-ring);
-
-  /* Theme-independent (branding_tokens.FIXED, FIXED_CHANNELS). */
-  --media-ink: #ffffff;
-  --media-ink-inverse: #222222;
-  --media-bg: #2a1a1a;
-  --media-tint-from: #6b3b3b;
-  --media-tint-to: #3a2323;
-  --paper: #ffffff;
-  --ink: #000000;
-  --on-signal: #ffffff;
-  --player-main-ink: #0a0a0a;
-  --media-ink-rgb: 255, 255, 255;
-  --shade-rgb: 0, 0, 0;
-  --knob-shadow-rgb: 15, 23, 42;
+  /* Breakpoints used below (custom properties do not work in @media):
+     600, 700 (phone bottom bar), 900, 1200, 1440. */
 }
 
-/* ── Light theme (solo delta) — warm paper, mirrors branding_tokens.LIGHT ── */
 html.light-theme,
 body.light-theme {
   color-scheme: light;
-  --scrim:      rgba(40,30,22,.36);
-  --overlay:    rgba(20,14,10,.62);
-  --chevron:    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236f655c' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-
 }
 
-/* ── Token v2 bridge (redesign Fase 3, voce 10) ──
-   css/tokens.css loads first and holds the console look. Every name the
-   old stylesheet uses now points at a v2 semantic token, so the whole
-   GUI takes graphite, the amber signal and JetBrains Mono at once while
-   the views are rebuilt one by one. --text, --surface and --ease are v2
-   names already and were dropped from the blocks above. The selector
-   list matches the light block so this wins in both themes; the
-   accents set the --signal tokens in css/accents.css (voce 28).
-   Goes away with styles.css (voce 22). */
-:root,
-html.light-theme,
-body.light-theme {
-  --bg: var(--ground);
-  --surface2: var(--raised);
-  --surface3: var(--selected);
-  --border: var(--rule);
-  --border2: var(--rule-strong);
-  --text2: var(--text-2);
-  --muted: var(--text-muted);
-  --text-dim: var(--text-muted);
-  --input-bg: var(--raised);
-  --input-text: var(--text);
-  --input-border: var(--control-border);
-  --button-bg: var(--raised);
-  --button-text: var(--text);
-  --button-border: var(--control-border);
-  --scrollbar: var(--rule-strong);
-
-  --highlight: var(--signal-text);
-  --highlight-bg: transparent;
-  --highlight-bd: var(--signal-strong);
-  --warning: var(--signal-text);
-  --chrome: var(--surface);
-  --chrome-blur: none;
-  --ambient: none;
-
-  --green-500: var(--signal);
-  --accent: var(--signal);
-  --accent-hover: var(--signal);
-  --accent-press: var(--signal-strong);
-  --accent-fg: var(--signal-ink);
-  --accent-text: var(--signal-text);
-  --accent-subtle: var(--selected);
-  --accent-border: var(--signal-strong);
-  --accent-ring: var(--signal-strong);
-
-  --green: var(--ok);
-  --red: var(--error);
-  --blue: var(--text-2);
-  --status-queued-fg: var(--text-muted);   --status-queued-bg: transparent;
-  --status-active-fg: var(--signal-text);  --status-active-bg: transparent;
-  --status-done-fg: var(--ok);             --status-done-bg: transparent;
-  --status-skipped-fg: var(--text-muted);  --status-skipped-bg: transparent;
-  --status-failed-fg: var(--error);        --status-failed-bg: transparent;
-  --status-warn-fg: var(--signal-text);    --status-warn-bg: transparent;
-  --util-lyrics: var(--text-2);   --util-lyrics-bd: var(--rule-strong);   --util-lyrics-bg: transparent;
-  --util-preview: var(--text-2);  --util-preview-bd: var(--rule-strong);  --util-preview-bg: transparent;
-  --util-cover: var(--text-2);    --util-cover-bd: var(--rule-strong);    --util-cover-bg: transparent;
-
-  --fs-50: var(--text-xs);
-  --fs-75: var(--text-sm);
-  --fs-100: var(--text-md);
-  --fs-200: var(--text-lg);
-  --fs-300: var(--text-lg);
-  --fs-400: var(--text-xl);
-  --fs-500: var(--text-2xl);
-  --fs-600: var(--text-2xl);
-  --font-mono: var(--font);
-  --font-display: var(--font);
-  --app-font: var(--font);
-
-  --radius-xs: var(--radius-1);
-  --radius-sm: var(--radius-1);
-  --radius-md: var(--radius-2);
-  --radius-lg: var(--radius-2);
-  --radius-xl: var(--radius-2);
-  --radius-pill: var(--radius-2);
-
-  --elev-1: none;
-  --elev-2: none;
-  --elev-3: var(--elevation-overlay);
-  --elev-pop: var(--elevation-overlay);
-
-  --dur-1: var(--motion-fast);
-  --dur-2: var(--motion);
-  --dur-3: var(--motion);
-  --dur-4: var(--motion);
-  --ease-out: var(--ease);
-  --ease-spring: var(--ease);
-}
-
-html, body { height: 100%; overflow: hidden; background: var(--bg); }
+html, body { height: 100%; overflow: hidden; background: var(--ground); }
 body {
   color: var(--text);
   display: flex; flex-direction: column;
   -webkit-app-region: no-drag;
   user-select: none;
-  font-size: var(--fs-200);
+  font-size: var(--text-lg);
   min-height: 0;
-  background: var(--ambient), var(--bg);
+  background: none, var(--ground);
   background-attachment: fixed;
   font-feature-settings: 'cv11', 'ss01';
   -webkit-font-smoothing: antialiased;
@@ -237,7 +59,7 @@ body {
 
 /* ── Titlebar ── */
 #titlebar {
-  -webkit-backdrop-filter: var(--chrome-blur);
+  -webkit-backdrop-filter: none;
   display: flex; align-items: center;
   gap: 10px;
   -webkit-app-region: drag;
@@ -280,22 +102,22 @@ body.windows-style .dot.x { background: var(--dot-max-win); }
   display: none;
 }
 #tb-version {
-  font-family: var(--font-mono);
-  font-size: var(--fs-50); font-weight: 500;
-  background: var(--accent-subtle); color: var(--accent-text);
-  border: 1px solid var(--accent-border);
+  font-family: var(--font);
+  font-size: var(--text-xs); font-weight: 500;
+  background: var(--selected); color: var(--signal-text);
+  border: 1px solid var(--signal-strong);
   padding: 1px 6px; border-radius: 4px;
 }
 .update-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--font-mono);
-  font-size: var(--fs-50);
+  font-family: var(--font);
+  font-size: var(--text-xs);
   font-weight: 700;
-  color: var(--accent-fg);
-  background: var(--accent);
-  border: 1px solid var(--accent-border);
+  color: var(--signal-ink);
+  background: var(--signal);
+  border: 1px solid var(--signal-strong);
   border-radius: 999px;
   padding: 0 7px;
   margin-left: 8px;
@@ -320,14 +142,14 @@ body.windows-style .dot.x { background: var(--dot-max-win); }
    rail again and the data-label tooltips come back. */
 #sidebar {
   width: var(--rail-w);
-  -webkit-backdrop-filter: var(--chrome-blur); backdrop-filter: var(--chrome-blur);
-  border-right: 1px solid var(--border);
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  border-right: 1px solid var(--rule);
   display: flex; flex-direction: column;
   align-items: stretch; padding: 14px 12px 12px; gap: 2px;
   flex-shrink: 0;
   position: relative;
   z-index: var(--z-sidebar);
-  transition: width var(--dur-3) var(--ease-out);
+  transition: width var(--motion) var(--ease);
 }
 #sidebar::-webkit-scrollbar { width: 0; }
 .sb-brand {
@@ -341,54 +163,54 @@ body.windows-style .dot.x { background: var(--dot-max-win); }
   padding: 3px; object-fit: contain;
 }
 .sb-name {
-  font-family: var(--font-display); font-size: 21px; font-weight: 600;
+  font-family: var(--font); font-size: 21px; font-weight: 600;
   letter-spacing: -0.01em; color: var(--text); white-space: nowrap;
 }
 .sb-version {
   margin-left: auto;
-  font-family: var(--font-mono); font-size: 11px; font-weight: 600;
-  color: var(--accent-text); background: var(--accent-subtle);
-  padding: 2px 7px; border-radius: var(--radius-pill);
+  font-family: var(--font); font-size: 11px; font-weight: 600;
+  color: var(--signal-text); background: var(--selected);
+  padding: 2px 7px; border-radius: var(--radius-2);
   white-space: nowrap; cursor: pointer;
 }
 body.sidebar-collapsed .sb-version { display: none; }
 .sb-group {
   padding: 14px 12px 6px;
-  font-size: var(--fs-75); font-weight: var(--fw-semibold);
-  color: var(--text-dim); white-space: nowrap;
+  font-size: var(--text-sm); font-weight: 600;
+  color: var(--text-muted); white-space: nowrap;
 }
 .nav-btn {
   width: 100%; height: 38px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: flex-start; gap: 12px;
   padding: 0 12px;
   border: 1px solid transparent;
-  font-family: var(--app-font); font-size: 14px; font-weight: var(--fw-medium);
+  font-family: var(--font); font-size: 14px; font-weight: var(--weight-medium);
   cursor: pointer; text-align: left;
-  transition: background var(--t), color var(--t), border-color var(--t), transform var(--dur-1) var(--ease-out);
+  transition: background var(--motion) var(--ease), color var(--motion) var(--ease), border-color var(--motion) var(--ease), transform var(--motion-fast) var(--ease);
   position: relative;
 }
-.nav-btn svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--muted); transition: color var(--t); }
+.nav-btn svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-muted); transition: color var(--motion) var(--ease); }
 .nav-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nav-btn:hover { color: var(--text); }
 .nav-btn:hover svg { color: var(--text); }
 .nav-btn:active { transform: scale(0.98); }
-.nav-btn:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 1px; }
+.nav-btn:focus-visible { outline: 2px solid var(--signal-strong); outline-offset: 1px; }
 /* Active is a tinted row with an accent glyph, not a solid slab: the
    artwork and the one primary button per view stay the loudest things. */
 .nav-btn.active {
-  font-weight: var(--fw-semibold);
+  font-weight: 600;
 }
-.nav-btn.active svg { color: var(--accent-text); }
+.nav-btn.active svg { color: var(--signal-text); }
 .nav-btn.active::before {
   content: '';
   position: absolute;
   top: 50%;  /* the sidebar's own left edge */
   transform: translateY(-50%);
   border-radius: 0 3px 3px 0;
-  background: var(--accent);
+  background: var(--signal);
 }
-.nav-spacer { flex: 1; min-height: var(--sp-4); }
-.sb-collapse { color: var(--muted); }
+.nav-spacer { flex: 1; min-height: var(--space-3); }
+.sb-collapse { color: var(--text-muted); }
 
 /* Folded: icons only, centred; brand keeps just the logo. */
 body.sidebar-collapsed { --rail-w: var(--rail-collapsed-w); }
@@ -427,7 +249,7 @@ body.sidebar-collapsed .nav-btn + .sb-group { margin-top: 0; }
 }
 #content::-webkit-scrollbar { width: 8px; }
 #content::-webkit-scrollbar-thumb {
-  background: var(--scrollbar);
+  background: var(--rule-strong);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: padding-box;
@@ -443,7 +265,7 @@ body.sidebar-collapsed .nav-btn + .sb-group { margin-top: 0; }
   z-index: var(--z-dock);
   display: none;
   align-items: center;
-  -webkit-backdrop-filter: var(--chrome-blur);
+  -webkit-backdrop-filter: none;
   cursor: pointer;
   color: var(--text);
 }
@@ -483,8 +305,8 @@ body.has-dock #content { padding-bottom: var(--dock-h); }
 
 .nav-badge {
   margin-left: auto; min-width: 20px; padding: 1px 6px;
-  border-radius: var(--radius-pill); background: var(--accent); color: var(--accent-fg);
-  font-size: 11px; font-weight: var(--fw-bold); text-align: center; font-variant-numeric: tabular-nums;
+  border-radius: var(--radius-2); background: var(--signal); color: var(--signal-ink);
+  font-size: 11px; font-weight: var(--weight-bold); text-align: center; font-variant-numeric: tabular-nums;
 }
 body.sidebar-collapsed .nav-badge { position: absolute; top: 4px; right: 4px; margin: 0; min-width: 16px; padding: 0 4px; font-size: 10px; }
 
@@ -517,15 +339,15 @@ body.sidebar-collapsed .nav-badge { position: absolute; top: 4px; right: 4px; ma
   position: absolute;
   left: calc(100% + 10px);
   top: 50%; transform: translateY(-50%);
-  background: var(--surface3);
-  border: 1px solid var(--border2);
+  background: var(--selected);
+  border: 1px solid var(--rule-strong);
   color: var(--text);
-  font-family: var(--app-font); font-size: 11.5px; font-weight: 600;
-  padding: 5px 11px; border-radius: var(--radius-sm);
+  font-family: var(--font); font-size: 11.5px; font-weight: 600;
+  padding: 5px 11px; border-radius: var(--radius-1);
   white-space: nowrap; pointer-events: none;
   opacity: 0; transition: opacity .12s ease;
   z-index: var(--z-nav-tooltip);
-  box-shadow: var(--elev-pop);
+  box-shadow: var(--elevation-overlay);
 }
 .nav-btn[data-label]:hover::after { opacity: 1; }
 
@@ -648,13 +470,13 @@ body.sidebar-collapsed .nav-badge { position: absolute; top: 4px; right: 4px; ma
     height: var(--nav-total-h);
     flex-direction: row;
     align-items: center;
-    gap: var(--sp-2);
+    gap: var(--space-1);
     /* The inset is padding, not margin, so the bar's own background reaches
        the bottom of the screen and the home indicator sits on it rather
        than on whatever is behind the page. */
-    padding: 0 var(--sp-3) env(safe-area-inset-bottom);
+    padding: 0 var(--space-2) env(safe-area-inset-bottom);
     border-right: none;
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--rule);
     /* The rail needed overflow:visible to let its tooltips escape; those
        are suppressed below, and hiding overflow keeps the active marker or
        a stray badge from drawing over the content above the bar. */
@@ -670,7 +492,7 @@ body.sidebar-collapsed .nav-badge { position: absolute; top: 4px; right: 4px; ma
     min-width: 0;
     width: auto;
     height: 44px;
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-1);
   }
   /* A flex:1 button has no gap beside it to sit a marker in, and the accent
      fill already says which view is open. The rail's edge tab would draw as
@@ -685,7 +507,7 @@ body.sidebar-collapsed .nav-badge { position: absolute; top: 4px; right: 4px; ma
   body.web-mode .sb-group,
   body.web-mode .sb-collapse { display: none; }
   body.web-mode .nav-btn { justify-content: center; padding: 0; }
-  body.web-mode .nav-btn.active svg { color: var(--accent-text); }
+  body.web-mode .nav-btn.active svg { color: var(--signal-text); }
   /* A rail hover lifts the button by scaling it; in a row of touching
      buttons that reads as the neighbours being shoved aside. */
   body.web-mode .nav-btn:hover { transform: none; }
@@ -699,7 +521,7 @@ body.sidebar-collapsed .nav-badge { position: absolute; top: 4px; right: 4px; ma
     right: 0;
     bottom: var(--nav-total-h);
     --dock-h: 60px;
-    padding: 0 var(--sp-4);
+    padding: 0 var(--space-3);
     gap: 10px;
   }
   body.web-mode.has-dock #content { padding-bottom: 60px; }
@@ -716,7 +538,7 @@ body.sidebar-collapsed .nav-badge { position: absolute; top: 4px; right: 4px; ma
    scrollable rail would have to give up overflow:visible and its tooltips
    with it. */
 @media (max-height: 560px) {
-  #sidebar { gap: var(--sp-2); padding: var(--sp-3) 0; }
+  #sidebar { gap: var(--space-1); padding: var(--space-2) 0; }
   .nav-btn { height: 34px; flex-shrink: 0; }
 }
 
@@ -733,20 +555,20 @@ body.sidebar-collapsed .nav-badge { position: absolute; top: 4px; right: 4px; ma
 /* Mornye surfaces: grouped iOS neutrals, compact controls, and system-like
    typography. Theme and accent choices continue to resolve through tokens. */
 body {
-  font-family: var(--app-font);
+  font-family: var(--font);
   text-rendering: optimizeLegibility;
 }
 
 #sidebar {
-  background: var(--bg);
-  border-right-color: var(--border);
+  background: var(--ground);
+  border-right-color: var(--rule);
 }
 
 .nav-btn {
   background: transparent;
   border-color: transparent;
   border-radius: 12px;
-  color: var(--muted);
+  color: var(--text-muted);
   box-shadow: none;
 }
 
@@ -759,8 +581,8 @@ body {
 
 .nav-btn.active,
 .nav-btn.active:hover {
-  color: var(--accent-text);
-  background: var(--accent-subtle);
+  color: var(--signal-text);
+  background: var(--selected);
   border-color: transparent;
   box-shadow: none;
 }
@@ -783,17 +605,17 @@ body {
   display: flex; align-items: center;
 }
 #player-bar .pl-info { width: 230px; min-width: 120px; flex-shrink: 0; }
-.pl-quality { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-quality { font-family: var(--font); font-size: 10.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pl-controls { display: flex; align-items: center; gap: 6px; }
 .pl-btn {
   display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px;
-  border: 0; border-radius: 50%; background: transparent; color: var(--text2); cursor: pointer; font: inherit;
+  border: 0; border-radius: 50%; background: transparent; color: var(--text-2); cursor: pointer; font: inherit;
 }
-.pl-btn:hover { color: var(--text); background: var(--surface3); }
-.pl-btn.pl-main { background: var(--accent); color: var(--player-main-ink); width: 38px; height: 38px; }
+.pl-btn:hover { color: var(--text); background: var(--selected); }
+.pl-btn.pl-main { background: var(--signal); color: var(--player-main-ink); width: 38px; height: 38px; }
 .pl-seek { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
-.pl-seek input[type=range] { flex: 1; accent-color: var(--accent); }
-.pl-vol { width: 90px; accent-color: var(--accent); }
+.pl-seek input[type=range] { flex: 1; accent-color: var(--signal); }
+.pl-vol { width: 90px; accent-color: var(--signal); }
 
 @media (max-width: 760px) {
   #player-bar .pl-info { width: 110px; }
@@ -823,7 +645,7 @@ body {
 .pl-btn.pl-mode { position: relative; }
 
 /* One focus treatment for the whole app (voce 30), the same as base.css in
-   the component library: a 1px signal ring outside the box. styles.css's
+   the component library: a 1px signal ring outside the box. The old
    2px ring drew in the old --accent and reshaped every focused control to
    an 8px radius; this restates both at the same specificity, later. Fields
    that show focus on their own border opt out in their view sheets. */

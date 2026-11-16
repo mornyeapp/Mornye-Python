@@ -198,7 +198,7 @@ regola (una parola = un elemento).
      `sw.js` (SHELL_FILES), `MANIFEST.in`/package-data, aggiornare
      `test_brand_tokens.py`, `test_frontend_inline_styles.py` (utility
      `u-*` → dove finiscono), i font Inter/Fraunces da `assets/fonts/`.
-   - **voce 22 — in corso** (2026-11-13, sessione dedicata, branch
+   - **voce 22 — fatta** (2026-11-13 → 16, sessione dedicata, branch
      `claude/zen-curran-97cf7a` da `redesign`, un commit per passo).
      Strumenti ricostruiti nella cartella temporanea della sessione: un
      modello CSS che conserva gli offset (regole, contesti `@media`,
@@ -297,6 +297,26 @@ regola (una parola = un elemento).
         erano finiti in più fogli: il testo resta in uno, negli altri un
         rimando di una riga. Commenti di `app.js` e `index.html` puntano ai
         fogli nuovi. Confronto: 0 differenze.
+     7. **Nomi v1 → v2, bridge tolto, font.** Ogni `var(--v1)` dei fogli
+        diventa il token v2 a cui il bridge lo legava (`--muted` →
+        `--text-muted`, `--accent-*` → `--signal*`, `--fs-*`, `--radius-*`…),
+        il token della stessa famiglia con lo stesso valore (`--sp-4` →
+        `--space-3`) o il valore stesso (`--sp-1` → `2px`, `--t` →
+        `var(--motion) var(--ease)`). Restano variabili di `layout.css` solo
+        quelle della shell, che le sue regole di stato cambiano (`--rail-w`,
+        `--dock-h`, `--nav-h`…), e lo z-index. Nuovi token in
+        `branding_tokens.py` (e `tokens.css` rigenerato): i pallini della
+        finestra e `brand-deep` tra i fissi; `scrim`, `overlay`, `chevron`
+        per tema (`V2_THEMED`). `--tracking-label` diventa `0.12em`: il
+        valore v1 vinceva su quello v2 (`.14em`) e la GUI mostrava già
+        quello. Tolti Inter e Fraunces (`@font-face` e file): nessuna regola
+        li usava più. Test: `test_brand_tokens.py` controlla che nessun
+        foglio nomini un token v1; `test_brand_tokens_v2.py` accetta
+        `rgba(var(--…-rgb), α)` (un token, non un colore crudo) e le
+        variabili di `layout.css` e quelle che `app.js` imposta su un
+        elemento. Confronto: 0 differenze sulle proprietà reali (le custom
+        property v1 spariscono, com'è giusto). Suite completa: 2331 passati.
+        **Voce 22 fatta.**
    **Prossimo:** Fase 4 (TUI, voci 23–26) — fatta, vedi sotto.
 0. **Fasi 4, 5 e 6 fatte** (2026-11-12), su `redesign`, commit locali non
    pushati. Prima, fuori dal redesign, la **issue #277** (playlist):
@@ -353,7 +373,7 @@ regola (una parola = un elemento).
      accanto alla scheda album e la coda mostra una riga vuota sotto i
      brani in attesa/errore: estetico, nessuna funzione persa;
      `text-wrap: pretty` viene ignorato dove manca.
-   **Aperte:** voce 22 (togliere `styles.css`, metodo sopra), F7
+   **Aperte:** F7
    (`confirm()` nativi), riorganizzazione di Settings, quality display
    dell'album, toast "fetching metadata…" che resta durante la ricerca,
    verifica con dati veri (Jellyfin, scansione Local, seguiti, download).

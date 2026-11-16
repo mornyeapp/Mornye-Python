@@ -2,8 +2,9 @@
    the totals as readouts and every ranking as a segmented meter, the second
    signature element doing what it is for.
 
-   Over styles.css until voce 22. Semantic tokens only; ids and handlers
-   untouched. */
+   The view's structure (grids, positions, the phone layout) comes first,
+   moved out of styles.css in voce 22; the console look follows it.
+   Semantic tokens only; ids and handlers untouched. */
 
 /* ── Your library, in numbers (view-stats) ─────────────────────────────
    Deliberately built from the same tokens as the rest of the interface
@@ -22,16 +23,16 @@
 #stats-smb-scan svg { width: 16px; height: 16px; }
 #stats-smb-scan:disabled { opacity: .5; cursor: not-allowed; }
 .stats-smb-status {
-  margin: 0 0 14px; padding: 9px 12px; border-left: 2px solid var(--accent);
-  background: var(--surface2); line-height: 1.5;
+  margin: 0 0 14px; padding: 9px 12px; border-left: 2px solid var(--signal);
+  background: var(--raised); line-height: 1.5;
 }
-.stats-smb-status.error { border-left-color: var(--red); }
+.stats-smb-status.error { border-left-color: var(--error); }
 .stats-source-note {
   display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px;
   margin-bottom: 14px;
 }
-.stats-source-note strong { color: var(--accent); font-weight: 600; }
-.stats-source-note span { color: var(--muted); }
+.stats-source-note strong { color: var(--signal); font-weight: 600; }
+.stats-source-note span { color: var(--text-muted); }
 .stat-tile-value {
   line-height: 1.2;
   overflow-wrap: anywhere;
@@ -45,7 +46,7 @@
   display: flex;
   align-items: center;
   padding: 4px 0;
-  font-size: var(--fs-100);
+  font-size: var(--text-md);
 }
 .stat-bar-label {
   flex: 0 0 34%;
