@@ -130,6 +130,24 @@ class _Manager:
             "987654321",
         ),
         (
+            "https://open.qobuz.com/track/8731021",
+            "qobuz",
+            "track",
+            "8731021",
+        ),
+        (
+            "https://www.qobuz.com/us-en/album/heaven-nor-hell-volbeat/0060252746837",
+            "qobuz",
+            "album",
+            "0060252746837",
+        ),
+        (
+            "https://open.qobuz.com/playlist/1182929",
+            "qobuz",
+            "playlist",
+            "1182929",
+        ),
+        (
             "https://open.qobuz.com/playlist/1234567890",
             "qobuz",
             "playlist",

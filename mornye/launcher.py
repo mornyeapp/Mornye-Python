@@ -1243,6 +1243,43 @@ def parse_args(profile_defaults: dict | None = None) -> argparse.Namespace:
         "sequential downloads with no interleaved console output.",
     )
 
+    rate_limit_grp = parser.add_argument_group("Rate limiting")
+    rate_limit_grp.add_argument(
+        "--metadata-delay-min",
+        type=float,
+        default=pd.get("metadata_delay_min_s", 0.0),
+        metavar="SECONDS",
+        help="Minimum random spacing between metadata requests (default: 0).",
+    )
+    rate_limit_grp.add_argument(
+        "--metadata-delay-max",
+        type=float,
+        default=pd.get("metadata_delay_max_s", 0.0),
+        metavar="SECONDS",
+        help="Maximum random spacing between metadata requests (default: 0).",
+    )
+    rate_limit_grp.add_argument(
+        "--provider-delay-min",
+        type=float,
+        default=pd.get("provider_delay_min_s", 0.0),
+        metavar="SECONDS",
+        help="Minimum random spacing between provider attempts (default: 0).",
+    )
+    rate_limit_grp.add_argument(
+        "--provider-delay-max",
+        type=float,
+        default=pd.get("provider_delay_max_s", 0.0),
+        metavar="SECONDS",
+        help="Maximum random spacing between provider attempts (default: 0).",
+    )
+    rate_limit_grp.add_argument(
+        "--auto-rate-limit-cooldown",
+        action=argparse.BooleanOptionalAction,
+        default=pd.get("auto_rate_limit_cooldown", True),
+        help="Pause all download requests after a 429; disable with "
+        "--no-auto-rate-limit-cooldown (default: enabled).",
+    )
+
     # ── Timeout ──────────────────────────────────────────────────────────────
     timeout_grp = parser.add_argument_group("Timeout")
     timeout_grp.add_argument(
@@ -1552,6 +1589,11 @@ def _subscription_downloader(profile_defaults: dict, output_dir_override: str | 
             transcode_max_sample_rate=pd.get("transcode_max_sample_rate", 0),
             transcode_max_bit_depth=pd.get("transcode_max_bit_depth", 0),
             max_concurrent_downloads=pd.get("max_concurrent_downloads", 2),
+            metadata_delay_min_s=pd.get("metadata_delay_min_s", 0.0),
+            metadata_delay_max_s=pd.get("metadata_delay_max_s", 0.0),
+            provider_delay_min_s=pd.get("provider_delay_min_s", 0.0),
+            provider_delay_max_s=pd.get("provider_delay_max_s", 0.0),
+            auto_rate_limit_cooldown=pd.get("auto_rate_limit_cooldown", True),
             verify_hires=pd.get("verify_hires", False),
             redownload_fake_hires=pd.get("redownload_fake_hires", False),
         )
@@ -1828,6 +1870,11 @@ async def _run_download_async(
     m3u_format: str = "m3u8",
     library_scan_dirs: list[str] | None = None,
     max_concurrent_downloads: int = 2,
+    metadata_delay_min_s: float = 0.0,
+    metadata_delay_max_s: float = 0.0,
+    provider_delay_min_s: float = 0.0,
+    provider_delay_max_s: float = 0.0,
+    auto_rate_limit_cooldown: bool = True,
     extension_quality: dict[str, str] | None = None,
     verify_hires: bool = False,
     redownload_fake_hires: bool = False,
@@ -1983,6 +2030,11 @@ async def _run_download_async(
         transcode_max_sample_rate=transcode_max_sample_rate,
         transcode_max_bit_depth=transcode_max_bit_depth,
         max_concurrent_downloads=max(1, max_concurrent_downloads),
+        metadata_delay_min_s=metadata_delay_min_s,
+        metadata_delay_max_s=metadata_delay_max_s,
+        provider_delay_min_s=provider_delay_min_s,
+        provider_delay_max_s=provider_delay_max_s,
+        auto_rate_limit_cooldown=auto_rate_limit_cooldown,
         verify_hires=verify_hires,
         redownload_fake_hires=redownload_fake_hires,
         save_lrc=save_lrc,
@@ -2236,6 +2288,11 @@ async def run_download_from_cfg(cfg: dict, log_level: int) -> None:
             transcode_max_sample_rate=cfg.get("transcode_max_sample_rate", 0),
             transcode_max_bit_depth=cfg.get("transcode_max_bit_depth", 0),
             max_concurrent_downloads=cfg.get("max_concurrent_downloads", 2),
+            metadata_delay_min_s=cfg.get("metadata_delay_min_s", 0.0),
+            metadata_delay_max_s=cfg.get("metadata_delay_max_s", 0.0),
+            provider_delay_min_s=cfg.get("provider_delay_min_s", 0.0),
+            provider_delay_max_s=cfg.get("provider_delay_max_s", 0.0),
+            auto_rate_limit_cooldown=cfg.get("auto_rate_limit_cooldown", True),
             extension_quality=dict(cfg.get("extension_quality") or {}),
             verify_hires=cfg.get("verify_hires", False),
             redownload_fake_hires=cfg.get("redownload_fake_hires", False),
@@ -3227,6 +3284,11 @@ async def amain() -> None:
             csv_unresolved=args.csv_unresolved,
             m3u_format=args.m3u_format,
             max_concurrent_downloads=args.max_concurrent,
+            metadata_delay_min_s=args.metadata_delay_min,
+            metadata_delay_max_s=args.metadata_delay_max,
+            provider_delay_min_s=args.provider_delay_min,
+            provider_delay_max_s=args.provider_delay_max,
+            auto_rate_limit_cooldown=args.auto_rate_limit_cooldown,
             extension_quality=extension_quality,
             verify_hires=args.verify_hires,
             redownload_fake_hires=args.redownload_fake_hires,
@@ -3284,6 +3346,11 @@ async def amain() -> None:
                 "loop": args.loop,
                 "watch": args.watch,
                 "max_concurrent_downloads": args.max_concurrent,
+                "metadata_delay_min_s": args.metadata_delay_min,
+                "metadata_delay_max_s": args.metadata_delay_max,
+                "provider_delay_min_s": args.provider_delay_min,
+                "provider_delay_max_s": args.provider_delay_max,
+                "auto_rate_limit_cooldown": args.auto_rate_limit_cooldown,
                 "verify_hires": args.verify_hires,
                 "redownload_fake_hires": args.redownload_fake_hires,
                 "save_lrc": args.save_lrc,

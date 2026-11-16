@@ -58,6 +58,11 @@ def calls(monkeypatch) -> Any:
                 {
                     "url": list(request.sources),
                     "prefetched_tracks": dict(request.prefetched or {}),
+                    "m3u_playlist_tracks": getattr(
+                        getattr(self.provider_executor, "_options", None),
+                        "m3u_playlist_tracks",
+                        None,
+                    ),
                 }
             )
             return None
@@ -165,6 +170,33 @@ def test_a_job_resumes_after_a_restart_without_the_tracklist(tmp_path, calls) ->
     assert (
         "app_download_finished" not in names
     ), "a restored job must not close a batch the new page dispatched"
+
+
+def test_a_followed_playlist_job_keeps_the_full_listing_for_m3u_refresh(
+    tmp_path, calls
+):
+    api = _api(tmp_path)
+    current_playlist = [_track(0), _track(1), _track(2)]
+    payload = {
+        "indices": [0],
+        "tracks": [_track(2).model_dump(mode="json")],
+        "playlist_tracks": [
+            track.model_dump(mode="json") for track in current_playlist
+        ],
+        "source_url": PLAYLIST,
+        "whole": False,
+        "playlist_name": "My Playlist",
+        "config": {"services": ["tidal"]},
+    }
+
+    api.run_download_job(payload)
+
+    [call] = calls
+    assert [track.id for track in call["m3u_playlist_tracks"]] == [
+        "sp0",
+        "sp1",
+        "sp2",
+    ]
 
 
 def test_a_whole_playlist_resumes_as_the_playlist(tmp_path, calls):

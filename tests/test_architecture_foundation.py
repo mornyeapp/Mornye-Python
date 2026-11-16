@@ -76,6 +76,11 @@ def test_mornye_config_can_be_built_from_legacy_options():
             quality="HI_RES_LOSSLESS",
             allow_fallback=False,
             max_concurrent_downloads=4,
+            metadata_delay_min_s=0.25,
+            metadata_delay_max_s=0.75,
+            provider_delay_min_s=1.0,
+            provider_delay_max_s=2.0,
+            auto_rate_limit_cooldown=False,
         )
     )
 
@@ -83,6 +88,11 @@ def test_mornye_config_can_be_built_from_legacy_options():
     assert cfg.download.quality == "HI_RES_LOSSLESS"
     assert cfg.download.allow_fallback is False
     assert cfg.download.max_concurrent == 4
+    assert cfg.download.metadata_delay_min_s == 0.25
+    assert cfg.download.metadata_delay_max_s == 0.75
+    assert cfg.download.provider_delay_min_s == 1.0
+    assert cfg.download.provider_delay_max_s == 2.0
+    assert cfg.download.auto_rate_limit_cooldown is False
 
 
 def test_application_imports_legacy_downloader_only_through_adapter():
@@ -245,9 +255,15 @@ def test_download_service_builds_structured_report_from_request():
 
 def test_download_service_builds_legacy_download_options_from_config():
     service = DownloadService()
+    config = MornyeConfig()
+    config.download.metadata_delay_min_s = 0.25
+    config.download.metadata_delay_max_s = 0.75
+    config.download.provider_delay_min_s = 1.0
+    config.download.provider_delay_max_s = 2.0
+    config.download.auto_rate_limit_cooldown = False
     request = DownloadRequest(
         sources=["spotify:track:abc123"],
-        config=MornyeConfig(),
+        config=config,
     )
 
     opts = service.legacy_options_for(request)
@@ -255,6 +271,11 @@ def test_download_service_builds_legacy_download_options_from_config():
     assert opts.output_dir == str(request.config.output.directory)
     assert opts.quality == request.config.download.quality
     assert opts.max_concurrent_downloads == request.config.download.max_concurrent
+    assert opts.metadata_delay_min_s == 0.25
+    assert opts.metadata_delay_max_s == 0.75
+    assert opts.provider_delay_min_s == 1.0
+    assert opts.provider_delay_max_s == 2.0
+    assert opts.auto_rate_limit_cooldown is False
 
 
 def test_download_service_uses_legacy_downloader_for_sources(monkeypatch):

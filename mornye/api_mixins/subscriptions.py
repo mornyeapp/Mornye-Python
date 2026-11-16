@@ -256,6 +256,7 @@ class SubscriptionsMixin:
                     settings,
                     whole=False,
                     playlist_name=result.artist_name or sub.name or "",
+                    playlist_tracks=result.playlist_tracks,
                 ):
                     unqueued += 1
                 continue
@@ -302,6 +303,7 @@ class SubscriptionsMixin:
         *,
         whole: bool,
         playlist_name: str = "",
+        playlist_tracks: list | None = None,
     ) -> bool:
         """Queues one batch; False when it could not be queued.
 
@@ -325,6 +327,10 @@ class SubscriptionsMixin:
             # name rides along so they land in the same playlist subfolder
             # a full download of it would have made (issue #263).
             payload["playlist_name"] = playlist_name
+        if playlist_tracks is not None:
+            payload["playlist_tracks"] = [
+                track.model_dump(mode="json") for track in playlist_tracks
+            ]
         queue = getattr(self, "_subscription_download_queue", None)
         if queue is None:
             self._start_download_job(payload)

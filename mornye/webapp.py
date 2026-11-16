@@ -169,6 +169,7 @@ ALLOWED_METHODS: set[str] = {
     "get_track_preview",
     "fetch_metadata",
     "download_tracks",
+    "stop_all_downloads",
     "run_health_check",
     "scan_local",
     "apply_local_tags",

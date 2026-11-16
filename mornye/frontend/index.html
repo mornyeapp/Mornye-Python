@@ -1059,6 +1059,29 @@
               <span class="s-label">Parallel downloads<small>Tracks fetched at the same time (CLI: --max-concurrent)</small></span>
               <input type="number" id="config-concurrent" value="2" min="1" max="8">
             </div>
+            <div class="s-row">
+              <span class="s-label">Metadata request delay (seconds)<small>Random range between Spotify/metadata requests</small></span>
+              <div class="u-gap-6 u-items-center" style="display:flex;">
+                <input type="number" id="config-metadata-delay-min" value="0" min="0" step="0.1" aria-label="Minimum metadata delay">
+                <span>to</span>
+                <input type="number" id="config-metadata-delay-max" value="0" min="0" step="0.1" aria-label="Maximum metadata delay">
+              </div>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Provider request delay (seconds)<small>Random range between provider download attempts</small></span>
+              <div class="u-gap-6 u-items-center" style="display:flex;">
+                <input type="number" id="config-provider-delay-min" value="0" min="0" step="0.1" aria-label="Minimum provider delay">
+                <span>to</span>
+                <input type="number" id="config-provider-delay-max" value="0" min="0" step="0.1" aria-label="Maximum provider delay">
+              </div>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Automatic 429 cooldown<small>Pause all requests for Retry-After (or 60s) after a rate limit</small></span>
+              <label class="toggle">
+                <input type="checkbox" id="config-auto-rate-limit-cooldown" checked>
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
           </div>
           <div class="s-section">
             <div class="s-title">Retry & Loop</div>
@@ -1420,6 +1443,7 @@
       <div class="s-header">
         <h1>Queue</h1>
         <div class="s-actions">
+          <button class="act-btn secondary" type="button" onclick="stopAllDownloads()">Stop all downloads</button>
           <button class="act-btn primary" type="button" id="sq-start-all" onclick="startStaged(false)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg>Start all</button>
         </div>
       </div>

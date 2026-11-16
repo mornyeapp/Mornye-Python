@@ -40,6 +40,11 @@ SETTINGS: dict[str, str] = {
     "max_concurrent_downloads": "int",
     "loop": "int",
     "track_max_retries": "int",
+    "metadata_delay_min_s": "float",
+    "metadata_delay_max_s": "float",
+    "provider_delay_min_s": "float",
+    "provider_delay_max_s": "float",
+    "auto_rate_limit_cooldown": "bool",
     "lyrics_providers": "list",
     "apple_lyrics_word_by_word": "bool",
     "save_lrc": "bool",
@@ -97,6 +102,11 @@ def _parse(kind: str, raw: str) -> Any:
         raise ValueError("expected true or false")
     if kind == "int":
         numeric_value = int(text)
+        if numeric_value < 0:
+            raise ValueError("expected a number of 0 or more")
+        return numeric_value
+    if kind == "float":
+        numeric_value = float(text)
         if numeric_value < 0:
             raise ValueError("expected a number of 0 or more")
         return numeric_value

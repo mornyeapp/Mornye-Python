@@ -12,8 +12,11 @@ from .env import env_value
 import asyncio
 import atexit as _atexit
 import contextlib
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 import ipaddress
 import logging
+import math
 import os
 import re
 import threading
@@ -166,6 +169,25 @@ def _content_range_starts_at(resp: httpx.Response, expected_start: int) -> bool:
     if not match:
         return False
     return int(match.group(1)) == expected_start
+
+
+def _retry_after_seconds(value: str | None) -> int:
+    """Parse either Retry-After's delta-seconds or HTTP-date form."""
+    if not value:
+        return 5
+    try:
+        return max(0, math.ceil(float(value)))
+    except (ValueError, OverflowError):
+        pass
+    try:
+        retry_at = parsedate_to_datetime(value)
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=timezone.utc)
+        return max(
+            0, math.ceil((retry_at - datetime.now(timezone.utc)).total_seconds())
+        )
+    except (TypeError, ValueError, OverflowError):
+        return 5
 
 
 def _remove_quietly(path: str) -> None:
@@ -495,7 +517,7 @@ class AsyncHttpClient:
         if sc == 429:
             raise RateLimitedError(
                 self._provider,
-                int(resp.headers.get("Retry-After", 5)),
+                _retry_after_seconds(resp.headers.get("Retry-After")),
             )
         if resp.is_redirect or 300 <= sc < 400:
             # Its own error, and not a retryable one — see

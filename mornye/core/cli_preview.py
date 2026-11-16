@@ -108,6 +108,16 @@ def build_command_parts(cfg: dict) -> list[str]:
         parts.extend(["--retries", str(cfg["track_max_retries"])])
     if cfg.get("max_concurrent_downloads", 2) != 2:
         parts.extend(["--max-concurrent", str(cfg["max_concurrent_downloads"])])
+    for key, option in (
+        ("metadata_delay_min_s", "--metadata-delay-min"),
+        ("metadata_delay_max_s", "--metadata-delay-max"),
+        ("provider_delay_min_s", "--provider-delay-min"),
+        ("provider_delay_max_s", "--provider-delay-max"),
+    ):
+        if cfg.get(key, 0.0):
+            parts.extend([option, str(cfg[key])])
+    if not cfg.get("auto_rate_limit_cooldown", True):
+        parts.append("--no-auto-rate-limit-cooldown")
     if cfg.get("timeout_s"):
         parts.extend(["--timeout", str(cfg["timeout_s"])])
     if cfg.get("post_download_action") and cfg["post_download_action"] != "none":
