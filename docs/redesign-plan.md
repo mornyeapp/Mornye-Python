@@ -543,6 +543,48 @@ regola (una parola = un elemento).
      il "richiesto" è il livello globale. Verificato con la scheda di prova
      e una risposta simulata della sonda, scuro a 1280 e chiaro a 375. Test:
      `tests/test_album_quality_readout.py` (un WAV vero).
+   - **F1 · Content-Security-Policy** (commit sotto; prima `5fc8a2d`:
+     `probe_audio_quality` mancava in `REMOTE_METHODS` di `web-shim.js`,
+     quindi in `--web` il display di qualità restava "REQ"). (1) I 271
+     handler inline (208 in `index.html`, 62 nel markup di `app.js`, 1 in
+     `toast-system.js`) diventano `data-on<evento>="…"`, stesso codice.
+     `frontend/inline-handlers.js` li lega senza `eval` né `new Function`:
+     un tokenizer e un parser a precedenze per il sottoinsieme che usano
+     (chiamate, membri, `this`, `event`, letterali e array, `! - + === !==
+     == != < > <= >= && ||`, assegnazione, `if`, `return`), compilato una
+     volta per stringa; un listener vero sullo stesso elemento (stessa
+     fase dell'attributo), `return false` → `preventDefault`,
+     `this.onerror = null` toglie il listener (niente cicli sui fallback
+     delle immagini). Il markup aggiunto dopo è legato da un
+     `MutationObserver` prima che i suoi eventi possano arrivare. I nomi
+     sono globali di `window`; l'unico `const` usato dagli handler, `$`, è
+     registrato con `MornyeHandlers.expose()`. Un handler che non si
+     analizza resta morto con un errore in console: un test (node) li
+     analizza tutti. (2) Gli script inline escono in file: `boot-head.js`
+     (fogli con `?_=` e tema/accento prima del primo disegno),
+     `boot-body.js` (classi sul `<body>`), `boot-tail.js` (script dell'app
+     e service worker); `window.__MORNYE_WEB_MODE__` lo imposta
+     `web-shim.js`, non più uno script iniettato. `sw.js` li elenca
+     (`CACHE_NAME` v22). (3) `webapp.py`: la pagina manda
+     `Content-Security-Policy` con `script-src 'self'` (niente
+     `unsafe-inline`/`unsafe-eval`), `object-src 'none'`, `base-uri
+     'none'`, `form-action 'self'`, `frame-ancestors 'none'`,
+     `connect-src` limitato a questo host (anche `ws://`/`wss://`),
+     immagini e audio anche da `https:`/`http:` (copertine e anteprime dei
+     provider), `style-src` con `'unsafe-inline'` (gli `style=""` e
+     `el.style` restano; un hash non li copre) più `X-Frame-Options:
+     DENY`; ogni risposta `X-Content-Type-Options: nosniff` e
+     `Referrer-Policy: same-origin`. Verificato con Playwright sotto la
+     politica vera: clic reali sul rail e sulle schede di Settings, ripiego
+     `onerror` di un'immagine rotta, chiusura di un toast, dialogo di
+     conferma — 0 violazioni (`securitypolicyviolation`), nessun errore di
+     pagina. Confronto degli stili (144 scenari) contro `5fc8a2d`: solo uno
+     `<script>` in meno nel `<body>`, 0 differenze sugli elementi. Test: `tests/test_web_csp.py` (nessuno script/handler inline,
+     intestazioni, ogni handler analizzabile, semantica
+     dell'interprete); `test_webapp_pwa.py` aggiornato. **Da provare a
+     mano:** finestra pywebview (stessi file, nessuna CSP: deve solo
+     comportarsi come prima) e `--web` dietro un proxy che incornicia la
+     pagina (ora rifiutato da `frame-ancestors`).
    - **Fermato qui per limite d'uso** (2026-11-16). **Ancora aperti:**
      riorganizzazione di Settings e display di qualità dell'album (domanda
      inviata alla sessione madre con una proposta, nessuna risposta

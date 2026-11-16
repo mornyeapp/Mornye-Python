@@ -94,6 +94,9 @@ function clearSearchUI() {
 }
 // ── Helpers ─────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
+// A top-level const is not a window property; the markup's data-on*
+// handlers (inline-handlers.js) name it, so it is registered there.
+window.MornyeHandlers?.expose({ $ });
 const ts = () => new Date().toLocaleTimeString('en-US');
 // ── Global Initialization ──────────────────────────────────────────────────
 const toastMgr = new ToastManager();
@@ -964,7 +967,7 @@ function buildSortItem(item, index) {
   d.dataset.value = item.id;
   
   const iconHtml = item.iconFile
-    ? `<span class="svc-icon ${item.iconClass} icon-image"><img src="assets/icons/${item.iconFile}" alt="${item.label}" onerror="this.onerror=null; this.src='assets/icons/${item.id}.png';"></span>`
+    ? `<span class="svc-icon ${item.iconClass} icon-image"><img src="assets/icons/${item.iconFile}" alt="${item.label}" data-onerror="this.onerror=null; this.src='assets/icons/${item.id}.png';"></span>`
     : item.icon ? `<span class="svc-icon ${item.iconClass}">${item.icon}</span>` : '';
   
   // Add the number (index + 1) and the checkbox
@@ -973,7 +976,7 @@ function buildSortItem(item, index) {
     <span class="priority-num">${index + 1}</span>
     <span class="drag-h">⠿</span>
     ${iconHtml}
-    <input type="checkbox" ${item.on ? 'checked' : ''} onclick="event.stopPropagation(); toggleItemActive(this)">
+    <input type="checkbox" ${item.on ? 'checked' : ''} data-onclick="event.stopPropagation(); toggleItemActive(this)">
     <span class="svc-name">${item.label}</span>
     ${item.badge ? `<span class="svc-badge">${item.badge}</span>` : ''}
   `;
@@ -1004,14 +1007,14 @@ function showServicesPlaceholder(message, withLink = false) {
   const el = $('services-list');
   if (!el) return;
   const link = withLink
-    ? ` <a href="#" onclick="openExtensionsSettings(); return false;">Settings → Extensions</a>.`
+    ? ` <a href="#" data-onclick="openExtensionsSettings(); return false;">Settings → Extensions</a>.`
     : '';
   el.innerHTML = `<div class="s-label u-fs-11_5 u-p-6-2">${escHtml(message)}${link}</div>`;
 }
 
 function openExtensionsSettings() {
   switchView('settings');
-  const tab = document.querySelector('.stab[onclick*="extensions"]');
+  const tab = document.querySelector('.stab[data-onclick*="extensions"]');
   if (tab) switchTab('extensions', tab);
 }
 
@@ -1168,7 +1171,7 @@ function renderExtensionQualityRows() {
     ).join('');
     return `<div class="s-row u-pl-16 u-bl-2-solid-border2 u-ml-4">
       <span class="s-label">${regEscapeHtml(svc.label || svc.id)}<small>${regEscapeHtml(svc.primary || '')}</small></span>
-      <select data-service="${regEscapeHtml(svc.id)}" onchange="onExtensionQualityChange(this)">${opts}</select>
+      <select data-service="${regEscapeHtml(svc.id)}" data-onchange="onExtensionQualityChange(this)">${opts}</select>
     </div>`;
   }).join('');
 }
@@ -1278,7 +1281,7 @@ function renderPlatformIcon(type) {
     const glyph = known?.icon || (type || '?').slice(0, 2).toUpperCase();
     return `<span class="svc-icon icon-glyph ${type}">${escHtml(glyph)}</span>`;
   }
-  return `<span class="svc-icon icon-image ${type}"><img src="assets/icons/${iconFile}" alt="${type}" onerror="this.onerror=null; this.src='assets/icons/${type}.png';"></span>`;
+  return `<span class="svc-icon icon-image ${type}"><img src="assets/icons/${iconFile}" alt="${type}" data-onerror="this.onerror=null; this.src='assets/icons/${type}.png';"></span>`;
 }
 
 function buildStatusCard(source) {
@@ -2104,18 +2107,18 @@ function setAlbumCard(title, artist, coverUrl, quality, description, followers, 
   // separate, not-strictly-ordered backend callbacks).
 
   $('album-actions').innerHTML = `
-    <button class="act-btn primary" onclick="downloadAll()">
+    <button class="act-btn primary" data-onclick="downloadAll()">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       Download All
     </button>
-    <button class="act-btn secondary" onclick="downloadSelected()" id="dl-selected-btn" style="display:none;">
+    <button class="act-btn secondary" data-onclick="downloadSelected()" id="dl-selected-btn" style="display:none;">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="9 12 11 14 15 10"/></svg>
       Download Selected
     </button>
-    <button class="act-btn secondary" id="save-all-covers-btn" data-tip="Save all covers as .jpg" onclick="downloadAllCovers(this)">
+    <button class="act-btn secondary" id="save-all-covers-btn" data-tip="Save all covers as .jpg" data-onclick="downloadAllCovers(this)">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
     </button>
-    <button class="act-btn secondary" id="save-all-lyrics-btn" data-tip="Save all lyrics as .lrc" onclick="downloadAllLyrics(this)">
+    <button class="act-btn secondary" id="save-all-lyrics-btn" data-tip="Save all lyrics as .lrc" data-onclick="downloadAllLyrics(this)">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
     </button>
     
@@ -2445,21 +2448,21 @@ function showSingleTrackCard(t) {
   const extUrl     = t.external_url || t.externalUrl || t.link || '';
   const trackId    = t.id || '';
   $('album-actions').innerHTML = `
-  <button class="act-btn primary" data-tip="Download" onclick="downloadSingle(0)">
+  <button class="act-btn primary" data-tip="Download" data-onclick="downloadSingle(0)">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     Download
   </button>
-  <button class="act-btn secondary ta-preview" data-tip="Play Preview" data-preview-index="0" data-track-id="${trackId}" onclick="playPreview(0)">
+  <button class="act-btn secondary ta-preview" data-tip="Play Preview" data-preview-index="0" data-track-id="${trackId}" data-onclick="playPreview(0)">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
   </button>
-  <button class="act-btn secondary ta-lyrics" data-tip="Save Lyrics (.lrc)" data-track-index="0" onclick="downloadLyrics(0)">
+  <button class="act-btn secondary ta-lyrics" data-tip="Save Lyrics (.lrc)" data-track-index="0" data-onclick="downloadLyrics(0)">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
   </button>
-  <button class="act-btn secondary ta-cover" data-tip="Save Cover (.jpg)" data-track-index="0" onclick="downloadCover(0)">
+  <button class="act-btn secondary ta-cover" data-tip="Save Cover (.jpg)" data-track-index="0" data-onclick="downloadCover(0)">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
   </button>
   ${extUrl ? `
-  <button class="act-btn secondary" data-tip="Open in Spotify" onclick="openExternal(0)">
+  <button class="act-btn secondary" data-tip="Open in Spotify" data-onclick="openExternal(0)">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
   </button>` : ''}
 `;
@@ -2716,7 +2719,7 @@ function injectArtistTabs(tracks) {
     card.className = 'artist-album-card';
     makeActivatable(card);
     const coverHtml = album.cover
-      ? `<img src="${escHtml(album.cover)}" alt="cover" loading="lazy" onerror="this.parentElement.innerHTML='🎵'">`
+      ? `<img src="${escHtml(album.cover)}" alt="cover" loading="lazy" data-onerror="this.parentElement.innerHTML='🎵'">`
       : '🎵';
     card.innerHTML = `
       <div class="aac-cover">${coverHtml}
@@ -2775,7 +2778,7 @@ async function loadArtistGallery(panel) {
       const images = await window.pywebview.api.get_artist_images(currentUrl);
       if (images?.length) {
         panel.innerHTML = images.map(url =>
-          `<img class="artist-gallery-img" src="${escHtml(url)}" alt="Artist photo" loading="lazy" onerror="this.remove()">`
+          `<img class="artist-gallery-img" src="${escHtml(url)}" alt="Artist photo" loading="lazy" data-onerror="this.remove()">`
         ).join('');
         return;
       }
@@ -2786,7 +2789,7 @@ async function loadArtistGallery(panel) {
   const covers = [...new Set(currentTracks.map(t => t.cover_url || t.cover || t.image).filter(Boolean))];
   if (covers.length) {
     panel.innerHTML = covers.map(url =>
-      `<img class="artist-gallery-img" src="${escHtml(url)}" alt="Cover" loading="lazy" onerror="this.remove()">`
+      `<img class="artist-gallery-img" src="${escHtml(url)}" alt="Cover" loading="lazy" data-onerror="this.remove()">`
     ).join('');
   } else {
     panel.innerHTML = `<div class="artist-gallery-empty">🖼 No gallery images available.</div>`;
@@ -2871,7 +2874,7 @@ function renderTracks(tracks, page = 1) {
       if (coverUrl) {
         // AGGIUNTO data-url QUI SOTTO
         thumb = `<div class="tr-thumb" data-url="${escHtml(coverUrl)}" style="background-image:url('${encodeURI(coverUrl)}')">
-                   <img src="${escHtml(coverUrl)}" alt="cover" loading="lazy" decoding="async" onerror="this.parentElement.innerHTML='🎵';console.warn('cover load failed', this.src)">
+                   <img src="${escHtml(coverUrl)}" alt="cover" loading="lazy" decoding="async" data-onerror="this.parentElement.innerHTML='🎵';console.warn('cover load failed', this.src)">
                  </div>`;
       } else {
         thumb = `<div class="tr-thumb">🎵</div>`;
@@ -2889,13 +2892,13 @@ function renderTracks(tracks, page = 1) {
       if (!previewUrl && t.previewUrl) previewUrl = t.previewUrl;
       
       // Lazy Loading: the button is always enabled, but it will fetch the preview on click if necessary
-      const previewBtn = `<button class="ta-btn ta-preview" data-preview-index="${globalIndex}" data-track-id="${t.id || ''}" data-tip="Play Preview" onclick="playPreview(${globalIndex})">
+      const previewBtn = `<button class="ta-btn ta-preview" data-preview-index="${globalIndex}" data-track-id="${t.id || ''}" data-tip="Play Preview" data-onclick="playPreview(${globalIndex})">
              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
            </button>`;
 
       const extUrl  = t.external_url || t.externalUrl || t.link || t.url || '';
       const linkBtn = extUrl
-        ? `<button class="ta-btn ta-link" data-tip="Open in Spotify" onclick="openExternal(${globalIndex})">
+        ? `<button class="ta-btn ta-link" data-tip="Open in Spotify" data-onclick="openExternal(${globalIndex})">
              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
            </button>`
         : `<button class="ta-btn" data-tip="No link" disabled style="opacity:.3;">
@@ -2903,7 +2906,7 @@ function renderTracks(tracks, page = 1) {
            </button>`;
 
       row.innerHTML = `
-        <div class="tr-check"><input type="checkbox" class="track-cb" value="${globalIndex}" checked onchange="onCheckChange()"></div>
+        <div class="tr-check"><input type="checkbox" class="track-cb" value="${globalIndex}" checked data-onchange="onCheckChange()"></div>
         <div class="tr-num">${globalIndex + 1}</div>
         <div class="tr-title-cell">
           ${thumb}
@@ -2915,14 +2918,14 @@ function renderTracks(tracks, page = 1) {
         <div class="tr-playcount">${playcountCell}</div>
         <div class="tr-dur">${dur}</div>
         <div class="tr-actions">
-          <button class="ta-btn dl" data-tip="Download" onclick="downloadSingle(${globalIndex})">
+          <button class="ta-btn dl" data-tip="Download" data-onclick="downloadSingle(${globalIndex})">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
-          <button class="ta-btn ta-lyrics" data-tip="Save Lyrics (.lrc)" onclick="downloadLyrics(${globalIndex})">
+          <button class="ta-btn ta-lyrics" data-tip="Save Lyrics (.lrc)" data-onclick="downloadLyrics(${globalIndex})">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
           </button>
           ${previewBtn}
-          <button class="ta-btn ta-cover" data-tip="Save Cover (.jpg)" onclick="downloadCover(${globalIndex})">
+          <button class="ta-btn ta-cover" data-tip="Save Cover (.jpg)" data-onclick="downloadCover(${globalIndex})">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
           </button>
           ${linkBtn}
@@ -3727,7 +3730,7 @@ window.app_handle_provider_search_results = function(results) {
     return `
       <div class="search-result-item" role="button" tabindex="0" data-activate data-url="${escHtml(url)}" data-name="${name}|${meta}">
         <div class="${thumbClass}">
-          ${img ? `<img src="${escHtml(img)}" alt="" onerror="this.parentElement.innerHTML='${defaultIcon(item._kind)}'">` : defaultIcon(item._kind)}
+          ${img ? `<img src="${escHtml(img)}" alt="" data-onerror="this.parentElement.innerHTML='${defaultIcon(item._kind)}'">` : defaultIcon(item._kind)}
         </div>
         <div class="search-result-info">
           <div class="search-result-title">${name}</div>
@@ -3878,8 +3881,8 @@ function errorStateHTML(info, retry) {
       ? '<path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/><line x1="2" y1="2" x2="22" y2="22"/>'
       : '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>';
   const buttons = [
-    info.action ? `<button type="button" class="act-btn primary" onclick="${info.action.onclick}">${escHtml(info.action.label)}</button>` : '',
-    retry ? `<button type="button" class="act-btn secondary" onclick="${retry}">Try again</button>` : '',
+    info.action ? `<button type="button" class="act-btn primary" data-onclick="${info.action.onclick}">${escHtml(info.action.label)}</button>` : '',
+    retry ? `<button type="button" class="act-btn secondary" data-onclick="${retry}">Try again</button>` : '',
   ].join('');
   return `<div class="error-state ${info.kind}" role="alert">
     <div class="es-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${icon}</svg></div>
@@ -4062,7 +4065,7 @@ function renderRecent(hist) {
     card.innerHTML = `
       <div class="rc-cover" style="${coverBg}">${coverUrl ? '' : '🎵'}
         <button class="rc-remove" title="Remove from history"
-          onclick="event.stopPropagation();removeRecent(this.closest('.recent-card').dataset.url)">✕</button>
+          data-onclick="event.stopPropagation();removeRecent(this.closest('.recent-card').dataset.url)">✕</button>
       </div>
       <div class="rc-info">
         <div class="rc-title">${escHtml(item.label || item.title || item.url || '—')}</div>
@@ -4625,9 +4628,9 @@ function renderStaged() {
     const meta = [kind.label, `${item.track_count} track${item.track_count === 1 ? '' : 's'}`, `added ${timeAgo(item.added_at)}`]
       .filter(Boolean).join(' · ');
     const actions = [
-      item.status === 'pending' ? `<button type="button" class="row-btn accent" title="Start" onclick="startStagedOne('${item.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg></button>` : '',
-      (item.status === 'failed' || item.status === 'done') ? `<button type="button" class="row-btn" title="Queue again" onclick="retryStaged('${item.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>` : '',
-      item.status !== 'running' ? `<button type="button" class="row-btn" title="Remove" onclick="removeStaged('${item.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>` : '',
+      item.status === 'pending' ? `<button type="button" class="row-btn accent" title="Start" data-onclick="startStagedOne('${item.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg></button>` : '',
+      (item.status === 'failed' || item.status === 'done') ? `<button type="button" class="row-btn" title="Queue again" data-onclick="retryStaged('${item.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>` : '',
+      item.status !== 'running' ? `<button type="button" class="row-btn" title="Remove" data-onclick="removeStaged('${item.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>` : '',
     ].join('');
     return `<div class="page-row status-${item.status}">
       <div class="pr-cover">${cover}</div>
@@ -4784,7 +4787,7 @@ function renderDownloadHistory(items, totals, q) {
       </div>
       ${r.success ? '' : '<span class="status-pill failed">Failed</span>'}
       <div class="pr-actions">
-        <button type="button" class="row-btn" title="Remove from history" onclick="removeDownloadHistory(${Number(r.id)})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        <button type="button" class="row-btn" title="Remove from history" data-onclick="removeDownloadHistory(${Number(r.id)})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
     </div>`;
   }).join('');
@@ -4895,7 +4898,7 @@ function renderFailedTracks() {
         </div>
         <span class="fp-attempts">${tries}</span>
         <button type="button" class="act-btn secondary" data-key="${regEscapeHtml(t.key)}"
-          onclick="retryFailedTracks([this.dataset.key])">Retry</button>
+          data-onclick="retryFailedTracks([this.dataset.key])">Retry</button>
       </li>`;
   }).join('');
 }
@@ -5853,7 +5856,7 @@ function renderRegistries(registries) {
           <span class="reg-url" title="${regEscapeHtml(r.url)}">${regEscapeHtml(r.url)}</span>
           <div class="reg-badges">${badges}${r.enabled ? '' : '<span class="reg-badge reg-badge-off">Removed</span>'}</div>
         </div>
-        <button class="act-btn secondary reg-remove-btn" type="button" onclick="removeRegistryLink('${encodeURIComponent(r.url)}')" title="Remove this registry link">
+        <button class="act-btn secondary reg-remove-btn" type="button" data-onclick="removeRegistryLink('${encodeURIComponent(r.url)}')" title="Remove this registry link">
           Remove
         </button>
       </div>`;
@@ -5943,7 +5946,7 @@ function renderDirectories(directories) {
           <span class="reg-url" title="${regEscapeHtml(d.url)}">${regEscapeHtml(d.url)}</span>
           <div class="reg-badges">${badges}${d.enabled ? '' : '<span class="reg-badge reg-badge-off">Removed</span>'}</div>
         </div>
-        <button class="act-btn secondary reg-remove-btn" type="button" onclick="removeDirectoryLink('${encodeURIComponent(d.url)}')" title="Remove this directory link">
+        <button class="act-btn secondary reg-remove-btn" type="button" data-onclick="removeDirectoryLink('${encodeURIComponent(d.url)}')" title="Remove this directory link">
           Remove
         </button>
       </div>`;
@@ -6037,7 +6040,7 @@ function renderDiscoveryResults(byDirectory) {
             <span class="reg-url" title="${regEscapeHtml(r.url)}">${regEscapeHtml(r.name)} — ${regEscapeHtml(r.url)}</span>
             <div class="reg-badges">${badge}</div>
           </div>
-          <button class="act-btn secondary reg-remove-btn" type="button" onclick="addDiscoveredAsRegistry('${encodeURIComponent(r.url)}')">
+          <button class="act-btn secondary reg-remove-btn" type="button" data-onclick="addDiscoveredAsRegistry('${encodeURIComponent(r.url)}')">
             Add as Registry
           </button>
         </div>`;
@@ -6100,7 +6103,7 @@ function renderTrustedKeys(keys) {
         <span class="reg-url">${regEscapeHtml(k.name)}</span>
         <div class="reg-badges"><span class="reg-badge">${regEscapeHtml((k.public_key_b64 || '').slice(0, 16))}…</span></div>
       </div>
-      <button class="act-btn secondary reg-remove-btn" type="button" onclick="removeTrustedKeyLink('${encodeURIComponent(k.name)}')">
+      <button class="act-btn secondary reg-remove-btn" type="button" data-onclick="removeTrustedKeyLink('${encodeURIComponent(k.name)}')">
         Remove
       </button>
     </div>`).join('');
@@ -6375,10 +6378,10 @@ function renderLibraryDedup(report) {
         return `
         <div class="u-items-center u-gap-8" style="display:flex;">
           <input type="radio" name="libdedup-keep-${i}" ${isKeeper ? 'checked' : ''}
-                 onchange="setLibDedupKeeper(${i}, ${j})" title="Keep this copy">
+                 data-onchange="setLibDedupKeeper(${i}, ${j})" title="Keep this copy">
           <input type="checkbox" ${group.selected.has(file.path) ? 'checked' : ''}
                  ${isKeeper ? 'disabled' : ''}
-                 onchange="toggleLibDedupFile(${i}, ${j}, this.checked)"
+                 data-onchange="toggleLibDedupFile(${i}, ${j}, this.checked)"
                  title="${isKeeper ? 'The kept copy is never removed' : 'Remove this copy'}">
           <span class="reg-url u-flex-1 u-minw-0" title="${regEscapeHtml(file.path)}">${regEscapeHtml(file.path)}</span>
           <span class="s-label u-fs-10_5 u-ws-nowrap">${regEscapeHtml(file.quality || '')}</span>
@@ -6690,7 +6693,7 @@ function renderHomeSections(sections) {
 
       card.innerHTML = `
         ${item.cover_url
-          ? `<img src="${escHtml(item.cover_url)}" alt="" loading="lazy" onerror="this.outerHTML='${blank.replace(/"/g, '&quot;')}'">`
+          ? `<img src="${escHtml(item.cover_url)}" alt="" loading="lazy" data-onerror="this.outerHTML='${blank.replace(/"/g, '&quot;')}'">`
           : blank}
         <div class="explore-card-title" title="${escHtml(item.name)}">${escHtml(item.name)}</div>
         <div class="explore-card-subtitle" title="${escHtml(subText)}">${escHtml(subText)}</div>
@@ -6871,11 +6874,11 @@ window.showFfmpegWarning = function(result) {
       <strong>ffmpeg not found</strong>
       <span>Tidal FLAC muxing and Amazon decryption will be unavailable. MP3 transcoding will try to install ffmpeg automatically the first time you use it.</span>
       <a href="#" class="ffmpeg-banner-link"
-        onclick="event.preventDefault(); pyWin('open_url', 'https://ffmpeg.org/download.html')">
+        data-onclick="event.preventDefault(); pyWin('open_url', 'https://ffmpeg.org/download.html')">
         Download ffmpeg
       </a>
     </div>
-    <button class="ffmpeg-banner-close" onclick="this.closest('.ffmpeg-banner').remove()" title="Dismiss">✕</button>
+    <button class="ffmpeg-banner-close" data-onclick="this.closest('.ffmpeg-banner').remove()" title="Dismiss">✕</button>
   `;
 
   // Insert right after the search bar
@@ -6902,11 +6905,11 @@ window.showNodeWarning = function(result) {
       <strong>Node.js not found</strong>
       <span>JavaScript extensions won't work until it's installed — Mornye will try to install it automatically the first time you use one.</span>
       <a href="#" class="ffmpeg-banner-link"
-        onclick="event.preventDefault(); pyWin('open_url', 'https://nodejs.org/en/download')">
+        data-onclick="event.preventDefault(); pyWin('open_url', 'https://nodejs.org/en/download')">
         Download Node.js
       </a>
     </div>
-    <button class="ffmpeg-banner-close" onclick="this.closest('.ffmpeg-banner').remove()" title="Dismiss">✕</button>
+    <button class="ffmpeg-banner-close" data-onclick="this.closest('.ffmpeg-banner').remove()" title="Dismiss">✕</button>
   `;
 
   const searchBar = $('search-bar');
@@ -7302,7 +7305,7 @@ function renderLocalTracks() {
                 }
                 scoreCol = `<span class="local-badge ${isSafe ? 'ok' : 'warn'}" title="${escHtml(why)}">${best.confidence}%</span>`;
             }
-            checkbox = `<input type="checkbox" class="local-cb" value="${i}" data-file-path="${escHtml(item.file_path)}" ${isSafe ? 'checked' : ''} onchange="updateLocalSelection()">`;
+            checkbox = `<input type="checkbox" class="local-cb" value="${i}" data-file-path="${escHtml(item.file_path)}" ${isSafe ? 'checked' : ''} data-onchange="updateLocalSelection()">`;
         } else if (item.error) {
             scoreCol = `<span class="local-badge err">Error</span>`;
             newCol = `<div class="u-c-red u-fs-11">${escHtml(item.error)}</div>`;
@@ -7320,10 +7323,10 @@ function renderLocalTracks() {
                     <div class="local-artist">${escHtml(oldArtist)}</div>
                     <div class="u-ff-jetbrains-mono-monospace u-fs-9_5 u-c-muted u-o-hidden u-text-overflow-ellipsis u-ws-nowrap u-mt-3" title="${escHtml(item.file_path)}">${escHtml(fileName)}</div>
                     <div class="local-actions">
-                      <button type="button" class="local-convert-btn" title="Play this file as it is stored" onclick="playLocal(${i})">Play</button>
-                      <button type="button" class="local-convert-btn" title="Edit the tags, cover and lyrics of this file" onclick="openTagEditor(${i})">Edit</button>
-                      <button type="button" class="local-convert-btn" title="Convert this file to another format" onclick="openConvertDialog([${i}])">Convert</button>
-                      <button type="button" class="local-convert-btn" title="Show technical details and a spectrogram" onclick="openAnalyze(${i})">Analyze</button>
+                      <button type="button" class="local-convert-btn" title="Play this file as it is stored" data-onclick="playLocal(${i})">Play</button>
+                      <button type="button" class="local-convert-btn" title="Edit the tags, cover and lyrics of this file" data-onclick="openTagEditor(${i})">Edit</button>
+                      <button type="button" class="local-convert-btn" title="Convert this file to another format" data-onclick="openConvertDialog([${i}])">Convert</button>
+                      <button type="button" class="local-convert-btn" title="Show technical details and a spectrogram" data-onclick="openAnalyze(${i})">Analyze</button>
                     </div>
                 </div>
             </div>
@@ -7752,8 +7755,8 @@ function openConcerts(artistName) {
         <div class="weekly-title">${escHtml(concertWhen(c))}</div>
         <div class="weekly-artist">${escHtml([c.venue, c.location].filter(Boolean).join(' · '))}</div>
       </div>
-      <button type="button" class="act-btn secondary u-p-5-12 u-fs-12" onclick="downloadConcertIcs(${i})" title="Download a calendar event">Add to calendar</button>
-      ${c.url ? `<button type="button" class="act-btn secondary u-p-5-12 u-fs-12" onclick="openExternalUrl(${escHtml(JSON.stringify(c.url))})">Details</button>` : ''}
+      <button type="button" class="act-btn secondary u-p-5-12 u-fs-12" data-onclick="downloadConcertIcs(${i})" title="Download a calendar event">Add to calendar</button>
+      ${c.url ? `<button type="button" class="act-btn secondary u-p-5-12 u-fs-12" data-onclick="openExternalUrl(${escHtml(JSON.stringify(c.url))})">Details</button>` : ''}
     </div>`).join('');
   $('concerts-modal').classList.remove('hidden');
 }
@@ -8518,7 +8521,7 @@ function npRenderQueue() {
   for (let n = Math.max(0, playerPos); n < Math.min(playerOrder.length, Math.max(0, playerPos) + 200); n++) {
     const i = playerOrder[n], q = playerQueue[i];
     if (!q) continue;
-    rows.push(`<div class="np-queue-row${n === playerPos ? ' active' : ''}" role="button" tabindex="0" data-activate onclick="loadPlayerTrack(${i})">
+    rows.push(`<div class="np-queue-row${n === playerPos ? ' active' : ''}" role="button" tabindex="0" data-activate data-onclick="loadPlayerTrack(${i})">
        <span class="t">${escHtml(q.title)}</span><span class="a">${escHtml(q.artist || '')}</span></div>`);
   }
   $('np-queue').innerHTML = rows.join('');
@@ -8952,21 +8955,21 @@ function renderSubscriptions(subs) {
         </div>
         <select class="u-maxw-140 u-p-5-8 u-fs-fs-75 u-shrink-0"
                 title="Check this ${target} automatically and download what is new"
-                onchange="setSubscriptionInterval('${regEscapeHtml(s.id)}', this.value)">
+                data-onchange="setSubscriptionInterval('${regEscapeHtml(s.id)}', this.value)">
           ${subIntervalOptions(s.interval_minutes)}
         </select>
         <button class="act-btn secondary reg-remove-btn" type="button"
-                onclick="toggleSubscription('${regEscapeHtml(s.id)}', ${s.enabled ? 'false' : 'true'})"
+                data-onclick="toggleSubscription('${regEscapeHtml(s.id)}', ${s.enabled ? 'false' : 'true'})"
                 title="${s.enabled ? `Stop checking this ${target} without forgetting what has been seen` : `Resume checking this ${target}`}">
           ${s.enabled ? 'Pause' : 'Resume'}
         </button>
         <button class="act-btn secondary reg-remove-btn" type="button"
-                onclick="resetSubscription('${regEscapeHtml(s.id)}')"
+                data-onclick="resetSubscription('${regEscapeHtml(s.id)}')"
                 title="Forget what this subscription has seen, so the whole back catalogue counts as new again">
           Reset
         </button>
         <button class="act-btn secondary reg-remove-btn" type="button"
-                onclick="removeSubscription('${regEscapeHtml(s.id)}')">
+                data-onclick="removeSubscription('${regEscapeHtml(s.id)}')">
           Unfollow
         </button>
       </div>`;
@@ -9383,7 +9386,7 @@ function extSettingFieldHtml(ext, entry, cardIdx) {
   if (entry.type === 'button') {
     return `<div class="s-row">${label}
       <button class="act-btn secondary u-p-6-14 u-fs-12" type="button"
-        onclick="runExtensionSettingAction('${regEscapeHtml(ext.name)}','${regEscapeHtml(entry.key)}')">${regEscapeHtml(entry.label)}</button>
+        data-onclick="runExtensionSettingAction('${regEscapeHtml(ext.name)}','${regEscapeHtml(entry.key)}')">${regEscapeHtml(entry.label)}</button>
     </div>`;
   }
   if (entry.type === 'boolean') {
@@ -9430,7 +9433,7 @@ function extLocalNetworkRowHtml(ext) {
   return `<div class="s-row">
     <span class="s-label">Allow local network access<small>${what}</small></span>
     <label class="toggle"><input type="checkbox" ${ext.local_network ? 'checked' : ''}
-      onchange="setExtensionLocalNetwork('${regEscapeHtml(ext.name)}', this)"><span class="toggle-sl"></span></label>
+      data-onchange="setExtensionLocalNetwork('${regEscapeHtml(ext.name)}', this)"><span class="toggle-sl"></span></label>
   </div>`;
 }
 
@@ -9473,9 +9476,9 @@ function renderExtensionSettings(data) {
         ${extLocalNetworkRowHtml(ext)}
         <div class="s-row u-justify-flex-end u-gap-8">
           <button class="act-btn secondary u-p-6-14 u-fs-12" type="button"
-            onclick="resetExtensionSettings('${regEscapeHtml(ext.name)}')">Reset to defaults</button>
+            data-onclick="resetExtensionSettings('${regEscapeHtml(ext.name)}')">Reset to defaults</button>
           <button class="act-btn primary u-p-6-14 u-fs-12" type="button"
-            onclick="saveExtensionSettings('${regEscapeHtml(ext.name)}', this)">Save</button>
+            data-onclick="saveExtensionSettings('${regEscapeHtml(ext.name)}', this)">Save</button>
         </div>
       </div>
     </details>`).join('');

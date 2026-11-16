@@ -488,6 +488,40 @@ def _safe_username(username: str) -> str:
     return f"{cleaned[:55]}-{digest}"
 
 
+def _page_security_headers(request) -> dict[str, str]:
+    """Headers of the page itself (F1, docs/redesign-plan.md).
+
+    Scripts only from this origin: index.html has no inline script and no
+    onclick="" attributes any more (frontend/inline-handlers.js binds the
+    data-on* ones without eval). Styles keep 'unsafe-inline': the markup and
+    app.js set style="" and el.style, which a style hash cannot cover.
+    Covers, artist pictures and track previews come from the providers'
+    hosts, over https and sometimes plain http. The WebSocket is this host.
+    frame-ancestors 'none' (and X-Frame-Options for old engines): nothing
+    may frame the app and click through it.
+    """
+    host = request.headers.get("host", "")
+    ws = f" ws://{host} wss://{host}" if host else ""
+    csp = "; ".join(
+        (
+            "default-src 'self'",
+            "script-src 'self'",
+            "style-src 'self' 'unsafe-inline'",
+            "img-src 'self' data: blob: https: http:",
+            "media-src 'self' data: blob: https: http:",
+            "font-src 'self' data:",
+            f"connect-src 'self'{ws}",
+            "worker-src 'self'",
+            "manifest-src 'self'",
+            "object-src 'none'",
+            "base-uri 'none'",
+            "form-action 'self'",
+            "frame-ancestors 'none'",
+        )
+    )
+    return {"Content-Security-Policy": csp, "X-Frame-Options": "DENY"}
+
+
 def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
     """`multiuser=True` gives every account its own MornyeAPI instance,
     download folder and event stream — see the note on SESSION_COOKIE above
@@ -687,6 +721,12 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
     @app.middleware("http")
     async def _no_cache_frontend(request, call_next):
         response = await call_next(request)
+        # F1: on every response. nosniff stops a browser running an uploaded
+        # or proxied file as a script or stylesheet of another type; the
+        # referrer stays on this origin (cover and preview hosts are told
+        # nothing about the page that asked).
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "same-origin")
         if request.url.path.endswith((".js", ".css", ".html")):
             response.headers["Cache-Control"] = (
                 "no-store, no-cache, must-revalidate, max-age=0"
@@ -1338,12 +1378,12 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
     # ── Frontend: same static files the desktop build uses, with a small
     #    script injected so window.pywebview.api exists in a plain browser.
     @app.get("/")
-    async def index() -> HTMLResponse:
+    async def index(request: Request) -> HTMLResponse:
         html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
-        inject = (
-            "<script>window.__MORNYE_WEB_MODE__ = true;</script>\n"
-            '<script src="/web-shim.js"></script>\n'
-        )
+        # A file, not inline script: the page's Content-Security-Policy runs
+        # scripts only from this origin (F1). web-shim.js sets
+        # window.__MORNYE_WEB_MODE__ itself.
+        inject = '<script src="/web-shim.js"></script>\n'
         # Before the first app script. index.html marks the spot with a
         # comment, because matching the script tag itself silently dropped the
         # shim (and with it every API call) whenever that tag changed shape —
@@ -1380,7 +1420,7 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
                 + '<body class="web-mode">'
                 + html[body_at + len("<body>") :]
             )
-        return HTMLResponse(html)
+        return HTMLResponse(html, headers=_page_security_headers(request))
 
     @app.get("/web-shim.js")
     async def web_shim() -> FileResponse:

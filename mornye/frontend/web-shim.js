@@ -17,6 +17,10 @@
   'use strict';
   // The page is served by webapp.py: audio streams through /api/media.
   window.__mornyeWeb = true;
+  // Read by boot-tail.js (service worker) and app.js. Set here rather than in
+  // an inline <script> webapp.py used to inject: the page's
+  // Content-Security-Policy runs scripts only from files (F1).
+  window.__MORNYE_WEB_MODE__ = true;
 
   async function callApi(name, args) {
     const res = await fetch('/api/' + name, {
