@@ -452,6 +452,43 @@ regola (una parola = un elemento).
    `core/hires_check.py:469`. `hc-summary` è aggiornato da `app.js` ma non
    esiste più nell'HTML. Suite completa dopo J4: 2249 passati, 357 saltati
    (l'unico fallimento era un test da aggiornare, fatto nello stesso commit).
+7. **Chiusura delle voci aperte** (2026-11-16, sessione dedicata, branch
+   `claude/plan-rest-3e589f` da `2.0.7` a `bd1d93c`, un commit per voce,
+   non pushati). Confronto degli stili calcolati con lo strumento della
+   voce 22 (140 scenari), base presa da un checkout separato di `bd1d93c`.
+   - **F7 · accessibilità** (commit sotto). (a) Gli 11 `confirm()` nativi
+     diventano `askConfirm(domanda, {title, ok, danger})` → `Promise<bool>`,
+     che apre `#confirm-modal`: lo stesso dialogo a filetto degli altri
+     (`api-modal`), stretto (`.confirm-card`, `feedback.css`), su telefono
+     come foglio dal basso. Escape, sfondo e Cancel rispondono no; il Tab
+     resta nei due pulsanti; alla chiusura il focus torna dove era. Le
+     domande distruttive (cancella profilo/file/cronologia, svuota coda…)
+     hanno il pulsante `danger` e partono su Cancel, le altre sul pulsante
+     di conferma. `switchView()` resta sincrona: con modifiche non salvate
+     chiede e, su "Leave", richiama se stessa. (b) 18 elementi cliccabili
+     non controlli (pallini della finestra, versione e badge
+     d'aggiornamento ×5, dock, info del player, righe coda di Now Playing,
+     risultati di ricerca, recenti, righe di History, card di Explore e
+     degli album dell'artista, voci del selettore cartelle, righe della
+     libreria del Player) hanno `tabindex="0"`, `data-activate` e un ruolo;
+     un solo `keydown` in `app.js` trasforma Enter/Spazio sull'elemento
+     stesso nel suo clic (`makeActivatable()` per quelli creati in JS).
+     Lasciati: gli sfondi dei dialoghi (si chiudono con Escape e i
+     pulsanti) e le righe dei testi di Now Playing (centinaia di fermate di
+     Tab; il clic resta una scorciatoia del mouse). (c) `outline: none`:
+     una sonda (ogni controllo visibile di ogni vista, scheda e stato di
+     prova, transizioni spente, elemento e due antenati) trova un solo
+     controllo che a fuoco non cambia aspetto — la casella "Reset seen
+     history" di Following, presa da `#view-following input:focus` che le
+     toglieva l'anello per colorarle un bordo che una casella nativa non
+     disegna; ora la regola esclude caselle/radio come le altre della
+     vista. Gli altri `outline: none` sono campi che mostrano il fuoco sul
+     bordo. (d) `<img>` senza `alt`: due nel markup generato (miniature
+     della ricerca, copertina proposta in Local, ora anche passata da
+     `escHtml`). Test: `tests/test_frontend_a11y.py`. Confronto: cambiano
+     solo gli elementi nuovi del dialogo (nascosto); 0 differenze sul resto.
+     Provato con Playwright: dialogo in scuro/chiaro a 1280 e 375, Tab,
+     Escape, Enter su una card dei recenti.
 
 ### Da sapere prima di toccare qualcosa
 

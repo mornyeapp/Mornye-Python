@@ -103,15 +103,87 @@ const toastMgr = new ToastManager();
 // sound followed only the browser's own localStorage (issue #254).
 window.toastMgr = toastMgr;
 
+// ── Keyboard reach for clickable non-buttons (F7) ───────────────────────────
+// Rows and cards that act on a click are <div>s (a <button> cannot hold
+// their block layout or nested buttons). Each carries tabindex="0" and
+// data-activate, and Enter or Space on it is its click. Only the element
+// itself: a key typed in a field or on a button inside it is left alone.
+function makeActivatable(el, role = 'button') {
+  el.tabIndex = 0;
+  el.dataset.activate = '';
+  if (role && !el.hasAttribute('role')) el.setAttribute('role', role);
+  return el;
+}
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const el = e.target;
+  if (!(el instanceof Element) || !el.hasAttribute('data-activate')) return;
+  if (e.repeat) return;
+  e.preventDefault();
+  el.click();
+});
+
+// ── Confirmation dialog (F7) ─────────────────────────────────────────────────
+// askConfirm(question, {title, ok, danger}) → Promise<boolean>. Opens
+// #confirm-modal in place of the native confirm(), which pywebview draws in
+// the OS's own style and outside the window. Escape, the backdrop and Cancel
+// answer false. A destructive question (danger) starts on Cancel, so a
+// stray Enter does not delete anything; otherwise on the confirm button.
+let confirmSettle = null;
+function askConfirm(question, { title = 'Are you sure?', ok = 'OK', danger = false } = {}) {
+  const modal = $('confirm-modal');
+  if (confirmSettle) confirmSettle(false);
+  $('confirm-title').textContent = title;
+  $('confirm-message').textContent = question;
+  const okBtn = $('confirm-ok');
+  okBtn.textContent = ok;
+  okBtn.classList.toggle('danger', danger);
+  okBtn.classList.toggle('primary', !danger);
+  const opener = document.activeElement;
+  modal.classList.remove('hidden');
+  (danger ? $('confirm-cancel') : okBtn).focus();
+  return new Promise(resolve => {
+    confirmSettle = (answer) => {
+      confirmSettle = null;
+      modal.classList.add('hidden');
+      if (opener && typeof opener.focus === 'function' && document.contains(opener)) opener.focus();
+      resolve(answer);
+    };
+  });
+}
+(function initConfirmDialog() {
+  const modal = $('confirm-modal');
+  if (!modal) return;
+  modal.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-confirm]');
+    if (b && confirmSettle) confirmSettle(b.dataset.confirm === 'ok');
+  });
+  modal.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault(); e.stopPropagation();
+      if (confirmSettle) confirmSettle(false);
+    } else if (e.key === 'Tab') {
+      // Two buttons: keep the focus inside the dialog while it is open.
+      const first = $('confirm-cancel'), last = $('confirm-ok');
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  });
+})();
+
 // ── View switching ───────────────────────────────────────────────────────────
 function switchView(name) {
   if (isDirty) {
-        if (!confirm("You have unsaved changes. Do you want to leave this page?")) {
-            return; // Cancel view change
-        }
-        isDirty = false; // Force reset when the user chooses to leave
-        updateSaveButtonVisual();
-    }
+    // Ask in the app's own dialog; on "Leave" drop the edits and switch.
+    askConfirm('You have unsaved changes. Leave this page without saving them?',
+      { title: 'Unsaved changes', ok: 'Leave' }).then(leave => {
+      if (!leave) return;
+      isDirty = false; // Force reset when the user chooses to leave
+      updateSaveButtonVisual();
+      switchView(name);
+    });
+    return;
+  }
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-btn[id^="nav-"]').forEach(b => b.classList.remove('active'));
   $('view-' + name)?.classList.add('active');
@@ -2598,6 +2670,7 @@ function injectArtistTabs(tracks) {
   albumMap.forEach(album => {
     const card = document.createElement('div');
     card.className = 'artist-album-card';
+    makeActivatable(card);
     const coverHtml = album.cover
       ? `<img src="${escHtml(album.cover)}" alt="cover" loading="lazy" onerror="this.parentElement.innerHTML='🎵'">`
       : '🎵';
@@ -3610,9 +3683,9 @@ window.app_handle_provider_search_results = function(results) {
       console.log('[Artist] Name:', name, 'cover_url:', item.cover_url, 'images:', item.images, 'cover:', item.cover, 'image:', item.image, 'full item:', item);
     }
     return `
-      <div class="search-result-item" data-url="${escHtml(url)}" data-name="${name}|${meta}">
+      <div class="search-result-item" role="button" tabindex="0" data-activate data-url="${escHtml(url)}" data-name="${name}|${meta}">
         <div class="${thumbClass}">
-          ${img ? `<img src="${escHtml(img)}" onerror="this.parentElement.innerHTML='${defaultIcon(item._kind)}'">` : defaultIcon(item._kind)}
+          ${img ? `<img src="${escHtml(img)}" alt="" onerror="this.parentElement.innerHTML='${defaultIcon(item._kind)}'">` : defaultIcon(item._kind)}
         </div>
         <div class="search-result-info">
           <div class="search-result-title">${name}</div>
@@ -3913,6 +3986,7 @@ function renderRecent(hist) {
   hist.slice(0, 16).forEach(item => {
     const card = document.createElement('div');
     card.className = 'recent-card';
+    makeActivatable(card);
   const rawUrl = item.url || '';
   const link = normalizeHistoryUrl(rawUrl);
   card.onclick = () => {
@@ -4601,7 +4675,7 @@ async function retryStaged(id) {
 }
 
 async function clearStaged(scope) {
-  if (scope === 'all' && !confirm('Remove everything waiting in the queue? Downloads in progress keep going.')) return;
+  if (scope === 'all' && !(await askConfirm('Remove everything waiting in the queue? Downloads in progress keep going.', { title: 'Clear the queue', ok: 'Remove all', danger: true }))) return;
   await window.pywebview?.api?.clear_staged_queue?.(scope);
   loadStaged();
 }
@@ -4691,7 +4765,7 @@ function renderFetchHistory(items, q) {
       ? `<img src="${escHtml(h.cover)}" alt="" loading="lazy">`
       : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${km.icon}</svg>`;
     const meta = [km.label, h.track_count ? `${h.track_count} tracks` : '', timeAgo(h.at)].filter(Boolean).join(' · ');
-    return `<div class="page-row clickable" data-idx="${idx}" title="Open this link again">
+    return `<div class="page-row clickable" role="button" tabindex="0" data-activate data-idx="${idx}" title="Open this link again">
       <div class="pr-cover">${cover}</div>
       <div class="pr-main">
         <div class="pr-title">${escHtml(h.label || h.url || '—')}</div>
@@ -4726,7 +4800,7 @@ async function removeDownloadHistory(id) {
 
 async function clearHistory() {
   const what = historyTab === 'downloads' ? 'the download history (your files stay where they are)' : 'the list of fetched links';
-  if (!confirm(`Clear ${what}?`)) return;
+  if (!(await askConfirm(`Clear ${what}?`, { title: 'Clear history', ok: 'Clear', danger: true }))) return;
   if (historyTab === 'downloads') await window.pywebview?.api?.clear_download_history?.();
   else {
     await window.pywebview?.api?.clear_fetch_history?.();
@@ -5582,7 +5656,7 @@ async function deleteProfile() {
     logMessage('Select a profile to delete.', 'error');
     return;
   }
-  if (!confirm(`Delete profile '${name}'? This cannot be undone.`)) return;
+  if (!(await askConfirm(`Delete profile '${name}'? This cannot be undone.`, { title: 'Delete profile', ok: 'Delete', danger: true }))) return;
   if (window.pywebview?.api) {
     const result = await window.pywebview.api.delete_profile_data(name);
     if (result) {
@@ -6358,7 +6432,7 @@ async function resolveLibraryDuplicates(action) {
   const question = action === 'delete'
     ? `Delete ${paths.length} file(s) permanently? This cannot be undone.`
     : `Move ${paths.length} file(s) into the quarantine folder? You can undo this afterwards.`;
-  if (!confirm(question)) return;
+  if (!(await askConfirm(question, { title: action === 'delete' ? 'Delete duplicates' : 'Quarantine duplicates', ok: action === 'delete' ? 'Delete' : 'Move', danger: action === 'delete' }))) return;
 
   const btn = $(action === 'delete' ? 'btn-libdedup-delete' : 'btn-libdedup-trash');
   setTaBtnState(btn, 'loading');
@@ -6565,6 +6639,7 @@ function renderHomeSections(sections) {
     section.items.forEach(item => {
       const card = document.createElement('div');
       card.className = 'explore-card';
+      makeActivatable(card);
       
       // No cover, or one that fails to load: a neutral square (css/views/
       // explore.css), not another service's logo — the feed may be Apple's
@@ -7011,6 +7086,7 @@ async function navigateFolderBrowser(path) {
             items.forEach(item => {
                 const div = document.createElement('div');
                 div.className = 'fb-entry';
+                makeActivatable(div);
                 const icon = item.type === 'dir'
                     ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>'
                     : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg>';
@@ -7144,7 +7220,7 @@ function renderLocalTracks() {
 
         if (hasMatch) {
             const newCover = best.metadata.cover_url || best.metadata.cover || '';
-            const newCoverHtml = newCover ? `<img src="${newCover}">` : `🎵`;
+            const newCoverHtml = newCover ? `<img src="${escHtml(newCover)}" alt="">` : `🎵`;
             const newTitle = best.metadata.title || '';
             const newArtist = best.metadata.first_artist || '';
 
@@ -8398,7 +8474,7 @@ function npRenderQueue() {
   for (let n = Math.max(0, playerPos); n < Math.min(playerOrder.length, Math.max(0, playerPos) + 200); n++) {
     const i = playerOrder[n], q = playerQueue[i];
     if (!q) continue;
-    rows.push(`<div class="np-queue-row${n === playerPos ? ' active' : ''}" onclick="loadPlayerTrack(${i})">
+    rows.push(`<div class="np-queue-row${n === playerPos ? ' active' : ''}" role="button" tabindex="0" data-activate onclick="loadPlayerTrack(${i})">
        <span class="t">${escHtml(q.title)}</span><span class="a">${escHtml(q.artist || '')}</span></div>`);
   }
   $('np-queue').innerHTML = rows.join('');
@@ -8528,7 +8604,7 @@ function filterPlayerLibrary(keepScroll) {
 
 function libRowHtml(t, i) {
   const art = [t.artist, t.album].filter(Boolean).join(' — ');
-  return `<div class="pl-row" role="listitem" data-i="${i}" data-p="${escHtml(t.path)}">
+  return `<div class="pl-row" role="listitem" tabindex="0" data-activate data-i="${i}" data-p="${escHtml(t.path)}">
     <div class="pl-num"><span class="n">${i + 1}</span><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span></div>
     <div class="pl-thumb"><img alt="" draggable="false"></div>
     <div class="pl-main"><div class="pl-t">${escHtml(t.title)}</div><div class="pl-a">${escHtml(art)}</div></div>
@@ -8874,7 +8950,7 @@ async function addSubscriptionsBulk() {
     showToast('Only Spotify artist URLs are accepted in bulk mode. Check the pasted list.', 'error');
     return;
   }
-  if (!confirm(`Follow ${urls.length} artist(s)?${$('subscription-bulk-backfill')?.checked ? '\nTheir seen history will be reset so existing releases count as new.' : ''}`)) return;
+  if (!(await askConfirm(`Follow ${urls.length} artist(s)?${$('subscription-bulk-backfill')?.checked ? '\nTheir seen history will be reset so existing releases count as new.' : ''}`, { title: 'Follow artists', ok: 'Follow' }))) return;
 
   const interval = Number($('subscription-interval')?.value || 0);
   const groups = $('subscription-groups')?.value || 'album,single';
@@ -8981,7 +9057,7 @@ async function toggleSubscription(id, enabled) {
 }
 
 async function resetSubscription(id) {
-  if (!confirm('Forget what this subscription has seen? The next check with downloading on will treat the whole back catalogue as new.')) return;
+  if (!(await askConfirm('Forget what this subscription has seen? The next check with downloading on will treat the whole back catalogue as new.', { title: 'Reset subscription', ok: 'Reset', danger: true }))) return;
   try {
     await window.pywebview.api.reset_subscription(id);
     showToast('Reset. The next check with downloading on will treat the whole back catalogue as new.');
@@ -9122,7 +9198,7 @@ function renderExtensionHealth(data) {
 }
 
 async function resetExtensionHealth() {
-  if (!confirm('Clear the recorded provider statistics?')) return;
+  if (!(await askConfirm('Clear the recorded provider statistics?', { title: 'Clear statistics', ok: 'Clear', danger: true }))) return;
   try {
     await window.pywebview.api.reset_extension_health();
     showToast('Extension statistics cleared.');
@@ -9390,7 +9466,7 @@ async function saveExtensionSettings(name, btn) {
 }
 
 async function resetExtensionSettings(name) {
-  if (!confirm(`Reset every setting of ${name} to its default?`)) return;
+  if (!(await askConfirm(`Reset every setting of ${name} to its default?`, { title: 'Reset settings', ok: 'Reset', danger: true }))) return;
   try {
     const res = await window.pywebview.api.reset_extension_settings(name);
     if (res?.error) {
@@ -9538,7 +9614,7 @@ function renderSignedSessions(data) {
 }
 
 async function clearSignedSession(key) {
-  if (!confirm('Clear this signed session? The next request that needs it will verify again.')) return;
+  if (!(await askConfirm('Clear this signed session? The next request that needs it will verify again.', { title: 'Clear session', ok: 'Clear' }))) return;
   try {
     const res = await window.pywebview.api.clear_signed_session(key);
     if (res?.ok) showToast('Signed session cleared.');
@@ -9550,7 +9626,7 @@ async function clearSignedSession(key) {
 }
 
 async function pruneSignedSessions() {
-  if (!confirm('Delete the session files no installed extension uses?')) return;
+  if (!(await askConfirm('Delete the session files no installed extension uses?', { title: 'Delete unused sessions', ok: 'Delete', danger: true }))) return;
   try {
     const res = await window.pywebview.api.prune_signed_sessions();
     if (res?.ok) {

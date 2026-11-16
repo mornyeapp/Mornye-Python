@@ -57,7 +57,7 @@
 }
 #view-following input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"])),
 #view-following select { height: var(--row); }
-#view-following input:focus,
+#view-following input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"])):focus,
 #view-following select:focus,
 #view-following textarea:focus { border-color: var(--signal-strong); box-shadow: none; outline: none; }
 #view-following input[type="checkbox"] { accent-color: var(--signal-strong); }

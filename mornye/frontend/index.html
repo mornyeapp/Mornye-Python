@@ -132,17 +132,17 @@
 
 <div id="titlebar">
   <div class="dots">
-    <div class="dot c" onclick="pyWin('Quit')" title="Close"></div>
-    <div class="dot m" onclick="pyWin('WindowMinimise')" title="Minimize"></div>
-    <div class="dot x" onclick="pyWin('WindowToggleMaximise')" title="Maximize"></div>
+    <div class="dot c" role="button" tabindex="0" data-activate aria-label="Close" onclick="pyWin('Quit')" title="Close"></div>
+    <div class="dot m" role="button" tabindex="0" data-activate aria-label="Minimize" onclick="pyWin('WindowMinimise')" title="Minimize"></div>
+    <div class="dot x" role="button" tabindex="0" data-activate aria-label="Maximize" onclick="pyWin('WindowToggleMaximise')" title="Maximize"></div>
   </div>
   
   <div class="pywebview-drag-region u-flex-1 u-h-100pct u-app-region-drag"></div>
 
   <div id="tb-logo">
     <span>Mornye</span>
-    <span id="tb-version" class="clickable-version" onclick="openReleasePage()">v...</span>
-    <span id="tb-update-badge" class="update-badge hidden" title="Update available" onclick="openReleasePage()">⬆️</span>
+    <span id="tb-version" class="clickable-version" role="link" tabindex="0" data-activate onclick="openReleasePage()">v...</span>
+    <span id="tb-update-badge" class="update-badge hidden" title="Update available" role="link" tabindex="0" data-activate aria-label="Update available" onclick="openReleasePage()">⬆️</span>
   </div>
 </div>
 
@@ -155,7 +155,7 @@
     <div class="sb-brand">
       <img src="assets/icons/logo-transparent.png" alt="" class="sb-logo">
       <span class="sb-name">Mornye</span>
-      <span id="sb-version" class="sb-version clickable-version" onclick="openReleasePage()" title="Latest release on PyPI">v...</span>
+      <span id="sb-version" class="sb-version clickable-version" role="link" tabindex="0" data-activate onclick="openReleasePage()" title="Latest release on PyPI">v...</span>
     </div>
     <div class="sb-group">Discover</div>
     <button class="nav-btn active" id="nav-home"     onclick="switchView('home')"     title="Home" data-label="Home">
@@ -224,8 +224,8 @@
             </div>
             <div class="hero-main">
               <div class="hero-title">Mornye</div>
-              <span id="hero-version" class="hero-version clickable-version" onclick="openReleasePage()">v...</span>
-              <span id="hero-update-badge" class="hero-update-badge hidden" title="Update available" onclick="openReleasePage()">New version</span>
+              <span id="hero-version" class="hero-version clickable-version" role="link" tabindex="0" data-activate onclick="openReleasePage()">v...</span>
+              <span id="hero-update-badge" class="hero-update-badge hidden" title="Update available" role="link" tabindex="0" data-activate onclick="openReleasePage()">New version</span>
             </div>
           </div>
           <div class="hero-subtitle">Fetch Spotify track metadata and retrieve matching lossless audio through configurable Tidal, Qobuz & Amazon Music provider backends.</div>
@@ -1800,6 +1800,28 @@
       </div>
     </div>
   </div>
+
+  <!-- In-app confirmation (F7): askConfirm() in app.js opens it in place
+       of the native confirm(), which pywebview draws in the OS style and
+       outside the window. Escape and the backdrop count as Cancel. -->
+  <div id="confirm-modal" class="api-modal hidden" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+    <div class="api-modal-backdrop" data-confirm="cancel"></div>
+    <div class="api-modal-card confirm-card">
+      <div class="api-modal-header">
+        <div id="confirm-title" class="s-title">Are you sure?</div>
+      </div>
+      <div class="api-modal-body">
+        <p id="confirm-message" class="confirm-message"></p>
+      </div>
+      <div class="api-modal-actions">
+        <span></span>
+        <div class="u-gap-10 u-wrap-wrap" style="display:flex;">
+          <button class="act-btn secondary" type="button" data-confirm="cancel" id="confirm-cancel">Cancel</button>
+          <button class="act-btn primary" type="button" data-confirm="ok" id="confirm-ok">OK</button>
+        </div>
+      </div>
+    </div>
+  </div>
   </div>
   <!-- The download dock and its queue drawer live at body level, not
        inside #view-home. Two things went wrong while they were: the
@@ -1810,7 +1832,7 @@
        makes it a stacking context, so the dock's own --z-dock could
        not lift it above the 58px sidebar rail: the rail painted over
        its left edge, and the drawer's backdrop stopped at the rail. -->
-      <div id="queue-dock" onclick="toggleQueueDrawer()" title="Open download queue">
+      <div id="queue-dock" role="button" tabindex="0" data-activate aria-label="Open download queue" onclick="toggleQueueDrawer()" title="Open download queue">
         <span class="qd-label label">Downloads</span>
         <!-- A segmented meter: app.js sizes the fill in whole 8px steps. -->
         <div class="qd-bar" aria-hidden="true"><i id="qd-bar-fill"></i></div>
@@ -1837,7 +1859,7 @@
 
 <div id="player-bar" class="hidden" role="region" aria-label="Player">
   <audio id="player-audio" preload="metadata"></audio>
-  <div class="pl-info u-cursor-pointer" onclick="openNowPlaying()" title="Open the full player">
+  <div class="pl-info u-cursor-pointer" role="button" tabindex="0" data-activate onclick="openNowPlaying()" title="Open the full player">
     <div id="pl-title" class="pl-title">—</div>
     <div id="pl-quality" class="pl-quality" title="Played exactly as stored. Formats the window cannot decode are played as a lossless FLAC copy. The operating system may still resample to your output device's rate."></div>
   </div>

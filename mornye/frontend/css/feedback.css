@@ -490,6 +490,19 @@
 }
 .api-modal-actions { border-top: 1px solid var(--rule); }
 
+/* The confirmation dialog (askConfirm in app.js): narrower than a form
+   dialog, the question in the body's tone; a line break in the question
+   (a second sentence that warns) is kept. */
+.confirm-card { width: min(440px, 100%); }
+.confirm-message {
+  margin: var(--space-4) 0 0;
+  color: var(--text);
+  font-size: var(--text-md);
+  line-height: 1.5;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
 /* ── Empty state → blank: left-aligned, no dashed frame ──────────────── */
 .empty-state {
   align-items: flex-start;
