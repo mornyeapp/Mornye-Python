@@ -32,6 +32,7 @@ import re
 import secrets
 import threading
 import time
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -522,219 +523,8 @@ def _page_security_headers(request) -> dict[str, str]:
     return {"Content-Security-Policy": csp, "X-Frame-Options": "DENY"}
 
 
-def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
-    """`multiuser=True` gives every account its own MornyeAPI instance,
-    download folder and event stream — see the note on SESSION_COOKIE above
-    for what is isolated and what is still shared machine-wide.
-    """
-    manager = ConnectionManager()
-    # The shared instance. In single-user mode it is the only one, and its
-    # events go to every connected browser (owner=None), exactly as before.
-    api = MornyeAPI()
-    setattr(api, "_ws_broadcast", manager.broadcast)
-
-    registry = ApiRegistry(manager, api.download_dir)
-
-    def api_for(request: Request) -> MornyeAPI:
-        """The Api instance a request should act on.
-
-        Single-user mode has exactly one; multi-user mode has one per
-        account, so two people searching at the same time no longer
-        overwrite each other's `current_tracks`.
-        """
-        if not multiuser:
-            return api
-        return registry.get(getattr(request.state, "username", None))
-
-    # Exposed on app.state so tests (and anything embedding this app) can
-    # observe which instance a request actually reached, rather than having
-    # to infer it from a response that would look identical either way.
-    app_state_api = api
-    sessions: Any = None
-    job_queue: Any = None
-    login_limiter = LoginRateLimiter()
-    if multiuser:
-        from .core.job_queue import JobQueue, QueueFullError
-        from .core.web_users import SessionStore, check_quota
-
-        sessions = SessionStore()
-
-        def _quota_check(owner: str) -> None:
-            """Refuses a submission that would exceed the account's quota.
-
-            Injected into JobQueue rather than implemented there: the queue
-            deliberately knows nothing about accounts (see its docstring), and
-            "how much may this person download" is a question about accounts.
-            """
-            check_quota(owner)
-
-        def _run_queued_download(payload: dict) -> dict:
-            # The owner rides in the payload so the worker downloads into
-            # *their* folder and their browser gets the progress events —
-            # the queue thread has no request to read it from.
-            owner_api = registry.get(payload.get("owner"))
-
-            # Two shapes reach this handler. The frontend submits tracks it
-            # has already fetched, by index into the account's current_tracks
-            # (`selected_indices`); /api/v1/downloads submits a bare URL,
-            # because a REST client has no notion of a fetch that happened
-            # earlier in someone's browser session. Resolving a URL is the
-            # same fetch_metadata() the GUI runs, so both end up on one path.
-            # A third shape comes from the scheduler: a subscription's new
-            # tracks, carried whole (see api_mixins/subscriptions.py), which
-            # run_download_job() can execute without a tracklist in memory.
-            if "tracks" in payload:
-                return owner_api.run_download_job(payload)
-            if "selected_indices" in payload:
-                owner_api.download_tracks(
-                    payload["selected_indices"],
-                    payload.get("config", {}),
-                    payload.get("list_id"),
-                )
-            else:
-                from .core.config import DownloadRequest, MornyeConfig
-
-                config = MornyeConfig()
-                queue_config = payload.get("config") or {}
-                if "quality" in queue_config:
-                    config.download.quality = queue_config["quality"]
-                if "output_dir" in queue_config:
-                    config.output.directory = Path(
-                        queue_config["output_dir"]
-                    ).expanduser()
-                request = DownloadRequest(
-                    sources=[payload["url"]],
-                    config=config,
-                )
-                asyncio.run(application_download_service.download(request))
-            return {"status": "dispatched"}
-
-        job_queue = JobQueue(
-            handler=_run_queued_download,
-            workers=1,
-            # Survives a restart — see core/job_queue.py's docstring. This is
-            # the deployment the queue exists for (headless, on a NAS), and
-            # the one where a lost backlog is least likely to be noticed.
-            persist=True,
-            quota_check=_quota_check,
-            # Its own rows only: single-user --web persists into the same
-            # table (see below), with payloads this handler cannot read.
-            kind="multiuser",
-        )
-        # Every account Api built from here on gets it (see _build); none has
-        # been built yet — the first is created by the first request.
-        registry.download_queue = job_queue
-
-    # Single-user --web runs its downloads through a persisted queue as well,
-    # and for the reason multi-user's exists: this is the headless deployment,
-    # restarted by container updates and reboots nobody is watching. Each
-    # batch is written down before it starts — the tracks themselves, not
-    # positions in a tracklist that lives only in memory — and whatever a
-    # restart cut short is put back and runs again, skipping what is already
-    # on disk (see MornyeAPI.download_tracks). Kept apart from
-    # `job_queue`: that is multi-user's account-aware queue, and /api/metrics
-    # and the v1 API read its presence as "multi-user".
-    download_queue: Any = None
-    if not multiuser:
-        from .core.job_queue import JobQueue
-
-        download_queue = JobQueue(
-            handler=api.run_download_job,
-            workers=1,
-            persist=True,
-            kind="single-user",
-            # One user, so no one to crowd out: the per-owner cap only
-            # refused (and, for a subscription check, lost) the 51st of a
-            # large batch of new releases (issue #271).
-            max_pending_per_owner=None,
-        )
-        api._download_queue = download_queue
-
-    @asynccontextmanager
-    async def _lifespan(_app: FastAPI):
-        manager.bind_loop(asyncio.get_running_loop())
-        # Mirrors what _on_loaded() does for the desktop window, minus the
-        # window-specific bits (there is no self._window in web mode, so
-        # every push below goes out over the WebSocket only).
-        await run_in_threadpool(
-            api.log, "Python backend connected (web mode).", "debug"
-        )
-        await run_in_threadpool(
-            api.log,
-            f"Default download folder: {api.download_dir}",
-            "debug",
-        )
-        await run_in_threadpool(api._check_ffmpeg_startup)
-        await run_in_threadpool(api._check_node_startup)
-        try:
-            from .extensions.manager import ExtensionManager
-
-            # Explicit, because the comment that used to sit here said "no
-            # auto-install by default" while the constructor's default is
-            # True — so it did bootstrap, and had done all along. Behaviour
-            # unchanged; only the claim about it was wrong. In practice this
-            # is a no-op under `mornye --web`: launcher.amain() has already
-            # run the bootstrap, and ExtensionManager skips a repeat within
-            # $MORNYE_EXT_UPDATE_INTERVAL (_startup_registry_checks). It
-            # matters when webapp is started directly, e.g.
-            # `python -m mornye.webapp`. Later updates need no hook here:
-            # every download re-runs the same check once the interval is up.
-            await run_in_threadpool(ExtensionManager, auto_install_downloads=True)
-        except Exception as e:
-            await run_in_threadpool(api.log, f"Extension init error: {e}", "warn")
-        api._push("loadHistoryAndProfiles")
-        api._push("__set_version_label", api.app_version)
-        if download_queue is not None:
-            # Nothing has been submitted yet at this point, so anything queued
-            # or running is what the queue restored from the last process.
-            waiting = [
-                job
-                for job in download_queue.list_all()
-                if job.status.value in ("queued", "running")
-            ]
-            if waiting:
-                tracks = sum(len(job.payload.get("tracks") or []) for job in waiting)
-                await run_in_threadpool(
-                    api.log,
-                    f"Resuming {len(waiting)} download(s) ({tracks} track(s)) cut "
-                    "short by the last restart; tracks already on disk are skipped.",
-                    "info",
-                )
-        # Scheduled subscriptions (Following view). In multi-user mode each
-        # subscription is checked, and downloaded, by its own account's Api
-        # instance — into that account's folder.
-        scheduler = api._start_subscription_scheduler(
-            (lambda owner: registry.get(owner or None)) if multiuser else None
-        )
-        yield
-        # Everything else here is process-lifetime state (threads, in-memory
-        # sessions/queue) that dies with the process anyway; the scheduler is
-        # stopped so an app torn down in-process stops checking.
-        await run_in_threadpool(scheduler.stop)
-
-    app = FastAPI(title="Mornye Web", lifespan=_lifespan)
-    app.state.shared_api = app_state_api
-    app.state.api_registry = registry
-    app.state.job_queue = job_queue
-    app.state.download_queue = download_queue
-
-    @app.middleware("http")
-    async def _no_cache_frontend(request, call_next):
-        response = await call_next(request)
-        # F1: on every response. nosniff stops a browser running an uploaded
-        # or proxied file as a script or stylesheet of another type; the
-        # referrer stays on this origin (cover and preview hosts are told
-        # nothing about the page that asked).
-        response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("Referrer-Policy", "same-origin")
-        if request.url.path.endswith((".js", ".css", ".html")):
-            response.headers["Cache-Control"] = (
-                "no-store, no-cache, must-revalidate, max-age=0"
-            )
-            response.headers["Pragma"] = "no-cache"
-            response.headers["Expires"] = "0"
-        return response
-
+def _install_token_gate(app: FastAPI, token: str | None) -> None:
+    """The opt-in shared-secret gate (--web-token). Split out of create_app (M2)."""
     if token:
         # Opt-in shared-secret gate (see --web-token / MORNYE_WEB_TOKEN):
         # every request — page, static asset, or /api/* call — must present
@@ -774,7 +564,21 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
                 )
             return response
 
+
+def _register_multiuser_routes(
+    app: FastAPI,
+    multiuser: bool,
+    sessions: Any,
+    job_queue: Any,
+    login_limiter: LoginRateLimiter,
+) -> None:
+    """Login, logout, accounts and the per-user job queue (--web-multiuser).
+
+    Split out of create_app (M2).
+    """
     if multiuser:
+        from .core.job_queue import QueueFullError
+
         # Gates /api/* behind a logged-in session — see the "Multi-user mode"
         # note on SESSION_COOKIE above for what this does and doesn't isolate
         # between accounts. /ws is gated separately, inside ws_endpoint: HTTP
@@ -960,6 +764,18 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
             assert job_queue is not None
             return JSONResponse({"jobs": [j.to_dict() for j in job_queue.list_all()]})
 
+
+def _register_ops_routes(
+    app: FastAPI,
+    api: MornyeAPI,
+    manager: ConnectionManager,
+    token: str | None,
+    multiuser: bool,
+    sessions: Any,
+    job_queue: Any,
+) -> None:
+    """Liveness (/healthz), metrics and the auth status probe. Split out of create_app (M2)."""
+
     # ── Operations: liveness and metrics ──────────────────────────────────
     #
     # /healthz is deliberately outside /api/, and therefore outside the
@@ -1046,6 +862,15 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
         username = sessions.username_for(request.cookies.get(SESSION_COOKIE))
         return JSONResponse({"multiuser": True, "logged_in": username is not None})
 
+
+def _register_method_dispatch(
+    app: FastAPI, api_for: Callable[[Request], MornyeAPI], multiuser: bool
+) -> None:
+    """POST /api/<method>: every method in ALLOWED_METHODS, as the shim calls it.
+
+    Split out of create_app (M2).
+    """
+
     # ── Dynamic dispatcher for every whitelisted Api method ────────────────
     @app.post("/api/{method_name}")
     async def call_method(
@@ -1124,6 +949,14 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
 
         return JSONResponse({"result": result})
 
+
+def _register_file_routes(
+    app: FastAPI, api_for: Callable[[Request], MornyeAPI], multiuser: bool
+) -> None:
+    """The server-side folder browser, media streaming and the home folder.
+
+    Split out of create_app (M2).
+    """
     # ── Server-side folder browser (replaces the native folder dialog) ─────
     #
     # Both handlers below answer with one account's private view of the
@@ -1250,6 +1083,17 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
             )
         return JSONResponse({"home_dir": str(Path.home())})
 
+
+def _register_websocket(
+    app: FastAPI,
+    manager: ConnectionManager,
+    registry: ApiRegistry,
+    token: str | None,
+    multiuser: bool,
+    sessions: Any,
+) -> None:
+    """The /ws push channel (log, progress, metadata). Split out of create_app (M2)."""
+
     # ── WebSocket: push channel for log/progress/metadata/etc. ─────────────
     @app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket) -> None:
@@ -1286,6 +1130,21 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
         except Exception:
             manager.disconnect(ws)
 
+
+def _register_v1_api(
+    app: FastAPI,
+    api_for: Callable[[Request], MornyeAPI],
+    manager: ConnectionManager,
+    token: str | None,
+    multiuser: bool,
+    job_queue: Any,
+) -> Any:
+    """The versioned REST API under /api/v1. Split out of create_app (M2).
+
+    Returns its DownloadService: the --web-multiuser queue handler set up at
+    the top of create_app runs downloads through it, and looks the name up
+    when a job runs, so create_app binds it before any job can start.
+    """
     # ── The versioned REST API (/api/v1) ──────────────────────────────────
     #
     # Additive: the RPC bridge above is untouched and the frontend still uses
@@ -1374,6 +1233,14 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
             )
         )
     )
+    return application_download_service
+
+
+def _register_frontend(app: FastAPI) -> None:
+    """The page itself (with the shim and security headers), and the static files.
+
+    Split out of create_app (M2).
+    """
 
     # ── Frontend: same static files the desktop build uses, with a small
     #    script injected so window.pywebview.api exists in a plain browser.
@@ -1430,6 +1297,257 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
 
     # Everything else (app.js, css/, assets/...) served as-is.
     app.mount("/", StaticFiles(directory=str(FRONTEND_DIR)), name="frontend")
+
+
+def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
+    """`multiuser=True` gives every account its own MornyeAPI instance,
+    download folder and event stream — see the note on SESSION_COOKIE above
+    for what is isolated and what is still shared machine-wide.
+    """
+    manager = ConnectionManager()
+    # The shared instance. In single-user mode it is the only one, and its
+    # events go to every connected browser (owner=None), exactly as before.
+    api = MornyeAPI()
+    setattr(api, "_ws_broadcast", manager.broadcast)
+
+    registry = ApiRegistry(manager, api.download_dir)
+
+    def api_for(request: Request) -> MornyeAPI:
+        """The Api instance a request should act on.
+
+        Single-user mode has exactly one; multi-user mode has one per
+        account, so two people searching at the same time no longer
+        overwrite each other's `current_tracks`.
+        """
+        if not multiuser:
+            return api
+        return registry.get(getattr(request.state, "username", None))
+
+    # Exposed on app.state so tests (and anything embedding this app) can
+    # observe which instance a request actually reached, rather than having
+    # to infer it from a response that would look identical either way.
+    app_state_api = api
+    sessions: Any = None
+    job_queue: Any = None
+    login_limiter = LoginRateLimiter()
+    if multiuser:
+        from .core.job_queue import JobQueue
+        from .core.web_users import SessionStore, check_quota
+
+        sessions = SessionStore()
+
+        def _quota_check(owner: str) -> None:
+            """Refuses a submission that would exceed the account's quota.
+
+            Injected into JobQueue rather than implemented there: the queue
+            deliberately knows nothing about accounts (see its docstring), and
+            "how much may this person download" is a question about accounts.
+            """
+            check_quota(owner)
+
+        def _run_queued_download(payload: dict) -> dict:
+            # The owner rides in the payload so the worker downloads into
+            # *their* folder and their browser gets the progress events —
+            # the queue thread has no request to read it from.
+            owner_api = registry.get(payload.get("owner"))
+
+            # Two shapes reach this handler. The frontend submits tracks it
+            # has already fetched, by index into the account's current_tracks
+            # (`selected_indices`); /api/v1/downloads submits a bare URL,
+            # because a REST client has no notion of a fetch that happened
+            # earlier in someone's browser session. Resolving a URL is the
+            # same fetch_metadata() the GUI runs, so both end up on one path.
+            # A third shape comes from the scheduler: a subscription's new
+            # tracks, carried whole (see api_mixins/subscriptions.py), which
+            # run_download_job() can execute without a tracklist in memory.
+            if "tracks" in payload:
+                return owner_api.run_download_job(payload)
+            if "selected_indices" in payload:
+                owner_api.download_tracks(
+                    payload["selected_indices"],
+                    payload.get("config", {}),
+                    payload.get("list_id"),
+                )
+            else:
+                from .core.config import DownloadRequest, MornyeConfig
+
+                config = MornyeConfig()
+                queue_config = payload.get("config") or {}
+                if "quality" in queue_config:
+                    config.download.quality = queue_config["quality"]
+                if "output_dir" in queue_config:
+                    config.output.directory = Path(
+                        queue_config["output_dir"]
+                    ).expanduser()
+                request = DownloadRequest(
+                    sources=[payload["url"]],
+                    config=config,
+                )
+                asyncio.run(application_download_service.download(request))
+            return {"status": "dispatched"}
+
+        job_queue = JobQueue(
+            handler=_run_queued_download,
+            workers=1,
+            # Survives a restart — see core/job_queue.py's docstring. This is
+            # the deployment the queue exists for (headless, on a NAS), and
+            # the one where a lost backlog is least likely to be noticed.
+            persist=True,
+            quota_check=_quota_check,
+            # Its own rows only: single-user --web persists into the same
+            # table (see below), with payloads this handler cannot read.
+            kind="multiuser",
+        )
+        # Every account Api built from here on gets it (see _build); none has
+        # been built yet — the first is created by the first request.
+        registry.download_queue = job_queue
+
+    # Single-user --web runs its downloads through a persisted queue as well,
+    # and for the reason multi-user's exists: this is the headless deployment,
+    # restarted by container updates and reboots nobody is watching. Each
+    # batch is written down before it starts — the tracks themselves, not
+    # positions in a tracklist that lives only in memory — and whatever a
+    # restart cut short is put back and runs again, skipping what is already
+    # on disk (see MornyeAPI.download_tracks). Kept apart from
+    # `job_queue`: that is multi-user's account-aware queue, and /api/metrics
+    # and the v1 API read its presence as "multi-user".
+    download_queue: Any = None
+    if not multiuser:
+        from .core.job_queue import JobQueue
+
+        download_queue = JobQueue(
+            handler=api.run_download_job,
+            workers=1,
+            persist=True,
+            kind="single-user",
+            # One user, so no one to crowd out: the per-owner cap only
+            # refused (and, for a subscription check, lost) the 51st of a
+            # large batch of new releases (issue #271).
+            max_pending_per_owner=None,
+        )
+        api._download_queue = download_queue
+
+    @asynccontextmanager
+    async def _lifespan(_app: FastAPI):
+        manager.bind_loop(asyncio.get_running_loop())
+        # Mirrors what _on_loaded() does for the desktop window, minus the
+        # window-specific bits (there is no self._window in web mode, so
+        # every push below goes out over the WebSocket only).
+        await run_in_threadpool(
+            api.log, "Python backend connected (web mode).", "debug"
+        )
+        await run_in_threadpool(
+            api.log,
+            f"Default download folder: {api.download_dir}",
+            "debug",
+        )
+        await run_in_threadpool(api._check_ffmpeg_startup)
+        await run_in_threadpool(api._check_node_startup)
+        try:
+            from .extensions.manager import ExtensionManager
+
+            # Explicit, because the comment that used to sit here said "no
+            # auto-install by default" while the constructor's default is
+            # True — so it did bootstrap, and had done all along. Behaviour
+            # unchanged; only the claim about it was wrong. In practice this
+            # is a no-op under `mornye --web`: launcher.amain() has already
+            # run the bootstrap, and ExtensionManager skips a repeat within
+            # $MORNYE_EXT_UPDATE_INTERVAL (_startup_registry_checks). It
+            # matters when webapp is started directly, e.g.
+            # `python -m mornye.webapp`. Later updates need no hook here:
+            # every download re-runs the same check once the interval is up.
+            await run_in_threadpool(ExtensionManager, auto_install_downloads=True)
+        except Exception as e:
+            await run_in_threadpool(api.log, f"Extension init error: {e}", "warn")
+        api._push("loadHistoryAndProfiles")
+        api._push("__set_version_label", api.app_version)
+        if download_queue is not None:
+            # Nothing has been submitted yet at this point, so anything queued
+            # or running is what the queue restored from the last process.
+            waiting = [
+                job
+                for job in download_queue.list_all()
+                if job.status.value in ("queued", "running")
+            ]
+            if waiting:
+                tracks = sum(len(job.payload.get("tracks") or []) for job in waiting)
+                await run_in_threadpool(
+                    api.log,
+                    f"Resuming {len(waiting)} download(s) ({tracks} track(s)) cut "
+                    "short by the last restart; tracks already on disk are skipped.",
+                    "info",
+                )
+        # Scheduled subscriptions (Following view). In multi-user mode each
+        # subscription is checked, and downloaded, by its own account's Api
+        # instance — into that account's folder.
+        scheduler = api._start_subscription_scheduler(
+            (lambda owner: registry.get(owner or None)) if multiuser else None
+        )
+        yield
+        # Everything else here is process-lifetime state (threads, in-memory
+        # sessions/queue) that dies with the process anyway; the scheduler is
+        # stopped so an app torn down in-process stops checking.
+        await run_in_threadpool(scheduler.stop)
+
+    app = FastAPI(title="Mornye Web", lifespan=_lifespan)
+    app.state.shared_api = app_state_api
+    app.state.api_registry = registry
+    app.state.job_queue = job_queue
+    app.state.download_queue = download_queue
+
+    @app.middleware("http")
+    async def _no_cache_frontend(request, call_next):
+        response = await call_next(request)
+        # F1: on every response. nosniff stops a browser running an uploaded
+        # or proxied file as a script or stylesheet of another type; the
+        # referrer stays on this origin (cover and preview hosts are told
+        # nothing about the page that asked).
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "same-origin")
+        if request.url.path.endswith((".js", ".css", ".html")):
+            response.headers["Cache-Control"] = (
+                "no-store, no-cache, must-revalidate, max-age=0"
+            )
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return response
+
+    _install_token_gate(app, token=token)
+    _register_multiuser_routes(
+        app,
+        multiuser=multiuser,
+        sessions=sessions,
+        job_queue=job_queue,
+        login_limiter=login_limiter,
+    )
+    _register_ops_routes(
+        app,
+        api=api,
+        manager=manager,
+        token=token,
+        multiuser=multiuser,
+        sessions=sessions,
+        job_queue=job_queue,
+    )
+    _register_method_dispatch(app, api_for=api_for, multiuser=multiuser)
+    _register_file_routes(app, api_for=api_for, multiuser=multiuser)
+    _register_websocket(
+        app,
+        manager=manager,
+        registry=registry,
+        token=token,
+        multiuser=multiuser,
+        sessions=sessions,
+    )
+    application_download_service = _register_v1_api(
+        app,
+        api_for=api_for,
+        manager=manager,
+        token=token,
+        multiuser=multiuser,
+        job_queue=job_queue,
+    )
+    _register_frontend(app)
 
     return app
 

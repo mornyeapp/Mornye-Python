@@ -585,6 +585,46 @@ regola (una parola = un elemento).
      mano:** finestra pywebview (stessi file, nessuna CSP: deve solo
      comportarsi come prima) e `--web` dietro un proxy che incornicia la
      pagina (ora rifiutato da `frame-ancestors`).
+   - **M1 · `app.js` in moduli — rinviata, con le misure per farla.** La
+     finestra desktop carica la pagina dal server HTTP di pywebview
+     (`webview.start(http_server=True)`), non da `file://`: i moduli ES
+     si caricherebbero su tutti e tre i backend. Due ostacoli concreti:
+     (a) su Windows `mimetypes` legge il registro e può servire `.js` come
+     `text/plain`, che un `<script type="module">` rifiuta (uno classico
+     no): serve forzare il tipo nel server di pywebview o in `webapp.py`
+     prima; (b) i moduli non mettono le funzioni su `window`, e gli
+     handler `data-on*` le cercano lì (F1): ogni modulo dovrebbe
+     esportarle con `MornyeHandlers.expose()`. Una divisione in script
+     *classici* per vista conserva lo scope globale condiviso, ma sposta
+     il sollevamento delle `function` da tutto `app.js` al singolo file:
+     una chiamata fatta al caricamento verso una funzione di un file
+     successivo, se protetta da `typeof f === 'function'`, smetterebbe in
+     silenzio. Senza un parser JS (qui non c'è: niente acorn/esprima,
+     nessun download) non si può escludere in modo statico, e il
+     confronto a runtime non vede i rami solo-desktop. Ordine proposto:
+     (1) tipo MIME forzato; (2) divisione classica per sezioni `// ──`,
+     con un controllo statico (acorn) delle chiamate al caricamento;
+     (3) moduli vista per vista, con `expose()`.
+   - **M2 · le tre funzioni più intricate** (commit sotto). Complessità
+     (ruff C901): `create_app` 92 → 17, `build_v1_router` 53 → 2,
+     `amain` 73 → 46. `create_app`: otto gruppi di rotte diventano
+     funzioni di modulo (`_install_token_gate`,
+     `_register_multiuser_routes`, `_register_ops_routes`,
+     `_register_method_dispatch`, `_register_file_routes`,
+     `_register_websocket`, `_register_v1_api`, `_register_frontend`),
+     chiamate nello stesso ordine (l'ordine delle rotte conta: il
+     catch-all `/api/{method_name}` e il mount statico restano dopo).
+     Parametri ricavati con `symtable` (le variabili libere di ogni
+     funzione annidata); unico ritorno: `_register_v1_api` restituisce il
+     `DownloadService`, che la coda multi-utente in cima a `create_app`
+     legge quando un job parte. `build_v1_router`: sette gruppi
+     (`_instance_routes` … `_library_routes`). `amain`: i 23 comandi a
+     uscita anticipata (`--gui`, `--tui`, `--web`, `--web-user-*`,
+     `--stats`, `--health-check`, `--trust-key-*`, `--split-cue`,
+     `--dedup-*`, `--upgrade-library`, …) diventano `_cli_*()`; resta in
+     `amain` il percorso di download (lettura degli argomenti e
+     `_run_once`), da spezzare a parte. Nessun cambio di comportamento;
+     test web/API/CLI/TUI verdi.
    - **Fermato qui per limite d'uso** (2026-11-16). **Ancora aperti:**
      riorganizzazione di Settings e display di qualità dell'album (domanda
      inviata alla sessione madre con una proposta, nessuna risposta
