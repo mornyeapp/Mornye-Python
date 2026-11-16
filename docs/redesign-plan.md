@@ -727,6 +727,25 @@ regola (una parola = un elemento).
      (nuova API `save_density`, valori ammessi controllati). Verificato con
      Playwright: scelta, `--row` 28px, sopravvive al ricaricamento, nessuno
      sbordo, scuro a 1280 e chiaro a 375. Test: `tests/test_gui_density.py`.
+   - **N3 · parità TUI — Following fatto; Local ed Explore no** (commit
+     sotto). Pannello nuovo `tui/following_view.py` (voce "Following" nel
+     rail dopo Library, glifo ★/`*`, etichetta `--subscribe`): elenca le
+     iscrizioni dello stesso archivio di GUI e `--subscribe` (nome, tipo,
+     stato, intervallo, ultimo controllo, già viste, errore), segue un
+     nuovo link (Invio nel campo o "Follow"; scarica nella cartella del
+     pannello Download), mette in pausa/riprende e toglie quella
+     selezionata. Solo letture/scritture SQLite locali; il controllo delle
+     uscite resta allo scheduler e a `--subscribe-check` (rete e
+     download). Senza l'estensione `utilities` il tipo di un link non si
+     ricava e il pannello lo dice nella riga di stato, come la GUI.
+     Verificato con un render a 120×40 (schermata SVG) e con pilot. Test:
+     `tests/test_tui_following.py`. **Non fatti:** *Local* (tagging e
+     conversione di file locali: scansione lunga, anteprima delle
+     corrispondenze, applicazione per file — un flusso a più passi, non
+     una tabella) ed *Explore* (il feed è una griglia di copertine; in
+     terminale andrebbe ripensato come elenco di sezioni). Da fare ognuno
+     con la sua sessione. Nota: `tests/visual/capture_tui.py` ora cattura
+     13 pannelli; la baseline ne ha 12.
    - **Fermato qui per limite d'uso** (2026-11-16). **Ancora aperti:**
      riorganizzazione di Settings e display di qualità dell'album (domanda
      inviata alla sessione madre con una proposta, nessuna risposta

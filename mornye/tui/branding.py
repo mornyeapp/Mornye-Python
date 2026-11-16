@@ -202,6 +202,7 @@ _MODE_GLYPHS: dict[str, tuple[str, str]] = {
     "staged": ("☰", "Q"),
     "queue": ("≡", "="),
     "history": ("↺", "h"),
+    "following": ("★", "*"),
     "session": ("◷", "@"),
     "extensions": ("⧉", "+"),
     "health": ("♥", "!"),

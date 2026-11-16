@@ -63,6 +63,7 @@ from .queue_view import QueuePanel
 from .search_view import SearchPanel
 from .tracklist_view import TracklistPanel
 from .session_view import SessionPanel
+from .following_view import FollowingPanel
 from .signed_sessions_view import SignedSessionsPanel
 from .staged_view import StagedQueuePanel
 from .history_view import HistoryPanel
@@ -78,6 +79,7 @@ MODES: tuple[tuple[str, str], ...] = (
     ("history", "History"),
     ("session", "Session"),
     ("library", "Library"),
+    ("following", "Following"),
     ("extensions", "Extensions"),
     ("health", "Health"),
     ("signed", "Signed"),
@@ -156,6 +158,7 @@ PANEL_TITLES: dict[str, tuple[str, str]] = {
     "history": ("History", "downloads · fetches"),
     "session": ("Session", "history · profiles"),
     "library": ("Library", "SMB scan"),
+    "following": ("Following", "--subscribe"),
     "extensions": ("Extensions", "registries"),
     "health": ("Health", "providers"),
     "signed": ("Signed sessions", "--signed-sessions"),
@@ -251,6 +254,7 @@ class MornyeTui(App[None]):
                     yield HistoryPanel(id="history")
                     yield SessionPanel(lambda: self.state, id="session")
                     yield LibraryPanel(id="library")
+                    yield FollowingPanel(lambda: self.state.output_dir, id="following")
                     yield ExtensionsPanel(self._min_trust_tier, id="extensions")
                     yield HealthPanel(id="health")
                     yield SignedSessionsPanel(id="signed")
