@@ -1385,11 +1385,6 @@ async function checkExtensions() {
  * Updates the health-check summary label.
  * @param {string} text - The summary text to display.
  */
-function updateStatusSummary(text) {
-  const label = $('hc-summary');
-  if (label) label.textContent = text;
-}
-
 /** The overall pill from what the cards show: extensions and lyrics. */
 function updateOverallStatusFromCards() {
   const lyricsDone = API_SOURCES.filter((s) => ['online', 'offline'].includes(apiStatusState.statuses[s.id]));
@@ -1420,7 +1415,6 @@ function checkAll() {
     apiStatusState.statuses[sourceId] = 'checking';
   });
   renderStatusGrids();
-  updateStatusSummary('Checking all providers...');
   // The extensions' own checks run alongside; they answer directly rather
   // than through the pushed updateHealthResults().
   checkExtensions().then(() => updateOverallStatusFromCards());
@@ -1432,7 +1426,6 @@ function checkAll() {
         apiStatusState.checkingSources[sourceId] = false;
       });
       renderStatusGrids();
-      updateStatusSummary('Health check failed.');
       updateOverallStatus(0, sources.length);
     });
   } else {
@@ -1442,7 +1435,6 @@ function checkAll() {
         apiStatusState.checkingSources[sourceId] = false;
       });
       renderStatusGrids();
-      updateStatusSummary('Demo: all providers offline.');
       updateOverallStatus(0, sources.length);
     }, 800);
   }
@@ -1459,12 +1451,10 @@ function checkOne(sourceId) {
   apiStatusState.checkingSources[sourceId] = true;
   apiStatusState.statuses[sourceId] = 'checking';
   renderStatusGrids();
-  updateStatusSummary(`Checking ${sourceId}...`);
   if (window.pywebview?.api?.run_health_check) {
     window.pywebview.api.run_health_check([sourceId]).catch(() => {
       apiStatusState.statuses[sourceId] = 'offline';
       renderStatusGrids();
-      updateStatusSummary(`Check failed for ${sourceId}.`);
     }).finally(() => {
       apiStatusState.checkingSources[sourceId] = false;
       renderStatusGrids();
@@ -1474,7 +1464,6 @@ function checkOne(sourceId) {
       apiStatusState.statuses[sourceId] = 'offline';
       apiStatusState.checkingSources[sourceId] = false;
       renderStatusGrids();
-      updateStatusSummary(`Demo: ${sourceId} is offline.`);
     }, 800);
   }
 }
@@ -5710,7 +5699,6 @@ function renderHealthResults(data) {
   const totalProviders = Object.keys(provMap).length;
   const okProviders = Object.values(provMap).filter(rows => rows.some(r => r.ok)).length;
 
-  updateStatusSummary(`${okProviders}/${totalProviders} providers OK`);
   // Counts the extension cards too, whichever of the two checks ends last.
   updateOverallStatusFromCards();
 

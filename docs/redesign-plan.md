@@ -500,6 +500,10 @@ regola (una parola = un elemento).
      scartata come vecchia e nessuno chiudeva l'avviso; ora lo chiude lo
      svuotamento. Riprodotto sul checkout di base e verificato dopo
      (Playwright: 1 avviso → 0, recenti sbloccati).
+   - **Orfano `hc-summary`** (commit sotto): `updateStatusSummary()` e le
+     sue 7 chiamate tolte; scrivevano in un'etichetta che non esiste più e
+     il conteggio lo mostra già la pillola `#status-overall`. Nessun
+     cambio di comportamento; `KNOWN_ORPHANS` ora è vuoto.
 
 ### Da sapere prima di toccare qualcosa
 
