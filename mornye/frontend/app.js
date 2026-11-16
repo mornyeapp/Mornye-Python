@@ -1693,6 +1693,7 @@ window.updateFolderLabel = (path) => {
             }
           }
         }
+        if (Array.isArray(data.queue)) updateAlbumQualityFromStats(data.queue);
         if (Array.isArray(data.queue) && data.queue.length) {
           // The queue is indexed once per push instead of being scanned once
           // per stat entry: those scans were quadratic in the queue length,
@@ -2026,7 +2027,61 @@ function collapseCopyright(value) {
   return [...seen.values()].join(' · ');
 }
 
+// ── Album quality readout (§2, signature 1) ─────────────────────────────────
+// Before anything is downloaded the card shows the tier asked for in
+// Settings ("REQ · HI-RES LOSSLESS"); once a track of the card finishes,
+// the first such file is read (probe_audio_quality) and the readout becomes
+// what it really is: "24 / 96 · FLAC", or "320 KBPS · MP3" for a lossy file.
+const REQUESTED_QUALITY_LABELS = {
+  HI_RES_LOSSLESS: 'HI-RES LOSSLESS', LOSSLESS: 'LOSSLESS', DOLBY_ATMOS: 'DOLBY ATMOS',
+};
+let albumQualityProbed = false;   // a real value is shown (or being read) for this card
+
+function formatAudioQuality(info) {
+  if (!info) return '';
+  const fmt = String(info.format || '').toUpperCase();
+  if (info.bit_depth && info.sample_rate) {
+    const khz = Math.round(info.sample_rate / 100) / 10;
+    return `${info.bit_depth} / ${khz} · ${fmt}`.trim();
+  }
+  if (info.bitrate) return `${Math.round(info.bitrate / 1000)} KBPS · ${fmt}`;
+  return fmt;
+}
+
+function showRequestedAlbumQuality() {
+  const el = $('album-quality');
+  if (!el) return;
+  albumQualityProbed = false;
+  const q = $('config-quality')?.value || '';
+  const label = REQUESTED_QUALITY_LABELS[q] || q.replace(/_/g, ' ');
+  el.textContent = label ? `REQ · ${label}` : '';
+  el.dataset.state = 'requested';
+  el.title = 'The quality asked for in Settings; replaced by the real one once a track has downloaded';
+  el.classList.toggle('hidden', !label);
+}
+
+function updateAlbumQualityFromStats(items) {
+  const el = $('album-quality');
+  if (!el || albumQualityProbed || !el.textContent) return;
+  if ($('album-card')?.classList.contains('hidden')) return;
+  const ids = new Set(currentTracks.map(t => t && t.id).filter(Boolean));
+  if (!ids.size) return;
+  const done = (items || []).find(i => i && i.status === 'completed' && i.file_path && ids.has(i.spotify_id));
+  const api = window.pywebview?.api;
+  if (!done || typeof api?.probe_audio_quality !== 'function') return;
+  albumQualityProbed = true;
+  Promise.resolve(api.probe_audio_quality(done.file_path)).then(res => {
+    const label = res && res.status === 'ok' ? formatAudioQuality(res.info) : '';
+    if (!label) { albumQualityProbed = false; return; }
+    el.textContent = label;
+    el.dataset.state = 'actual';
+    el.title = `Read from ${res.info.file || 'the first downloaded track'}`;
+    el.classList.remove('hidden');
+  }).catch(() => { albumQualityProbed = false; });
+}
+
 function setAlbumCard(title, artist, coverUrl, quality, description, followers, owner, ownerAvatar, source, artistListeners, artistRank, artistVerified, artistBiography, releaseDate, trackCount, artistUrl, artistsData) {
+  showRequestedAlbumQuality();
   g_albumReleaseDate = releaseDate || '';
   g_albumTrackCount = trackCount || 0;
   g_albumArtistUrl = artistUrl || '';

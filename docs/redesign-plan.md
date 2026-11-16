@@ -529,6 +529,20 @@ regola (una parola = un elemento).
      persa (multinsieme delle righe prima/dopo). Verificata in scuro a 1280
      e in chiaro a 375, nessuno sbordo. Lo strumento di confronto ora
      conosce la scheda `sources`.
+   - **Display di qualità dell'album** (commit sotto; opzione (a) scelta
+     dall'utente). `#album-quality` sotto artista/data nella scheda album:
+     all'apertura mostra la qualità chiesta in Settings, attenuata e
+     marcata (`REQ · LOSSLESS`, `REQ · HI-RES LOSSLESS`, `REQ · DOLBY
+     ATMOS`); quando un brano di quella scheda risulta `completed` nelle
+     statistiche (`app_update_download_stats`, confronto per id), il primo
+     file viene letto con la nuova API `probe_audio_quality(path)` (solo
+     `probe_audio`, senza spettrogramma; percorsi approvati come le altre;
+     nell'allowlist di `webapp.py`) e la lettura diventa reale sul segnale:
+     `24 / 96 · FLAC`, o `320 KBPS · MP3` per un file con perdita. Non
+     considera la qualità per servizio delle estensioni (`ext-quality`):
+     il "richiesto" è il livello globale. Verificato con la scheda di prova
+     e una risposta simulata della sonda, scuro a 1280 e chiaro a 375. Test:
+     `tests/test_album_quality_readout.py` (un WAV vero).
    - **Fermato qui per limite d'uso** (2026-11-16). **Ancora aperti:**
      riorganizzazione di Settings e display di qualità dell'album (domanda
      inviata alla sessione madre con una proposta, nessuna risposta

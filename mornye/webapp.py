@@ -178,6 +178,7 @@ ALLOWED_METHODS: set[str] = {
     "read_file_tags",
     "save_file_tags",
     "analyze_audio_file",
+    "probe_audio_quality",
     "get_reorganize_defaults",
     "plan_library_reorganize",
     "apply_library_reorganize",

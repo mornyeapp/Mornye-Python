@@ -116,6 +116,19 @@ class LibraryToolsMixin:
             "spectrogram": f"data:image/png;base64,{b64}",
         }
 
+    def probe_audio_quality(self, path: str) -> dict:
+        """Codec, bit depth and sample rate of one downloaded file, without
+        the spectrogram: the album card's quality readout reads the first
+        finished track of the album it shows."""
+        from ..core.audio_analysis import probe_audio
+
+        if not self._is_approved_path(path):
+            return {"status": "error", "error": "Path is outside approved directories"}
+        try:
+            return {"status": "ok", "info": probe_audio(path)}
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+
     # ── Library reorganiser ─────────────────────────────────────────────────
 
     def get_reorganize_defaults(self) -> dict:
