@@ -122,9 +122,36 @@ def test_retry_groups_keep_the_source_and_clear_takes_keys():
 
     assert failed_tracks.clear(keys=[failed_tracks.track_key(_track(4))]) == 1
     assert [i["key"] for i in failed_tracks.list_for()] == [
-        failed_tracks.track_key(_track(5))
+        failed_tracks.failure_key(failed_tracks.track_key(_track(5)), tidal)
     ]
     assert failed_tracks.clear() == 1
+
+
+def test_a_track_missing_from_two_playlists_is_two_failures():
+    """Issue #277: each playlist gets its own retry, folder and M3U."""
+    other = "https://open.spotify.com/playlist/other"
+    failed_tracks.hook(source_url=PLAYLIST, playlist_name="Top 50 - India")(
+        DownloadResult.fail("t", "e"), _track(8)
+    )
+    failed_tracks.hook(source_url=other, playlist_name="Top 50 - Global")(
+        DownloadResult.fail("t", "e"), _track(8)
+    )
+
+    groups = {name: url for url, name, _ in failed_tracks.retry_groups()}
+    assert groups == {"Top 50 - India": PLAYLIST, "Top 50 - Global": other}
+
+    # Downloaded for one playlist: the other one's failure stays.
+    failed_tracks.hook(source_url=PLAYLIST)(
+        DownloadResult.ok("t", "/x.flac"), _track(8)
+    )
+    [left] = failed_tracks.list_for()
+    assert left["key"] == failed_tracks.failure_key(
+        failed_tracks.track_key(_track(8)), other
+    )
+
+    # Its list key picks that one failure only.
+    assert failed_tracks.clear(keys=[left["key"]]) == 1
+    assert failed_tracks.list_for() == []
 
 
 # ── Persisted download jobs ───────────────────────────────────────────────
