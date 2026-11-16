@@ -3613,16 +3613,14 @@ window.app_handle_provider_search_results = function(results) {
   // source switched, its box cleared — must not paint over the newer one.
   if (!isCurrentSearchRequest(results)) return;
   const isSearchMode = $('searchMode')?.value === 'search';
-  if (!isSearchMode) { 
-    return; 
-  }
   if (!isSearchMode) {
-    setFetchingState('success');
-  } else {
-    isFetchingData = false;
-    const fetchBtn = $('fetchBtn');
-    if (fetchBtn) fetchBtn.disabled = false;
+    return;
   }
+  // The results are the answer: take down the "fetching metadata…" notice
+  // onFetch() raised and unlock the bar and the recents. This branch used
+  // to clear only isFetchingData and the Fetch button, so the notice stayed
+  // in the corner over the results until the next fetch replaced it.
+  setFetchingState('hide');
 
   // ── Build data ────────────────────────────────────────────────────────────
   const allItems = [
@@ -6757,6 +6755,9 @@ $('urlInput').addEventListener('input', function() {
     clearSearchUI();
     _lastSearchQuery = '';
     nextSearchRequest(); // whatever is still out answers a box that is now empty
+    // ...and is dropped as stale, so nothing else would take down a
+    // "fetching" notice a Fetch press left up for it.
+    if (isFetchingData) setFetchingState('hide');
     clearTimeout(_searchDebounceTimer);
     const container = $('text-search-results');
     if (container) container.innerHTML = '';

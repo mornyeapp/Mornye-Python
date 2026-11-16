@@ -63,3 +63,12 @@ def test_images_have_alt():
         if not re.search(r"\balt=", m.group(0))
     ]
     assert not missing, missing
+
+
+def test_search_results_take_down_the_fetching_notice():
+    # Plan §0, voce 21: the "fetching metadata…" notice onFetch() raises
+    # for a search stayed up over the results; the results handler must
+    # end the fetching state (which also dismisses the notice).
+    start = APP.index("window.app_handle_provider_search_results = function")
+    body = APP[start : APP.index("// ── Build data", start)]
+    assert "setFetchingState('hide')" in body

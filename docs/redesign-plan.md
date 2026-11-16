@@ -489,6 +489,17 @@ regola (una parola = un elemento).
      solo gli elementi nuovi del dialogo (nascosto); 0 differenze sul resto.
      Provato con Playwright: dialogo in scuro/chiaro a 1280 e 375, Tab,
      Escape, Enter su una card dei recenti.
+   - **Toast "fetching metadata…" durante la ricerca** (commit sotto).
+     Causa: in modalità ricerca `onFetch()` chiama `setFetchingState('start')`
+     (che apre l'avviso in basso a sinistra e blocca i recenti con
+     `fetching-disabled`), ma `app_handle_provider_search_results` in quel
+     ramo azzerava solo `isFetchingData` e il pulsante Fetch: l'avviso e il
+     blocco dei recenti restavano finché un fetch successivo non li
+     sostituiva. Ora i risultati chiamano `setFetchingState('hide')`. Stesso
+     difetto svuotando il campo durante una ricerca: la risposta arriva
+     scartata come vecchia e nessuno chiudeva l'avviso; ora lo chiude lo
+     svuotamento. Riprodotto sul checkout di base e verificato dopo
+     (Playwright: 1 avviso → 0, recenti sbloccati).
 
 ### Da sapere prima di toccare qualcosa
 
