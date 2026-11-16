@@ -504,6 +504,31 @@ regola (una parola = un elemento).
      sue 7 chiamate tolte; scrivevano in un'etichetta che non esiste più e
      il conteggio lo mostra già la pillola `#status-overall`. Nessun
      cambio di comportamento; `KNOWN_ORPHANS` ora è vuoto.
+   - **F6 · `app.py`** (commit sotto): 0 `except Exception: pass` (erano
+     21). `_push()` non solleva mai: un invio fallito va a
+     `_push_failed()`, log a debug sul logger `mornye_gui.app` (fuori da
+     `mornye`, il cui `UILogHandler` rimanderebbe il messaggio attraverso
+     lo stesso invio), con un blocco di rientro per thread. Tolti i 12
+     `try/except` attorno a sole chiamate `_push`; gli altri 8 (versione da
+     `pyproject`, massimizza, playcount, cronologia dei fetch, monitor
+     delle statistiche, ricerca del frontend) loggano a debug con
+     traceback; `remove_history_item` dice all'utente che non è riuscito
+     (`warn`). Restano ~50 casi negli altri moduli (`launcher.py` 4, poi 1–3
+     per file).
+   - **Fermato qui per limite d'uso** (2026-11-16). **Ancora aperti:**
+     riorganizzazione di Settings e display di qualità dell'album (domanda
+     inviata alla sessione madre con una proposta, nessuna risposta
+     ancora); F1 (analisi fatta: 167 `onclick`, 26 `onchange`, 8
+     `oninput`, 3 `onkeydown`, drag&drop in `index.html` e 47+7+8 handler
+     nel markup di `app.js`, quasi tutti chiamate semplici `f('x', this)`;
+     servono: handler → `data-on*` con un piccolo interprete senza `eval`
+     legato per elemento (MutationObserver per il markup generato, così
+     l'ordine con gli altri listener resta quello attuale), gli script
+     inline di `<head>`/`<body>` e i `document.write` in file esterni, la
+     flag `__MORNYE_WEB_MODE__` di `webapp.py` come attributo, poi CSP
+     senza `unsafe-inline` + `nosniff` + `frame-ancestors`; attenzione:
+     lo strumento di confronto cerca le schede di Settings per
+     `onclick`); F6 negli altri moduli; F3 resto; M1–M6, N1–N5.
 
 ### Da sapere prima di toccare qualcosa
 

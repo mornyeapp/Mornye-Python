@@ -198,6 +198,14 @@ class UILogHandler(CallbackLogHandler):
         self.api = api
 
 
+# F6: failures that used to vanish behind `except Exception: pass`. Debug
+# level: none of them is the user's to act on, but a --log-level DEBUG run
+# shows them. Not under "mornye", whose UILogHandler pushes every record to
+# the GUI: a failing push would log about itself through the push that fails.
+_quiet_log = logging.getLogger("mornye_gui.app")
+_push_guard = threading.local()
+
+
 class MornyeAPI(
     SearchMixin,
     LocalTaggingMixin,
@@ -301,7 +309,9 @@ class MornyeAPI(
                         if m:
                             v = m.group(1)
             except Exception:
-                pass
+                _quiet_log.debug(
+                    "Could not read the version from pyproject.toml", exc_info=True
+                )
         self.app_version = v
 
     def set_window(self, window) -> None:
@@ -318,12 +328,29 @@ class MornyeAPI(
                 js_args = ", ".join(json.dumps(a) for a in args)
                 self._window.evaluate_js(f"window.{fn_name}({js_args});")
             except Exception:
-                pass
+                self._push_failed(fn_name, "window")
         if self._ws_broadcast:
             try:
                 self._ws_broadcast(fn_name, list(args))
             except Exception:
-                pass
+                self._push_failed(fn_name, "websocket")
+
+    @staticmethod
+    def _push_failed(fn_name: str, path: str) -> None:
+        """Never raises, and never recurses: logging about a failed push
+        must not reach the push again (a re-entrant failure is dropped)."""
+        if getattr(_push_guard, "active", False):
+            return
+        _push_guard.active = True
+        try:
+            with contextlib.suppress(
+                Exception
+            ):  # logging itself failed: nothing left to tell
+                _quiet_log.debug(
+                    "GUI push %s via %s failed", fn_name, path, exc_info=True
+                )
+        finally:
+            _push_guard.active = False
 
     def _on_loaded(self) -> None:
         """Initializes the frontend after the webview finishes loading.
@@ -352,11 +379,8 @@ class MornyeAPI(
         except Exception as e:
             self.log(f"Could not start the subscription scheduler: {e}", "warn")
         app_version = self.app_version
-        try:
-            self._push("loadHistoryAndProfiles")
-            self._push("__set_version_label", app_version)
-        except Exception:
-            pass
+        self._push("loadHistoryAndProfiles")
+        self._push("__set_version_label", app_version)
 
     # Expose simple getters to the frontend via pywebview
     def get_version(self):
@@ -431,10 +455,7 @@ class MornyeAPI(
                     "install: https://ffmpeg.org/download.html",
                     "error",
                 )
-                try:
-                    self._push("showFfmpegWarning", result)
-                except Exception:
-                    pass
+                self._push("showFfmpegWarning", result)
         except Exception as exc:
             self.log(f"ffmpeg check error: {exc}", "warn")
 
@@ -459,10 +480,7 @@ class MornyeAPI(
                     "https://nodejs.org/en/download",
                     "error",
                 )
-                try:
-                    self._push("showNodeWarning", result)
-                except Exception:
-                    pass
+                self._push("showNodeWarning", result)
         except Exception as exc:
             self.log(f"Node.js check error: {exc}", "warn")
 
@@ -503,16 +521,10 @@ class MornyeAPI(
         ("error-quiet", "warn-quiet"): the line keeps its colour there and
         raises no toast, leaving one summary toast to stand for the list.
         """
-        try:
-            self._push("app_log", str(message), type)
-        except Exception:
-            pass
+        self._push("app_log", str(message), type)
 
     def set_progress(self, label="") -> None:
-        try:
-            self._push("app_set_progress", label)
-        except Exception:
-            pass
+        self._push("app_set_progress", label)
 
     def set_metadata(
         self,
@@ -570,10 +582,7 @@ class MornyeAPI(
         if track_count is not None:
             payload["track_count"] = track_count
 
-        try:
-            self._push("app_set_metadata", payload)
-        except Exception:
-            pass
+        self._push("app_set_metadata", payload)
 
     def _fetch_track_playcounts(
         self,
@@ -954,8 +963,8 @@ class MornyeAPI(
             from .core.session_memory import remove_url_from_history_async
 
             run_sync(remove_url_from_history_async(url))
-        except Exception:
-            pass
+        except Exception as exc:
+            self.log(f"Could not remove the link from the history: {exc}", "warn")
 
     def save_profile_data(self, name, cfg) -> bool | None:
         try:
@@ -1069,7 +1078,7 @@ class MornyeAPI(
                     self._window.maximize()
                     self._is_maximized = True
                 except Exception:
-                    pass
+                    _quiet_log.debug("Window maximize fallback failed", exc_info=True)
         else:
             self._window.maximize()
             self._is_maximized = True
@@ -1394,7 +1403,7 @@ class MornyeAPI(
                         )
 
                 except Exception:
-                    pass  # Silently skip playcount on any error
+                    _quiet_log.debug("Playcount lookup failed", exc_info=True)
 
             # ── Enhanced metadata-extraction loop ──
             for i, t in enumerate(tracks):
@@ -1547,12 +1556,11 @@ class MornyeAPI(
                     artist=_artist,
                 )
             except Exception:
-                pass
+                _quiet_log.debug(
+                    "Could not add %s to the fetch history", url, exc_info=True
+                )
 
-            try:
-                self._push("showTracklist", track_data)
-            except Exception:
-                pass
+            self._push("showTracklist", track_data)
 
         except Exception as e:
             self.log(f"Error fetching metadata: {e!s}", "error")
@@ -2445,20 +2453,17 @@ class MornyeAPI(
                 return
             self.set_progress("Complete!")
             self.log(f"All tracks saved to: {self.download_dir}", "ok")
-            try:
-                # The indices are echoed back so the frontend closes the
-                # items of *this* batch: app_download_finished() used to mark
-                # every 'active' row done, which with a second batch queued
-                # behind this one meant marking tracks finished before they
-                # had started.
-                if announce:
-                    self._push("app_download_finished", True, list(selected_indices))
-                else:
-                    self._push(
-                        "app_background_download_finished", True, len(selected_indices)
-                    )
-            except Exception:
-                pass
+            # The indices are echoed back so the frontend closes the
+            # items of *this* batch: app_download_finished() used to mark
+            # every 'active' row done, which with a second batch queued
+            # behind this one meant marking tracks finished before they
+            # had started. (_push never raises.)
+            if announce:
+                self._push("app_download_finished", True, list(selected_indices))
+            else:
+                self._push(
+                    "app_background_download_finished", True, len(selected_indices)
+                )
 
         except Exception as e:
             self.log(f"Download error: {e!s}", "error")
@@ -2470,15 +2475,12 @@ class MornyeAPI(
                 )
             self.set_progress("Error.")
             self._push_download_stats()
-            try:
-                if announce:
-                    self._push("app_download_finished", False, list(selected_indices))
-                else:
-                    self._push(
-                        "app_background_download_finished", False, len(selected_indices)
-                    )
-            except Exception:
-                pass
+            if announce:
+                self._push("app_download_finished", False, list(selected_indices))
+            else:
+                self._push(
+                    "app_background_download_finished", False, len(selected_indices)
+                )
             if destination_id and self._download_queue is not None:
                 raise
         finally:
@@ -2519,7 +2521,9 @@ class MornyeAPI(
             while not stop_event.wait(0.25):
                 self._push_download_stats(manager.get_stats_sync())
         except Exception:
-            pass
+            _quiet_log.debug(
+                "Download stats monitor stopped on an error", exc_info=True
+            )
         finally:
             self._push_download_stats()
 
@@ -2531,7 +2535,7 @@ class MornyeAPI(
                 stats = DownloadManager().get_stats_sync()
             self._push("app_update_download_stats", stats)
         except Exception:
-            pass
+            _quiet_log.debug("Could not push the download stats", exc_info=True)
 
     def _health_check_task(self, services) -> None:
         """Run lyrics provider health checks and update the frontend."""
@@ -2556,10 +2560,7 @@ class MornyeAPI(
                 f"Health check — {len([r for r in results if r.ok])}/{len(results)} endpoints OK.",
                 "ok" if ok_providers else "error",
             )
-            try:
-                self._push("updateHealthResults", data)
-            except Exception:
-                pass
+            self._push("updateHealthResults", data)
         except ImportError:
             self.log("health_check module not found.", "error")
         except Exception as e:
@@ -2666,7 +2667,9 @@ def run_gui() -> None:
         )
         candidates.append(pkg_frontend)
     except Exception:
-        pass
+        _quiet_log.debug(
+            "mornye package not importable while locating the frontend", exc_info=True
+        )
 
     # 3) original heuristic (parent of site-packages, e.g. lib/pythonX.Y/frontend)
     original_frontend = os.path.abspath(
@@ -2682,7 +2685,9 @@ def run_gui() -> None:
         if data_dir:
             candidates.append(os.path.join(data_dir, "frontend", "index.html"))
     except Exception:
-        pass
+        _quiet_log.debug(
+            "sysconfig data dir unavailable while locating the frontend", exc_info=True
+        )
 
     # Pick the first existing candidate
     html_path = None
