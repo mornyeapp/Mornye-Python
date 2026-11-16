@@ -515,6 +515,20 @@ regola (una parola = un elemento).
      traceback; `remove_history_item` dice all'utente che non è riuscito
      (`warn`). Restano ~50 casi negli altri moduli (`launcher.py` 4, poi 1–3
      per file).
+   - **Riorganizzazione di Settings** (voce 14, commit sotto; proposta A
+     scelta dall'utente). Solo spostamenti di sezioni intere: id, campi e
+     salvataggio invariati. General = Appearance, Account, Logging · nuova
+     scheda **Sources** (`#tc-sources`, icona a onde) = Audio Sources,
+     Quality, Auth & APIs, Self-hosted Endpoints (da Extensions) ·
+     Download = Performance, Retry & Loop, Transcoding, Post-Download
+     Action, Profiles · Files = Download Location, Filename Format, Folder
+     Organization, Network Destinations (da Download) · Metadata, Status,
+     Extensions come prima (Extensions senza gli endpoint). A ≥1900px è
+     Files a restare su una colonna (ci sta il form largo delle
+     destinazioni), non più Download. Controllo: nessuna riga del markup
+     persa (multinsieme delle righe prima/dopo). Verificata in scuro a 1280
+     e in chiaro a 375, nessuno sbordo. Lo strumento di confronto ora
+     conosce la scheda `sources`.
    - **Fermato qui per limite d'uso** (2026-11-16). **Ancora aperti:**
      riorganizzazione di Settings e display di qualità dell'album (domanda
      inviata alla sessione madre con una proposta, nessuna risposta

@@ -165,7 +165,7 @@
    card being split down the middle across the column boundary. */
 @media (min-width: 1900px) {
   .tc.active { columns: 2; column-gap: var(--space-3); }
-  #tc-download.active,
+  #tc-files.active,
   #tc-status.active { columns: 1; }
   .tc.active .s-section {
     break-inside: avoid;

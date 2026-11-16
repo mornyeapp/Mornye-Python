@@ -763,6 +763,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/><circle cx="17" cy="14" r="2.5"/><path d="M17 10v1.5"/><path d="M17 16.5v1.5"/><path d="M14 14h1.5"/><path d="M18.5 14H20"/></svg>
           General
         </button>
+        <button class="stab" onclick="switchTab('sources',this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 19.1a10 10 0 0 1 0-14.2"/><path d="M7.8 16.2a6 6 0 0 1 0-8.4"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4"/><path d="M19.1 4.9a10 10 0 0 1 0 14.2"/></svg>
+          Sources
+        </button>
         <button class="stab" onclick="switchTab('download',this)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Download
@@ -788,54 +792,6 @@
         <div id="settings-no-match" class="s-no-match hidden">No settings match this search.</div>
 
         <div class="tc active" id="tc-general" data-title="General">
-          <div class="s-section">
-            <div class="s-title">Logging</div>
-            <div class="s-row">
-              <span class="s-label">Log Level</span>
-              <select id="config-loglevel">
-                <option value="INFO">Standard (INFO)</option>
-                <option value="DEBUG">Verbose (DEBUG)</option>
-              </select>
-            </div>
-          </div>
-          <div class="s-section">
-            <div class="s-title">Quality</div>
-            <div class="s-row">
-              <span class="s-label">Audio Quality</span>
-              <select id="config-quality">
-                <option value="HI_RES_LOSSLESS">HI-RES-LOSSLESS</option>
-                <option value="LOSSLESS">LOSSLESS</option>
-                <option value="DOLBY_ATMOS">DOLBY ATMOS (services that offer it)</option>
-              </select>
-            </div>
-            <div id="ext-quality-section" style="display:none;">
-              <div class="s-row">
-                <span class="s-label">Quality per service<small>Each extension's own quality choices. "Use global quality" maps the tier above onto the closest one the extension offers</small></span>
-              </div>
-              <div id="ext-quality-rows"></div>
-            </div>
-            <div class="s-row">
-              <span class="s-label">Auto quality fallback</span>
-              <label class="toggle">
-                <input type="checkbox" id="config-fallback">
-                <span class="toggle-sl"></span>
-              </label>
-            </div>
-            <div class="s-row">
-              <span class="s-label">Verify Hi-Res authenticity<small>Flags files that declare 96 kHz but whose content stops at CD range (upsampled), and 24-bit files that are really a padded 16-bit master. Adds a few seconds of analysis per track</small></span>
-              <label class="toggle">
-                <input type="checkbox" id="config-verify-hires" onchange="onVerifyHiresChange()">
-                <span class="toggle-sl"></span>
-              </label>
-            </div>
-            <div class="s-row verify-hires-opt u-bl-2-solid-border2 u-ml-4" style="display:none;">
-              <span class="s-label">Replace fake Hi-Res<small>Off = a finding is only reported. On = the flagged file is set aside, the track is re-downloaded as LOSSLESS, and the flagged file is deleted only once the replacement is on disk</small></span>
-              <label class="toggle">
-                <input type="checkbox" id="config-redownload-fake-hires">
-                <span class="toggle-sl"></span>
-              </label>
-            </div>
-          </div>
           <div class="s-section">
             <div class="s-title">Appearance</div>
             <div class="s-row">
@@ -903,13 +859,290 @@
               <button class="act-btn secondary" type="button" onclick="doLogout()">Sign Out</button>
             </div>
           </div>
+          <div class="s-section">
+            <div class="s-title">Logging</div>
+            <div class="s-row">
+              <span class="s-label">Log Level</span>
+              <select id="config-loglevel">
+                <option value="INFO">Standard (INFO)</option>
+                <option value="DEBUG">Verbose (DEBUG)</option>
+              </select>
+            </div>
+          </div>
         </div>
 
-        <div class="tc" id="tc-download" data-title="Download">
+        <div class="tc" id="tc-sources" data-title="Sources">
           <div class="s-section">
             <div class="s-title">Audio Sources</div>
             <div class="s-row"><span class="s-label">Source priority (drag to reorder)</span></div>
             <div id="services-list" class="sort-list"></div>
+          </div>
+          <div class="s-section">
+            <div class="s-title">Quality</div>
+            <div class="s-row">
+              <span class="s-label">Audio Quality</span>
+              <select id="config-quality">
+                <option value="HI_RES_LOSSLESS">HI-RES-LOSSLESS</option>
+                <option value="LOSSLESS">LOSSLESS</option>
+                <option value="DOLBY_ATMOS">DOLBY ATMOS (services that offer it)</option>
+              </select>
+            </div>
+            <div id="ext-quality-section" style="display:none;">
+              <div class="s-row">
+                <span class="s-label">Quality per service<small>Each extension's own quality choices. "Use global quality" maps the tier above onto the closest one the extension offers</small></span>
+              </div>
+              <div id="ext-quality-rows"></div>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Auto quality fallback</span>
+              <label class="toggle">
+                <input type="checkbox" id="config-fallback">
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Verify Hi-Res authenticity<small>Flags files that declare 96 kHz but whose content stops at CD range (upsampled), and 24-bit files that are really a padded 16-bit master. Adds a few seconds of analysis per track</small></span>
+              <label class="toggle">
+                <input type="checkbox" id="config-verify-hires" onchange="onVerifyHiresChange()">
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
+            <div class="s-row verify-hires-opt u-bl-2-solid-border2 u-ml-4" style="display:none;">
+              <span class="s-label">Replace fake Hi-Res<small>Off = a finding is only reported. On = the flagged file is set aside, the track is re-downloaded as LOSSLESS, and the flagged file is deleted only once the replacement is on disk</small></span>
+              <label class="toggle">
+                <input type="checkbox" id="config-redownload-fake-hires">
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
+          </div>
+          <div class="s-section">
+            <div class="s-title">Auth & APIs</div>
+            <div class="s-row">
+              <span class="s-label">Provider APIs<small>The APIs each download service uses (Tidal's download API, Deezer's resolver, Qobuz app ID, country codes…) are set in that extension's own settings</small></span>
+              <button class="act-btn secondary u-p-5-12 u-fs-11_5" type="button" onclick="switchTab('extensions', document.querySelector('.stab[onclick*=&quot;extensions&quot;]'))">Extension Settings</button>
+            </div>
+            <div class="s-row">
+              <span class="s-label">AcoustID API key<small>Optional. Identifying untagged files uses a key shared by all users, capped at 3 lookups/second between everyone; your own key gets its own budget. Free from acoustid.org/new-application</small></span>
+              <input class="u-w-190" type="text" id="config-acoustid-key" placeholder="Using the shared key">
+            </div>
+          </div>
+          <div class="s-section" id="custom-endpoints">
+            <div class="s-title">Self-hosted Endpoints</div>
+            <p class="u-fs-12 u-c-muted u-m-n4-0-12 u-lh-1_6">
+              Download through your own server. It is tried first; if it fails the
+              extension falls back to its default API. Tidal expects a
+              <a class="u-c-accent" href="https://github.com/binimum/hifi-api" target="_blank" rel="noopener">hifi-api</a>
+              compatible server, Qobuz a
+              <a class="u-c-accent" href="https://github.com/BartolomeoRusso9/qobuz-rest-api" target="_blank" rel="noopener">qobuz-rest-api</a>
+              compatible one. A server on this machine or your LAN
+              (<code>http://192.168.1.10:8000</code>) is allowed for that address only.
+            </p>
+            <div class="s-row">
+              <span class="s-label">Tidal endpoint<small id="ce-tidal-note">tidal-web</small></span>
+              <input style="flex:1 1 220px;min-width:180px;max-width:320px;" type="text" class="full" id="ce-tidal" placeholder="http://192.168.1.10:8000">
+              <button class="act-btn secondary u-p-6-14 u-fs-12" type="button" id="ce-tidal-test" onclick="testCustomEndpoint('tidal')">Test</button>
+            </div>
+            <div class="ce-result" id="ce-tidal-result" role="status" aria-live="polite" hidden></div>
+            <div class="s-row">
+              <span class="s-label">Qobuz endpoint<small id="ce-qobuz-note">qobuz-web</small></span>
+              <input style="flex:1 1 220px;min-width:180px;max-width:320px;" type="text" class="full" id="ce-qobuz" placeholder="http://127.0.0.1:8000">
+              <button class="act-btn secondary u-p-6-14 u-fs-12" type="button" id="ce-qobuz-test" onclick="testCustomEndpoint('qobuz')">Test</button>
+            </div>
+            <div class="ce-result" id="ce-qobuz-result" role="status" aria-live="polite" hidden></div>
+            <div class="s-row">
+              <span class="s-label">Qobuz API key<small>Sent as X-API-Key; leave empty to keep the saved one</small></span>
+              <input style="flex:1 1 220px;min-width:180px;max-width:320px;" type="password" class="full" id="ce-qobuz-key" autocomplete="off" placeholder="Not set">
+            </div>
+            <div class="s-row u-items-stretch u-gap-8">
+              <button class="act-btn u-p-8-16 u-fs-12" type="button" id="ce-save" onclick="saveCustomEndpoints()">Save endpoints</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="tc" id="tc-download" data-title="Download">
+          <div class="s-section">
+            <div class="s-title">Performance</div>
+            <div class="s-row">
+              <span class="s-label">Parallel downloads<small>Tracks fetched at the same time (CLI: --max-concurrent)</small></span>
+              <input type="number" id="config-concurrent" value="2" min="1" max="8">
+            </div>
+            <div class="s-row">
+              <span class="s-label">Metadata request delay (seconds)<small>Random range between Spotify/metadata requests</small></span>
+              <div class="u-gap-6 u-items-center" style="display:flex;">
+                <input type="number" id="config-metadata-delay-min" value="0" min="0" step="0.1" aria-label="Minimum metadata delay">
+                <span>to</span>
+                <input type="number" id="config-metadata-delay-max" value="0" min="0" step="0.1" aria-label="Maximum metadata delay">
+              </div>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Provider request delay (seconds)<small>Random range between provider download attempts</small></span>
+              <div class="u-gap-6 u-items-center" style="display:flex;">
+                <input type="number" id="config-provider-delay-min" value="0" min="0" step="0.1" aria-label="Minimum provider delay">
+                <span>to</span>
+                <input type="number" id="config-provider-delay-max" value="0" min="0" step="0.1" aria-label="Maximum provider delay">
+              </div>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Automatic 429 cooldown<small>Pause all requests for Retry-After (or 60s) after a rate limit</small></span>
+              <label class="toggle">
+                <input type="checkbox" id="config-auto-rate-limit-cooldown" checked>
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
+          </div>
+          <div class="s-section">
+            <div class="s-title">Retry & Loop</div>
+            <div class="s-row">
+              <span class="s-label">Extra retries per track<small>Cycles through all providers</small></span>
+              <input type="number" id="config-retries" value="0" min="0" max="10">
+            </div>
+            <div class="s-row">
+              <span class="s-label">Loop failed tracks every<small>N minutes (0 = disabled)</small></span>
+              <input type="number" id="config-loop" value="0" min="0" max="999">
+            </div>
+          </div>
+          <div class="s-section">
+            <div class="s-title">Transcoding</div>
+            <div class="s-row">
+              <span class="s-label">Output format<small>Converted after download — requires ffmpeg</small></span>
+              <select id="config-transcode" onchange="onTranscodeChange()">
+                <option value="none">Original (FLAC/M4A)</option>
+                <optgroup label="Lossless">
+                  <option value="flac">FLAC — universal default</option>
+                  <option value="alac">ALAC (.m4a) — native on macOS/iOS</option>
+                  <option value="wavpack">WavPack (.wv)</option>
+                  <option value="tta">TTA (.tta)</option>
+                  <option value="wav">WAV — uncompressed PCM</option>
+                  <option value="aiff">AIFF — uncompressed PCM</option>
+                </optgroup>
+                <optgroup label="Lossy">
+                  <option value="aac">AAC (.m4a)</option>
+                  <option value="opus">Opus</option>
+                  <option value="mp3">MP3</option>
+                </optgroup>
+              </select>
+            </div>
+            <div class="s-row transcode-lossy u-bl-2-solid-border2 u-ml-4" style="display:none;">
+              <span class="s-label">Bitrate</span>
+              <select id="config-transcode-bitrate">
+                <option value="320k">320 kbps</option>
+                <option value="256k">256 kbps</option>
+                <option value="192k">192 kbps</option>
+                <option value="128k">128 kbps</option>
+              </select>
+            </div>
+            <div class="s-row transcode-opt u-bl-2-solid-border2 u-ml-4" style="display:none;">
+              <span class="s-label">Keep original file<small>Off = the downloaded source is deleted after conversion</small></span>
+              <label class="toggle">
+                <input type="checkbox" id="config-transcode-keep">
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
+          </div>
+          <div class="s-section">
+            <div class="s-title">Post-Download Action</div>
+            <div class="s-row">
+              <span class="s-label">Action</span>
+              <select id="config-post-action" onchange="onPostChange()">
+                <option value="none">None</option>
+                <option value="open_folder">Open folder</option>
+                <option value="notify">System notification</option>
+                <option value="command">Shell command</option>
+              </select>
+            </div>
+            <div id="post-cmd-row" style="display:none;" class="s-row">
+              <input type="text" id="config-post-cmd" class="full u-w-100pct" placeholder="rsync -av {folder}/ user@nas:/music/">
+            </div>
+          </div>
+          <div class="s-section">
+            <div class="s-title">Profiles</div>
+            <div class="s-row">
+              <span class="s-label">Save</span>
+              <input class="u-w-120" type="text" id="profile-name" placeholder="Profile name">
+              <button onclick="saveProfile()" class="act-btn secondary u-p-5-10 u-fs-11_5">Save</button>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Load</span>
+              <select class="u-flex-1" id="profile-select"><option value="">Select…</option></select>
+              <button onclick="loadProfile()" class="act-btn secondary u-p-5-10 u-fs-11_5">Load</button>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Delete</span>
+              <button onclick="deleteProfile()" class="act-btn danger u-p-5-10 u-fs-11_5">Delete</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="tc" id="tc-files" data-title="Files">
+          <div class="s-section">
+            <div class="s-title">Download Location</div>
+            <div class="s-row u-justify-flex-start u-gap-12">
+              <button class="act-btn secondary" type="button" onclick="pyWin('choose_folder')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                Choose Folder
+              </button>
+              <span class="folder-pill" id="folder-path">…</span>
+            </div>
+          </div>
+          <div class="s-section">
+            <div class="s-title">Filename Format</div>
+            <div class="s-row"><span class="s-label u-fs-11 u-c-muted">{title} {artist} {album} {album_artist} {year} {track} {disc} {isrc} {position}</span></div>
+            <input type="text" id="config-filename" class="full u-w-100pct u-mb-8" value="{title} - {artist}">
+            <div class="s-sep"></div>
+            <div class="s-row">
+              <span class="s-label">Add track number to filename</span>
+              <label class="toggle">
+                <input type="checkbox" id="config-track-numbers" onchange="onTNChange()">
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
+            <div class="s-row u-bl-2-solid-border2 u-ml-4" id="album-track-row" style="display:none;">
+              <span class="s-label">Use original album track number</span>
+              <label class="toggle">
+                <input type="checkbox" id="config-album-track-numbers">
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="s-section">
+            <div class="s-title">Folder Organization</div>
+            <div class="s-row">
+              <span class="s-label">Artist subfolders</span>
+              <label class="toggle">
+                <input type="checkbox" id="config-artist-sub">
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Album subfolders</span>
+              <label class="toggle">
+                <input type="checkbox" id="config-album-sub">
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Playlist subfolders</span>
+              <label class="toggle">
+                <input type="checkbox" id="config-playlist-sub">
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Existing library folders<small>Playlists and single tracks already here are not downloaded again; the playlist file links to them. Separate folders with ;</small></span>
+              <input class="u-w-220" type="text" id="config-library-scan-dirs" placeholder="e.g. /music/old-library">
+            </div>
+            <div class="s-row">
+              <span class="s-label">First artist only in tags & filename</span>
+              <label class="toggle">
+                <input type="checkbox" id="config-first-artist">
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
+            <div class="s-row u-bl-2-solid-border2 u-ml-4" id="config-artist-sep-row">
+              <span class="s-label">Artist Separator<small>(e.g. ", " or " / ")</small></span>
+              <input class="u-w-160" type="text" id="config-artist-separator" placeholder="None (Standard Vorbis array)">
+            </div>
           </div>
           <div class="s-section s-wide network-destinations">
             <div class="s-title">Network Destinations</div>
@@ -1013,201 +1246,6 @@
                 <button class="act-btn secondary" type="button" onclick="retryNetworkDelivery()">Retry</button>
               </div>
             </div>
-          </div>
-          <div class="s-section">
-            <div class="s-title">Transcoding</div>
-            <div class="s-row">
-              <span class="s-label">Output format<small>Converted after download — requires ffmpeg</small></span>
-              <select id="config-transcode" onchange="onTranscodeChange()">
-                <option value="none">Original (FLAC/M4A)</option>
-                <optgroup label="Lossless">
-                  <option value="flac">FLAC — universal default</option>
-                  <option value="alac">ALAC (.m4a) — native on macOS/iOS</option>
-                  <option value="wavpack">WavPack (.wv)</option>
-                  <option value="tta">TTA (.tta)</option>
-                  <option value="wav">WAV — uncompressed PCM</option>
-                  <option value="aiff">AIFF — uncompressed PCM</option>
-                </optgroup>
-                <optgroup label="Lossy">
-                  <option value="aac">AAC (.m4a)</option>
-                  <option value="opus">Opus</option>
-                  <option value="mp3">MP3</option>
-                </optgroup>
-              </select>
-            </div>
-            <div class="s-row transcode-lossy u-bl-2-solid-border2 u-ml-4" style="display:none;">
-              <span class="s-label">Bitrate</span>
-              <select id="config-transcode-bitrate">
-                <option value="320k">320 kbps</option>
-                <option value="256k">256 kbps</option>
-                <option value="192k">192 kbps</option>
-                <option value="128k">128 kbps</option>
-              </select>
-            </div>
-            <div class="s-row transcode-opt u-bl-2-solid-border2 u-ml-4" style="display:none;">
-              <span class="s-label">Keep original file<small>Off = the downloaded source is deleted after conversion</small></span>
-              <label class="toggle">
-                <input type="checkbox" id="config-transcode-keep">
-                <span class="toggle-sl"></span>
-              </label>
-            </div>
-          </div>
-          <div class="s-section">
-            <div class="s-title">Performance</div>
-            <div class="s-row">
-              <span class="s-label">Parallel downloads<small>Tracks fetched at the same time (CLI: --max-concurrent)</small></span>
-              <input type="number" id="config-concurrent" value="2" min="1" max="8">
-            </div>
-            <div class="s-row">
-              <span class="s-label">Metadata request delay (seconds)<small>Random range between Spotify/metadata requests</small></span>
-              <div class="u-gap-6 u-items-center" style="display:flex;">
-                <input type="number" id="config-metadata-delay-min" value="0" min="0" step="0.1" aria-label="Minimum metadata delay">
-                <span>to</span>
-                <input type="number" id="config-metadata-delay-max" value="0" min="0" step="0.1" aria-label="Maximum metadata delay">
-              </div>
-            </div>
-            <div class="s-row">
-              <span class="s-label">Provider request delay (seconds)<small>Random range between provider download attempts</small></span>
-              <div class="u-gap-6 u-items-center" style="display:flex;">
-                <input type="number" id="config-provider-delay-min" value="0" min="0" step="0.1" aria-label="Minimum provider delay">
-                <span>to</span>
-                <input type="number" id="config-provider-delay-max" value="0" min="0" step="0.1" aria-label="Maximum provider delay">
-              </div>
-            </div>
-            <div class="s-row">
-              <span class="s-label">Automatic 429 cooldown<small>Pause all requests for Retry-After (or 60s) after a rate limit</small></span>
-              <label class="toggle">
-                <input type="checkbox" id="config-auto-rate-limit-cooldown" checked>
-                <span class="toggle-sl"></span>
-              </label>
-            </div>
-          </div>
-          <div class="s-section">
-            <div class="s-title">Retry & Loop</div>
-            <div class="s-row">
-              <span class="s-label">Extra retries per track<small>Cycles through all providers</small></span>
-              <input type="number" id="config-retries" value="0" min="0" max="10">
-            </div>
-            <div class="s-row">
-              <span class="s-label">Loop failed tracks every<small>N minutes (0 = disabled)</small></span>
-              <input type="number" id="config-loop" value="0" min="0" max="999">
-            </div>
-          </div>
-          <div class="s-section">
-            <div class="s-title">Post-Download Action</div>
-            <div class="s-row">
-              <span class="s-label">Action</span>
-              <select id="config-post-action" onchange="onPostChange()">
-                <option value="none">None</option>
-                <option value="open_folder">Open folder</option>
-                <option value="notify">System notification</option>
-                <option value="command">Shell command</option>
-              </select>
-            </div>
-            <div id="post-cmd-row" style="display:none;" class="s-row">
-              <input type="text" id="config-post-cmd" class="full u-w-100pct" placeholder="rsync -av {folder}/ user@nas:/music/">
-            </div>
-          </div>
-          <div class="s-section">
-            <div class="s-title">Auth & APIs</div>
-            <div class="s-row">
-              <span class="s-label">Provider APIs<small>The APIs each download service uses (Tidal's download API, Deezer's resolver, Qobuz app ID, country codes…) are set in that extension's own settings</small></span>
-              <button class="act-btn secondary u-p-5-12 u-fs-11_5" type="button" onclick="switchTab('extensions', document.querySelector('.stab[onclick*=&quot;extensions&quot;]'))">Extension Settings</button>
-            </div>
-            <div class="s-row">
-              <span class="s-label">AcoustID API key<small>Optional. Identifying untagged files uses a key shared by all users, capped at 3 lookups/second between everyone; your own key gets its own budget. Free from acoustid.org/new-application</small></span>
-              <input class="u-w-190" type="text" id="config-acoustid-key" placeholder="Using the shared key">
-            </div>
-          </div>
-          <div class="s-section">
-            <div class="s-title">Profiles</div>
-            <div class="s-row">
-              <span class="s-label">Save</span>
-              <input class="u-w-120" type="text" id="profile-name" placeholder="Profile name">
-              <button onclick="saveProfile()" class="act-btn secondary u-p-5-10 u-fs-11_5">Save</button>
-            </div>
-            <div class="s-row">
-              <span class="s-label">Load</span>
-              <select class="u-flex-1" id="profile-select"><option value="">Select…</option></select>
-              <button onclick="loadProfile()" class="act-btn secondary u-p-5-10 u-fs-11_5">Load</button>
-            </div>
-            <div class="s-row">
-              <span class="s-label">Delete</span>
-              <button onclick="deleteProfile()" class="act-btn danger u-p-5-10 u-fs-11_5">Delete</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="tc" id="tc-files" data-title="Files">
-          <div class="s-section">
-            <div class="s-title">Download Location</div>
-            <div class="s-row u-justify-flex-start u-gap-12">
-              <button class="act-btn secondary" type="button" onclick="pyWin('choose_folder')">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                Choose Folder
-              </button>
-              <span class="folder-pill" id="folder-path">…</span>
-            </div>
-          </div>
-          <div class="s-section">
-            <div class="s-title">Filename Format</div>
-            <div class="s-row"><span class="s-label u-fs-11 u-c-muted">{title} {artist} {album} {album_artist} {year} {track} {disc} {isrc} {position}</span></div>
-            <input type="text" id="config-filename" class="full u-w-100pct u-mb-8" value="{title} - {artist}">
-            <div class="s-sep"></div>
-            <div class="s-row">
-              <span class="s-label">Add track number to filename</span>
-              <label class="toggle">
-                <input type="checkbox" id="config-track-numbers" onchange="onTNChange()">
-                <span class="toggle-sl"></span>
-              </label>
-            </div>
-            <div class="s-row u-bl-2-solid-border2 u-ml-4" id="album-track-row" style="display:none;">
-              <span class="s-label">Use original album track number</span>
-              <label class="toggle">
-                <input type="checkbox" id="config-album-track-numbers">
-                <span class="toggle-sl"></span>
-              </label>
-            </div>
-          </div>
-
-          <div class="s-section">
-            <div class="s-title">Folder Organization</div>
-            <div class="s-row">
-              <span class="s-label">Artist subfolders</span>
-              <label class="toggle">
-                <input type="checkbox" id="config-artist-sub">
-                <span class="toggle-sl"></span>
-              </label>
-            </div>
-            <div class="s-row">
-              <span class="s-label">Album subfolders</span>
-              <label class="toggle">
-                <input type="checkbox" id="config-album-sub">
-                <span class="toggle-sl"></span>
-              </label>
-            </div>
-            <div class="s-row">
-              <span class="s-label">Playlist subfolders</span>
-              <label class="toggle">
-                <input type="checkbox" id="config-playlist-sub">
-                <span class="toggle-sl"></span>
-              </label>
-            </div>
-            <div class="s-row">
-              <span class="s-label">Existing library folders<small>Playlists and single tracks already here are not downloaded again; the playlist file links to them. Separate folders with ;</small></span>
-              <input class="u-w-220" type="text" id="config-library-scan-dirs" placeholder="e.g. /music/old-library">
-            </div>
-            <div class="s-row">
-              <span class="s-label">First artist only in tags & filename</span>
-              <label class="toggle">
-                <input type="checkbox" id="config-first-artist">
-                <span class="toggle-sl"></span>
-              </label>
-            </div>
-            <div class="s-row u-bl-2-solid-border2 u-ml-4" id="config-artist-sep-row">
-              <span class="s-label">Artist Separator<small>(e.g. ", " or " / ")</small></span>
-              <input class="u-w-160" type="text" id="config-artist-separator" placeholder="None (Standard Vorbis array)">
-            </div>
           </div>  
 
         </div>
@@ -1292,37 +1330,6 @@
         </div>
 
         <div class="tc" id="tc-extensions" data-title="Extensions">
-          <div class="s-section" id="custom-endpoints">
-            <div class="s-title">Self-hosted Endpoints</div>
-            <p class="u-fs-12 u-c-muted u-m-n4-0-12 u-lh-1_6">
-              Download through your own server. It is tried first; if it fails the
-              extension falls back to its default API. Tidal expects a
-              <a class="u-c-accent" href="https://github.com/binimum/hifi-api" target="_blank" rel="noopener">hifi-api</a>
-              compatible server, Qobuz a
-              <a class="u-c-accent" href="https://github.com/BartolomeoRusso9/qobuz-rest-api" target="_blank" rel="noopener">qobuz-rest-api</a>
-              compatible one. A server on this machine or your LAN
-              (<code>http://192.168.1.10:8000</code>) is allowed for that address only.
-            </p>
-            <div class="s-row">
-              <span class="s-label">Tidal endpoint<small id="ce-tidal-note">tidal-web</small></span>
-              <input style="flex:1 1 220px;min-width:180px;max-width:320px;" type="text" class="full" id="ce-tidal" placeholder="http://192.168.1.10:8000">
-              <button class="act-btn secondary u-p-6-14 u-fs-12" type="button" id="ce-tidal-test" onclick="testCustomEndpoint('tidal')">Test</button>
-            </div>
-            <div class="ce-result" id="ce-tidal-result" role="status" aria-live="polite" hidden></div>
-            <div class="s-row">
-              <span class="s-label">Qobuz endpoint<small id="ce-qobuz-note">qobuz-web</small></span>
-              <input style="flex:1 1 220px;min-width:180px;max-width:320px;" type="text" class="full" id="ce-qobuz" placeholder="http://127.0.0.1:8000">
-              <button class="act-btn secondary u-p-6-14 u-fs-12" type="button" id="ce-qobuz-test" onclick="testCustomEndpoint('qobuz')">Test</button>
-            </div>
-            <div class="ce-result" id="ce-qobuz-result" role="status" aria-live="polite" hidden></div>
-            <div class="s-row">
-              <span class="s-label">Qobuz API key<small>Sent as X-API-Key; leave empty to keep the saved one</small></span>
-              <input style="flex:1 1 220px;min-width:180px;max-width:320px;" type="password" class="full" id="ce-qobuz-key" autocomplete="off" placeholder="Not set">
-            </div>
-            <div class="s-row u-items-stretch u-gap-8">
-              <button class="act-btn u-p-8-16 u-fs-12" type="button" id="ce-save" onclick="saveCustomEndpoints()">Save endpoints</button>
-            </div>
-          </div>
 
           <div class="s-section">
             <div class="s-title">Extension Settings</div>
