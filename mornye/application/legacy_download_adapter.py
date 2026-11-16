@@ -97,6 +97,8 @@ class LegacyDownloadAdapter(ProviderExecutor):
             create_playlist_subfolders=config.output.playlist_subfolders,
             quality=config.download.quality,
             allow_fallback=config.download.allow_fallback,
+            preferred_service=config.download.preferred_service,
+            fallback_services=config.download.fallback_services,
             max_concurrent_downloads=config.download.max_concurrent,
             track_max_retries=config.download.retries,
             timeout_s=config.download.timeout,

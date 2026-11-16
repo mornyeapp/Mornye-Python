@@ -416,15 +416,33 @@ function changeAccent() {
 // the row height and the spacing tokens a step there. Stored like the
 // accent: localStorage for the next first paint (boot-head.js), the settings
 // blob, and gui-settings.json (save_density), the copy that survives.
-const DENSITIES = ['comfortable', 'compact'];
+const DENSITIES = ['comfortable', 'compact', 'large'];
+// 'large' magnifies the whole interface. The desktop window zooms natively
+// (set_page_zoom, WKWebView pageZoom — like Cmd-+); where that isn't
+// available (browser tab, other platforms) css/layout.css applies CSS zoom
+// under data-zoom="css".
+const LARGE_ZOOM = 1.15;
 
 function applyDensity(density) {
   const val = DENSITIES.includes(density) ? density : 'comfortable';
   for (const el of [document.documentElement, document.body]) {
     if (!el) continue;
-    if (val === 'compact') el.setAttribute('data-density', 'compact');
+    if (val !== 'comfortable') el.setAttribute('data-density', val);
     else el.removeAttribute('data-density');
   }
+  applyPageZoom(val === 'large' ? LARGE_ZOOM : 1);
+}
+
+function applyPageZoom(factor) {
+  const setCss = (on) => {
+    if (on) document.documentElement.setAttribute('data-zoom', 'css');
+    else document.documentElement.removeAttribute('data-zoom');
+  };
+  const native = window.pywebview?.api?.set_page_zoom;
+  if (typeof native !== 'function') { setCss(factor !== 1); return; }
+  Promise.resolve(native(factor))
+    .then(res => setCss(!(res && res.ok) && factor !== 1))
+    .catch(() => setCss(factor !== 1));
 }
 
 function changeDensity() {
@@ -527,6 +545,12 @@ function applySettings(settings = {}) {
       };
   }
   if ($('config-fallback')) $('config-fallback').checked = cfg.allow_fallback;
+  if ($('config-provider-fallback')) {
+    $('config-provider-fallback').checked = cfg.fallback_services !== false;
+  }
+  if ($('config-ask-provider')) {
+    $('config-ask-provider').checked = cfg.ask_provider_before_download === true;
+  }
   // The dedicated key wins over the blob's copy: it is what the pre-paint
   // script in index.html already acted on, and a stale cfg.theme here would
   // otherwise flip the UI back a moment after load. When the key is absent —
@@ -649,6 +673,7 @@ function applyListState(id, values = []) {
     items.filter(i => !values.includes(i.dataset.value)).forEach(item => el.appendChild(item));
   }
   renumberList(el);
+  if (id === 'services-list') refreshServicePriorityIndicators();
 }
 
 async function loadSettingsFromStorage() {
@@ -778,12 +803,22 @@ function onVerifyHiresChange() {
 // ── Sortable lists ───────────────────────────────────────────────────────────
 function makeSortable(el) {
   let drag = null;
-  function onDS(e) { drag = e.currentTarget; setTimeout(() => drag?.classList.add('dragging'), 0); }
+  let startingOrder = [];
+  function onDS(e) {
+    drag = e.currentTarget;
+    startingOrder = [...el.querySelectorAll('.sort-item')].map(item => item.dataset.value);
+    setTimeout(() => drag?.classList.add('dragging'), 0);
+  }
   function onDE() {
     drag?.classList.remove('dragging');
     el.querySelectorAll('.sort-item').forEach(i => i.classList.remove('drag-over'));
     drag = null;
     renumberList(el);
+    if (el.id === 'services-list') {
+      refreshServicePriorityIndicators();
+      const currentOrder = [...el.querySelectorAll('.sort-item')].map(item => item.dataset.value);
+      if (currentOrder.some((value, i) => value !== startingOrder[i])) markSettingsDirty();
+    }
   }
   function onDO(e) {
     e.preventDefault();
@@ -856,6 +891,8 @@ const DEFAULT_SETTINGS = {
   font: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   quality: 'LOSSLESS',
   allow_fallback: false,
+  fallback_services: true,
+  ask_provider_before_download: false,
   lyrics: true,
   enrich_metadata: true,
   save_animated_artwork: false,
@@ -1021,6 +1058,82 @@ function buildSortItem(item, index) {
   return d;
 }
 
+function buildServiceSortItem(item, index) {
+  const d = document.createElement('div');
+  d.className = `sort-item service-sort-item ${item.on ? '' : 'inactive'}`;
+  d.dataset.value = item.id;
+  if (item.title) d.title = `Provided by ${item.title}`;
+  const iconHtml = item.iconFile
+    ? `<span class="svc-icon ${item.iconClass} icon-image"><img src="assets/icons/${item.iconFile}" alt="" data-onerror="this.onerror=null; this.src='assets/icons/${item.id}.png';"></span>`
+    : item.icon ? `<span class="svc-icon ${item.iconClass}">${escHtml(item.icon)}</span>` : '';
+  d.innerHTML = `
+    <span class="priority-num">${index + 1}</span>
+    <span class="drag-h" aria-hidden="true">⠿</span>
+    ${iconHtml}
+    <span class="svc-name">${escHtml(item.label)}</span>
+    <span class="service-order-status"></span>
+    ${item.badge ? `<span class="svc-badge">${escHtml(item.badge)}</span>` : ''}
+    <div class="service-row-actions">
+      <button type="button" class="service-move" data-onclick="moveService(this, -1)" aria-label="Move ${escHtml(item.label)} up" title="Move up">↑</button>
+      <button type="button" class="service-move" data-onclick="moveService(this, 1)" aria-label="Move ${escHtml(item.label)} down" title="Move down">↓</button>
+      <label class="service-enable" title="${item.on ? 'Enabled download source' : 'Enable download source'}">
+        <input type="checkbox" ${item.on ? 'checked' : ''} data-onchange="onServiceEnabledChange(this)" aria-label="Enable ${escHtml(item.label)} as a download source">
+        <span>${item.on ? 'On' : 'Off'}</span>
+      </label>
+    </div>`;
+  return d;
+}
+
+function markSettingsDirty() {
+  isDirty = true;
+  updateSaveButtonVisual();
+}
+
+function refreshServicePriorityIndicators() {
+  const el = $('services-list');
+  if (!el) return;
+  let activeRank = 0;
+  el.querySelectorAll('.service-sort-item').forEach((item, index) => {
+    const enabled = item.querySelector('input[type="checkbox"]')?.checked;
+    item.querySelector('.priority-num').textContent = String(index + 1).padStart(2, '0');
+    const status = item.querySelector('.service-order-status');
+    if (enabled) {
+      activeRank += 1;
+      status.textContent = activeRank === 1 ? 'Primary' : `Fallback ${activeRank - 1}`;
+      item.classList.toggle('service-primary', activeRank === 1);
+    } else {
+      status.textContent = 'Disabled';
+      item.classList.remove('service-primary');
+    }
+    item.querySelectorAll('.service-move').forEach((button, moveIndex) => {
+      button.disabled = moveIndex === 0 ? index === 0 : index === el.children.length - 1;
+    });
+    const enableLabel = item.querySelector('.service-enable span');
+    if (enableLabel) enableLabel.textContent = enabled ? 'On' : 'Off';
+  });
+  const count = el.querySelectorAll('input[type="checkbox"]:checked').length;
+  const summary = $('services-summary');
+  if (summary) summary.textContent = `${count} enabled · first enabled source is tried first`;
+}
+
+function moveService(button, direction) {
+  const item = button.closest('.service-sort-item');
+  const list = $('services-list');
+  const target = direction < 0 ? item?.previousElementSibling : item?.nextElementSibling;
+  if (!item || !target || !list) return;
+  if (direction < 0) list.insertBefore(item, target);
+  else list.insertBefore(target, item);
+  refreshServicePriorityIndicators();
+  markSettingsDirty();
+}
+
+function onServiceEnabledChange(input) {
+  const item = input.closest('.service-sort-item');
+  if (item) item.classList.toggle('inactive', !input.checked);
+  refreshServicePriorityIndicators();
+  markSettingsDirty();
+}
+
 function toggleItemActive(cb) {
   const item = cb.closest('.sort-item');
   item.classList.toggle('inactive', !cb.checked);
@@ -1028,8 +1141,11 @@ function toggleItemActive(cb) {
 
 function populateList(id, items) {
   const el = $(id); el.innerHTML = '';
-  items.forEach((i, idx) => el.appendChild(buildSortItem(i, idx)));
+  items.forEach((i, idx) => el.appendChild(
+    id === 'services-list' ? buildServiceSortItem(i, idx) : buildSortItem(i, idx)
+  ));
   makeSortable(el);
+  if (id === 'services-list') refreshServicePriorityIndicators();
 }
 function getChecked(id) {
   return [...$(id).querySelectorAll('.sort-item')]
@@ -1207,9 +1323,9 @@ function renderExtensionQualityRows() {
       svc.quality_options.map(o =>
         `<option value="${regEscapeHtml(o.id)}" ${o.id === current ? 'selected' : ''} title="${regEscapeHtml(o.description || '')}">${regEscapeHtml(o.label || o.id)}</option>`)
     ).join('');
-    return `<div class="s-row u-pl-16 u-bl-2-solid-border2 u-ml-4">
+    return `<div class="extension-quality-row">
       <span class="s-label">${regEscapeHtml(svc.label || svc.id)}<small>${regEscapeHtml(svc.primary || '')}</small></span>
-      <select data-service="${regEscapeHtml(svc.id)}" data-onchange="onExtensionQualityChange(this)">${opts}</select>
+      <select aria-label="Quality for ${regEscapeHtml(svc.label || svc.id)}" data-service="${regEscapeHtml(svc.id)}" data-onchange="onExtensionQualityChange(this)">${opts}</select>
     </div>`;
   }).join('');
 }
@@ -1219,8 +1335,7 @@ function onExtensionQualityChange(select) {
   if (!service) return;
   if (select.value) extensionQualityChoices[service] = select.value;
   else delete extensionQualityChoices[service];
-  isDirty = true;
-  updateSaveButtonVisual();
+  markSettingsDirty();
 }
 
 function collectExtensionQuality() {
@@ -2653,7 +2768,9 @@ function renderAlbumTech(rows) {
         `title="Click to copy ${escHtml(val)}" aria-label="UPC ${escHtml(val)}, click to copy">` +
         `${barcode}<span class="tech-barcode-num">${escHtml(val)}</span></button></div>`;
     }
-    return `<div class="tech-row"><div class="tech-k">${escHtml(k)}</div>` +
+    // The ℗/© line is the one long value: it gets the sheet's full width.
+    const wide = /copyright|℗|©/i.test(k) ? ' wide' : '';
+    return `<div class="tech-row${wide}"><div class="tech-k">${escHtml(k)}</div>` +
       `<div class="tech-v" title="${escHtml(val)}">${escHtml(val)}</div></div>`;
   }).join('');
   el.classList.toggle('hidden', clean.length === 0);
@@ -4772,7 +4889,9 @@ async function startStaged(onlyShown) {
   if (!window.pywebview?.api?.start_staged_items) return;
   const ids = onlyShown ? visibleStaged().filter(i => i.status === 'pending').map(i => i.id) : [];
   if (onlyShown && !ids.length) { showToast('Nothing waiting among the items shown.', 'info'); return; }
-  const res = await window.pywebview.api.start_staged_items(ids, buildConfig());
+  const config = await chooseProviderForBatch(buildConfig());
+  if (!config) return;
+  const res = await window.pywebview.api.start_staged_items(ids, config);
   if (res?.ok) showToast(`Starting ${res.started} item${res.started === 1 ? '' : 's'}.`);
   else showToast(res?.error || 'Nothing to start.', 'info');
   loadStaged();
@@ -4798,7 +4917,9 @@ async function stopAllDownloads() {
 }
 
 async function startStagedOne(id) {
-  const res = await window.pywebview?.api?.start_staged_items?.([id], buildConfig());
+  const config = await chooseProviderForBatch(buildConfig());
+  if (!config) return;
+  const res = await window.pywebview?.api?.start_staged_items?.([id], config);
   if (res && !res.ok) showToast(res.error || 'Could not start it.', 'error');
   loadStaged();
 }
@@ -5011,7 +5132,9 @@ function toggleFailedList() {
 async function retryFailedTracks(keys = null) {
   if (!window.pywebview?.api?.retry_failed_tracks) return;
   try {
-    const res = await window.pywebview.api.retry_failed_tracks(buildConfig(), keys);
+    const config = await chooseProviderForBatch(buildConfig());
+    if (!config) return;
+    const res = await window.pywebview.api.retry_failed_tracks(config, keys);
     if (!res?.queued) showToast('Nothing left to retry.', 'info');
   } catch (e) {
     logMessage('Could not retry the missing tracks: ' + e, 'error');
@@ -5130,6 +5253,118 @@ function downloadSelected() {
   $('queue-drawer').classList.add('open');
 }
 
+let providerPickerResolve = null;
+
+function chooseProviderForBatch(config) {
+  const activeServices = (config.services || []).filter(Boolean);
+  if (!config.ask_provider_before_download) return Promise.resolve(config);
+  if (providerPickerResolve) return Promise.resolve(null);
+  if (!activeServices.length) {
+    toastMgr.error('Enable at least one download source in Settings.');
+    return Promise.resolve(null);
+  }
+  const modal = $('provider-picker-modal');
+  const select = $('provider-picker-service');
+  const fallback = $('provider-picker-fallback');
+  const qualitySelect = $('provider-picker-quality');
+  if (!modal || !select || !fallback || !qualitySelect) {
+    toastMgr.error('The download source picker is unavailable.');
+    return Promise.resolve(null);
+  }
+  const rows = [...$('services-list').querySelectorAll('.service-sort-item')];
+  select.innerHTML = activeServices.map(service => {
+    const row = rows.find(item => item.dataset.value === service);
+    const label = row?.querySelector('.svc-name')?.textContent || service;
+    return `<option value="${escHtml(service)}">${escHtml(label)}</option>`;
+  }).join('');
+  const preferred = config.preferred_service || activeServices[0];
+  select.value = activeServices.includes(preferred) ? preferred : activeServices[0];
+  select.onchange = () => updateProviderPickerQuality(select.value);
+  updateProviderPickerQuality(select.value, config);
+  fallback.checked = config.fallback_services !== false;
+  modal.classList.remove('hidden');
+  select.focus();
+  return new Promise(resolve => { providerPickerResolve = resolve; });
+}
+
+function updateProviderPickerQuality(service, config = buildConfig()) {
+  const select = $('provider-picker-quality');
+  if (!select) return;
+
+  const provider = installedServiceRows.find(row => row.id === service);
+  const options = provider?.quality_options || [];
+  const savedChoice = config.extension_quality?.[service] || '';
+
+  if (options.length) {
+    select.innerHTML = [
+      '<option value="">Use global quality</option>',
+      ...options.map(option =>
+        `<option value="${escHtml(option.id)}" title="${escHtml(option.description || '')}">${escHtml(option.label || option.id)}</option>`
+      ),
+    ].join('');
+    select.value = options.some(option => option.id === savedChoice) ? savedChoice : '';
+    select.disabled = false;
+    return;
+  }
+
+  const globalQuality = $('config-quality');
+  select.innerHTML = [...(globalQuality?.options || [])].map(option =>
+    `<option value="${escHtml(option.value)}">${escHtml(option.textContent)}</option>`
+  ).join('');
+  select.value = config.quality || globalQuality?.value || '';
+  select.disabled = !select.options.length;
+}
+
+function finishProviderPicker(confirmed) {
+  const modal = $('provider-picker-modal');
+  const resolve = providerPickerResolve;
+  providerPickerResolve = null;
+  modal?.classList.add('hidden');
+  if (!resolve) return;
+  if (!confirmed) {
+    resolve(null);
+    return;
+  }
+  const config = buildConfig();
+  const selected = $('provider-picker-service')?.value;
+  const fallback = $('provider-picker-fallback')?.checked === true;
+  const ordered = getChecked('services-list');
+  if (!selected || !ordered.includes(selected)) {
+    toastMgr.error('Choose an enabled download source.');
+    resolve(null);
+    return;
+  }
+  config.preferred_service = selected;
+  config.fallback_services = fallback;
+  config.services = fallback
+    ? [selected, ...ordered.filter(service => service !== selected)]
+    : [selected];
+  const provider = installedServiceRows.find(row => row.id === selected);
+  const pickedQuality = $('provider-picker-quality')?.value || '';
+  if ((provider?.quality_options || []).length) {
+    config.extension_quality = { ...(config.extension_quality || {}) };
+    if (pickedQuality) config.extension_quality[selected] = pickedQuality;
+    else delete config.extension_quality[selected];
+  } else if (pickedQuality) {
+    config.quality = pickedQuality;
+  }
+  resolve(config);
+}
+
+function closeProviderPicker() {
+  finishProviderPicker(false);
+}
+
+function confirmProviderPicker() {
+  finishProviderPicker(true);
+}
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !$('provider-picker-modal')?.classList.contains('hidden')) {
+    closeProviderPicker();
+  }
+});
+
 // Execute downloads immediately without waiting for previous batches
 async function startDownloadQueue() {
   console.log('[startDownloadQueue] Starting... Queue status:', queue.map(q => q.status));
@@ -5147,6 +5382,9 @@ async function startDownloadQueue() {
     console.warn('[startDownloadQueue] No waiting items, returning');
     return false;
   }
+
+  let config = await chooseProviderForBatch(buildConfig());
+  if (!config) return false;
 
   console.log('[startDownloadQueue] Proceeding with download for:', waiting.length, 'items');
 
@@ -5170,7 +5408,6 @@ async function startDownloadQueue() {
   
   setStatus(`Downloading track(s)…`, true);
 
-  const config = buildConfig();
   const indices = waiting.map(w => w.index);
   // The ids, not the indices, are what identifies these rows later: `index`
   // is a position in the fetched tracklist, and a second fetch puts a
@@ -5393,8 +5630,12 @@ function delayRange(kind) {
 
 function buildConfig() {
   const soundEnabled = $('config-sound-enabled')?.checked ?? true;
+  const services = getChecked('services-list');
   return {
-    services:               getChecked('services-list').length ? getChecked('services-list') : ['tidal'],
+    services,
+    preferred_service:      services[0] || null,
+    fallback_services:      $('config-provider-fallback')?.checked !== false,
+    ask_provider_before_download: $('config-ask-provider')?.checked === true,
     quality:                $('config-quality').value,
     allow_fallback:         $('config-fallback').checked,
     sound_enabled:          soundEnabled,
@@ -5894,6 +6135,12 @@ function pyWin(method, arg) {
   if (arg !== undefined) window.pywebview?.api?.[method]?.(arg);
   else window.pywebview?.api?.[method]?.();
 }
+
+// Double-clicking the titlebar zooms / restores the window, as a native
+// title bar does — the frameless window has none of its own.
+document.addEventListener('dblclick', (e) => {
+  if (e.target.closest?.('#titlebar .pywebview-drag-region')) pyWin('WindowToggleMaximise');
+});
 
 // ── Extension Registries ───────────────────────────────────────────────────
 const REGISTRY_SOURCE_LABELS = {
@@ -8038,6 +8285,7 @@ async function loadPlayerTrack(index) {
   const audio = $('player-audio');
   $('player-bar').classList.remove('hidden');
   document.body.classList.add('has-player');
+  setPlayerArtwork('');
   $('pl-title').textContent = item.artist ? `${item.title} — ${item.artist}` : item.title;
   $('pl-quality').textContent = 'Preparing…';
   markPlayingRow();
@@ -8152,11 +8400,45 @@ let npLines = [];       // [{t: seconds|null, text}]
 let npSynced = false;
 let npWordSynced = false;
 let npActive = -1;
+const NP_SYNC = { offset: 0, speed: 1 };
+
+function npLyricsTime(audioTime) {
+  return Math.max(0, audioTime * NP_SYNC.speed + NP_SYNC.offset);
+}
+
+function npAudioTimeForLyrics(lyricsTime) {
+  return Math.max(0, (lyricsTime - NP_SYNC.offset) / NP_SYNC.speed);
+}
+
+function npSetSync(kind, rawValue) {
+  const value = Number(rawValue);
+  if (!Number.isFinite(value)) return;
+  if (kind === 'offset') {
+    NP_SYNC.offset = Math.max(-5, Math.min(5, value));
+    $('np-sync-offset-value').textContent = `${NP_SYNC.offset > 0 ? '+' : ''}${NP_SYNC.offset.toFixed(1)} s`;
+  } else if (kind === 'speed') {
+    NP_SYNC.speed = Math.max(0.9, Math.min(1.1, value));
+    $('np-sync-speed-value').textContent = `${NP_SYNC.speed.toFixed(2)}×`;
+  } else {
+    return;
+  }
+  NP.focus = -2;
+  npUpdate(npLyricsTime($('player-audio').currentTime), true);
+}
+
+function npResetSync() {
+  NP_SYNC.offset = 0;
+  NP_SYNC.speed = 1;
+  $('np-sync-offset').value = '0';
+  $('np-sync-offset-value').textContent = '0.0 s';
+  $('np-sync-speed').value = '1';
+  $('np-sync-speed-value').textContent = '1.00×';
+}
 
 function openNowPlaying() {
   $('np-view').classList.remove('hidden');
   npStartTick();
-  if (npLines.length) { npLayoutLyrics(); NP.focus = -2; NP.first = true; npUpdate($('player-audio').currentTime, true); }
+  if (npLines.length) { npLayoutLyrics(); NP.focus = -2; NP.first = true; npUpdate(npLyricsTime($('player-audio').currentTime), true); }
 }
 function closeNowPlaying() { $('np-view').classList.add('hidden'); }
 
@@ -8314,6 +8596,8 @@ function npApplyColors(src) {
 }
 
 function fillNowPlaying(item, res) {
+  setPlayerArtwork(res.cover || '');
+  npResetSync();
   $('np-title').textContent = res.title || item.title;
   $('np-artist').textContent = [res.artist || item.artist, res.album].filter(Boolean).join(' · ');
   $('np-explicit').classList.toggle('hidden', !res.explicit);
@@ -8383,12 +8667,23 @@ function fillNowPlaying(item, res) {
     }).join('');
     box.querySelectorAll('.np-line').forEach(el => el.addEventListener('click', () => {
       const l = npLines[parseInt(el.dataset.i)];
-      if (npSynced && l && l.t != null) { $('player-audio').currentTime = l.t; $('player-audio').play(); }
+      if (npSynced && l && l.t != null) { $('player-audio').currentTime = npAudioTimeForLyrics(l.t); $('player-audio').play(); }
     }));
     npLayoutLyrics();
   }
   if (!$('np-queue').classList.contains('hidden')) npRenderQueue();
-  if (npSynced) npUpdate($('player-audio').currentTime, true);
+  if (npSynced) npUpdate(npLyricsTime($('player-audio').currentTime), true);
+}
+
+function setPlayerArtwork(src) {
+  const wrap = $('pl-artwork');
+  const image = $('pl-cover');
+  if (!wrap || !image) return;
+  wrap.classList.remove('has-artwork');
+  image.onload = () => wrap.classList.add('has-artwork');
+  image.onerror = () => wrap.classList.remove('has-artwork');
+  image.removeAttribute('src');
+  if (src) image.src = src;
 }
 
 // ── Lyrics engine ───────────────────────────────────────────────────────────
@@ -8591,7 +8886,7 @@ function npUpdate(time, force) {
     NP.userTimer = setTimeout(() => {
       NP.userScrolling = false;
       NP.focus = -2;                       // follow again, with the spring
-      npUpdate($('player-audio').currentTime, true);
+      npUpdate(npLyricsTime($('player-audio').currentTime), true);
     }, 4000);
   };
   box.addEventListener('wheel', hold, { passive: true });
@@ -8604,11 +8899,11 @@ function npTick() {
   npRaf = 0;
   const audio = $('player-audio');
   if (!audio || audio.paused || $('np-view').classList.contains('hidden')) return;
-  npUpdate(audio.currentTime);
+  npUpdate(npLyricsTime(audio.currentTime));
   npRaf = requestAnimationFrame(npTick);
 }
 function npStartTick() { if (!npRaf) npRaf = requestAnimationFrame(npTick); }
-function npSyncLyrics(time) { npUpdate(time); }
+function npSyncLyrics(time) { npUpdate(npLyricsTime(time)); }
 
 function npRenderQueue() {
   const rows = [];
@@ -8668,12 +8963,14 @@ async function scanPlayerLibrary() {
   $('player-list').innerHTML = '';
   $('player-toolbar').classList.add('hidden');
   $('player-status').textContent = 'Scanning…';
+  renderPlayerEmptyState();
   $('player-scan-btn').disabled = true;
   const res = await window.pywebview?.api?.scan_music_library?.(path);
   if (!res || res.status !== 'started') {
     lib.loading = false;
     $('player-scan-btn').disabled = false;
     $('player-status').textContent = res?.error || 'Could not open that folder.';
+    renderPlayerEmptyState();
     return;
   }
   lib.lastScan = Math.max(lib.lastScan, res.scan);
@@ -8697,7 +8994,7 @@ window.app_library_scan_finished = function(p) {
   lib.loading = false;
   $('player-scan-btn').disabled = false;
   filterPlayerLibrary(true);
-  if (!lib.items.length) $('player-status').textContent = 'No audio files found in this folder.';
+  if (!lib.items.length) $('player-status').textContent = '';
   else { $('player-status').textContent = ''; libRemember(p.folder); }
 };
 
@@ -8706,6 +9003,7 @@ window.app_library_scan_error = function(p) {
   lib.loading = false;
   $('player-scan-btn').disabled = false;
   $('player-status').textContent = 'Scan failed: ' + (p?.error || 'unknown error');
+  renderPlayerEmptyState();
 };
 
 function libSortKey(key) {
@@ -8760,6 +9058,29 @@ function renderPlayerRows() {
     + (lib.shown < lib.view.length ? '<div id="player-sentinel" class="pl-more">Loading more…</div>' : '');
   libObserve(list);
   markPlayingRow();
+  renderPlayerEmptyState();
+}
+
+function renderPlayerEmptyState() {
+  const empty = $('player-empty');
+  if (!empty) return;
+  const show = !lib.loading && lib.view.length === 0;
+  empty.classList.toggle('hidden', !show);
+  if (!show) return;
+
+  const title = empty.querySelector('.player-empty-title');
+  const copy = empty.querySelector('.player-empty-copy');
+  const query = ($('player-search')?.value || '').trim();
+  if (query && lib.items.length) {
+    title.textContent = 'No matching tracks';
+    copy.textContent = 'Try a different title, artist, or album search.';
+  } else if (lib.scan !== null && !lib.items.length) {
+    title.textContent = 'No audio files found';
+    copy.textContent = 'Choose a folder that contains music, then scan it again.';
+  } else {
+    title.textContent = 'Choose a music folder';
+    copy.textContent = 'Your tracks will appear here after the library is scanned.';
+  }
 }
 
 function libAppendRows() {
@@ -9952,7 +10273,7 @@ async function loadStats() {
   body.innerHTML = '<div class="s-label u-fs-11_5">Loading…</div>';
   try {
     const [year, days] = statsPeriodArgs();
-    renderStats(await window.pywebview.api.get_stats(year, days, 10));
+    renderStats(await window.pywebview.api.get_stats(year, days, 10, true));
   } catch (e) {
     body.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Could not read the download log.</div>';
   }

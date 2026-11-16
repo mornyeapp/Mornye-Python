@@ -39,7 +39,10 @@ Mornye — all time
 
 In the GUI and in `--web` the same numbers are a screen of their own — the
 **Stats** entry in the sidebar — with a period selector and the rankings drawn
-as bars.
+as bars. The GUI checks downloaded file paths on disk each time it refreshes,
+so deleted files leave its current-library totals. This does not erase the
+download log: the CLI and the default Python/API view continue to report
+download history.
 
 ---
 
@@ -59,6 +62,10 @@ as bars.
 - **Activity** — by weekday and hour *in your own timezone*, the busiest single
   day, how many days you downloaded on at all, and the longest run of
   consecutive days.
+
+The GUI's local-library view includes only successful downloads whose saved
+file paths still point to files. Files moved to a different location are not
+counted until downloaded or otherwise added to the log at their new path.
 
 ---
 
@@ -110,6 +117,7 @@ itself; without it the CLI reports the whole instance.
   from mornye.core import stats
 
   document = stats.wrapped(window=stats.year_window(2026), top=20)
+  current = stats.wrapped(existing_files=True)
   print(document["totals"], document["top_artists"])
   print(stats.format_wrapped(document))   # the text rendering above
   ```

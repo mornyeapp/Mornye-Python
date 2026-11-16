@@ -155,7 +155,7 @@ rows.append(
     )
 )
 rows.append(line())
-for left, right in zip(sidebar, main_rows):
+for left, right in zip(sidebar, main_rows, strict=True):
     rows.append([*left, (" ", ""), *right])
 rows.append(line())
 rows.append(line(("▌", "s"), (" Downloading Night Signals — track 3 of 12", "t")))

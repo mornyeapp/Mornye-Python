@@ -74,6 +74,7 @@ document.write('<link rel="stylesheet" href="css/utilities.css?_=' + Date.now() 
   // Density (N4), for the same reason: the rows would jump once
   // applyDensity() runs. boot-body.js copies it onto <body>.
   try {
-    if (localStorage.getItem('mornye-density') === 'compact') document.documentElement.setAttribute('data-density', 'compact');
+    var _d = localStorage.getItem('mornye-density');
+    if (_d === 'compact' || _d === 'large') document.documentElement.setAttribute('data-density', _d);
   } catch (e) {}
 })();

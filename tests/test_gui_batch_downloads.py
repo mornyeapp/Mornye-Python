@@ -95,6 +95,40 @@ def test_the_setting_is_clamped(captured_calls, sent, expected) -> None:
     assert opts["max_concurrent_downloads"] == expected
 
 
+def test_preferred_provider_and_fallback_order_reach_download_service(
+    captured_calls,
+) -> None:
+    options = captured_calls(
+        [0],
+        {
+            "services": ["tidal", "qobuz", "deezer"],
+            "preferred_service": "qobuz",
+            "fallback_services": True,
+        },
+    )[0]
+
+    assert options["services"] == ["qobuz", "tidal", "deezer"]
+    assert options["preferred_service"] == "qobuz"
+    assert options["fallback_services"] is True
+
+
+def test_disabling_provider_fallback_limits_the_batch_to_its_preference(
+    captured_calls,
+) -> None:
+    options = captured_calls(
+        [0],
+        {
+            "services": ["tidal", "qobuz", "deezer"],
+            "preferred_service": "qobuz",
+            "fallback_services": False,
+        },
+    )[0]
+
+    assert options["services"] == ["qobuz"]
+    assert options["preferred_service"] == "qobuz"
+    assert options["fallback_services"] is False
+
+
 @pytest.mark.parametrize("picked", ["HI_RES_LOSSLESS", "LOSSLESS", "DOLBY_ATMOS"])
 def test_the_quality_picker_reaches_the_client_untouched(
     captured_calls, picked

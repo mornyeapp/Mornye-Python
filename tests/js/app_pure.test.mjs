@@ -49,3 +49,53 @@ test('formatAudioQuality: depth / kHz · format, or kbps for lossy', () => {
   assert.equal(f.formatAudioQuality({ format: 'MP3', bitrate: 320000 }), '320 KBPS · MP3');
   assert.equal(f.formatAudioQuality(null), '');
 });
+
+test('batch source picker lists that provider’s declared qualities and restores its choice', () => {
+  const qualitySelect = { value: '', disabled: false, innerHTML: '' };
+  const picker = pick(['updateProviderPickerQuality', 'escHtml'], {
+    $: (id) => id === 'provider-picker-quality' ? qualitySelect : null,
+    installedServiceRows: [{
+      id: 'tidal',
+      quality_options: [
+        { id: 'LOSSLESS', label: 'Lossless' },
+        { id: 'DOLBY_ATMOS', label: 'Dolby Atmos' },
+      ],
+    }],
+  });
+
+  picker.updateProviderPickerQuality('tidal', {
+    extension_quality: { tidal: 'DOLBY_ATMOS' },
+  });
+
+  assert.equal(qualitySelect.value, 'DOLBY_ATMOS');
+  assert.match(qualitySelect.innerHTML, /Use global quality/);
+  assert.match(qualitySelect.innerHTML, /Lossless/);
+  assert.match(qualitySelect.innerHTML, /Dolby Atmos/);
+});
+
+test('lyrics timing applies offset and speed, with inverse mapping for line seeking', () => {
+  const sync = { offset: 0.5, speed: 1.1 };
+  const f = pick(['npLyricsTime', 'npAudioTimeForLyrics'], { NP_SYNC: sync });
+
+  assert.equal(f.npLyricsTime(10), 11.5);
+  assert.equal(f.npAudioTimeForLyrics(11.5), 10);
+  assert.equal(f.npLyricsTime(0), 0.5);
+});
+
+test('changing lyric speed immediately recalculates the current lyric position', () => {
+  const sync = { offset: 0, speed: 1 };
+  const output = { textContent: '' };
+  let updatedTime = null;
+  const globals = {
+    NP_SYNC: sync,
+    NP: { focus: 0 },
+    $: (id) => id === 'player-audio' ? { currentTime: 100 } : output,
+    npUpdate: (time) => { updatedTime = time; },
+  };
+  const f = pick(['npSetSync', 'npLyricsTime'], globals);
+
+  f.npSetSync('speed', '1.1');
+
+  assert.ok(Math.abs(f.npLyricsTime(100) - 110) < 1e-9);
+  assert.ok(Math.abs(updatedTime - 110) < 1e-9);
+});

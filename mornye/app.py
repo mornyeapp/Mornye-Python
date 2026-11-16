@@ -753,7 +753,35 @@ class MornyeAPI(
             return {"ok": False, "error": str(e)}
 
     #: Row and gap density of the GUI (N4): frontend/css/layout.css.
-    DENSITIES = ("comfortable", "compact")
+    DENSITIES = ("comfortable", "compact", "large")
+
+    def set_page_zoom(self, factor: float) -> dict:
+        """Zoom the whole page natively (the 'large' density).
+
+        WKWebView's pageZoom is the same zoom as Cmd-+ in Safari: layout,
+        media queries and getBoundingClientRect all agree, so popovers and
+        tooltips stay where they belong — CSS zoom does not promise that in
+        WebKit. Cocoa only; elsewhere the frontend falls back to CSS zoom.
+        """
+        try:
+            factor = min(max(float(factor), 0.5), 2.0)
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "invalid zoom factor"}
+        if sys.platform != "darwin" or not self._window:
+            return {"ok": False, "error": "native zoom unavailable"}
+        try:
+            from PyObjCTools import AppHelper
+            from webview.platforms.cocoa import BrowserView
+
+            view = BrowserView.instances.get(self._window.uid)
+            webview_ = getattr(view, "webview", None)
+            if webview_ is None or not hasattr(webview_, "setPageZoom_"):
+                return {"ok": False, "error": "native zoom unavailable"}
+            AppHelper.callAfter(webview_.setPageZoom_, factor)
+            return {"ok": True, "zoom": factor}
+        except Exception as e:
+            _quiet_log.debug("Native page zoom failed", exc_info=True)
+            return {"ok": False, "error": str(e)}
 
     def save_density(self, density: str) -> dict:
         """Persists the density, same reasoning as save_theme()."""
@@ -1059,8 +1087,33 @@ class MornyeAPI(
         if self._window:
             self._window.minimize()
 
+    def _toggle_zoom_macos(self) -> bool:
+        """Toggle the native macOS zoom on the frameless window.
+
+        pywebview's Cocoa backend implements maximize() as a resize to the
+        screen size anchored at the window's current origin (so it overflows
+        the screen) and restore() as deminiaturize, which does nothing for a
+        window that isn't minimised: the green dot could grow the window but
+        never bring it back. NSWindow.zoom: fills the visible frame (menu bar
+        and Dock excluded) and toggles back to the previous frame.
+        """
+        native = getattr(self._window, "native", None)
+        if native is None:
+            return False
+        try:
+            from PyObjCTools import AppHelper
+
+            AppHelper.callAfter(native.zoom_, None)
+        except Exception:
+            _quiet_log.debug("Native macOS zoom failed", exc_info=True)
+            return False
+        self._is_maximized = not getattr(self, "_is_maximized", False)
+        return True
+
     def WindowToggleMaximise(self) -> None:
         if not self._window:
+            return
+        if sys.platform == "darwin" and self._toggle_zoom_macos():
             return
         if getattr(self, "_is_maximized", False):
             self._window.restore()
@@ -2014,7 +2067,38 @@ class MornyeAPI(
             allow_fallback = config.get("allow_fallback", True)
             embed_lyrics = config.get("lyrics", True)
             enrich_metadata = config.get("enrich_metadata", True)
-            services = config.get("services", ["tidal", "qobuz", "deezer"])
+            raw_services = config.get("services", ["tidal", "qobuz", "deezer"])
+            services = (
+                [str(service) for service in raw_services if str(service).strip()]
+                if isinstance(raw_services, (list, tuple))
+                else []
+            )
+            preferred_service = str(
+                config.get("preferred_service") or (services[0] if services else "")
+            ).strip()
+            fallback_services = config.get("fallback_services", True) is not False
+            if preferred_service:
+                from .extensions.catalog import canonical_service_name
+
+                preferred_key = canonical_service_name(preferred_service)
+                matching_service = next(
+                    (
+                        service
+                        for service in services
+                        if canonical_service_name(str(service)) == preferred_key
+                    ),
+                    None,
+                )
+                if matching_service is None:
+                    raise ValueError(
+                        "The preferred download provider is not enabled. "
+                        "Choose an enabled provider in Settings."
+                    )
+                services = [matching_service] + [
+                    service for service in services if service != matching_service
+                ]
+                if not fallback_services:
+                    services = [matching_service]
             filename_format = config.get("filename_format", "{title} - {artist}")
             output_path = config.get("output_path") or None
             if destination_id and output_path:
@@ -2298,6 +2382,8 @@ class MornyeAPI(
                 services=services,
                 quality=quality,
                 allow_fallback=allow_fallback,
+                preferred_service=preferred_service or None,
+                fallback_services=fallback_services,
                 filename_format=filename_format,
                 use_track_numbers=use_track_numbers,
                 use_album_track_numbers=use_album_track_numbers,

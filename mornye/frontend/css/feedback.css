@@ -489,6 +489,38 @@
   font-size: var(--text-sm);
 }
 .api-modal-actions { border-top: 1px solid var(--rule); }
+.provider-picker-card { width: min(460px, 100%); }
+.provider-picker-description {
+  max-width: 48ch;
+  margin: 7px 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+.provider-picker-card .api-modal-body { padding-top: 18px; }
+.provider-picker-label { display: block; margin-bottom: 6px; color: var(--text-muted); font-size: var(--text-xs); }
+.provider-picker-card select { width: 100%; min-height: 40px; padding: 0 10px; }
+.provider-picker-quality { margin-top: 16px; }
+.provider-picker-quality-note { margin: 6px 0 0; color: var(--text-muted); font-size: var(--text-xs); line-height: 1.45; }
+.provider-picker-card select:disabled { opacity: .65; cursor: not-allowed; }
+.provider-picker-fallback {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-1);
+  background: var(--raised);
+  color: var(--text);
+  cursor: pointer;
+}
+.provider-picker-fallback input { margin-top: 3px; accent-color: var(--signal-strong); }
+.provider-picker-fallback strong,
+.provider-picker-fallback small { display: block; }
+.provider-picker-fallback strong { font-size: var(--text-xs); font-weight: var(--weight-medium); }
+.provider-picker-fallback small { margin-top: 3px; color: var(--text-muted); font-size: var(--text-xs); line-height: 1.4; }
+.provider-picker-card .api-modal-actions > div { display: flex; gap: 8px; }
 
 /* The confirmation dialog (askConfirm in app.js): narrower than a form
    dialog, the question in the body's tone; a line break in the question

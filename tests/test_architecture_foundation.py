@@ -1361,6 +1361,49 @@ def test_provider_resolver_orders_candidates_by_configured_services():
     assert ProviderResolver().resolve(request) == ["deezer", "tidal"]
 
 
+def test_provider_resolver_tries_preferred_source_before_remaining_sources():
+    config = MornyeConfig()
+    config.download.services = ["tidal", "ext:qobuz-web", "deezer"]
+    config.download.preferred_service = "qobuz"
+    request = DownloadRequest(sources=["spotify:track:abc123"], config=config)
+
+    assert ProviderResolver().resolve(request) == ["qobuz", "tidal", "deezer"]
+
+
+def test_provider_resolver_can_limit_a_batch_to_the_preferred_source():
+    config = MornyeConfig()
+    config.download.services = ["tidal", "qobuz"]
+    config.download.preferred_service = "qobuz"
+    config.download.fallback_services = False
+    request = DownloadRequest(sources=["spotify:track:abc123"], config=config)
+
+    assert ProviderResolver().resolve(request) == ["qobuz"]
+
+
+def test_provider_resolver_does_not_replace_an_unavailable_preferred_source():
+    config = MornyeConfig()
+    config.download.services = ["tidal", "qobuz"]
+    config.download.preferred_service = "unavailable"
+    request = DownloadRequest(sources=["spotify:track:abc123"], config=config)
+
+    assert ProviderResolver().resolve(request) == []
+
+
+def test_provider_resolver_preference_overrides_extension_priority():
+    config = MornyeConfig()
+    config.download.services = ["tidal", "qobuz"]
+    config.download.preferred_service = "qobuz"
+    request = DownloadRequest(sources=["spotify:track:abc123"], config=config)
+    resolver = ProviderResolver(
+        [
+            ProviderProfile("tidal", priority=100),
+            ProviderProfile("ext:qobuz-web", priority=1),
+        ]
+    )
+
+    assert resolver.resolve(request) == ["ext:qobuz-web", "tidal"]
+
+
 def test_download_pipeline_prepares_source_and_provider_context():
     """Verify preparation records the selected provider and ordered candidates."""
     request = DownloadRequest(sources=["spotify:track:abc123"], config=MornyeConfig())

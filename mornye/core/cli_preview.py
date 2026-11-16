@@ -229,6 +229,15 @@ def gui_command(url: str, gui_cfg: dict, output_dir: str) -> str:
         target = _GUI_RENAMES.get(key, key)
         if target in cfg and value is not None and target not in ("url", "csv_path"):
             cfg[target] = value
+    configured_services = list(gui_cfg.get("services") or cfg["services"])
+    preferred_service = gui_cfg.get("preferred_service")
+    if preferred_service in configured_services:
+        configured_services = [preferred_service] + [
+            service for service in configured_services if service != preferred_service
+        ]
+        if gui_cfg.get("fallback_services", True) is False:
+            configured_services = [preferred_service]
+    cfg["services"] = configured_services
     if cfg.get("transcode_to") in ("", "none"):
         cfg["transcode_to"] = None
     # INFO is the CLI's own default: only DEBUG is a choice worth printing.

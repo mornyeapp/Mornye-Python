@@ -49,6 +49,20 @@ def test_gui_names_and_values_map_onto_flags():
     assert "abc" not in cmd
 
 
+def test_gui_command_respects_batch_provider_priority_and_fallback():
+    cmd = gui_command(
+        URL,
+        {
+            "services": ["tidal", "qobuz", "deezer"],
+            "preferred_service": "qobuz",
+            "fallback_services": False,
+        },
+        "/m",
+    )
+    assert "-s qobuz" in cmd
+    assert "-s tidal" not in cmd
+
+
 def test_no_transcode_and_info_level_print_nothing():
     cmd = gui_command(URL, {"transcode_to": "none", "log_level": "INFO"}, "/m")
     assert "--transcode" not in cmd and "--log-level" not in cmd

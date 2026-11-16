@@ -244,6 +244,13 @@ body.sidebar-collapsed .nav-btn + .sb-group { margin-top: 0; }
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  /* overflow-y:auto turns overflow-x into auto too, and the desktop
+     window's WebKit gives the classic (non-overlay) scrollbar its 8px out
+     of the width, so a few px of overspill drew a horizontal bar under
+     every view. Nothing in #content is meant to scroll sideways — wide
+     things (tables, chip rows) scroll in their own boxes. */
+  overflow-x: hidden;
+  min-width: 0;
   min-height: 0;
   scroll-behavior: smooth;
 }
@@ -618,7 +625,8 @@ body {
 .pl-vol { width: 90px; accent-color: var(--signal); }
 
 @media (max-width: 760px) {
-  #player-bar .pl-info { width: 110px; }
+  #player-bar .pl-info { width: 150px; min-width: 90px; }
+  #player-bar .pl-artwork { width: 30px; height: 30px; }
   .pl-vol { display: none; }
 }
 
@@ -677,6 +685,10 @@ body {
   --space-6: 20px;
   --space-8: 24px;
 }
+/* Large: everything a step bigger. app.js zooms the desktop window natively
+   (WKWebView pageZoom); data-zoom="css" is the fallback where it can't. On
+   <body>, not <html>: <html> is what holds the viewport-height box. */
+:root[data-zoom="css"] body { zoom: 1.15; }
 
 /* ── Titlebar (desktop window only; web mode hides it) ─────────────── */
 #titlebar {
@@ -842,7 +854,7 @@ body {
 #player-bar {
   height: var(--player-h);
   gap: var(--space-4);
-  padding: 0 var(--space-3);
+  padding: 0 var(--space-4);
   background: var(--surface);
   border-top: 1px solid var(--rule);
 }
@@ -851,6 +863,40 @@ body.has-player #app-body { margin-bottom: var(--player-h); }
    top of it instead of being covered. */
 body.has-player #queue-dock { bottom: var(--player-h); }
 #player-bar .pl-title { font-size: var(--text-sm); color: var(--text); }
+#player-bar .pl-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: clamp(190px, 20vw, 270px);
+  min-width: 150px;
+  transition: opacity var(--motion) var(--ease);
+}
+#player-bar .pl-info:hover { opacity: .88; }
+.pl-artwork {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  background: var(--raised);
+  color: var(--text-muted);
+}
+.pl-artwork img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity var(--motion) var(--ease);
+}
+.pl-artwork.has-artwork img { opacity: 1; }
+.pl-artwork-placeholder { width: 17px; height: 17px; }
+.pl-track-meta { display: block; min-width: 0; }
+#player-bar .pl-title,
+#player-bar .pl-quality { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #player-bar .pl-quality {
   font-family: var(--font);
   font-size: var(--text-xs);
@@ -872,3 +918,15 @@ body.has-player #queue-dock { bottom: var(--player-h); }
 }
 #player-bar .pl-time { font-family: var(--font); font-size: var(--text-xs); color: var(--text-muted); }
 #player-bar input[type=range] { accent-color: var(--signal-strong); }
+
+@media (max-width: 760px) {
+  #player-bar { gap: var(--space-2); padding-inline: var(--space-2); }
+  #player-bar .pl-info { width: clamp(120px, 24vw, 180px); min-width: 90px; gap: 8px; }
+}
+@media (max-width: 520px) {
+  #player-bar .pl-quality { display: none; }
+  #player-bar .pl-info { width: 108px; min-width: 88px; }
+  #player-bar .pl-artwork { width: 28px; height: 28px; }
+  #player-bar .pl-controls { gap: 0; }
+  #player-bar .pl-time { min-width: 32px; }
+}

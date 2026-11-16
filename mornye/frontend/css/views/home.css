@@ -1416,6 +1416,36 @@ body:has(#album-card:not(.hidden)) #fetchBtn {
   padding-left: 0;
   padding-right: 0;
 }
+/* The margin:0 above glued the search bar to the card's bottom border. */
+#album-card:not(.hidden) ~ #track-controls { margin-top: var(--space-4); }
+
+/* ── Album card: compact layout ─────────────────────────────────────────
+   The facts column was a 200px single file of six label/value pairs, so it
+   ran ~300px tall, wrapped every label and copyright line, and set the card
+   height; the text column, centred in that height, floated with a hole above
+   and below it. The facts now sit in two columns (copyright across both) so
+   the card is about as tall as the cover, and the text column starts at the
+   top, level with the artwork. */
+#album-card { align-items: flex-start; }
+#album-info { justify-content: flex-start; align-self: flex-start; padding-top: var(--space-1); }
+#album-tech {
+  width: clamp(300px, 34%, 440px);
+  align-self: flex-start;
+  display: grid;
+  /* Left column as wide as its longest value (the release date line),
+     the rest to the right one — two equal halves wrapped both. */
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: var(--space-4);
+  row-gap: var(--space-3);
+  align-content: start;
+}
+#album-tech.hidden { display: none; }
+#album-tech .tech-row.wide,
+#album-tech .tech-row:has(.tech-barcode) { grid-column: 1 / -1; }
+#album-tech .tech-v { -webkit-line-clamp: 2; }
+@media (max-width: 900px) {
+  #album-tech { width: 100%; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+}
 
 /* A download per row would be a column of signal: neutral until pointed at. */
 .ta-btn.dl { background: transparent; border-color: var(--rule-strong); color: var(--text-2); }

@@ -35,6 +35,7 @@ than one that admits a gap.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import time
 from collections import Counter
@@ -159,6 +160,11 @@ def _value(row: Any, name: str, default: Any = "") -> Any:
     return default if value is None else value
 
 
+def _file_exists(row: Any) -> bool:
+    path = _value(row, "file_path")
+    return bool(path) and os.path.isfile(path)
+
+
 # ---------------------------------------------------------------------------
 # The dashboard
 # ---------------------------------------------------------------------------
@@ -169,6 +175,7 @@ def wrapped(
     owner: str | None = None,
     window: Window | None = None,
     top: int = DEFAULT_TOP,
+    existing_files: bool = False,
 ) -> dict:
     """Everything the dashboard shows, from one pass over the log.
 
@@ -183,6 +190,12 @@ def wrapped(
     """
     window = window or Window()
     rows = _fetch(window, owner)
+    if existing_files:
+        rows = [
+            row
+            for row in rows
+            if _value(row, "success", 0) and _file_exists(row)
+        ]
     successful = [row for row in rows if _value(row, "success", 0)]
 
     document: dict[str, Any] = {

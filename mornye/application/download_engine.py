@@ -201,6 +201,8 @@ class DownloadOptions:
     # the extension does not declare is ignored.
     extension_quality: dict[str, str] = field(default_factory=dict)
     allow_fallback: bool = True
+    preferred_service: str | None = None
+    fallback_services: bool = True
     inter_track_delay_s: float = 1.0
     is_album: bool = False
     output_path: str | None = None

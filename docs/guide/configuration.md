@@ -1,6 +1,5 @@
-<!-- Extracted verbatim from README.md. The README had grown to 76 KB
-     and 87 headings, which is past the point where either GitHub or
-     PyPI renders it usefully. Nothing here was reworded in the split. -->
+<!-- The original README section was extracted verbatim. Supplemental GUI
+     configuration notes are maintained here alongside it. -->
 
 [← Back to the README](../../README.md)
 
@@ -25,6 +24,10 @@ Mornye(
     post_download_action="notify"
 )
 ```
+
+### GUI download source priority
+
+In the GUI's **Settings → Sources**, enabled providers are tried in the order shown; the first enabled provider is the primary source. Turn on **Try other enabled sources** to continue down that list after a provider fails, or turn it off to keep a batch on its primary source only. **Choose source before each batch** opens a one-time provider, provider-specific quality, and fallback choice when starting downloads, staged items, or retries. If a provider declares quality options, the batch choice applies only to that provider; fallback providers retain their saved quality choices. Providers without declared options use the batch's selected global quality. These controls are separate from **Auto quality fallback**, which only changes the requested quality on the same provider.
 
 ### Lyrics Provider Health Check
 
@@ -96,6 +99,8 @@ By default Apple's lyrics are kept in their native *word-by-word* form (timed pe
 ```
 
 Line-synced is useful for players and overlay apps that only understand line-level `.lrc`, or simply if you prefer a plain karaoke-style scroll. The setting affects only the `apple` provider; every other provider is unchanged. Apple's two renderings are cached under separate keys, so switching the setting takes effect immediately.
+
+In the built-in **Now Playing** view, open **Lyrics sync** to adjust the timing offset (from −5 to +5 seconds) and lyric speed (0.90× to 1.10×). A positive offset advances the lyrics; a negative offset delays them. These controls affect lyric timing only, not audio playback, and reset when the track changes.
 
 ### Lyrics Files (`.lrc`)
 

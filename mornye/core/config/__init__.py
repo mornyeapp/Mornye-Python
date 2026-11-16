@@ -27,6 +27,8 @@ class OutputConfig:
 class DownloadConfig:
     quality: str = "LOSSLESS"
     services: list[str] = field(default_factory=list)
+    preferred_service: str | None = None
+    fallback_services: bool = True
     allow_fallback: bool = True
     max_concurrent: int = 2
     retries: int = 0
@@ -126,6 +128,8 @@ class MornyeConfig:
 
         config.download.quality = getattr(options, "quality", "LOSSLESS")
         config.download.services = list(getattr(options, "services", []))
+        config.download.preferred_service = getattr(options, "preferred_service", None)
+        config.download.fallback_services = getattr(options, "fallback_services", True)
         config.download.allow_fallback = getattr(options, "allow_fallback", True)
         config.download.max_concurrent = getattr(options, "max_concurrent_downloads", 2)
         config.download.retries = getattr(options, "track_max_retries", 0)

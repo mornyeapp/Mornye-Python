@@ -53,3 +53,21 @@ def test_compact_tokens_stay_on_the_4px_grid():
     assert block
     values = [int(v) for v in re.findall(r":\s*(\d+)px;", block.group(1))]
     assert values and all(v % 4 == 0 for v in values)
+
+
+def test_large_density_is_offered_saved_and_zooms(api):
+    assert api.save_density("large")["ok"]
+    assert json.loads(api.settings_file.read_text())["density"] == "large"
+    html = (FRONT / "index.html").read_text()
+    assert '<option value="large">' in html
+    # The CSS fallback when the window can't zoom natively.
+    assert (
+        ':root[data-zoom="css"] body { zoom:'
+        in (FRONT / "css" / "layout.css").read_text()
+    )
+
+
+def test_set_page_zoom_rejects_junk_and_needs_a_window(api):
+    api._window = None
+    assert not api.set_page_zoom("big")["ok"]
+    assert not api.set_page_zoom(1.15)["ok"]
