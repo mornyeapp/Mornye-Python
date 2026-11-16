@@ -713,6 +713,20 @@ regola (una parola = un elemento).
      Invio, Esc, `/`), nessun errore. Test: `tests/test_command_palette.py`
      (ogni funzione chiamata esiste, ogni scheda esiste, le scorciatoie non
      scattano nei campi).
+   - **N4 · densità regolabile** (commit sotto). Settings → General →
+     Appearance → **Density**: Comfortable (default, invariato) /
+     Compact. Compact mette `data-density="compact"` su `<html>` e
+     `<body>`; `layout.css` toglie un passo a `--row` (32 → 28),
+     `--row-head` (28 → 24) e agli spazi grandi (`--space-3…8`: 12/16/20/
+     24/32 → 8/12/16/20/24), sempre sulla griglia di 4px; restano 4 e 8px,
+     gli spazi dentro un controllo. Tutto ciò che è costruito sui token
+     segue; le misure scritte in px nei fogli delle viste no (è il limite
+     di questa prima versione). Salvata come l'accento: `localStorage`
+     (`mornye-density`, applicata in `boot-head.js`/`boot-body.js` prima
+     del primo disegno), il blob delle impostazioni e `gui-settings.json`
+     (nuova API `save_density`, valori ammessi controllati). Verificato con
+     Playwright: scelta, `--row` 28px, sopravvive al ricaricamento, nessuno
+     sbordo, scuro a 1280 e chiaro a 375. Test: `tests/test_gui_density.py`.
    - **Fermato qui per limite d'uso** (2026-11-16). **Ancora aperti:**
      riorganizzazione di Settings e display di qualità dell'album (domanda
      inviata alla sessione madre con una proposta, nessuna risposta

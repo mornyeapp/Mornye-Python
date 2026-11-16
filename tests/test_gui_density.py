@@ -1,0 +1,55 @@
+"""N4: adjustable density in the GUI (comfortable / compact)."""
+
+from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
+
+import pytest
+
+import mornye.app as app_module
+from mornye.app import MornyeAPI
+from mornye.webapp import ALLOWED_METHODS
+
+FRONT = Path(__file__).resolve().parents[1] / "mornye" / "frontend"
+
+
+@pytest.fixture
+def api(tmp_path, monkeypatch):
+    settings_file = tmp_path / "gui-settings.json"
+    monkeypatch.setattr(app_module, "cache_path", lambda *parts: settings_file)
+    instance = MornyeAPI.__new__(MornyeAPI)
+    instance.log = lambda *a, **k: None
+    instance.settings_file = settings_file
+    return instance
+
+
+def test_save_density_merges_and_refuses_unknown_values(api):
+    api.settings_file.write_text(json.dumps({"theme": "dark"}), encoding="utf-8")
+    assert api.save_density("compact")["ok"]
+    assert json.loads(api.settings_file.read_text()) == {
+        "theme": "dark",
+        "density": "compact",
+    }
+    assert not api.save_density("tiny")["ok"]
+
+
+def test_reachable_from_the_web_ui():
+    assert "save_density" in ALLOWED_METHODS
+    assert "'save_density'" in (FRONT / "web-shim.js").read_text()
+
+
+def test_applied_before_the_first_paint_and_on_change():
+    assert "mornye-density" in (FRONT / "boot-head.js").read_text()
+    assert "data-density" in (FRONT / "boot-body.js").read_text()
+    html = (FRONT / "index.html").read_text()
+    assert 'id="config-density" data-onchange="changeDensity()"' in html
+
+
+def test_compact_tokens_stay_on_the_4px_grid():
+    css = (FRONT / "css" / "layout.css").read_text()
+    block = re.search(r':root\[data-density="compact"\] \{(.*?)\}', css, re.S)
+    assert block
+    values = [int(v) for v in re.findall(r":\s*(\d+)px;", block.group(1))]
+    assert values and all(v % 4 == 0 for v in values)

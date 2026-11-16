@@ -743,6 +743,14 @@
                 </select>
               </div>
             </div>
+            <!-- N4: rows and gaps; compact shrinks the spacing tokens a step. -->
+            <div class="s-row">
+              <span class="s-label">Density<small>Compact fits more rows on screen</small></span>
+              <select id="config-density" data-onchange="changeDensity()">
+                <option value="comfortable" selected>Comfortable</option>
+                <option value="compact">Compact</option>
+              </select>
+            </div>
             <div class="s-row">
               <span class="s-label">Notification sounds</span>
               <label class="toggle">

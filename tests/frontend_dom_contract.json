@@ -70,6 +70,7 @@
  "config-artist-sub",
  "config-auto-rate-limit-cooldown",
  "config-concurrent",
+ "config-density",
  "config-enrich",
  "config-fallback",
  "config-filename",

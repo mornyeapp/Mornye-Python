@@ -752,6 +752,21 @@ class MornyeAPI(
             self.log(f"Failed to save accent: {e}", "error")
             return {"ok": False, "error": str(e)}
 
+    #: Row and gap density of the GUI (N4): frontend/css/layout.css.
+    DENSITIES = ("comfortable", "compact")
+
+    def save_density(self, density: str) -> dict:
+        """Persists the density, same reasoning as save_theme()."""
+        density = str(density or "comfortable")
+        if density not in self.DENSITIES:
+            return {"ok": False, "error": f"unknown density: {density}"}
+        try:
+            self._update_settings({"density": density})
+            return {"ok": True, "density": density}
+        except Exception as e:
+            self.log(f"Failed to save density: {e}", "error")
+            return {"ok": False, "error": str(e)}
+
     def load_settings(self) -> dict:
         try:
             with _SETTINGS_LOCK:

@@ -411,6 +411,36 @@ function changeAccent() {
   } catch (e) {}
 }
 
+// ── Density (N4) ───────────────────────────────────────────────────────────
+// 'compact' puts data-density on <html> and <body>; css/layout.css shrinks
+// the row height and the spacing tokens a step there. Stored like the
+// accent: localStorage for the next first paint (boot-head.js), the settings
+// blob, and gui-settings.json (save_density), the copy that survives.
+const DENSITIES = ['comfortable', 'compact'];
+
+function applyDensity(density) {
+  const val = DENSITIES.includes(density) ? density : 'comfortable';
+  for (const el of [document.documentElement, document.body]) {
+    if (!el) continue;
+    if (val === 'compact') el.setAttribute('data-density', 'compact');
+    else el.removeAttribute('data-density');
+  }
+}
+
+function changeDensity() {
+  const val = $('config-density')?.value || 'comfortable';
+  applyDensity(val);
+  try {
+    localStorage.setItem('mornye-density', val);
+    const stored = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) || '{}');
+    stored.density = val;
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(stored));
+  } catch (e) {}
+  try {
+    window.pywebview?.api?.save_density?.(val);
+  } catch (e) {}
+}
+
 function loadAccentFromStorage() {
   const stored = (() => {
     try { return localStorage.getItem('mornye-accent'); } catch (e) { return null; }
@@ -518,6 +548,12 @@ function applySettings(settings = {}) {
   accent = migrateAccent(accent, cfg.brand);
   try { localStorage.setItem('mornye-accent', accent); } catch (e) {}
   if ($('config-accent')) $('config-accent').value = accent;
+  let density = cfg.density || 'comfortable';
+  try { density = localStorage.getItem('mornye-density') || density; } catch (e) {}
+  if (!DENSITIES.includes(density)) density = 'comfortable';
+  try { localStorage.setItem('mornye-density', density); } catch (e) {}
+  if ($('config-density')) $('config-density').value = density;
+  applyDensity(density);
   const soundEnabled = cfg.sound_enabled !== false && cfg.notification_sound !== false;
   if ($('config-sound-enabled')) $('config-sound-enabled').checked = soundEnabled;
   if (window.toastMgr) window.toastMgr.setSoundEnabled(soundEnabled);
@@ -650,6 +686,7 @@ async function saveSettings() {
     const cfg = buildConfig();
     cfg.theme  = $('config-theme')?.value  || DEFAULT_SETTINGS.theme;
     cfg.accent = $('config-accent')?.value || DEFAULT_SETTINGS.accent;
+    cfg.density = $('config-density')?.value || DEFAULT_SETTINGS.density;
     cfg.font   = $('config-font')?.value   || DEFAULT_SETTINGS.font;
     cfg.preview_volume = previewVolume;
     if (window.pywebview?.api) {
@@ -812,6 +849,7 @@ const SETTINGS_STORAGE_KEY = 'mornye-settings';
 const DEFAULT_SETTINGS = {
   theme: 'auto',
   accent: 'amber',
+  density: 'comfortable',
   sound_enabled: true,
   notification_sound: true,
   preview_volume: 100,

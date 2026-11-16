@@ -13,6 +13,7 @@ document.body.classList.add(
 // off html *and* body (see setThemeClass/applyAccent in app.js).
 var _accent = document.documentElement.getAttribute('data-accent');
 if (_accent) document.body.setAttribute('data-accent', _accent);
+if (document.documentElement.getAttribute('data-density') === 'compact') document.body.setAttribute('data-density', 'compact');
 // Sidebar collapsed or labelled (toggleSidebar in app.js), before paint so
 // the content does not jump sideways once the app has loaded.
 try {

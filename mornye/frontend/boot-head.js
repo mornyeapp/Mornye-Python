@@ -71,4 +71,9 @@ document.write('<link rel="stylesheet" href="css/utilities.css?_=' + Date.now() 
     if ((accent === 'teal' || accent === 'green') && localStorage.getItem('mornye-brand') !== '3') accent = 'amber';
     if (accent && accent !== 'amber') document.documentElement.setAttribute('data-accent', accent);
   } catch (e) {}
+  // Density (N4), for the same reason: the rows would jump once
+  // applyDensity() runs. boot-body.js copies it onto <body>.
+  try {
+    if (localStorage.getItem('mornye-density') === 'compact') document.documentElement.setAttribute('data-density', 'compact');
+  } catch (e) {}
 })();

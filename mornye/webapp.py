@@ -181,6 +181,7 @@ ALLOWED_METHODS: set[str] = {
     "analyze_audio_file",
     "probe_audio_quality",
     "get_cli_command",
+    "save_density",
     "get_reorganize_defaults",
     "plan_library_reorganize",
     "apply_library_reorganize",

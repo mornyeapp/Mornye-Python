@@ -663,6 +663,21 @@ body {
   --player-h: 48px;
 }
 
+/* Density (N4, Settings → General → Density): compact takes one step off
+   the row height and the larger spacing tokens, on the 4px grid; the small
+   steps (4px, 8px) stay, they are the gaps inside a control. Everything
+   built on the tokens follows; sizes still written in px in a view sheet
+   do not. */
+:root[data-density="compact"] {
+  --row: 28px;
+  --row-head: 24px;
+  --space-3: 8px;
+  --space-4: 12px;
+  --space-5: 16px;
+  --space-6: 20px;
+  --space-8: 24px;
+}
+
 /* ── Titlebar (desktop window only; web mode hides it) ─────────────── */
 #titlebar {
   height: var(--titlebar);
