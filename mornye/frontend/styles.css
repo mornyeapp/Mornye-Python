@@ -238,11 +238,6 @@
       font-optical-sizing: auto;
       font-variation-settings: 'SOFT' 50;
     }
-    #explore-greeting {
-      font-family: var(--font-display);
-      font-optical-sizing: auto;
-      font-variation-settings: 'SOFT' 50;
-    }
     ::selection {
       background: var(--accent-subtle);
       color: var(--text);
@@ -2763,36 +2758,6 @@
 }
 .ffmpeg-banner-close:hover { color: var(--text2); }
 
-/* --- EXPLORE VIEW --- */
-.explore-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  margin-bottom: 32px;
-}
-.explore-card {
-  transition: transform 0.2s;
-}
-.explore-card img {
-  object-fit: cover;
-  margin-bottom: 12px;
-}
-.explore-card:hover img {
-  box-shadow: var(--elev-2);
-}
-.explore-card-title {
-  margin-bottom: 4px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.explore-card-subtitle {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2; /* Standard property */
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
 /* ==========================================================================
    TOAST SYSTEM
    ========================================================================== */
@@ -2985,9 +2950,6 @@
   .stab, .toggle {
     touch-action: manipulation;
   }
-  .explore-card {
-    touch-action: manipulation;
-  }
   /* The grey flash Android paints on tap lands on top of our own :active
      styling and outlasts it. */
   button, a, label, .track-row, [onclick] {
@@ -3047,15 +3009,6 @@
   }
   #album-cover {
     align-self: center;
-  }
-
-  /* ── Card grids ──
-     minmax(180px, 1fr) inside a ~330px content box resolves to exactly one
-     column, so each card drew at double its design size and the view became
-     a very long single file. 140px gives two. */
-  .explore-grid {
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: var(--sp-3);
   }
   .artist-gallery-grid {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));

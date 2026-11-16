@@ -6,6 +6,99 @@
    Over styles.css until voce 22. Semantic tokens only; ids and handlers
    untouched. */
 
+#explore-greeting {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-variation-settings: 'SOFT' 50;
+}
+
+/* --- EXPLORE VIEW --- */
+.explore-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  margin-bottom: 32px;
+}
+.explore-card {
+  transition: transform 0.2s;
+}
+.explore-card img {
+  object-fit: cover;
+  margin-bottom: 12px;
+}
+.explore-card:hover img {
+  box-shadow: var(--elev-2);
+}
+.explore-card-title {
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.explore-card-subtitle {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2; /* Standard property */
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* =========================================
+   PHONE LAYOUT
+   =========================================
+   The window this app was drawn for is a desktop one: a 58px vertical nav
+   rail on the left, hover to reveal a row's secondary actions, controls
+   sized for a mouse. Served over --web (webapp.py, which marks <body> with
+   .web-mode) that same document is what a phone gets, and several of those
+   choices stop working there rather than merely looking tight:
+
+     - the rail costs 16% of a 360px viewport and puts navigation in the
+       thumb's worst corner;
+     - a 14px <input> makes iOS Safari zoom the page in on focus, and it
+       does not zoom back out;
+     - the track row's action column is 130px wide but holds five 30px
+       buttons — 162px of content — because @media (hover:none) correctly
+       stops hiding four of them on a device that cannot hover;
+     - 30px and 36px hit targets are below the 44px both platforms' guidance
+       asks for;
+     - every viewport-anchored element (queue dock, toasts, modals) is
+       positioned in raw px from an edge that, on a notched phone, is under
+       the status bar or the home indicator.
+
+   What follows fixes those, in two deliberately different scopes:
+
+     - `@media (max-width: 700px)` alone — sizing, wrapping and overflow
+       fixes that are simply correct at that width whoever is looking. A
+       narrow desktop window gets them too, and wants them.
+     - `body.web-mode` as well — the structural change (the rail becomes a
+       bottom bar) and the safe-area insets. The desktop build is a frameless
+       pywebview window with real chrome and no notch, and never carries that
+       class, so nothing in those blocks can reach it.
+
+   700px rather than the 600px used elsewhere in this file: the rail-to-
+   bottom-bar switch is about thumb reach, which a 7" tablet in portrait
+   shares with a phone, while the 600px rules above are about a layout that
+   has genuinely run out of horizontal room. */
+
+/* ── Touch ergonomics, at any width ───────────────────────────────────────
+   Pointer-type questions, not width questions: an iPad in landscape is
+   1024px wide and still has no hover. */
+@media (hover: none) and (pointer: coarse) {
+  .explore-card {
+    touch-action: manipulation;
+  }
+}
+
+@media (max-width: 700px) {
+  /* ── Card grids ──
+     minmax(180px, 1fr) inside a ~330px content box resolves to exactly one
+     column, so each card drew at double its design size and the view became
+     a very long single file. 140px gives two. */
+  .explore-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: var(--sp-3);
+  }
+}
+
 #view-explore .explore-container { padding: var(--space-5) var(--space-5) var(--space-8); }
 #explore-greeting {
   font-family: var(--font);
