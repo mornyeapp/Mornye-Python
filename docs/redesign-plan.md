@@ -669,6 +669,26 @@ regola (una parola = un elemento).
      extra `visual`): `mornye --web` su una HOME vuota, ogni vista e ogni
      scheda di Settings con clic veri a 1280 e 375, sotto la CSP vera;
      fallisce su errori di pagina, di console o violazioni CSP. Passa.
+   - **N2 · "Copia come comando CLI"** (commit sotto). Pulsante "CLI"
+     (icona prompt) nelle azioni della scheda album e brano singolo; copia
+     negli appunti la riga `mornye …` che fa lo stesso download con le
+     impostazioni attuali. Backend: `cli_preview.gui_command(url, cfg,
+     cartella)` mette `buildConfig()` sopra i default completi della TUI
+     (`ConfigState`), con gli stessi default `MORNYE_<SETTING>` di un
+     download dalla GUI (`gui_env_defaults()`), e la passa a
+     `format_command()` — la stessa resa del pannello Command della TUI,
+     quindi solo i flag che differiscono dai default della CLI. Le chiavi
+     solo-GUI (qualità per estensione, destinazione di rete, suoni) restano
+     fuori; `lyrics` → `embed_lyrics`; nessun timeout se la GUI non ne
+     manda. API `get_cli_command(url, config)` (allowlist e
+     `REMOTE_METHODS`). Appunti: `navigator.clipboard`, poi la selezione
+     di una textarea; se mancano entrambi il comando va in Logs. Una
+     ricerca (non un link) non ha comando: avviso. Verificato con
+     Playwright (album di prova, appunti letti: comando corretto; toast
+     "Command copied"), scuro a 1280 e chiaro a 375. Test:
+     `tests/test_cli_command_from_gui.py`. Nota: il suggerimento `data-tip`
+     dei pulsanti sul bordo sinistro esce dallo schermo sul telefono (vale
+     per tutti i pulsanti con `data-tip`, preesistente).
    - **Fermato qui per limite d'uso** (2026-11-16). **Ancora aperti:**
      riorganizzazione di Settings e display di qualità dell'album (domanda
      inviata alla sessione madre con una proposta, nessuna risposta

@@ -180,6 +180,7 @@ ALLOWED_METHODS: set[str] = {
     "save_file_tags",
     "analyze_audio_file",
     "probe_audio_quality",
+    "get_cli_command",
     "get_reorganize_defaults",
     "plan_library_reorganize",
     "apply_library_reorganize",

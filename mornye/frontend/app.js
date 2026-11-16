@@ -2121,7 +2121,7 @@ function setAlbumCard(title, artist, coverUrl, quality, description, followers, 
     <button class="act-btn secondary" id="save-all-lyrics-btn" data-tip="Save all lyrics as .lrc" data-onclick="downloadAllLyrics(this)">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
     </button>
-    
+    ${CLI_BUTTON_HTML}
   `;
   $('album-title').innerHTML = escHtml(title || '—') + (artistVerified
     ? ` <span class="artist-verified-badge" title="Verified Artist"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="12" fill="#1d9bf0"/><path d="M8 12.5l2.5 2.5 5.5-5.5" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`
@@ -2465,6 +2465,7 @@ function showSingleTrackCard(t) {
   <button class="act-btn secondary" data-tip="Open in Spotify" data-onclick="openExternal(0)">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
   </button>` : ''}
+  ${CLI_BUTTON_HTML}
 `;
 
   // The left column (cover + title + artist + actions) is almost always
@@ -4643,6 +4644,61 @@ function renderStaged() {
       <div class="pr-actions">${actions}</div>
     </div>`;
   }).join('');
+}
+
+// N2: the album/track card's "CLI" action (copyCliCommand below).
+const CLI_BUTTON_HTML = `
+    <button class="act-btn secondary" type="button" id="copy-cli-btn" data-onclick="copyCliCommand()" data-tip="Copy as CLI command" aria-label="Copy as CLI command">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      CLI
+    </button>`;
+
+// ── Copy as CLI command (N2) ────────────────────────────────────────────────
+// The TUI has a Command panel; here the album card copies the same thing:
+// the `mornye …` line that downloads this link with the current settings
+// (core/cli_preview.py gui_command, the same rendering the TUI uses).
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // No async clipboard (an insecure origin, an old web view): the
+    // selection route, which every engine still supports.
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none;';
+    document.body.appendChild(area);
+    area.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    area.remove();
+    return ok;
+  }
+}
+
+async function copyCliCommand() {
+  const api = window.pywebview?.api;
+  const url = String(currentUrl || '').trim();
+  if (!/^(https?:|spotify:)/i.test(url)) {
+    toastMgr.error('Open a link first: a search has no command line.', { title: 'Nothing to copy' });
+    return;
+  }
+  if (typeof api?.get_cli_command !== 'function') {
+    toastMgr.error('This build cannot build the command.', { title: 'Copy as CLI command' });
+    return;
+  }
+  const res = await api.get_cli_command(url, buildConfig());
+  if (!res || res.status !== 'ok') {
+    toastMgr.error(res?.error || 'Could not build the command.', { title: 'Copy as CLI command' });
+    return;
+  }
+  if (await copyText(res.command)) {
+    toastMgr.success('Paste it in a terminal to run the same download.', { title: 'Command copied', duration: 3000 });
+  } else {
+    logMessage(res.command, 'info');
+    toastMgr.info('The clipboard is not available; the command is in Logs.', { title: 'Copy as CLI command' });
+  }
 }
 
 async function addToStagedQueue() {

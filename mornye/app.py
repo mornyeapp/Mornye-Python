@@ -382,6 +382,24 @@ class MornyeAPI(
         self._push("loadHistoryAndProfiles")
         self._push("__set_version_label", app_version)
 
+    def get_cli_command(self, url: str, config: dict | None = None) -> dict:
+        """The CLI command equivalent to downloading `url` with the GUI's
+        current settings (N2): what the TUI's Command panel shows."""
+        from .core.cli_preview import gui_command
+        from .core.env_settings import gui_env_defaults
+
+        url = str(url or "").strip()
+        if not url:
+            return {"status": "error", "error": "No link to turn into a command."}
+        try:
+            # Same layering as a GUI download (_queue_download_batch): the
+            # MORNYE_<SETTING> defaults, then what the page sends.
+            merged = {**gui_env_defaults(), **dict(config or {})}
+            command = gui_command(url, merged, str(self.download_dir))
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+        return {"status": "ok", "command": command}
+
     # Expose simple getters to the frontend via pywebview
     def get_version(self):
         return self.app_version

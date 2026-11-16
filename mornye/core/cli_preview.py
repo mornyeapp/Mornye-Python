@@ -204,3 +204,40 @@ def format_command(cfg: dict) -> str:
         else:
             lines[-1] += f" {quoted}"
     return " \\\n    ".join(lines)
+
+
+#: GUI setting (buildConfig() in frontend/app.js) → launcher `cfg` key, where
+#: the two names differ. A GUI key with no launcher counterpart (extension
+#: quality, network destination, sound…) is GUI-only and stays out.
+_GUI_RENAMES = {"lyrics": "embed_lyrics"}
+
+
+def gui_command(url: str, gui_cfg: dict, output_dir: str) -> str:
+    """The command line equivalent to downloading *url* from the GUI (N2).
+
+    *gui_cfg* is what the GUI's download uses: buildConfig() over the
+    MORNYE_<SETTING> defaults. It is laid over the TUI's complete defaults
+    (ConfigState), so a key the GUI leaves out keeps the launcher's value,
+    and only what differs from the CLI's own defaults is printed.
+    """
+    from ..tui.config_state import ConfigState
+
+    cfg = ConfigState().to_cfg()
+    # The GUI passes no timeout unless one is set: the engine's default.
+    cfg["timeout_s"] = None
+    for key, value in gui_cfg.items():
+        target = _GUI_RENAMES.get(key, key)
+        if target in cfg and value is not None and target not in ("url", "csv_path"):
+            cfg[target] = value
+    if cfg.get("transcode_to") in ("", "none"):
+        cfg["transcode_to"] = None
+    # INFO is the CLI's own default: only DEBUG is a choice worth printing.
+    if str(cfg.get("log_level") or "").upper() in ("", "INFO"):
+        cfg["log_level"] = None
+    for key in ("artist_separator", "loop"):
+        if not cfg.get(key):
+            cfg[key] = None
+    cfg["url"] = url
+    cfg["csv_path"] = ""
+    cfg["output_dir"] = output_dir
+    return format_command(cfg)
