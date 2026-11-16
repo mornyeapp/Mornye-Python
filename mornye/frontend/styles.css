@@ -1,4 +1,3 @@
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     /* ── Fonts ── shipped with the app (SIL OFL, see assets/fonts/README.md):
        the desktop window works offline, and a font CDN would also be one more
@@ -227,15 +226,6 @@
       font-feature-settings: 'cv11', 'ss01';
       -webkit-font-smoothing: antialiased;
     }
-    .s-header h1 {
-      font-family: var(--font-display);
-      font-optical-sizing: auto;
-      font-variation-settings: 'SOFT' 50;
-    }
-    ::selection {
-      background: var(--accent-subtle);
-      color: var(--text);
-    }
 
     /* ── Titlebar ── */
     #titlebar {
@@ -309,9 +299,6 @@
     }
     .update-badge:hover {
       transform: translateY(-1px);
-    }
-    .clickable-version {
-      cursor: pointer;
     }
 
     /* ── Layout ── */
@@ -437,76 +424,6 @@
       background-clip: padding-box;
     }
 
-    .view { display: none; flex-direction: column; flex: 1; overflow: visible; min-height: 0; }
-    .view.active { display: flex; }
-    /* Their button default: h-9 (36px), px-4 (16px), text-sm, gap-2, and a
-       rounded-md corner. Height set rather than implied by padding so every
-       button lines up with the inputs beside it whatever its label. */
-    .act-btn {
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer;
-    }
-    /* Clearing a queue or a history is not the same kind of act as saving a
-       setting, and until now it looked identical to it. Tinted rather than
-       filled: a solid red button competes with the primary action for
-       attention, which is backwards — this one should be findable, not
-       inviting. Uses the same --status-failed-* tokens as a failed row, so
-       "destructive" and "went wrong" stay one colour story. */
-    .act-btn.danger:hover {
-      transform: translateY(-1px);
-    }
-    .api-modal-body input {
-      width: 100%;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      background: var(--input-bg);
-      color: var(--input-text);
-      padding: var(--sp-4) 14px;
-      font-size: var(--fs-200);
-    }
-    /* The rule above is for text fields; a checkbox in a modal must keep its
-       own size or it stretches across the row and pushes its label away. */
-    .api-modal-body input[type="checkbox"],
-    .api-modal-body input[type="radio"] {
-      width: auto; flex: none; padding: 0; border: 0; background: none;
-    }
-    /* Columns: title | album | duration | actions */
-   .track-table-header, .track-row {
-     width: 100%;
-     display: grid;
-     /* Change this line to use 1fr on the flexible columns */
-     grid-template-columns: 24px 40px 1fr 1fr 80px 150px;
-     align-items: center;
-     transition: background var(--t);
-     box-sizing: border-box; /* Assicura che il padding sia incluso nella larghezza */
-   }
-    .track-table-header > div:first-child { display:flex; align-items:center; justify-content:center; }
-    .track-table-header input { cursor: pointer; }
-    /* Header style for album column (4th child) */
-    .track-table-header > div:nth-child(4) {
-      text-align: center; padding-left: 6px;
-    }
-    .track-row {
-      cursor: default;
-      position: relative;
-    }
-    .page-btn {
-      cursor: pointer; transition: all var(--t);
-    }
-    .page-btn:disabled { opacity: .4; cursor: not-allowed; }
-
-    .tr-check input { cursor: pointer; }
-    /* No hover to reveal them with — keep the whole set visible. */
-    .ta-btn.ta-lyrics:hover { color: var(--util-lyrics); border-color: var(--util-lyrics-bd); }
-    .ta-btn.ta-preview:hover { color: var(--util-preview); border-color: var(--util-preview-bd); }
-    .ta-btn.ta-preview.active { background: var(--util-preview-bg); border-color: var(--util-preview-bd); color: var(--util-preview); }
-    .ta-btn.ta-cover:hover { color: var(--util-cover); border-color: var(--util-cover-bd); }
-    .ta-btn.ta-link:hover { color: var(--util-link); border-color: var(--util-link-bd); }
-
-    #preview-player {
-      width: 100%; max-width: 100%; margin: 12px 0 12px; display: none;
-    }
-
     /* Queue drawer */
     /* ── Download bar ──
        A player-style bar fixed along the bottom, beside the sidebar: what is
@@ -540,27 +457,6 @@
     }
     #queue-dock .qd-chevron::before { content: 'Queue'; }
 
-    /* ── Empty states ─────────────────────────────────────────────────
-       Three screens open on nothing at all — no fetches, nobody followed,
-       no downloads logged — and each said so in its own way, in a different
-       size and colour. One component, so "there is nothing here yet" reads
-       the same everywhere and reads as designed rather than as missing. */
-    .empty-state {
-      display: flex; flex-direction: column;
-      justify-content: center;
-      gap: 6px; padding: 38px var(--sp-7);
-      color: var(--muted);
-    }
-    .empty-state .es-icon {
-      width: 44px; height: 44px; margin-bottom: 6px;
-      display: grid; place-items: center;
-      opacity: .9;
-    }
-    .empty-state .es-icon svg { width: 20px; height: 20px; }
-    .empty-state .es-hint {
-      line-height: 1.6; max-width: 46ch;
-    }
-
     /* Two components already honoured this preference on their own (the
        status spinner, the CSV button's pulse) while every hover lift, panel
        slide and toast still moved. One rule, at the end of the cascade for
@@ -568,101 +464,13 @@
        that conveys progress is removed — a spinner that has stopped says
        something untrue, so those keep turning, slowly. */
     @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after {
-        scroll-behavior: auto !important;
-      }
       /* A hover that moves the thing under the pointer is the part that
          causes trouble; the colour change alone still answers "am I on it". */
       .nav-btn:hover, .nav-btn:active {
         transform: none;
       }
-      .act-btn:hover, .act-btn:active {
-        transform: none;
-      }
-    }
-
-    #queue-search {
-      flex: 1; min-width: 0;
-      padding: 7px 11px 7px 30px;
-      background: var(--surface2); border: 1px solid var(--border);
-      border-radius: var(--radius-sm); color: var(--text);
-      font-family: var(--app-font); font-size: var(--fs-100);
-      outline: none; transition: border-color var(--t);
-      user-select: text;
-    }
-    #queue-search:focus { border-color: var(--accent); }
-    #queue-search::placeholder { color: var(--muted); }
-    .queue-no-match {
-      padding: var(--sp-8) var(--sp-5);
-      text-align: center; color: var(--muted); font-size: var(--fs-100);
     }
     @keyframes fadeup { from { opacity:0; transform: translateY(4px); } to { opacity:1; transform:none; } }
-    .s-header { padding: var(--sp-6) var(--sp-5) var(--sp-4); flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: var(--sp-5); flex-wrap: wrap; }
-    .s-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-    .s-body { flex: 1; overflow-y: auto; padding: var(--sp-4) var(--sp-5) var(--sp-5); min-height: 0; }
-    .s-search input {
-      flex: 1; min-width: 0; border: none; outline: none; background: transparent;
-      color: var(--input-text); font-family: var(--app-font); font-size: var(--fs-100);
-    }
-    .s-search input::-webkit-search-cancel-button { filter: grayscale(1); }
-
-    /* Mounted network shares under the local-library path field. */
-    .share-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); width: 100%; }
-    .share-chips-label { font-size: var(--fs-75); color: var(--muted); margin-right: var(--sp-1); }
-    .share-chip {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 5px 10px; border-radius: var(--radius-pill);
-      background: var(--surface2); border: 1px solid var(--border);
-      color: var(--text2); font-family: var(--app-font); font-size: var(--fs-75); font-weight: var(--fw-medium);
-      cursor: pointer; transition: background var(--t), border-color var(--t), color var(--t);
-    }
-    .share-chip svg { width: 13px; height: 13px; color: var(--accent-text); }
-    .share-chip:hover { background: var(--accent-subtle); border-color: var(--accent-border); color: var(--text); }
-    .act-btn svg { flex-shrink: 0; }
-    .act-btn:disabled { cursor: not-allowed; transform: none !important; box-shadow: none; }
-    .tb-search { width: 260px; }
-    .tb-search input { flex: 1; }
-    .tb-grow { flex: 1; width: auto; min-width: 200px; }
-    .page-row {
-      display: grid; grid-template-columns: 52px minmax(0, 1fr) auto auto;
-      align-items: center; gap: var(--sp-4);
-      transition: background var(--t), border-color var(--t);
-    }
-    .page-row:hover { border-color: var(--border2); }
-    .pr-cover {
-      overflow: hidden;
-      display: grid; place-items: center;
-    }
-    .pr-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .pr-cover svg { width: 22px; height: 22px; }
-    .pr-main { min-width: 0; }
-    .pr-title, .pr-sub, .pr-meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .pr-title { color: var(--text); }
-    .pr-sub { margin-top: 1px; }
-    .pr-meta { margin-top: 3px; font-variant-numeric: tabular-nums; }
-    .pr-actions { display: flex; gap: 4px; }
-    .row-btn {
-      display: grid; place-items: center;
-      cursor: pointer; transition: background var(--t), color var(--t), border-color var(--t);
-    }
-    .row-btn svg { width: 15px; height: 15px; }
-    .row-btn:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 1px; }
-
-    .status-pill {
-      display: inline-flex; align-items: center; gap: 6px;
-      white-space: nowrap;
-    }
-    .status-pill.queued { color: var(--status-queued-fg); background: var(--status-queued-bg); }
-    .status-pill.active { color: var(--status-active-fg); background: var(--status-active-bg); }
-    .status-pill.done   { color: var(--status-done-fg);   background: var(--status-done-bg); }
-    .status-pill.failed { color: var(--status-failed-fg); background: var(--status-failed-bg); }
-    .pill-spinner {
-      width: 9px; height: 9px; border-radius: 50%;
-      border: 2px solid currentColor; border-right-color: transparent;
-      animation: pill-spin .8s linear infinite;
-    }
-    @keyframes pill-spin { to { transform: rotate(360deg); } }
-    @media (prefers-reduced-motion: reduce) { .pill-spinner { animation: none; } }
 
     .nav-badge {
       margin-left: auto; min-width: 20px; padding: 1px 6px;
@@ -671,97 +479,8 @@
     }
     body.sidebar-collapsed .nav-badge { position: absolute; top: 4px; right: 4px; margin: 0; min-width: 16px; padding: 0 4px; font-size: 10px; }
     @media (max-width: 700px) {
-      .page-row { grid-template-columns: 44px minmax(0, 1fr) auto; }
-      .page-row .status-pill { grid-column: 2; justify-self: start; }
-      .page-row .pr-actions { grid-column: 3; grid-row: 1 / span 2; }
-      .tb-search { width: 100%; }
       body.web-mode .nav-badge { display: none; }
     }
-    .live-search { margin-left: auto; width: 240px; height: 34px; }
-    .live-search #queue-search { border: none; background: transparent; padding: 0; height: 100%; width: 100%; box-shadow: none; }
-    @media (max-width: 700px) {
-      .live-search { margin-left: 0; width: 100%; }
-    }
-    .s-body::-webkit-scrollbar { width: 3px; }
-    .s-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
-    .s-footer { position: sticky; bottom: 0; display: flex; justify-content: flex-start; padding: 10px 0 0; background: transparent; }
-    /* Two columns of setting cards once there is room for them. A settings
-       row is label-left / control-right and rarely more than ~500px of
-       actual content, so one column down the middle of a wide window meant
-       scrolling past a lot of air to reach things that could have been on
-       screen together.
-       CSS columns rather than a grid: the cards have very different heights
-       (a section with two toggles next to one with a dozen), and columns
-       fill by flowing, so the two sides stay roughly level instead of
-       leaving a grid row as tall as its tallest cell. break-inside stops a
-       card being split down the middle across the column boundary. */
-    .s-section {
-      position: relative;
-      overflow: hidden;
-    }
-    .s-section:last-child { margin-bottom: 0; }
-    /* Group heading in sentence case, like a System Settings group — the
-       old tracked-out uppercase label read as a form, not as a place. */
-    .s-row { display: flex; align-items: center; justify-content: space-between; min-height: 30px; margin-bottom: 8px; gap: 10px; }
-    /* Rows of one group read as a list: hairline between neighbours. */
-    .s-section > .s-row { margin-bottom: 0; }
-    .s-row label { display: flex; align-items: center; gap: var(--sp-3); cursor: pointer; }
-    .network-destination-field input {
-      box-sizing: border-box; width: 100%; min-width: 0; min-height: 38px;
-    }
-    /* Shrinkable, with min-width:0 so the <small> help text can wrap. It was
-       flex-shrink:0, which is fine for a two-word label but not for the ones
-       carrying a paragraph of explanation (the AcoustID key row is three
-       lines of prose): those could not wrap, so the row grew past the panel
-       and the whole section scrolled sideways. Short labels don't wrap
-       anyway — there is nothing in them to break. */
-    .s-label { min-width: 0; }
-
-    select, input[type="text"], input[type="password"], input[type="number"] {
-      /* background-color, not the `background` shorthand: the select below
-         paints its chevron as a background-image, and a shorthand here (or
-         in the dark-theme override) would quietly erase it. */
-      background-color: var(--surface); color: var(--text);
-      border: 1.5px solid var(--border);
-      padding: 7px 11px; outline: none;
-      font-family: var(--app-font); font-size: 12.5px; cursor: pointer;
-      transition: border-color var(--t), box-shadow var(--t), background-color var(--t);
-    }
-    /* A native select renders in the OS's own font and chrome — the one
-       control in the window that was still being drawn by something other
-       than this stylesheet, and next to these rounded mono surfaces it read
-       as an unfinished part of the page. */
-    select {
-      appearance: none;
-      -webkit-appearance: none;
-      padding-right: 30px;
-      background-image: var(--chevron);
-      background-repeat: no-repeat;
-      background-position: right 10px center;
-      background-size: 13px 13px;
-      text-overflow: ellipsis;
-    }
-    select:hover,
-    input[type="text"]:hover, input[type="password"]:hover, input[type="number"]:hover {
-      border-color: var(--border2);
-    }
-    select:focus, input:focus {
-      border-color: var(--yellow);
-      box-shadow: 0 0 0 3px var(--ring);
-    }
-    input[type="number"] { width: 70px; text-align: center; }
-    input[type="text"].full { width: 100%; }
-
-    input[type="checkbox"], input[type="radio"], progress {
-      accent-color: var(--yellow);
-    }
-
-    /* Sortable lists */
-    .sort-list { display: flex; flex-direction: column; gap: var(--sp-2); }
-    .reg-url { font-family: var(--font-mono); font-size: 11.5px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .reg-remove-btn { padding: 5px var(--sp-4); font-size: var(--fs-75); color: var(--red); border-color: var(--status-failed-fg); flex-shrink: 0; }
-
-    .hidden { display: none !important; }
 
     /* Windows High Contrast Mode / forced-colors: the app's borders and
        status tints are mostly low-alpha rgba() fills that forced-colors
@@ -771,16 +490,9 @@
        Canvas. A visible border in that mode is enough to keep every
        button legible as a button without touching normal-mode styling. */
     @media (forced-colors: active) {
-      .act-btn, .page-btn, input, select, textarea {
-        forced-color-adjust: none;
-        border: 1px solid ButtonText;
-      }
       .nav-btn {
         forced-color-adjust: none;
         border: 1px solid ButtonText;
-      }
-      .act-btn.primary {
-        background: Highlight; color: HighlightText; border-color: HighlightText;
       }
       .nav-btn.active {
         background: Highlight; color: HighlightText; border-color: HighlightText;
@@ -811,64 +523,9 @@
       body:not(.sidebar-collapsed) .nav-btn[data-label]::after { display: none; }
     }
 
-    /* ── Action button feedback states ── */
-    @keyframes ta-spin { to { transform: rotate(360deg); } }
-    .ta-spin { animation: ta-spin .65s linear infinite; transform-origin: center; }
-    .ta-btn.ta-loading, .act-btn.ta-loading {
-      pointer-events: none;
-      color: var(--text2) !important;
-      border-color: var(--border2) !important;
-      background: var(--surface2) !important;
-    }
-    .ta-btn.ta-state-success, .act-btn.ta-state-success {
-      background: var(--status-done-bg) !important;
-      border-color: var(--status-done-fg) !important;
-      color: var(--status-done-fg) !important;
-      pointer-events: none;
-    }
-    .ta-btn.ta-state-error, .act-btn.ta-state-error {
-      background: var(--status-failed-bg) !important;
-      border-color: var(--status-failed-fg) !important;
-      color: var(--status-failed-fg) !important;
-      pointer-events: none;
-    }
-
 /* =========================================
    RESPONSIVITY ADJUSTMENTS
    ========================================= */
-
-/* Track table column collapse — was @media, now keyed off #track-table-wrap's
-   own inline size (container-type set where #track-table-wrap is defined).
-   Same two breakpoints, same nth-child hides, same !important grid override
-   — only what they measure changed, not what they do. */
-/* Thresholds are 900/600 minus 102px, not 900/600 — a container query
-   measures #track-table-wrap's own box, which sits inside the 58px sidebar
-   + the surrounding containers' padding chain, so it's consistently 102px
-   narrower than the viewport at the widths that matter here (measured live:
-   innerWidth 900/700/600 -> wrap 798/598/498, offset exactly 102px each
-   time, no dependency on #track-table-wrap's own 950px cap since that
-   never engages this low). Using literal 900/600 here would collapse the
-   table ~102px too early compared to the old @media behaviour. */
-@container tracktable (max-width: 798px) {
-  /* Nascondi Playcount e Duration in modo forzato sia nell'header che nelle righe */
-  .track-table-header > div:nth-child(4), .track-row > div:nth-child(4) {
-    display: none !important;
-  }
-
-  /* Layout updated per le 4 colonne rimanenti (Checkbox, #, Titolo, Azioni) */
-  .track-table-header, .track-row {
-    grid-template-columns: 24px 30px 1fr 140px !important;
-  }
-}
-
-@container tracktable (max-width: 498px) {
-  /* Also hide the index (#) on smartphones */
-  .track-table-header > div:nth-child(2),
-  .track-row > div:nth-child(2) {
-    display: none !important;
-  }
-
-}
 
 @keyframes skeleton-pulse {
   0% { background-position: 200% 0; }
@@ -922,28 +579,12 @@
    Pointer-type questions, not width questions: an iPad in landscape is
    1024px wide and still has no hover. */
 @media (hover: none) and (pointer: coarse) {
-  /* Chromium and Safari wait ~300ms after a tap on an element that might be
-     the first half of a double-tap-to-zoom before they fire click.
-     Declaring that these never zoom removes the wait, which is most of what
-     makes the UI feel slower under a finger than the same buttons feel
-     under a mouse. */
-  button, .act-btn, .page-btn, .track-row, select, summary, [onclick] {
-    touch-action: manipulation;
-  }
   .nav-btn {
     touch-action: manipulation;
-  }
-  /* The grey flash Android paints on tap lands on top of our own :active
-     styling and outlasts it. */
-  button, a, label, .track-row, [onclick] {
-    -webkit-tap-highlight-color: transparent;
   }
   /* Rubber-banding the page behind a scrolled panel is how a modal ends up
      scrolling the list underneath it. */
   #content {
-    overscroll-behavior: contain;
-  }
-  .s-body, .queue-list {
     overscroll-behavior: contain;
   }
 }
@@ -955,66 +596,6 @@
      @supports so a browser without it keeps the height:100% it had. */
   @supports (height: 100dvh) {
     html, body { height: 100dvh; }
-  }
-
-  /* iOS zooms the page when a control smaller than 16px takes focus — the
-     single most disorienting thing the app does on a phone, because nothing
-     zooms it back out. 16px is the threshold, not a preference. */
-  input[type="text"], input[type="password"], input[type="number"], input[type="search"], input[type="email"], select, textarea {
-    font-size: 16px;
-  }
-
-  /* ── Settings ──
-     s-header is title-left / buttons-right; at this width its three action
-     buttons wrapped into a ragged block. They take the full row instead. */
-  .s-header { padding: var(--sp-5) var(--sp-4) var(--sp-3); gap: var(--sp-4); }
-  .s-actions { width: 100%; }
-  .s-actions .act-btn { flex: 1 1 auto; }
-  .s-body { padding: var(--sp-4) var(--sp-4) var(--sp-5); }
-
-  /* A settings row is `label` then `control`. A <select> or a text field
-     next to a label that wraps to three lines has nowhere to go, so it
-     takes a line of its own — flex-basis 100% forces the wrap — at full
-     width, which is also the only way its now-16px text fits. Toggles and
-     buttons are narrow and stay on the label's line, where they still read
-     as that label's control. */
-  .s-row { flex-wrap: wrap; }
-  /* A basis, so the label shrinks to share its line instead of measuring
-     its full text and pushing whatever follows onto the next one. Without
-     it every toggle row with a sentence of help text under its label sent
-     the toggle to a second line — and, being the only thing on that line,
-     space-between parked it on the left, where it no longer read as
-     belonging to the label above it. */
-  .s-row > .s-label { flex: 1 1 55%; }
-  .s-row > select, .s-row > input[type="text"] {
-    flex: 1 1 100%;
-    min-width: 0;
-    max-width: none;
-    min-height: 44px;
-  }
-  .page-btn { min-height: 40px; }
-}
-
-/* ── Track row action column ──────────────────────────────────────────────
-   A container query, not a media query, because that is what the two column
-   collapses above already use — #track-table-wrap's own box, not the
-   viewport (see their comment for the 102px offset).
-
-   At 498px the grid gives the actions column 130px. A row renders five
-   .ta-btn at 30px with a 3px gap: 162px. On a desktop that overflow is
-   invisible because four of the five are opacity:0 — but they still occupy
-   their width, and @media (hover:none) makes them opaque again on exactly
-   the devices where the column is narrowest.
-
-   The fix is to stop asking one line to hold both. Checkbox and title keep
-   the first line, the action cluster drops to a second, right-aligned,
-   where there is room to give each button a 38px target instead of shaving
-   pixels off five of them. The header's "Actions" label has nothing left to
-   sit over and goes. */
-@container tracktable (max-width: 498px) {
-  .track-table-header, .track-row {
-    grid-template-columns: 24px 1fr !important;
-    row-gap: var(--sp-3);
   }
 }
 
@@ -1179,31 +760,8 @@ body {
   left: -9px;
 }
 
-.act-btn, .page-btn, .s-actions .act-btn {
-  box-shadow: none;
-}
-
-.act-btn:hover,
-.act-btn.secondary:hover,
-.s-actions .act-btn.secondary:hover {
-  transform: none;
-  box-shadow: none;
-}
-
-select,
-input[type="text"],
-input[type="password"],
-input[type="number"],
-input[type="search"],
-textarea {
-  border-radius: 10px;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .nav-btn:hover {
-    transform: none;
-  }
-  .act-btn:hover {
     transform: none;
   }
 }
@@ -1247,5 +805,3 @@ textarea {
 }
 .pl-main { min-width: 0; }
 .pl-btn.pl-mode { position: relative; }
-.s-actions .act-btn.primary[data-dirty="true"] { border-color: var(--red); }
-.s-actions .act-btn.primary[data-dirty="false"] { border-color: var(--yellow-d); }
