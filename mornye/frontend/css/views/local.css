@@ -6,6 +6,67 @@
    Over styles.css until voce 22. Semantic tokens only; ids and handlers
    untouched. */
 
+/* ══════════ LOCAL AUTO-TAGGER ══════════ */
+.local-drop-zone { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.local-drop-zone svg { color: var(--muted); transition: color var(--t); }
+.local-drop-zone-text { text-align: center; }
+.local-drop-zone.drag-over svg { color: var(--status-active-fg); }
+.local-cell-content { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.local-thumb { width: 44px; height: 44px; border-radius: 6px; background: var(--surface3); display: flex; align-items: center; justify-content: center; font-size: 16px; overflow: hidden; border: 1px solid var(--border); flex-shrink: 0; }
+.local-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.local-info { min-width: 0; display: flex; flex-direction: column; flex: 1; gap: var(--sp-1); }
+
+.local-title { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); transition: color var(--t); }
+.local-artist { font-size: var(--fs-100); color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color var(--t); }
+
+/* Highlight for changed tags (Diffing) */
+.local-title.diff, .local-artist.diff { color: var(--diff-fg); }
+
+.local-badge { font-family: var(--font-mono); font-size: var(--fs-50); padding: 3px var(--sp-3); border-radius: 999px; font-weight: 700; display: inline-block; }
+.local-badge.ok { background: var(--status-done-bg); color: var(--status-done-fg); }
+.local-badge.warn { background: var(--status-warn-bg); color: var(--status-warn-fg); }
+.local-badge.err { background: var(--status-failed-bg); color: var(--status-failed-fg); }
+
+/* ── Scrolling panels whose cards must not be squeezed ────────────────────
+   #view-local's .s-body is `display:flex; flex-direction:column` (inline,
+   in index.html), which makes its .s-section cards flex items — and a flex
+   item's default flex-shrink is 1. In a container tall enough for all of
+   them that changes nothing, which is why this looks fine on a desktop.
+   When the content is taller than the panel, though, the cards are shrunk
+   to fit it instead of overflowing it, and .s-section is overflow:hidden,
+   so the surplus is simply cut off: the panel reports nothing to scroll and
+   the bottom of each card is unreachable. Measured at 360x740 that is 130px
+   of the Target Directory card — its path field's help line, and the start
+   of the row below it — gone with no way to reach it.
+
+   A card keeps its content height and the panel scrolls, which is what
+   .s-body's own overflow-y:auto was always there to do. Not inside a media
+   query: the trigger is content taller than the panel, which a short
+   desktop window reaches the same way a phone does. */
+#view-local > .s-body > * { flex-shrink: 0; }
+
+@media (max-width: 700px) {
+  /* The Local view's path field carries an inline `flex:1`, so it shares a
+     line with the Browse button and gets ~250px of it — an absolute path is
+     longer than that at the best of times. !important is the only thing
+     that outranks an inline style, and this is what it is for. */
+  #local-path-input { flex: 1 1 100% !important; }
+}
+
+.local-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.local-convert-btn {
+  padding: 1px 7px; border: 1px solid var(--border); border-radius: 6px;
+  background: transparent; color: var(--text2); font: inherit; font-size: 9.5px; cursor: pointer;
+}
+.local-convert-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+/* The focus ring (layout.css) loads before this sheet now: restated at its
+   specificity for the controls above that draw their own radius or
+   outline, so focused they keep the ring's shape, as before. */
+:where(button, a, input, select, textarea, [tabindex]):where(.local-convert-btn):focus-visible {
+  border-radius: var(--radius-1);
+}
+
 /* The drop target: a dashed rule, flat, the signal while dragging over. */
 .local-drop-zone {
   padding: var(--space-5) var(--space-4);
