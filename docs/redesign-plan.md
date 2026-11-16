@@ -278,6 +278,7 @@ regola (una parola = un elemento).
         - `views/player.css`: 104 blocchi (Player, Now Playing, testi). 0
           differenze; gli stati di prova non aprono Now Playing, qui vale
           soprattutto il controllo statico.
+        - `views/stats.css`: 21 blocchi. 0 differenze.
    **Prossimo:** Fase 4 (TUI, voci 23–26) — fatta, vedi sotto.
 0. **Fasi 4, 5 e 6 fatte** (2026-11-12), su `redesign`, commit locali non
    pushati. Prima, fuori dal redesign, la **issue #277** (playlist):
