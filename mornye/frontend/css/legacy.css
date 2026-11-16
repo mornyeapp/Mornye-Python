@@ -1,0 +1,624 @@
+/* frontend/css/legacy.css — the old shared control classes in the console
+   look (redesign Fase 3). app.js and index.html use .act-btn, .page-btn and
+   .explicit-badge in every view; until each view is rebuilt on the new
+   components (components.css: .btn, .qd…) their structure comes first
+   (moved out of styles.css in voce 22) and the console look restates each
+   property it changes. Semantic tokens only. */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+.s-header h1 {
+  font-family: var(--font);
+  font-optical-sizing: auto;
+  font-variation-settings: 'SOFT' 50;
+}
+::selection {
+  background: var(--selected);
+  color: var(--text);
+}
+.clickable-version {
+  cursor: pointer;
+}
+
+.view { display: none; flex-direction: column; flex: 1; overflow: visible; min-height: 0; }
+.view.active { display: flex; }
+/* Their button default: h-9 (36px), px-4 (16px), text-sm, gap-2, and a
+   rounded-md corner. Height set rather than implied by padding so every
+   button lines up with the inputs beside it whatever its label. */
+.act-btn {
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+/* Clearing a queue or a history is not the same kind of act as saving a
+   setting, and until now it looked identical to it. Tinted rather than
+   filled: a solid red button competes with the primary action for
+   attention, which is backwards — this one should be findable, not
+   inviting. Uses the same --status-failed-* tokens as a failed row, so
+   "destructive" and "went wrong" stay one colour story. */
+.act-btn.danger:hover {
+  transform: translateY(-1px);
+}
+.api-modal-body input {
+  width: 100%;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--raised);
+  color: var(--text);
+  padding: var(--space-3) 14px;
+  font-size: var(--text-lg);
+}
+/* The rule above is for text fields; a checkbox in a modal must keep its
+   own size or it stretches across the row and pushes its label away. */
+.api-modal-body input[type="checkbox"],
+.api-modal-body input[type="radio"] {
+  width: auto; flex: none; padding: 0; border: 0; background: none;
+}
+ /* Columns: title | album | duration | actions */
+.track-table-header, .track-row {
+  width: 100%;
+  display: grid;
+  /* Change this line to use 1fr on the flexible columns */
+  grid-template-columns: 24px 40px 1fr 1fr 80px 150px;
+  align-items: center;
+  transition: background var(--motion) var(--ease);
+  box-sizing: border-box; /* Assicura che il padding sia incluso nella larghezza */
+}
+.track-table-header > div:first-child { display:flex; align-items:center; justify-content:center; }
+.track-table-header input { cursor: pointer; }
+/* Header style for album column (4th child) */
+.track-table-header > div:nth-child(4) {
+  text-align: center; padding-left: 6px;
+}
+.track-row {
+  cursor: default;
+  position: relative;
+}
+.page-btn {
+  cursor: pointer; transition: all var(--motion) var(--ease);
+}
+.page-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+.tr-check input { cursor: pointer; }
+/* No hover to reveal them with — keep the whole set visible. */
+.ta-btn.ta-lyrics:hover { color: var(--text-2); border-color: var(--rule-strong); }
+.ta-btn.ta-preview:hover { color: var(--text-2); border-color: var(--rule-strong); }
+.ta-btn.ta-preview.active { background: transparent; border-color: var(--rule-strong); color: var(--text-2); }
+.ta-btn.ta-cover:hover { color: var(--text-2); border-color: var(--rule-strong); }
+.ta-btn.ta-link:hover { color: var(--signal-text); border-color: var(--signal-strong); }
+
+#preview-player {
+  width: 100%; max-width: 100%; margin: 12px 0 12px; display: none;
+}
+
+/* ── Empty states ─────────────────────────────────────────────────
+   Three screens open on nothing at all — no fetches, nobody followed,
+   no downloads logged — and each said so in its own way, in a different
+   size and colour. One component, so "there is nothing here yet" reads
+   the same everywhere and reads as designed rather than as missing. */
+.empty-state {
+  display: flex; flex-direction: column;
+  justify-content: center;
+  gap: 6px; padding: 38px var(--space-6);
+  color: var(--text-muted);
+}
+.empty-state .es-icon {
+  width: 44px; height: 44px; margin-bottom: 6px;
+  display: grid; place-items: center;
+  opacity: .9;
+}
+.empty-state .es-icon svg { width: 20px; height: 20px; }
+.empty-state .es-hint {
+  line-height: 1.6; max-width: 46ch;
+}
+
+/* Reduced motion: see the note in layout.css. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+  }
+  .act-btn:hover, .act-btn:active {
+    transform: none;
+  }
+}
+
+#queue-search {
+  flex: 1; min-width: 0;
+  padding: 7px 11px 7px 30px;
+  background: var(--raised); border: 1px solid var(--rule);
+  border-radius: var(--radius-1); color: var(--text);
+  font-family: var(--font); font-size: var(--text-md);
+  outline: none; transition: border-color var(--motion) var(--ease);
+  user-select: text;
+}
+#queue-search:focus { border-color: var(--signal); }
+#queue-search::placeholder { color: var(--text-muted); }
+.queue-no-match {
+  padding: var(--space-8) var(--space-4);
+  text-align: center; color: var(--text-muted); font-size: var(--text-md);
+}
+.s-header { padding: var(--space-5) var(--space-4) var(--space-3); flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
+.s-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.s-body { flex: 1; overflow-y: auto; padding: var(--space-3) var(--space-4) var(--space-4); min-height: 0; }
+.s-search input {
+  flex: 1; min-width: 0; border: none; outline: none; background: transparent;
+  color: var(--text); font-family: var(--font); font-size: var(--text-md);
+}
+.s-search input::-webkit-search-cancel-button { filter: grayscale(1); }
+
+/* Mounted network shares under the local-library path field. */
+.share-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); width: 100%; }
+.share-chips-label { font-size: var(--text-sm); color: var(--text-muted); margin-right: 2px; }
+.share-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 10px; border-radius: var(--radius-2);
+  background: var(--raised); border: 1px solid var(--rule);
+  color: var(--text-2); font-family: var(--font); font-size: var(--text-sm); font-weight: var(--weight-medium);
+  cursor: pointer; transition: background var(--motion) var(--ease), border-color var(--motion) var(--ease), color var(--motion) var(--ease);
+}
+.share-chip svg { width: 13px; height: 13px; color: var(--signal-text); }
+.share-chip:hover { background: var(--selected); border-color: var(--signal-strong); color: var(--text); }
+.act-btn svg { flex-shrink: 0; }
+.act-btn:disabled { cursor: not-allowed; transform: none !important; box-shadow: none; }
+.tb-search { width: 260px; }
+.tb-search input { flex: 1; }
+.tb-grow { flex: 1; width: auto; min-width: 200px; }
+.page-row {
+  display: grid; grid-template-columns: 52px minmax(0, 1fr) auto auto;
+  align-items: center; gap: var(--space-3);
+  transition: background var(--motion) var(--ease), border-color var(--motion) var(--ease);
+}
+.page-row:hover { border-color: var(--rule-strong); }
+.pr-cover {
+  overflow: hidden;
+  display: grid; place-items: center;
+}
+.pr-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pr-cover svg { width: 22px; height: 22px; }
+.pr-main { min-width: 0; }
+.pr-title, .pr-sub, .pr-meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pr-title { color: var(--text); }
+.pr-sub { margin-top: 1px; }
+.pr-meta { margin-top: 3px; font-variant-numeric: tabular-nums; }
+.pr-actions { display: flex; gap: 4px; }
+.row-btn {
+  display: grid; place-items: center;
+  cursor: pointer; transition: background var(--motion) var(--ease), color var(--motion) var(--ease), border-color var(--motion) var(--ease);
+}
+.row-btn svg { width: 15px; height: 15px; }
+.row-btn:focus-visible { outline: 2px solid var(--signal-strong); outline-offset: 1px; }
+
+.status-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  white-space: nowrap;
+}
+.status-pill.queued { color: var(--text-muted); background: transparent; }
+.status-pill.active { color: var(--signal-text); background: transparent; }
+.status-pill.done   { color: var(--ok);   background: transparent; }
+.status-pill.failed { color: var(--error); background: transparent; }
+.pill-spinner {
+  width: 9px; height: 9px; border-radius: 50%;
+  border: 2px solid currentColor; border-right-color: transparent;
+  animation: pill-spin .8s linear infinite;
+}
+@keyframes pill-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .pill-spinner { animation: none; }
+}
+
+@media (max-width: 700px) {
+  .page-row { grid-template-columns: 44px minmax(0, 1fr) auto; }
+  .page-row .status-pill { grid-column: 2; justify-self: start; }
+  .page-row .pr-actions { grid-column: 3; grid-row: 1 / span 2; }
+  .tb-search { width: 100%; }
+}
+.live-search { margin-left: auto; width: 240px; height: 34px; }
+.live-search #queue-search { border: none; background: transparent; padding: 0; height: 100%; width: 100%; box-shadow: none; }
+
+@media (max-width: 700px) {
+  .live-search { margin-left: 0; width: 100%; }
+}
+.s-body::-webkit-scrollbar { width: 3px; }
+.s-body::-webkit-scrollbar-thumb { background: var(--rule-strong); border-radius: 99px; }
+.s-footer { position: sticky; bottom: 0; display: flex; justify-content: flex-start; padding: 10px 0 0; background: transparent; }
+/* Two columns of setting cards: see the note in views/settings.css. */
+.s-section {
+  position: relative;
+  overflow: hidden;
+}
+.s-section:last-child { margin-bottom: 0; }
+/* Group heading in sentence case, like a System Settings group — the
+   old tracked-out uppercase label read as a form, not as a place. */
+.s-row { display: flex; align-items: center; justify-content: space-between; min-height: 30px; margin-bottom: 8px; gap: 10px; }
+/* Rows of one group read as a list: hairline between neighbours. */
+.s-section > .s-row { margin-bottom: 0; }
+.s-row label { display: flex; align-items: center; gap: var(--space-2); cursor: pointer; }
+.network-destination-field input {
+  box-sizing: border-box; width: 100%; min-width: 0; min-height: 38px;
+}
+/* Shrinkable, with min-width:0 so the <small> help text can wrap. It was
+   flex-shrink:0, which is fine for a two-word label but not for the ones
+   carrying a paragraph of explanation (the AcoustID key row is three
+   lines of prose): those could not wrap, so the row grew past the panel
+   and the whole section scrolled sideways. Short labels don't wrap
+   anyway — there is nothing in them to break. */
+.s-label { min-width: 0; }
+
+select, input[type="text"], input[type="password"], input[type="number"] {
+  /* background-color, not the `background` shorthand: the select below
+     paints its chevron as a background-image, and a shorthand here (or
+     in the dark-theme override) would quietly erase it. */
+  background-color: var(--surface); color: var(--text);
+  border: 1.5px solid var(--rule);
+  padding: 7px 11px; outline: none;
+  font-family: var(--font); font-size: 12.5px; cursor: pointer;
+  transition: border-color var(--motion) var(--ease), box-shadow var(--motion) var(--ease), background-color var(--motion) var(--ease);
+}
+/* A native select renders in the OS's own font and chrome — the one
+   control in the window that was still being drawn by something other
+   than this stylesheet, and next to these rounded mono surfaces it read
+   as an unfinished part of the page. */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 30px;
+  background-image: var(--chevron);
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 13px 13px;
+  text-overflow: ellipsis;
+}
+select:hover,
+input[type="text"]:hover, input[type="password"]:hover, input[type="number"]:hover {
+  border-color: var(--rule-strong);
+}
+select:focus, input:focus {
+  border-color: var(--signal);
+  box-shadow: 0 0 0 3px var(--signal-strong);
+}
+input[type="number"] { width: 70px; text-align: center; }
+input[type="text"].full { width: 100%; }
+
+input[type="checkbox"], input[type="radio"], progress {
+  accent-color: var(--signal);
+}
+
+/* Sortable lists */
+.sort-list { display: flex; flex-direction: column; gap: var(--space-1); }
+.reg-url { font-family: var(--font); font-size: 11.5px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reg-remove-btn { padding: 5px var(--space-3); font-size: var(--text-sm); color: var(--error); border-color: var(--error); flex-shrink: 0; }
+
+.hidden { display: none !important; }
+
+/* Forced colours: see the note in layout.css. */
+@media (forced-colors: active) {
+  .act-btn, .page-btn, input, select, textarea {
+    forced-color-adjust: none;
+    border: 1px solid ButtonText;
+  }
+  .act-btn.primary {
+    background: Highlight; color: HighlightText; border-color: HighlightText;
+  }
+}
+
+/* ── Action button feedback states ── */
+@keyframes ta-spin { to { transform: rotate(360deg); } }
+.ta-spin { animation: ta-spin .65s linear infinite; transform-origin: center; }
+.ta-btn.ta-loading, .act-btn.ta-loading {
+  pointer-events: none;
+  color: var(--text-2) !important;
+  border-color: var(--rule-strong) !important;
+  background: var(--raised) !important;
+}
+.ta-btn.ta-state-success, .act-btn.ta-state-success {
+  background: transparent !important;
+  border-color: var(--ok) !important;
+  color: var(--ok) !important;
+  pointer-events: none;
+}
+.ta-btn.ta-state-error, .act-btn.ta-state-error {
+  background: transparent !important;
+  border-color: var(--error) !important;
+  color: var(--error) !important;
+  pointer-events: none;
+}
+
+/* =========================================
+   RESPONSIVITY ADJUSTMENTS
+   ========================================= */
+
+/* Track table column collapse: see the note in views/home.css. */
+/* Container query thresholds: see the note in views/home.css. */
+@container tracktable (max-width: 798px) {
+  /* Nascondi Playcount e Duration in modo forzato sia nell'header che nelle righe */
+  .track-table-header > div:nth-child(4), .track-row > div:nth-child(4) {
+    display: none !important;
+  }
+
+  /* Layout updated per le 4 colonne rimanenti (Checkbox, #, Titolo, Azioni) */
+  .track-table-header, .track-row {
+    grid-template-columns: 24px 30px 1fr 140px !important;
+  }
+}
+
+@container tracktable (max-width: 498px) {
+  /* Also hide the index (#) on smartphones */
+  .track-table-header > div:nth-child(2),
+  .track-row > div:nth-child(2) {
+    display: none !important;
+  }
+}
+
+/* Phone layout: see the note in layout.css. */
+
+/* Touch ergonomics: see the note in layout.css. */
+@media (hover: none) and (pointer: coarse) {
+  /* Chromium and Safari wait ~300ms after a tap on an element that might be
+     the first half of a double-tap-to-zoom before they fire click.
+     Declaring that these never zoom removes the wait, which is most of what
+     makes the UI feel slower under a finger than the same buttons feel
+     under a mouse. */
+  button, .act-btn, .page-btn, .track-row, select, summary, [onclick] {
+    touch-action: manipulation;
+  }
+  /* The grey flash Android paints on tap lands on top of our own :active
+     styling and outlasts it. */
+  button, a, label, .track-row, [onclick] {
+    -webkit-tap-highlight-color: transparent;
+  }
+  .s-body, .queue-list {
+    overscroll-behavior: contain;
+  }
+}
+
+@media (max-width: 700px) {
+  /* iOS zooms the page when a control smaller than 16px takes focus — the
+     single most disorienting thing the app does on a phone, because nothing
+     zooms it back out. 16px is the threshold, not a preference. */
+  input[type="text"], input[type="password"], input[type="number"], input[type="search"], input[type="email"], select, textarea {
+    font-size: 16px;
+  }
+
+  /* ── Settings ──
+     s-header is title-left / buttons-right; at this width its three action
+     buttons wrapped into a ragged block. They take the full row instead. */
+  .s-header { padding: var(--space-4) var(--space-3) var(--space-2); gap: var(--space-3); }
+  .s-actions { width: 100%; }
+  .s-actions .act-btn { flex: 1 1 auto; }
+  .s-body { padding: var(--space-3) var(--space-3) var(--space-4); }
+
+  /* A settings row is `label` then `control`. A <select> or a text field
+     next to a label that wraps to three lines has nowhere to go, so it
+     takes a line of its own — flex-basis 100% forces the wrap — at full
+     width, which is also the only way its now-16px text fits. Toggles and
+     buttons are narrow and stay on the label's line, where they still read
+     as that label's control. */
+  .s-row { flex-wrap: wrap; }
+  /* A basis, so the label shrinks to share its line instead of measuring
+     its full text and pushing whatever follows onto the next one. Without
+     it every toggle row with a sentence of help text under its label sent
+     the toggle to a second line — and, being the only thing on that line,
+     space-between parked it on the left, where it no longer read as
+     belonging to the label above it. */
+  .s-row > .s-label { flex: 1 1 55%; }
+  .s-row > select, .s-row > input[type="text"] {
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: none;
+    min-height: 44px;
+  }
+  .page-btn { min-height: 40px; }
+}
+
+/* Track row action column: see the note in views/home.css. */
+@container tracktable (max-width: 498px) {
+  .track-table-header, .track-row {
+    grid-template-columns: 24px 1fr !important;
+    row-gap: var(--space-2);
+  }
+}
+
+.act-btn, .page-btn, .s-actions .act-btn {
+  box-shadow: none;
+}
+
+.act-btn:hover,
+.act-btn.secondary:hover,
+.s-actions .act-btn.secondary:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+select,
+input[type="text"],
+input[type="password"],
+input[type="number"],
+input[type="search"],
+textarea {
+  border-radius: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .act-btn:hover {
+    transform: none;
+  }
+}
+.s-actions .act-btn.primary[data-dirty="true"] { border-color: var(--error); }
+.s-actions .act-btn.primary[data-dirty="false"] { border-color: var(--signal-strong); }
+
+/* The focus ring (layout.css) loads before this sheet now: restated at its
+   specificity for the controls above that draw their own radius or
+   outline, so focused they keep the ring's shape, as before. */
+:where(button, a, input, select, textarea, [tabindex]):where(.share-chip):focus-visible {
+  border-radius: var(--radius-1);
+}
+
+.act-btn {
+  min-height: var(--row);
+  height: var(--row);
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background: var(--raised);
+  color: var(--text);
+  box-shadow: none;
+  font-family: var(--font);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  letter-spacing: .04em;
+  white-space: nowrap;
+  transition: border-color var(--motion-fast) var(--ease), background var(--motion-fast) var(--ease);
+}
+.act-btn svg { width: 14px; height: 14px; }
+.act-btn:hover { transform: none; box-shadow: none; border-color: var(--text-2); }
+.act-btn:active { transform: none; background: var(--selected); }
+.act-btn.primary { background: var(--signal); border-color: var(--signal); color: var(--signal-ink); }
+.act-btn.primary:hover { background: var(--signal); border-color: var(--signal-strong); transform: none; box-shadow: none; }
+.act-btn.secondary { background: var(--raised); color: var(--text); }
+.act-btn.secondary:hover { background: var(--raised); border-color: var(--text-2); color: var(--text); transform: none; }
+.act-btn.ghost { background: transparent; border-color: transparent; color: var(--text-2); }
+.act-btn.ghost:hover { border-color: var(--rule-strong); color: var(--text); }
+.act-btn.danger { background: var(--raised); border-color: var(--control-border); color: var(--error); }
+.act-btn.danger:hover { background: var(--raised); border-color: var(--error); color: var(--error); }
+.act-btn:disabled { opacity: .45; }
+.act-btn:focus-visible { outline: 1px solid var(--signal-strong); outline-offset: 2px; }
+
+.page-btn {
+  height: var(--row);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background: var(--raised);
+  color: var(--text-2);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+}
+.page-btn:hover:not(:disabled) { background: var(--raised); border-color: var(--text-2); color: var(--text); }
+
+/* "E" as a bordered readout, like the quality display, not a filled chip. */
+.explicit-badge {
+  background: transparent;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-1);
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-weight: var(--weight-medium);
+}
+
+/* ── Page parts shared by Queue, History, Following, Settings ───────────
+   View header, segmented tabs, toolbar fields, list rows, state words. */
+.s-header h1 {
+  font-family: var(--font);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: .02em;
+}
+.page-section-title {
+  font-family: var(--font);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.seg-tab {
+  height: var(--row);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background: var(--raised);
+  color: var(--text-2);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+}
+.seg-tab:hover { background: var(--raised); border-color: var(--text-2); color: var(--text); }
+.seg-tab.active { background: var(--selected); border-color: var(--signal-strong); color: var(--text); }
+.seg-count, .seg-tab.active .seg-count {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+.seg-tab.active .seg-count { color: var(--signal-text); }
+
+.tb-field {
+  height: var(--row);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background: var(--raised);
+  box-shadow: none;
+}
+.tb-field:focus-within { border-color: var(--signal-strong); box-shadow: none; }
+.tb-field input, .tb-field select { font-family: var(--font); font-size: var(--text-sm); color: var(--text); }
+
+/* Rows of a page list: rules, not cards. */
+.page-row {
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.page-row:hover { background: var(--raised); transform: none; box-shadow: none; }
+.pr-cover { width: 40px; height: 40px; border-radius: 0; }
+.pr-title { font-size: var(--text-md); font-weight: var(--weight-medium); }
+.pr-sub, .pr-meta { color: var(--text-muted); font-size: var(--text-sm); }
+.pr-error { color: var(--error); }
+.row-btn {
+  width: 28px; height: 28px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-1);
+  background: transparent;
+  color: var(--text-muted);
+}
+.row-btn:hover { background: var(--raised); border-color: var(--rule-strong); color: var(--text); }
+.row-btn.accent { background: transparent; border-color: var(--signal-strong); color: var(--signal-text); }
+.row-btn.accent:hover { background: var(--signal); border-color: var(--signal); color: var(--signal-ink); }
+
+/* A status is a word in its tone, not a filled pill. */
+.status-pill {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font-family: var(--font);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+/* The structure above restates the controls under .s-actions (view headers) and in a
+   late rebrand layer with a 12px radius; answered at the same specificity.
+   The phone keeps its 44px height from the phone rules (max-width: 700px). */
+.act-btn, .page-btn, .mode-btn, .s-actions .act-btn {
+  border-radius: var(--radius-1);
+  font-family: var(--font);
+}
+.s-actions .act-btn {
+  min-height: var(--row);
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
+}
+.s-actions .act-btn.secondary { background: var(--raised); color: var(--text); border-color: var(--control-border); }
+.s-actions .act-btn.secondary:hover { background: var(--raised); color: var(--text); border-color: var(--text-2); }
+.s-actions .act-btn.primary { background: var(--signal); color: var(--signal-ink); border-color: var(--signal); }
+.s-actions .act-btn.primary:hover { background: var(--signal); border-color: var(--signal-strong); }
+@media (max-width: 700px) { .s-actions .act-btn { min-height: 44px; } }
+
+/* A list row whose cover is missing shows the panel, not the logo's petrol;
+   a failed row carries the error rule on its left edge, like a track row. */
+.pr-cover { background: var(--raised); color: var(--text-muted); }
+.page-row.status-failed { box-shadow: inset 2px 0 0 var(--error); }
+.page-row.clickable { cursor: pointer; }
+.page-totals {
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}

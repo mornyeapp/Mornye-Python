@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mornye styleguide</title>
+<!-- Development only (redesign-plan voce 9): every component of token v2 in
+     every state, dark and light. Serve the repository root and open
+     /docs/styleguide.html; it loads the real files from mornye/frontend/css. -->
+<link rel="stylesheet" href="../mornye/frontend/css/tokens.css">
+<link rel="stylesheet" href="../mornye/frontend/css/base.css">
+<link rel="stylesheet" href="../mornye/frontend/css/components.css">
+<style>
+  /* Page layout only — nothing here belongs to a component. */
+  .sg { max-width: 1100px; margin: 0 auto; padding: var(--space-6) var(--space-5) 120px; display: grid; gap: var(--space-8); }
+  .sg-head { display: flex; align-items: center; gap: var(--space-4); }
+  .sg-head h1 { flex: 1; }
+  .sg section { display: grid; gap: var(--space-4); }
+  .sg section > h2 { font-size: var(--text-sm); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--rule); padding-bottom: var(--space-2); }
+  .sg .row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+  .sg .col { display: grid; gap: var(--space-2); }
+  .sg .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-2); }
+  .sw { border: 1px solid var(--rule); border-radius: var(--radius-1); overflow: hidden; }
+  .sw i { display: block; height: 40px; }
+  .sw div { padding: var(--space-1) var(--space-2); font-size: var(--text-xs); }
+  .sw div span { display: block; color: var(--text-muted); }
+  .type-row { display: flex; align-items: baseline; gap: var(--space-4); }
+  .type-row > .label:first-child { width: 90px; flex: none; }
+  .narrow { width: 375px; max-width: 100%; border: 1px dashed var(--rule-strong); padding-top: var(--space-3); }
+  .shell { display: grid; grid-template: var(--titlebar) 200px var(--dock) / var(--rail) 1fr; border: 1px solid var(--rule); }
+  .shell .titlebar, .shell .dock { grid-column: 1 / -1; }
+  .shell main { padding: var(--space-4); background: var(--ground); }
+  .notices { display: grid; gap: var(--space-2); max-width: 520px; }
+  .field-wrap { width: 360px; max-width: 100%; }
+  .sub { font-size: var(--text-md); font-weight: var(--weight-regular); }
+</style>
+</head>
+<body>
+<div class="sg">
+  <header class="sg-head">
+    <h1>Styleguide <span class="muted sub">token v2 · console</span></h1>
+    <button class="btn" id="theme">Light theme</button>
+  </header>
+
+  <section>
+    <h2>Semantic colours</h2>
+    <div class="grid" id="swatches"></div>
+  </section>
+
+  <section>
+    <h2>Type — one family, hierarchy by size, weight and capitals</h2>
+    <div class="type-row"><span class="label">2xl · 700</span><h1>Night Signals</h1></div>
+    <div class="type-row"><span class="label">xl · 700</span><h2>Queue</h2></div>
+    <div class="type-row"><span class="label">lg · 500</span><h3>Low Hours</h3></div>
+    <div class="type-row"><span class="label">md · 400</span><span>Arden Vale · Night Signals · track 3 of 12</span></div>
+    <div class="type-row"><span class="label">sm · 400</span><span class="muted" style="font-size: var(--text-sm)">Failed tracks stay here until you retry or clear them.</span></div>
+    <div class="type-row"><span class="label">label</span><span class="label">Downloads · Released · Tracks</span></div>
+    <div class="type-row"><span class="label">data</span><span class="num">0602567891234 · 18.4 / 29.6 MB · 4.2 MB/s · -&gt; != fi</span></div>
+  </section>
+
+  <section>
+    <h2>Buttons</h2>
+    <div class="row">
+      <button class="btn primary">Download 12 <span class="key">⏎</span></button>
+      <button class="btn">Download selected</button>
+      <button class="btn ghost">Copy as CLI</button>
+      <button class="btn danger">Delete</button>
+      <button class="btn" disabled>Disabled</button>
+      <button class="btn sm">Small</button>
+      <button class="btn icon" aria-label="Settings">⚙</button>
+      <button class="btn ghost">Search <span class="key">⌘K</span></button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Fields</h2>
+    <div class="row" style="align-items: flex-start">
+      <div class="field-wrap"><label class="field"><span class="pre">URL</span><input placeholder="Paste a link or search"></label></div>
+      <div class="field-wrap"><label class="field"><input value="https://open.spotify.com/album/5d1Kc0Q7pX3vXa" aria-label="Link"></label></div>
+      <div class="field-wrap">
+        <label class="field" data-state="error"><span class="pre">Server</span><input value="http://192.168.1.20"></label>
+        <p class="hint" data-tone="error">Could not reach the server: connection refused.</p>
+      </div>
+      <div class="field-wrap"><label class="field select"><select aria-label="Quality"><option>LOSSLESS</option><option>HI_RES</option></select></label><p class="hint">Falls back to lossless when hi-res is missing.</p></div>
+      <div class="field-wrap"><label class="field" aria-disabled="true"><input value="Disabled" disabled aria-label="Disabled"></label></div>
+    </div>
+    <div class="row">
+      <label class="row"><input type="checkbox" class="check" checked> Checked</label>
+      <label class="row"><input type="checkbox" class="check"> Unchecked</label>
+      <label class="row"><input type="checkbox" class="check" disabled> Disabled</label>
+      <label class="row"><input type="checkbox" class="switch" checked> Embed lyrics</label>
+      <label class="row"><input type="checkbox" class="switch"> Save .lrc</label>
+    </div>
+  </section>
+
+  <section>
+    <h2>Readouts — quality display, state words</h2>
+    <div class="row">
+      <span class="qd">24 / 96 · FLAC</span>
+      <span class="qd">24 / 192 · FLAC</span>
+      <span class="qd dim">16 / 44.1</span>
+      <span class="qd dim">ATMOS</span>
+      <span class="qd dim">320 · MP3</span>
+    </div>
+    <div class="row">
+      <span class="state" data-tone="run">running</span>
+      <span class="state" data-tone="ok">done</span>
+      <span class="state" data-tone="error">not found</span>
+      <span class="state">queued</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Segment meters</h2>
+    <div class="col">
+      <div class="row"><span class="meter" data-v="0" data-n="16"></span><span class="muted">0%</span></div>
+      <div class="row"><span class="meter" data-v=".62" data-n="16"></span><span class="signal">62%</span></div>
+      <div class="row"><span class="meter lg" data-v=".25" data-n="24"></span><span class="signal">3 / 12</span></div>
+      <div class="row"><span class="meter" data-tone="ok" data-v="1" data-n="16"></span><span class="state" data-tone="ok">done</span></div>
+      <div class="row"><span class="meter" data-tone="error" data-v=".4" data-n="16"></span><span class="state" data-tone="error">failed at 40%</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Panels and table</h2>
+    <section class="panel">
+      <span class="legend">Tracks <b>4</b></span>
+      <span class="legend end">Tidal → Qobuz</span>
+      <table class="table">
+        <thead><tr><th class="fit"></th><th class="fit end">#</th><th>Title</th><th class="fit">Quality</th><th class="fit end">Time</th><th class="fit">State</th></tr></thead>
+        <tbody>
+          <tr aria-selected="true"><td><input type="checkbox" class="check" checked aria-label="Select"></td><td class="end muted">1</td><td class="grow">Carrier Wave<small>Arden Vale</small></td><td><span class="qd dim">24 / 96</span></td><td class="end num">3:42</td><td><span class="state" data-tone="ok">done</span></td></tr>
+          <tr aria-selected="true"><td><input type="checkbox" class="check" checked aria-label="Select"></td><td class="end muted">3</td><td class="grow">Low Hours<small>Arden Vale</small></td><td><span class="qd dim">24 / 96</span></td><td class="end num">3:18</td><td><span class="meter" data-v=".62" data-n="10"></span></td></tr>
+          <tr><td><input type="checkbox" class="check" aria-label="Select"></td><td class="end muted">7</td><td class="grow">Northbound Signal Path — Extended Version For The Long Drive Home Tonight<small>Arden Vale, Mira Sol, Kō</small></td><td><span class="qd dim">24 / 96</span></td><td class="end num">7:48</td><td></td></tr>
+          <tr><td><input type="checkbox" class="check" aria-label="Select"></td><td class="end muted">8</td><td class="grow">Dial Tone<small>Arden Vale</small></td><td><span class="qd dim">—</span></td><td class="end num">3:02</td><td><span class="state" data-tone="error">not found</span></td></tr>
+        </tbody>
+      </table>
+    </section>
+    <p class="label">The same table at 375px — monospace takes more width than Inter (redesign-plan §5)</p>
+    <div class="narrow">
+      <section class="panel">
+        <span class="legend">Tracks</span>
+        <table class="table">
+          <tbody>
+            <tr aria-selected="true"><td class="end muted fit">1</td><td class="grow">Carrier Wave<small>Arden Vale</small></td><td class="end num fit">3:42</td></tr>
+            <tr><td class="end muted fit">7</td><td class="grow">Northbound Signal Path — Extended Version<small>Arden Vale</small></td><td class="end num fit">7:48</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+    <section class="panel" data-focus>
+      <span class="legend">Configuration</span>
+      <div class="body muted">A focused panel: the border and legend take the signal.</div>
+    </section>
+  </section>
+
+  <section>
+    <h2>Navigation — rail and tabs</h2>
+    <div class="shell">
+      <header class="titlebar"><span class="wordmark">MORNYE<small>2.0.6</small></span><span class="rule"></span><span class="state" data-tone="run">● downloading 3 / 12</span></header>
+      <nav class="rail">
+        <div class="group"><div class="label">Library</div>
+          <a href="#" aria-current="page"><span class="ico">≡</span>Queue<span class="count">9</span></a>
+          <a href="#"><span class="ico">↺</span>History</a>
+          <a href="#"><span class="ico">▤</span>Server</a>
+        </div>
+      </nav>
+      <main>
+        <div class="tabs" role="tablist">
+          <button role="tab" aria-selected="true">General</button>
+          <button role="tab" aria-selected="false">Download</button>
+          <button role="tab" aria-selected="false">Metadata</button>
+          <button role="tab" aria-selected="false">Extensions</button>
+        </div>
+      </main>
+      <footer class="dock"><span class="label">Downloads</span><span class="meter lg" data-v=".25" data-n="24"></span><span class="signal">3 / 12</span><span class="sep"></span><span class="what">Low Hours — Arden Vale · tidal · 4.2 MB/s</span><span class="qd">24 / 96 · FLAC</span></footer>
+    </div>
+  </section>
+
+  <section>
+    <h2>Feedback — notice, fault, blank, skeleton, dialog</h2>
+    <div class="notices">
+      <div class="notice" data-tone="ok"><span class="what">Settings saved for Jellyfin.</span><button class="btn ghost sm">Undo</button></div>
+      <div class="notice" data-tone="run"><span class="what">Checking 14 extensions…</span></div>
+      <div class="notice" data-tone="error"><span class="what">Could not save the extension settings.</span><button class="btn ghost sm">Details</button></div>
+    </div>
+    <section class="panel">
+      <span class="legend">Search</span>
+      <div class="fault">
+        <div class="what"><b>Could not reach Amazon Music</b>The extension answered with an error. Your other sources still work.
+          <details><summary>Technical details</summary>NETWORK_ERROR · ext:amazon · HTTP 503 after 3 attempts</details>
+        </div>
+        <button class="btn">Try again</button>
+      </div>
+    </section>
+    <section class="panel">
+      <span class="legend">History</span>
+      <div class="blank"><span class="label">Nothing yet</span><span>Downloads you finish appear here.</span><button class="btn">Open Home</button></div>
+    </section>
+    <section class="panel"><span class="legend">Loading</span>
+      <div class="body col"><span class="skel" style="width: 60%"></span><span class="skel" style="width: 40%"></span><span class="skel" style="width: 75%"></span></div>
+    </section>
+    <div class="row"><button class="btn" id="open-dialog">Open a confirm dialog</button></div>
+    <dialog class="dialog" id="dialog">
+      <header><h3>Reset every setting of Jellyfin?</h3></header>
+      <div class="body">The server address, user name and saved session are forgotten.</div>
+      <footer><button class="btn ghost" onclick="this.closest('dialog').close()">Cancel</button><button class="btn danger" onclick="this.closest('dialog').close()">Reset</button></footer>
+    </dialog>
+  </section>
+</div>
+<script>
+  const SEMANTIC = ['ground','surface','raised','selected','rule','rule-strong','control-border','text','text-2','text-muted','signal','signal-strong','signal-text','signal-ink','ok','error'];
+  function swatches() {
+    const cs = getComputedStyle(document.body);
+    document.getElementById('swatches').innerHTML = SEMANTIC.map((n) => {
+      const v = cs.getPropertyValue('--' + n).trim();
+      return `<div class="sw"><i style="background: var(--${n})"></i><div>${n}<span>${v}</span></div></div>`;
+    }).join('');
+  }
+  function meters() {
+    for (const m of document.querySelectorAll('.meter[data-v]')) {
+      const n = +m.dataset.n, lit = Math.round(+m.dataset.v * n);
+      m.innerHTML = Array.from({ length: n }, (_, i) => `<i class="${i < lit ? 'on' : ''}"></i>`).join('');
+    }
+  }
+  const btn = document.getElementById('theme');
+  btn.onclick = () => {
+    const light = !document.body.classList.contains('light-theme');
+    for (const el of [document.documentElement, document.body]) el.classList.toggle('light-theme', light);
+    btn.textContent = light ? 'Dark theme' : 'Light theme';
+    swatches();
+  };
+  if (location.hash === '#light') btn.click();
+  document.getElementById('open-dialog').onclick = () => document.getElementById('dialog').showModal();
+  swatches(); meters();
+</script>
+</body>
+</html>

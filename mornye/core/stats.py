@@ -35,12 +35,14 @@ than one that admits a gap.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import time
 from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Any, Iterable, Sequence
+from typing import Any
+from collections.abc import Iterable, Sequence
 
 from . import db
 
@@ -158,6 +160,11 @@ def _value(row: Any, name: str, default: Any = "") -> Any:
     return default if value is None else value
 
 
+def _file_exists(row: Any) -> bool:
+    path = _value(row, "file_path")
+    return bool(path) and os.path.isfile(path)
+
+
 # ---------------------------------------------------------------------------
 # The dashboard
 # ---------------------------------------------------------------------------
@@ -168,6 +175,7 @@ def wrapped(
     owner: str | None = None,
     window: Window | None = None,
     top: int = DEFAULT_TOP,
+    existing_files: bool = False,
 ) -> dict:
     """Everything the dashboard shows, from one pass over the log.
 
@@ -182,6 +190,8 @@ def wrapped(
     """
     window = window or Window()
     rows = _fetch(window, owner)
+    if existing_files:
+        rows = [row for row in rows if _value(row, "success", 0) and _file_exists(row)]
     successful = [row for row in rows if _value(row, "success", 0)]
 
     document: dict[str, Any] = {
@@ -389,7 +399,7 @@ def _streaks(per_day: Iterable[date]) -> tuple[int, int]:
         return 0, 0
 
     longest = run = 1
-    for previous, current in zip(days, days[1:]):
+    for previous, current in zip(days, days[1:], strict=False):
         run = run + 1 if current - previous == timedelta(days=1) else 1
         longest = max(longest, run)
 
@@ -398,7 +408,9 @@ def _streaks(per_day: Iterable[date]) -> tuple[int, int]:
         return longest, 0
 
     current_streak = 1
-    for previous, following in zip(reversed(days[:-1]), reversed(days[1:])):
+    for previous, following in zip(
+        reversed(days[:-1]), reversed(days[1:]), strict=False
+    ):
         if following - previous != timedelta(days=1):
             break
         current_streak += 1

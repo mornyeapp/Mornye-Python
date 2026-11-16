@@ -1,5 +1,5 @@
 """Bump the frontend cache-bust query string (?v=YYYYMMDD) across every file
-that carries it, so a static asset (styles.css, app.js, toast-system.js,
+that carries it, so a static asset (a stylesheet, app.js, toast-system.js,
 manifest.json) can't be served stale from a browser/webview cache after a
 frontend change.
 
@@ -8,7 +8,7 @@ Usage:
     python -m mornye.tools.bump_cache_bust 20260915    # explicit value
 
 Touches, in place:
-    mornye/frontend/index.html   (manifest.json, styles.css, toast-system.js, app.js)
+    mornye/frontend/index.html   (manifest.json, toast-system.js, app.js)
     mornye/webapp.py             (web-shim.js, toast-system.js injected tags)
 
 Does not touch sw.js's CACHE_NAME (that's a separate, coarser cache

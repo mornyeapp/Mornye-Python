@@ -5,7 +5,7 @@
   <!-- viewport-fit=cover lets the layout paint into the notch/home-indicator
        areas instead of being letterboxed by them; every edge-anchored element
        (the phone nav bar, the queue dock, toasts, bottom sheets) pads itself
-       back out with env(safe-area-inset-*) in styles.css. No maximum-scale or
+       back out with env(safe-area-inset-*) in css/layout.css. No maximum-scale or
        user-scalable=no: pinch-zoom stays available, and the iOS focus-zoom it
        is usually abused to suppress is handled properly instead, by giving
        form controls a 16px font below the phone breakpoint. -->
@@ -18,7 +18,7 @@
        pywebview window too: manifest/theme-color are simply unused there,
        and the registration script below no-ops without that flag. -->
   <link rel="manifest" href="manifest.json?v=20261106-warm-rebrand">
-  <meta name="theme-color" content="#0e0c0b">
+  <meta name="theme-color" content="#0d0d0d">
   <!-- apple-mobile-web-app-capable is the legacy spelling Safari still reads;
        mobile-web-app-capable is the standard one everything else reads. Both,
        because dropping either loses standalone mode on one of the two. -->
@@ -35,93 +35,30 @@
        gets a 404 in the server log for a file that was never going to
        be there. The artwork already ships. -->
   <link rel="icon" type="image/png" sizes="192x192" href="assets/icons/logo-192.png">
-  <!-- Fonts ship in assets/fonts/ (see the @font-face block in styles.css). -->
-  <!-- No hand-kept ?v= suffix: the three files below are written out with a
-       fresh timestamp on every load, so a changed styles.css/app.js is never
-       served from the web view's cache. They are local files; nothing is lost. -->
-  <script>document.write('<link rel="stylesheet" href="styles.css?_=' + Date.now() + '">');</script>
-  <script>
-    // Theme, applied before the first paint. app.js used to do this only from
-    // its 'pywebviewready' handler, which meant the window painted light and
-    // then flipped — and in --web mode that event never fires until you are
-    // signed in, so the login screen, and any session that failed to sign in,
-    // stayed light no matter what was chosen.
-    //
-    // This lives in <head>, not at the top of <body>: it needs to run before
-    // anything is painted, and at that point document.body does not exist
-    // yet, which is why the class goes on documentElement. app.js's
-    // setThemeClass() then keeps <html> and <body> carrying the same class —
-    // <html> so that `html { background: var(--bg) }` picks up the dark
-    // tokens, <body> for the many `body.dark-theme ...` component rules.
-    //
-    // The choice is stored twice: 'mornye-theme-mode' here (per-origin,
-    // readable this early) and gui-settings.json server-side (survives a
-    // restart even when the web view's storage does not — see save_theme()
-    // in app.py). applyTheme() in app.js reconciles the two after load.
-    (function () {
-      var mode = 'auto';
-      try { mode = localStorage.getItem('mornye-theme-mode') || 'auto'; } catch (e) {}
-      var dark = mode === 'dark' ||
-        (mode === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-      document.documentElement.classList.add(dark ? 'dark-theme' : 'light-theme');
-      // theme-color is what paints the browser UI around the page on a phone —
-      // Chrome's address bar, and the status/gesture bars of an installed PWA.
-      // Hard-coded dark, it framed the light theme in a black bar. It follows
-      // the chosen theme instead, here for the first paint and in app.js's
-      // setThemeClass() for every change after it.
-      try {
-        var tc = document.querySelector('meta[name="theme-color"]');
-        if (tc) tc.setAttribute('content', dark ? '#0e0c0b' : '#f6f2ec');
-      } catch (e) {}
-      // Accent, for the same reason and in the same breath: without it the
-      // first frames paint the default teal before applyAccent() runs.
-      // 'teal' is the default and has no data-accent value of its own.
-      // Before the 2026 rebrand the default was 'green', so a stored 'green'
-      // from then is almost always the untouched default: it is moved to
-      // teal once ('mornye-brand' marks it done; see migrateAccent in app.js).
-      try {
-        var accent = localStorage.getItem('mornye-accent');
-        if (accent === 'green' && localStorage.getItem('mornye-brand') !== '2') accent = 'teal';
-        if (accent && accent !== 'teal') document.documentElement.setAttribute('data-accent', accent);
-      } catch (e) {}
-    })();
-  </script>
+  <!-- Fonts ship in assets/fonts/ (see the @font-face block in css/layout.css). -->
+  <!-- boot-head.js: the stylesheets (each with a fresh ?_= timestamp, so a
+       changed sheet is never served from the web view's cache) and the
+       theme/accent classes, before the first paint. A file, not inline
+       script: --web sends a Content-Security-Policy that runs scripts only
+       from files (F1). -->
+  <script src="boot-head.js"></script>
 </head>
 <body>
-<script>
-  // Mirror the class the <head> script just put on <html> onto <body>, still
-  // before anything paints. Most component rules are written as
-  // `body.dark-theme ...`, and the base `body { background: ... }` is a
-  // light-only gradient — so a body without the class would paint a light
-  // slab over the correctly-dark <html> for the frames between here and
-  // app.js's applyTheme().
-  document.body.classList.add(
-    document.documentElement.classList.contains('dark-theme') ? 'dark-theme' : 'light-theme'
-  );
-  // Same mirroring for the accent — styles.css keys its --accent-* blocks
-  // off html *and* body (see setThemeClass/applyAccent in app.js).
-  var _accent = document.documentElement.getAttribute('data-accent');
-  if (_accent) document.body.setAttribute('data-accent', _accent);
-  // Sidebar collapsed or labelled (toggleSidebar in app.js), before paint so
-  // the content does not jump sideways once the app has loaded.
-  try {
-    if (localStorage.getItem('mornye-sidebar') === 'collapsed') document.body.classList.add('sidebar-collapsed');
-  } catch (e) {}
-</script>
+<script src="boot-body.js"></script>
 
 <div id="titlebar">
   <div class="dots">
-    <div class="dot c" onclick="pyWin('Quit')" title="Close"></div>
-    <div class="dot m" onclick="pyWin('WindowMinimise')" title="Minimize"></div>
-    <div class="dot x" onclick="pyWin('WindowToggleMaximise')" title="Maximize"></div>
+    <div class="dot c" role="button" tabindex="0" data-activate aria-label="Close" data-onclick="pyWin('Quit')" title="Close"></div>
+    <div class="dot m" role="button" tabindex="0" data-activate aria-label="Minimize" data-onclick="pyWin('WindowMinimise')" title="Minimize"></div>
+    <div class="dot x" role="button" tabindex="0" data-activate aria-label="Maximize" data-onclick="pyWin('WindowToggleMaximise')" title="Maximize"></div>
   </div>
   
   <div class="pywebview-drag-region u-flex-1 u-h-100pct u-app-region-drag"></div>
 
   <div id="tb-logo">
     <span>Mornye</span>
-    <span id="tb-version" class="clickable-version" onclick="openReleasePage()">v...</span>
-    <span id="tb-update-badge" class="update-badge hidden" title="Update available" onclick="openReleasePage()">⬆️</span>
+    <span id="tb-version" class="clickable-version" role="link" tabindex="0" data-activate data-onclick="openReleasePage()">v...</span>
+    <span id="tb-update-badge" class="update-badge hidden" title="Update available" role="link" tabindex="0" data-activate aria-label="Update available" data-onclick="openReleasePage()">⬆️</span>
   </div>
 </div>
 
@@ -134,59 +71,59 @@
     <div class="sb-brand">
       <img src="assets/icons/logo-transparent.png" alt="" class="sb-logo">
       <span class="sb-name">Mornye</span>
-      <span id="sb-version" class="sb-version clickable-version" onclick="openReleasePage()" title="Latest release on PyPI">v...</span>
+      <span id="sb-version" class="sb-version clickable-version" role="link" tabindex="0" data-activate data-onclick="openReleasePage()" title="Latest release on PyPI">v...</span>
     </div>
     <div class="sb-group">Discover</div>
-    <button class="nav-btn active" id="nav-home"     onclick="switchView('home')"     title="Home" data-label="Home">
+    <button class="nav-btn active" id="nav-home"     data-onclick="switchView('home')"     title="Home" data-label="Home">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V21H15v-5h-6v5H3z"/></svg>
       <span class="nav-label">Home</span>
     </button>
-    <button class="nav-btn" id="nav-explore" onclick="switchView('explore'); loadExploreData();" title="Explore" data-label="Explore">
+    <button class="nav-btn" id="nav-explore" data-onclick="switchView('explore'); loadExploreData();" title="Explore" data-label="Explore">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
       <span class="nav-label">Explore</span>
     </button>
     <div class="sb-group">Library</div>
-    <button class="nav-btn" id="nav-player" onclick="switchView('player')" title="Play the music in a folder" data-label="Player">
+    <button class="nav-btn" id="nav-player" data-onclick="switchView('player')" title="Play the music in a folder" data-label="Player">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor"/></svg>
       <span class="nav-label">Player</span>
     </button>
-    <button class="nav-btn" id="nav-queue" onclick="switchView('queue')" title="Queue" data-label="Queue">
+    <button class="nav-btn" id="nav-queue" data-onclick="switchView('queue')" title="Queue" data-label="Queue">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>
       <span class="nav-label">Queue</span>
       <span class="nav-badge hidden" id="nav-queue-badge"></span>
     </button>
-    <button class="nav-btn" id="nav-history" onclick="switchView('history')" title="History" data-label="History">
+    <button class="nav-btn" id="nav-history" data-onclick="switchView('history')" title="History" data-label="History">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
       <span class="nav-label">History</span>
     </button>
-    <button class="nav-btn" id="nav-local" onclick="switchView('local')" title="Fix Local Files" data-label="Fix Local Files">
+    <button class="nav-btn" id="nav-local" data-onclick="switchView('local')" title="Fix Local Files" data-label="Fix Local Files">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
       <span class="nav-label">Fix Local Files</span>
     </button>
-    <button class="nav-btn" id="nav-following" onclick="switchView('following'); loadSubscriptions();" title="Following" data-label="Following">
+    <button class="nav-btn" id="nav-following" data-onclick="switchView('following'); loadSubscriptions();" title="Following" data-label="Following">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
       <span class="nav-label">Following</span>
     </button>
-    <button class="nav-btn" id="nav-stats" onclick="switchView('stats'); loadStats();" title="Your library in numbers" data-label="Stats">
+    <button class="nav-btn" id="nav-stats" data-onclick="switchView('stats'); loadStats();" title="Your library in numbers" data-label="Stats">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
       <span class="nav-label">Stats</span>
     </button>
     <div class="sb-group">System</div>
-    <button class="nav-btn" id="nav-logs"     onclick="switchView('logs')"     title="Logs" data-label="Logs">
+    <button class="nav-btn" id="nav-logs"     data-onclick="switchView('logs')"     title="Logs" data-label="Logs">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
       <span class="nav-label">Logs</span>
     </button>
-    <button class="nav-btn" id="nav-settings" onclick="switchView('settings')" title="Settings" data-label="Settings">
+    <button class="nav-btn" id="nav-settings" data-onclick="switchView('settings')" title="Settings" data-label="Settings">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       <span class="nav-label">Settings</span>
     </button>
     <div class="nav-spacer"></div>
-    <button class="nav-btn sb-collapse" type="button" onclick="toggleSidebar()" title="Collapse sidebar" data-label="Expand sidebar" aria-pressed="false">
+    <button class="nav-btn sb-collapse" type="button" data-onclick="toggleSidebar()" title="Collapse sidebar" data-label="Expand sidebar" aria-pressed="false">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>
       <span class="nav-label">Collapse</span>
     </button>
     <button class="nav-btn" title="Report a Bug on GitHub" data-label="Report a Bug"
-      onclick="pyWin('open_url', 'https://github.com/mornyeapp/Mornye-Python/issues')">
+      data-onclick="pyWin('open_url', 'https://github.com/mornyeapp/Mornye-Python/issues')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
       <span class="nav-label">Report a Bug</span>
     </button>
@@ -203,8 +140,8 @@
             </div>
             <div class="hero-main">
               <div class="hero-title">Mornye</div>
-              <span id="hero-version" class="hero-version clickable-version" onclick="openReleasePage()">v...</span>
-              <span id="hero-update-badge" class="hero-update-badge hidden" title="Update available" onclick="openReleasePage()">New version</span>
+              <span id="hero-version" class="hero-version clickable-version" role="link" tabindex="0" data-activate data-onclick="openReleasePage()">v...</span>
+              <span id="hero-update-badge" class="hero-update-badge hidden" title="Update available" role="link" tabindex="0" data-activate data-onclick="openReleasePage()">New version</span>
             </div>
           </div>
           <div class="hero-subtitle">Fetch Spotify track metadata and retrieve matching lossless audio through configurable Tidal, Qobuz & Amazon Music provider backends.</div>
@@ -216,13 +153,13 @@
           <div class="mode-wrap">
             <!-- Both icons ship in the markup and CSS shows the one matching
                  the current mode, keyed off the .active class the toggle
-                 already carries (see .mode-btn.active in styles.css). That
+                 already carries (see .mode-btn.active in css/views/home.css). That
                  keeps the swap in one place: this used to be an emoji that
                  two separate JS functions reassigned, which is why they could
                  drift, and an emoji renders in the system's own colour and
                  style rather than following the button like the CSV icon
                  beside it does. -->
-            <button id="searchModeToggle" type="button" class="mode-btn" onclick="toggleSearchMode()" title="Switch to Search Mode">
+            <button id="searchModeToggle" type="button" class="mode-btn" data-onclick="toggleSearchMode()" title="Switch to Search Mode">
               <span class="mode-btn-icon" id="searchModeIcon">
                 <svg class="icon-link" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                 <svg class="icon-search" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
@@ -234,13 +171,13 @@
                  catalogue extension (Melon, Bugs, Genie…) is installed — with
                  Spotify as the only choice there is nothing to choose. -->
             <select id="searchSource" class="search-source hidden" aria-label="Search source"
-                    title="Search source" onchange="onSearchSourceChange()">
+                    title="Search source" data-onchange="onSearchSourceChange()">
               <option value="spotify">Spotify</option>
             </select>
             <!-- A CSV is the third way in, next to a link and a search: the
                  file is read in the browser and its text is sent, so nothing
                  here depends on the server seeing your disk. -->
-            <button id="csvBtn" type="button" class="mode-btn" onclick="openCsvPicker()"
+            <button id="csvBtn" type="button" class="mode-btn" data-onclick="openCsvPicker()"
                     title="Import a CSV of tracks (Exportify, Soundiiz, a list of links…)"
                     aria-label="Import a CSV of tracks">
               <span class="mode-btn-icon">
@@ -248,7 +185,7 @@
               </span>
             </button>
             <input id="csvFileInput" type="file" accept=".csv,.tsv,.txt,.m3u,.m3u8,text/csv,audio/x-mpegurl"
-                   style="display:none;" onchange="onCsvFileChosen(this)">
+                   style="display:none;" data-onchange="onCsvFileChosen(this)">
           </div>
           <div class="url-wrap">
             <span class="url-icon">
@@ -256,20 +193,20 @@
             </span>
             <input id="urlInput" type="text"
               placeholder="Paste Spotify, Tidal, Apple Music, YouTube or Pandora link…"
-              onkeydown="if(event.key==='Enter' && $('searchMode').value === 'link') onFetch()">
+              data-onkeydown="if(event.key==='Enter' && $('searchMode').value === 'link') onFetch()">
           </div>
           <!-- The gesture this app is built around is "copy a link in Spotify,
                come back here, paste, fetch". This does the paste and the fetch
                in one press. Hidden automatically when the browser gives no
                clipboard read permission (see initPasteButton in app.js) rather
                than sitting there doing nothing. -->
-          <button id="pasteBtn" type="button" class="mode-btn hidden" onclick="pasteAndFetch()"
+          <button id="pasteBtn" type="button" class="mode-btn hidden" data-onclick="pasteAndFetch()"
                   title="Paste link from clipboard and fetch" aria-label="Paste and fetch">
             <span class="mode-btn-icon">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
             </span>
           </button>
-          <button id="fetchBtn" onclick="onFetch()" title="Fetch" aria-label="Fetch">
+          <button id="fetchBtn" data-onclick="onFetch()" title="Fetch" aria-label="Fetch">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
         </div>
@@ -306,6 +243,10 @@
                 <div id="album-meta">
                   <span id="album-artist">—</span>
                 </div>
+                <!-- Quality readout (§2, signature 1): the tier asked for in
+                     Settings, marked REQ, until the first track of this card
+                     finishes; then what that file really is. -->
+                <div id="album-quality" class="album-quality hidden" aria-live="polite"></div>
                 <div id="album-meta-details" class="album-meta-details hidden">
                   <div class="u-items-center u-gap-8" id="album-owner-row" style="display:flex;">
                     <div id="album-owner-avatar" class="owner-avatar hidden"></div>
@@ -321,22 +262,22 @@
                 <div id="album-description" class="album-description hidden"></div>
                 <div id="track-meta-section" style="display:none;"></div>
                 <div id="album-actions">
-                  <button class="act-btn primary" onclick="downloadAll()">
+                  <button class="act-btn primary" data-onclick="downloadAll()">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                     Download All
                   </button>
-                  <button class="act-btn secondary" type="button" onclick="addToStagedQueue()" id="add-to-queue-btn" title="Keep it in the Queue and download it later">
+                  <button class="act-btn secondary" type="button" data-onclick="addToStagedQueue()" id="add-to-queue-btn" title="Keep it in the Queue and download it later">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                     Add to queue
                   </button>
-                  <button class="act-btn secondary" onclick="downloadSelected()" id="dl-selected-btn" style="display:none;">
+                  <button class="act-btn secondary" data-onclick="downloadSelected()" id="dl-selected-btn" style="display:none;">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="9 12 11 14 15 10"/></svg>
                     Download Selected
                   </button>
                 </div>
               </div>
               <aside id="album-tech" class="hidden" aria-label="Technical details"></aside>
-              <button style="position:absolute;" class="u-bg-none u-border-none u-c-muted u-cursor-pointer u-top-10 u-right-10 u-fs-16 u-lh-1 u-p-3" onclick="closeAlbumCard()">
+              <button style="position:absolute;" class="u-bg-none u-border-none u-c-muted u-cursor-pointer u-top-10 u-right-10 u-fs-16 u-lh-1 u-p-3" data-onclick="closeAlbumCard()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
             </div>
@@ -349,10 +290,10 @@
                 <span class="ts-icon">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
                 </span>
-                <input id="trackSearch" type="text" placeholder="Search tracks…" oninput="filterTracks()">
+                <input id="trackSearch" type="text" placeholder="Search tracks…" data-oninput="filterTracks()">
               </div>
               <div class="sort-wrap">
-                <select id="sort-select" onchange="sortTracks()">
+                <select id="sort-select" data-onchange="sortTracks()">
                   <option value="default">Default</option>
                   <option value="title_asc">Title (A-Z)</option>
                   <option value="title_desc">Title (Z-A)</option>
@@ -370,7 +311,7 @@
 
             <div id="track-table-wrap" class="hidden">
               <div class="track-table-header">
-                <div><input id="check-all" type="checkbox" title="Select all tracks" onchange="toggleAll(this)"></div>
+                <div><input id="check-all" type="checkbox" title="Select all tracks" data-onchange="toggleAll(this)"></div>
                 <div>#</div>
                 <div>Title</div>
                 <div>Playcount</div>
@@ -379,9 +320,9 @@
               </div>
               <div id="track-rows"></div>
               <div id="pagetion-controls" class="hidden">
-                <button id="page-prev" class="page-btn" onclick="previousPage()">← Previous</button>
+                <button id="page-prev" class="page-btn" data-onclick="previousPage()">← Previous</button>
                 <span id="page-info">Page 1 of 1</span>
-                <button id="page-next" class="page-btn" onclick="nextPage()">Next →</button>
+                <button id="page-next" class="page-btn" data-onclick="nextPage()">Next →</button>
               </div>
             </div>
 
@@ -399,7 +340,7 @@
         <div class="u-items-center u-justify-space-between u-gap-12 u-mb-24 u-wrap-wrap" style="display:flex;">
           <h2 class="u-m-0 u-fs-28" id="explore-greeting">Explore</h2>
           <label class="s-label u-items-center u-gap-8" style="display:flex;">Feed
-            <select id="explore-source" onchange="setExploreSource(this.value)" title="Where the feed comes from">
+            <select id="explore-source" data-onchange="setExploreSource(this.value)" title="Where the feed comes from">
               <option value="spotify">Spotify</option>
             </select>
           </label>
@@ -412,10 +353,10 @@
         <div id="log-header">
           <span>Terminal Logs</span>
           <div class="log-actions">
-            <button class="log-btn" onclick="copyLogs()" title="Copy Logs">
+            <button class="log-btn" data-onclick="copyLogs()" title="Copy Logs">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
             </button>
-            <button class="log-btn" onclick="clearLog()" title="Clear Logs">
+            <button class="log-btn" data-onclick="clearLog()" title="Clear Logs">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
             </button>
           </div>
@@ -430,36 +371,48 @@
     </div>
     <div class="view" id="view-player">
       <div class="s-header">
-        <h1>Player</h1>
-        <div class="s-actions">
-          <button class="act-btn secondary" type="button" onclick="openPlayerFolderBrowser()">Open folder…</button>
+        <div class="player-heading">
+          <h1>Player</h1>
+          <p>Browse and play music from your local library.</p>
         </div>
       </div>
       <div class="s-body" id="player-body">
-        <div class="s-section u-p-14-18">
+        <div class="s-section player-source">
+          <label class="player-folder-label" for="player-path-input">Music folder</label>
           <div class="s-row u-items-center u-gap-8">
-            <input style="flex:1;" type="text" id="player-path-input" class="full" placeholder="Folder with your music — /Users/name/Music, C:\Music"
-                   onkeydown="if(event.key==='Enter') scanPlayerLibrary()">
-            <button class="act-btn secondary" type="button" onclick="openPlayerFolderBrowser()">Browse</button>
-            <button class="act-btn primary" type="button" onclick="scanPlayerLibrary()" id="player-scan-btn">Open</button>
+            <input type="text" id="player-path-input" class="full" placeholder="Enter a folder path"
+                   data-onkeydown="if(event.key==='Enter') scanPlayerLibrary()">
+            <button class="act-btn secondary" type="button" data-onclick="openPlayerFolderBrowser()">Choose folder</button>
+            <button class="act-btn primary" type="button" data-onclick="scanPlayerLibrary()" id="player-scan-btn">Scan library</button>
           </div>
           <div id="player-recent" class="share-chips hidden" aria-label="Recent folders"></div>
+        </div>
+        <div class="player-empty" id="player-empty" role="status" aria-live="polite">
+          <span class="player-empty-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 7h6l2 2h10v10H3z"></path>
+              <path d="M14 12v4.2a1.8 1.8 0 1 1-1.8-1.8H14"></path>
+              <path d="M14 12V9l4-1v6"></path>
+            </svg>
+          </span>
+          <strong class="player-empty-title">Choose a music folder</strong>
+          <span class="player-empty-copy">Your tracks will appear here after the library is scanned.</span>
         </div>
         <div id="player-toolbar" class="player-toolbar hidden">
           <div class="pt-row">
             <div class="pt-group" role="group" aria-label="Playback">
-              <button class="pt-btn primary" type="button" onclick="playFromLibrary(0, false)">
+              <button class="pt-btn primary" type="button" data-onclick="playFromLibrary(0, false)">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Play all</button>
-              <button class="pt-btn" type="button" onclick="playFromLibrary(0, true)">
+              <button class="pt-btn" type="button" data-onclick="playFromLibrary(0, true)">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>Shuffle</button>
             </div>
             <label class="pt-search">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input type="search" id="player-search" placeholder="Search title, artist or album" oninput="filterPlayerLibrary()" autocomplete="off" spellcheck="false">
-              <button type="button" class="pt-clear hidden" id="player-search-clear" onclick="clearPlayerSearch()" aria-label="Clear search">×</button>
+              <input type="search" id="player-search" placeholder="Search title, artist or album" data-oninput="filterPlayerLibrary()" autocomplete="off" spellcheck="false">
+              <button type="button" class="pt-clear hidden" id="player-search-clear" data-onclick="clearPlayerSearch()" aria-label="Clear search">×</button>
             </label>
             <label class="pt-sort"><span>Sort</span>
-              <select id="player-sort" onchange="filterPlayerLibrary()" aria-label="Sort by">
+              <select id="player-sort" data-onchange="filterPlayerLibrary()" aria-label="Sort by">
                 <option value="path">Folder order</option>
                 <option value="title">Title</option>
                 <option value="artist">Artist</option>
@@ -482,11 +435,11 @@
       <div class="s-header">
         <h1>Local Auto-Tagger</h1>
         <div class="s-actions">
-          <button class="act-btn secondary" onclick="startDedupScan()" id="btn-scan-dedup" title="Find files that are the same recording by acoustic fingerprint, independent of tags/ISRC">
+          <button class="act-btn secondary" data-onclick="startDedupScan()" id="btn-scan-dedup" title="Find files that are the same recording by acoustic fingerprint, independent of tags/ISRC">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3z"/><path d="M20 20l-2.5-2.5"/></svg>
             Find Duplicates
           </button>
-          <button class="act-btn primary" onclick="startLocalScan()" id="btn-scan-local">
+          <button class="act-btn primary" data-onclick="startLocalScan()" id="btn-scan-local">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
             Scan Folder
           </button>
@@ -499,20 +452,20 @@
           <div
             id="local-drop-zone"
             class="local-drop-zone"
-            ondragover="onLocalDragOver(event)"
-            ondragleave="onLocalDragLeave(event)"
-            ondrop="onLocalDrop(event)"
+            data-ondragover="onLocalDragOver(event)"
+            data-ondragleave="onLocalDragLeave(event)"
+            data-ondrop="onLocalDrop(event)"
           >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
             <span class="local-drop-zone-text">Drag & drop a folder or audio file here, or paste a path below</span>
             <div class="s-row u-items-center u-gap-8 u-w-100pct">
-              <input type="text" id="local-path-input" class="full u-flex-1" placeholder="Folder path or network share — /Users/name/Music, C:\Music, smb://nas/Music" onclick="event.stopPropagation()">
-              <button class="act-btn secondary u-p-6-12 u-fs-12 u-ws-nowrap" onclick="openFolderBrowser()">
+              <input type="text" id="local-path-input" class="full u-flex-1" placeholder="Folder path or network share — /Users/name/Music, C:\Music, smb://nas/Music" data-onclick="event.stopPropagation()">
+              <button class="act-btn secondary u-p-6-12 u-fs-12 u-ws-nowrap" data-onclick="openFolderBrowser()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
                 Browse
               </button>
             </div>
-            <div id="local-network-shares" class="share-chips hidden" onclick="event.stopPropagation()" aria-label="Mounted network shares"></div>
+            <div id="local-network-shares" class="share-chips hidden" data-onclick="event.stopPropagation()" aria-label="Mounted network shares"></div>
           </div>
           <p class="u-fs-11_5 u-c-muted u-mt-8 u-lh-1_5">
             Paste (or drop) the folder or file you want to fix — a NAS works too: type its smb:// address or a \\server\share path once the share is connected on this computer. Supported formats: FLAC, MP3, M4A/AAC, OGG Vorbis, Opus, WAV, AIFF, WMA, WavPack, Monkey's Audio, Musepack, TrueAudio.
@@ -522,7 +475,7 @@
         
         <div id="local-results-wrap" class="hidden u-dir-column u-minh-0" style="display:flex;flex:1;">
           <div class="track-table-header u-cols-24-1fr-80-1fr u-mb-8">
-            <div><input id="check-all-local" type="checkbox" checked onchange="toggleAllLocal(this)"></div>
+            <div><input id="check-all-local" type="checkbox" checked data-onchange="toggleAllLocal(this)"></div>
             <div>Current File (Local)</div>
             <div class="u-ta-center">Match</div>
             <div>New Tags (Mornye)</div>
@@ -565,7 +518,7 @@
             <label class="s-label u-items-center u-gap-6 u-fs-11_5" style="display:flex;" title="Also write a SQLite index of the whole library next to the quarantine folder">
               <input type="checkbox" id="libdedup-db"> Write index .db
             </label>
-            <button class="act-btn primary u-ml-auto" onclick="startLibraryDedupScan()" id="btn-libdedup-scan">
+            <button class="act-btn secondary u-ml-auto" data-onclick="startLibraryDedupScan()" id="btn-libdedup-scan">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
               Scan Library
             </button>
@@ -575,16 +528,16 @@
           <div id="libdedup-groups" class="sort-list"></div>
           <div id="libdedup-actions" class="hidden s-row u-gap-10 u-items-center u-mt-12 u-wrap-wrap">
             <span class="u-fw-600 u-fs-12 u-c-text" id="libdedup-selected">0 selected</span>
-            <button class="act-btn secondary u-ml-auto" onclick="resolveLibraryDuplicates('trash')" id="btn-libdedup-trash" title="Move them into .mornye-duplicates inside the library. Undoable.">
+            <button class="act-btn secondary u-ml-auto" data-onclick="resolveLibraryDuplicates('trash')" id="btn-libdedup-trash" title="Move them into .mornye-duplicates inside the library. Undoable.">
               Move to quarantine
             </button>
-            <button class="act-btn danger" onclick="resolveLibraryDuplicates('delete')" id="btn-libdedup-delete" title="Delete them outright. Not undoable.">
+            <button class="act-btn danger" data-onclick="resolveLibraryDuplicates('delete')" id="btn-libdedup-delete" title="Delete them outright. Not undoable.">
               Delete permanently
             </button>
           </div>
           <div id="libdedup-undo" class="hidden u-mt-12 u-fs-11_5 u-c-muted u-gap-10 u-items-center u-wrap-wrap" style="display:flex;">
             <span id="libdedup-manifest" class="reg-url u-flex-1 u-minw-0"></span>
-            <button class="act-btn secondary" onclick="undoLibraryDedup()" id="btn-libdedup-undo">Undo</button>
+            <button class="act-btn secondary" data-onclick="undoLibraryDedup()" id="btn-libdedup-undo">Undo</button>
           </div>
         </div>
       </div>
@@ -592,15 +545,15 @@
       <div class="s-footer hidden u-p-14-18 u-border-top-1-solid-border u-bg-surface2 u-justify-space-between u-items-center u-shrink-0" id="local-footer">
         <span class="u-fw-600 u-fs-13 u-c-text" id="local-selected-count">0 selected</span>
         <div class="u-gap-10 u-items-center" style="display:flex;">
-          <button class="act-btn secondary" type="button" onclick="openConvertDialog()" id="btn-convert-local" title="Convert the ticked files to another audio format">
+          <button class="act-btn secondary" type="button" data-onclick="openConvertDialog()" id="btn-convert-local" title="Convert the ticked files to another audio format">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
             Convert…
           </button>
-          <button class="act-btn secondary" type="button" onclick="openReorganizeDialog()" title="Move the scanned files into folders built from their tags">
+          <button class="act-btn secondary" type="button" data-onclick="openReorganizeDialog()" title="Move the scanned files into folders built from their tags">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
             Organize…
           </button>
-        <button class="act-btn primary" onclick="applyLocalTags()" id="btn-apply-local">
+        <button class="act-btn primary" data-onclick="applyLocalTags()" id="btn-apply-local">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
           Apply Selected Tags
         </button>
@@ -612,8 +565,8 @@
       <div class="s-header">
         <h1>Following</h1>
         <div class="s-actions">
-          <button class="act-btn secondary" type="button" onclick="checkSubscriptions(false)">Check for new</button>
-          <button class="act-btn primary" type="button" onclick="checkSubscriptions(true)">Check &amp; download</button>
+          <button class="act-btn secondary" type="button" data-onclick="checkSubscriptions(false)">Check for new</button>
+          <button class="act-btn primary" type="button" data-onclick="checkSubscriptions(true)">Check &amp; download</button>
         </div>
       </div>
       <div class="s-body">
@@ -621,12 +574,12 @@
           <div class="s-row u-items-center u-justify-space-between u-gap-10 u-mb-8">
             <div class="s-title u-m-0">New this week</div>
             <div class="u-gap-8 u-items-center" style="display:flex;">
-              <select class="u-maxw-130" id="weekly-days" onchange="loadWeeklyReleases(false)">
+              <select class="u-maxw-130" id="weekly-days" data-onchange="loadWeeklyReleases(false)">
                 <option value="7">Last 7 days</option>
                 <option value="14">Last 14 days</option>
                 <option value="30">Last 30 days</option>
               </select>
-              <button class="act-btn secondary u-p-6-12 u-fs-12" type="button" onclick="loadWeeklyReleases(true)" id="weekly-refresh-btn">Refresh</button>
+              <button class="act-btn secondary u-p-6-12 u-fs-12" type="button" data-onclick="loadWeeklyReleases(true)" id="weekly-refresh-btn">Refresh</button>
             </div>
           </div>
           <div class="u-fs-12 u-c-muted" id="weekly-status"></div>
@@ -654,7 +607,7 @@
               <option value="all">Everything</option>
             </select>
             <select class="u-maxw-170" id="subscription-interval" title="Check automatically and download what is new"></select>
-            <button class="act-btn primary u-p-8-16 u-fs-12 u-ws-nowrap" type="button" onclick="addSubscription()">Follow</button>
+            <button class="act-btn secondary u-p-8-16 u-fs-12 u-ws-nowrap" type="button" data-onclick="addSubscription()">Follow</button>
           </div>
           <div class="bulk-follow">
             <label for="subscription-bulk-input" class="field-label">Follow several artists at once</label>
@@ -666,7 +619,7 @@
                 <input type="checkbox" id="subscription-bulk-backfill" checked>
                 Reset seen history so the whole back catalogue is found
               </label>
-              <button class="act-btn secondary u-p-8-16 u-fs-12 u-ws-nowrap" type="button" onclick="addSubscriptionsBulk()">Follow all</button>
+              <button class="act-btn secondary u-p-8-16 u-fs-12 u-ws-nowrap" type="button" data-onclick="addSubscriptionsBulk()">Follow all</button>
             </div>
             <p class="u-fs-11_5 u-c-muted u-m-8-0-0 u-lh-1_5">
               Accepts Spotify artist URLs only. Duplicates are ignored. With back catalogue enabled,
@@ -697,24 +650,25 @@
             <select id="stats-smb-destination" aria-label="Network library destination" title="Saved network library">
               <option value="">Loading network destinations…</option>
             </select>
-            <button class="act-btn secondary" type="button" id="stats-smb-scan" onclick="scanSmbLibrary()" disabled title="Scan the selected network library">
+            <button class="act-btn secondary" type="button" id="stats-smb-scan" data-onclick="scanSmbLibrary()" disabled title="Scan the selected network library">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h6l2 2h10v10H3z"/><circle cx="12" cy="14" r="3"/><path d="M12 12v4m-1.5-1.5h3"/></svg>
               Scan library
             </button>
           </div>
-          <select class="u-maxw-170" id="stats-period" onchange="loadStats()">
+          <select class="u-maxw-170" id="stats-period" data-onchange="loadStats()">
             <option value="all">All time</option>
             <option value="year">This year</option>
             <option value="365">Last 365 days</option>
             <option value="30">Last 30 days</option>
           </select>
-          <button class="act-btn secondary" type="button" onclick="loadStats()">Refresh</button>
+          <button class="act-btn secondary" type="button" data-onclick="loadStats()">Refresh</button>
         </div>
       </div>
       <div class="s-body">
         <p class="stats-intro">
-          Browse this install’s download history or scan a saved SMB/WebDAV library in place. Genre,
-          release year and duration appear where tags are available.
+          Counts include downloaded audio files still present at their saved locations. Refresh
+          checks the files again; removed files leave these totals without erasing download history.
+          You can also scan a saved SMB/WebDAV library in place.
         </p>
         <div id="stats-smb-status" class="stats-smb-status hidden" role="status" aria-live="polite"></div>
         <div id="stats-body">
@@ -727,38 +681,42 @@
       <div class="s-header">
       <h1>Settings</h1>
       <div class="s-actions">
-        <button class="act-btn secondary" type="button" onclick="openConfigFolder()">Open Config Folder</button>
-        <button class="act-btn secondary" type="button" onclick="resetSettings()">Reset to Default</button>
-        <button class="act-btn primary" type="button" onclick="saveSettings()">Save Changes</button>
+        <button class="act-btn secondary" type="button" data-onclick="openConfigFolder()">Open Config Folder</button>
+        <button class="act-btn secondary" type="button" data-onclick="resetSettings()">Reset to Default</button>
+        <button class="act-btn primary" type="button" data-onclick="saveSettings()">Save Changes</button>
       </div>
     </div>
     
     <div class="tab-bar" role="tablist" aria-label="Settings sections">
         <label class="s-search">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input type="search" id="settings-search" placeholder="Search settings" autocomplete="off" oninput="filterSettings(this.value)" aria-label="Search settings">
+          <input type="search" id="settings-search" placeholder="Search settings" autocomplete="off" data-oninput="filterSettings(this.value)" aria-label="Search settings">
         </label>
-        <button class="stab active" onclick="switchTab('general',this)">
+        <button class="stab active" data-onclick="switchTab('general',this)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/><circle cx="17" cy="14" r="2.5"/><path d="M17 10v1.5"/><path d="M17 16.5v1.5"/><path d="M14 14h1.5"/><path d="M18.5 14H20"/></svg>
           General
         </button>
-        <button class="stab" onclick="switchTab('download',this)">
+        <button class="stab" data-onclick="switchTab('sources',this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 19.1a10 10 0 0 1 0-14.2"/><path d="M7.8 16.2a6 6 0 0 1 0-8.4"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4"/><path d="M19.1 4.9a10 10 0 0 1 0 14.2"/></svg>
+          Sources
+        </button>
+        <button class="stab" data-onclick="switchTab('download',this)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Download
         </button>
-        <button class="stab" onclick="switchTab('files',this)">
+        <button class="stab" data-onclick="switchTab('files',this)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/><circle cx="16" cy="14" r="2"/><path d="M16 11v1"/><path d="M16 16v1"/><path d="M13 14h1"/><path d="M18 14h1"/></svg>
           Files
         </button>
-        <button class="stab" onclick="switchTab('metadata',this)">
+        <button class="stab" data-onclick="switchTab('metadata',this)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
           Metadata
         </button>
-        <button class="stab" onclick="switchTab('status',this)">
+        <button class="stab" data-onclick="switchTab('status',this)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><path d="M6 10v4"/><path d="M10 6v8"/><path d="M14 10v4"/><path d="M18 6v8"/><circle cx="6" cy="18" r="1"/><circle cx="10" cy="18" r="1"/></svg>
           Status
         </button>
-        <button class="stab" onclick="switchTab('extensions',this)">
+        <button class="stab" data-onclick="switchTab('extensions',this)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
           Extensions
         </button>
@@ -768,6 +726,82 @@
 
         <div class="tc active" id="tc-general" data-title="General">
           <div class="s-section">
+            <div class="s-title">Appearance</div>
+            <div class="s-row">
+              <span class="s-label">Color Mode</span>
+              <select id="config-theme" data-onchange="changeTheme()">
+                <option value="auto" selected>Auto</option>
+                <option value="dark">Dark</option>
+                <option value="light">Light</option>
+              </select>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Accent Color<small>The signal colour: focus, selection, the primary action. Default: Amber</small></span>
+              <div class="accent-picker">
+                <!-- A swatch of the current accent next to the select: the
+                     names alone ("Cyan" vs "Blue") don't tell you what you
+                     are choosing until you have chosen it. Painted from
+                     --accent itself, so it is always the real colour. -->
+                <span class="accent-dot" aria-hidden="true"></span>
+                <select id="config-accent" data-onchange="changeAccent()">
+                  <option value="amber" selected>Amber</option>
+                  <option value="teal">Teal</option>
+                  <option value="green">Green</option>
+                  <option value="blue">Blue</option>
+                  <option value="purple">Purple</option>
+                  <option value="pink">Pink</option>
+                  <option value="orange">Orange</option>
+                  <option value="red">Red</option>
+                  <option value="cyan">Cyan</option>
+                </select>
+              </div>
+            </div>
+            <!-- N4: rows and gaps; compact shrinks the spacing tokens a step. -->
+            <div class="s-row">
+              <span class="s-label">Density<small>Compact fits more rows on screen; Large makes everything bigger</small></span>
+              <select id="config-density" data-onchange="changeDensity()">
+                <option value="compact">Compact</option>
+                <option value="comfortable" selected>Comfortable</option>
+                <option value="large">Large</option>
+              </select>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Notification sounds</span>
+              <label class="toggle">
+                <input type="checkbox" id="config-sound-enabled" checked data-onchange="onNotificationSoundChange()">
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Preview Volume<small>The 30-second clips played from the ▶ button on a track</small></span>
+              <div class="volume-control">
+                <input type="range" id="config-preview-volume" min="0" max="100" step="5" value="100"
+                       data-oninput="changePreviewVolume()" aria-label="Preview volume">
+                <span id="preview-volume-value" class="volume-value">100%</span>
+              </div>
+            </div>
+            <!-- One typeface now (redesign §2); kept hidden so app.js's reads of
+                 #config-font keep working. -->
+            <div class="s-row hidden" aria-hidden="true">
+              <span class="s-label">App Font<small>Default: Inter</small></span>
+              <select id="config-font" data-onchange="changeFont()">
+                <option value="'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" selected>Inter</option>
+                <option value="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">System</option>
+                <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
+                <option value="'Fraunces', Georgia, serif">Fraunces</option>
+                <option value="Georgia, serif">Georgia</option>
+                <option value="Arial, sans-serif">Arial</option>
+              </select>
+            </div>
+          </div>
+          <div class="s-section hidden" id="account-signout-row">
+            <div class="s-title">Account</div>
+            <div class="s-row">
+              <span class="s-label">This instance requires --web-multiuser sign-in.</span>
+              <button class="act-btn secondary" type="button" data-onclick="doLogout()">Sign Out</button>
+            </div>
+          </div>
+          <div class="s-section">
             <div class="s-title">Logging</div>
             <div class="s-row">
               <span class="s-label">Log Level</span>
@@ -775,6 +809,36 @@
                 <option value="INFO">Standard (INFO)</option>
                 <option value="DEBUG">Verbose (DEBUG)</option>
               </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="tc" id="tc-sources" data-title="Sources">
+          <div class="s-section source-priority-section">
+            <div class="s-title">Download sources</div>
+            <div class="source-priority-intro">
+              <div>
+                <strong>Choose which sources Mornye can use</strong>
+                <p>Enable the providers you trust. The first enabled source is tried first; drag or use the arrows to change its priority.</p>
+              </div>
+              <span class="source-priority-count" id="services-summary">0 enabled</span>
+            </div>
+            <div id="services-list" class="sort-list"></div>
+            <div class="source-routing-options">
+              <div class="source-routing-option">
+                <span class="s-label">Try other enabled sources<small>If the first provider fails, continue down the priority list.</small></span>
+                <label class="toggle">
+                  <input type="checkbox" id="config-provider-fallback" checked>
+                  <span class="toggle-sl"></span>
+                </label>
+              </div>
+              <div class="source-routing-option">
+                <span class="s-label">Choose source before each batch<small>Ask which provider to use when you start a download. This choice applies only to that batch.</small></span>
+                <label class="toggle">
+                  <input type="checkbox" id="config-ask-provider">
+                  <span class="toggle-sl"></span>
+                </label>
+              </div>
             </div>
           </div>
           <div class="s-section">
@@ -794,7 +858,7 @@
               <div id="ext-quality-rows"></div>
             </div>
             <div class="s-row">
-              <span class="s-label">Auto quality fallback</span>
+              <span class="s-label">Auto quality fallback<small>Try a lower quality on the same provider when the requested quality is unavailable.</small></span>
               <label class="toggle">
                 <input type="checkbox" id="config-fallback">
                 <span class="toggle-sl"></span>
@@ -803,11 +867,11 @@
             <div class="s-row">
               <span class="s-label">Verify Hi-Res authenticity<small>Flags files that declare 96 kHz but whose content stops at CD range (upsampled), and 24-bit files that are really a padded 16-bit master. Adds a few seconds of analysis per track</small></span>
               <label class="toggle">
-                <input type="checkbox" id="config-verify-hires" onchange="onVerifyHiresChange()">
+                <input type="checkbox" id="config-verify-hires" data-onchange="onVerifyHiresChange()">
                 <span class="toggle-sl"></span>
               </label>
             </div>
-            <div class="s-row verify-hires-opt u-pl-16 u-bl-2-solid-border2 u-ml-4" style="display:none;">
+            <div class="s-row verify-hires-opt u-bl-2-solid-border2 u-ml-4" style="display:none;">
               <span class="s-label">Replace fake Hi-Res<small>Off = a finding is only reported. On = the flagged file is set aside, the track is re-downloaded as LOSSLESS, and the flagged file is deleted only once the replacement is on disk</small></span>
               <label class="toggle">
                 <input type="checkbox" id="config-redownload-fake-hires">
@@ -816,80 +880,233 @@
             </div>
           </div>
           <div class="s-section">
-            <div class="s-title">Appearance</div>
+            <div class="s-title">Auth & APIs</div>
             <div class="s-row">
-              <span class="s-label">Color Mode</span>
-              <select id="config-theme" onchange="changeTheme()">
-                <option value="auto" selected>Auto</option>
-                <option value="dark">Dark</option>
-                <option value="light">Light</option>
-              </select>
+              <span class="s-label">Provider APIs<small>The APIs each download service uses (Tidal's download API, Deezer's resolver, Qobuz app ID, country codes…) are set in that extension's own settings</small></span>
+              <button class="act-btn secondary u-p-5-12 u-fs-11_5" type="button" data-onclick="switchTab('extensions', document.querySelector('.stab[onclick*=&quot;extensions&quot;]'))">Extension Settings</button>
             </div>
             <div class="s-row">
-              <span class="s-label">Accent Color<small>Default: Teal</small></span>
-              <div class="accent-picker">
-                <!-- A swatch of the current accent next to the select: the
-                     names alone ("Cyan" vs "Blue") don't tell you what you
-                     are choosing until you have chosen it. Painted from
-                     --accent itself, so it is always the real colour. -->
-                <span class="accent-dot" aria-hidden="true"></span>
-                <select id="config-accent" onchange="changeAccent()">
-                  <option value="teal" selected>Teal</option>
-                  <option value="green">Green</option>
-                  <option value="blue">Blue</option>
-                  <option value="purple">Purple</option>
-                  <option value="pink">Pink</option>
-                  <option value="orange">Orange</option>
-                  <option value="red">Red</option>
-                  <option value="cyan">Cyan</option>
-                  <option value="amber">Amber</option>
-                </select>
-              </div>
-            </div>
-            <div class="s-row">
-              <span class="s-label">Notification sounds</span>
-              <label class="toggle">
-                <input type="checkbox" id="config-sound-enabled" checked onchange="onNotificationSoundChange()">
-                <span class="toggle-sl"></span>
-              </label>
-            </div>
-            <div class="s-row">
-              <span class="s-label">Preview Volume<small>The 30-second clips played from the ▶ button on a track</small></span>
-              <div class="volume-control">
-                <input type="range" id="config-preview-volume" min="0" max="100" step="5" value="100"
-                       oninput="changePreviewVolume()" aria-label="Preview volume">
-                <span id="preview-volume-value" class="volume-value">100%</span>
-              </div>
-            </div>
-            <div class="s-row">
-              <span class="s-label">App Font<small>Default: Inter</small></span>
-              <select id="config-font" onchange="changeFont()">
-                <option value="'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" selected>Inter</option>
-                <option value="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">System</option>
-                <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
-                <option value="'Fraunces', Georgia, serif">Fraunces</option>
-                <option value="Georgia, serif">Georgia</option>
-                <option value="Arial, sans-serif">Arial</option>
-              </select>
-            </div>
-            <div class="s-row">
-              <span class="s-label u-fs-11 u-c-muted">Preview: The quick brown fox jumps over the lazy dog.</span>
+              <span class="s-label">AcoustID API key<small>Optional. Identifying untagged files uses a key shared by all users, capped at 3 lookups/second between everyone; your own key gets its own budget. Free from acoustid.org/new-application</small></span>
+              <input class="u-w-190" type="text" id="config-acoustid-key" placeholder="Using the shared key">
             </div>
           </div>
-          <div class="s-section hidden" id="account-signout-row">
-            <div class="s-title">Account</div>
+          <div class="s-section" id="custom-endpoints">
+            <div class="s-title">Self-hosted Endpoints</div>
+            <p class="u-fs-12 u-c-muted u-m-n4-0-12 u-lh-1_6">
+              Download through your own server. It is tried first; if it fails the
+              extension falls back to its default API. Tidal expects a
+              <a class="u-c-accent" href="https://github.com/binimum/hifi-api" target="_blank" rel="noopener">hifi-api</a>
+              compatible server, Qobuz a
+              <a class="u-c-accent" href="https://github.com/BartolomeoRusso9/qobuz-rest-api" target="_blank" rel="noopener">qobuz-rest-api</a>
+              compatible one. A server on this machine or your LAN
+              (<code>http://192.168.1.10:8000</code>) is allowed for that address only.
+            </p>
             <div class="s-row">
-              <span class="s-label">This instance requires --web-multiuser sign-in.</span>
-              <button class="act-btn secondary" type="button" onclick="doLogout()">Sign Out</button>
+              <span class="s-label">Tidal endpoint<small id="ce-tidal-note">tidal-web</small></span>
+              <input style="flex:1 1 220px;min-width:180px;max-width:320px;" type="text" class="full" id="ce-tidal" placeholder="http://192.168.1.10:8000">
+              <button class="act-btn secondary u-p-6-14 u-fs-12" type="button" id="ce-tidal-test" data-onclick="testCustomEndpoint('tidal')">Test</button>
+            </div>
+            <div class="ce-result" id="ce-tidal-result" role="status" aria-live="polite" hidden></div>
+            <div class="s-row">
+              <span class="s-label">Qobuz endpoint<small id="ce-qobuz-note">qobuz-web</small></span>
+              <input style="flex:1 1 220px;min-width:180px;max-width:320px;" type="text" class="full" id="ce-qobuz" placeholder="http://127.0.0.1:8000">
+              <button class="act-btn secondary u-p-6-14 u-fs-12" type="button" id="ce-qobuz-test" data-onclick="testCustomEndpoint('qobuz')">Test</button>
+            </div>
+            <div class="ce-result" id="ce-qobuz-result" role="status" aria-live="polite" hidden></div>
+            <div class="s-row">
+              <span class="s-label">Qobuz API key<small>Sent as X-API-Key; leave empty to keep the saved one</small></span>
+              <input style="flex:1 1 220px;min-width:180px;max-width:320px;" type="password" class="full" id="ce-qobuz-key" autocomplete="off" placeholder="Not set">
+            </div>
+            <div class="s-row u-items-stretch u-gap-8">
+              <button class="act-btn u-p-8-16 u-fs-12" type="button" id="ce-save" data-onclick="saveCustomEndpoints()">Save endpoints</button>
             </div>
           </div>
         </div>
 
         <div class="tc" id="tc-download" data-title="Download">
           <div class="s-section">
-            <div class="s-title">Audio Sources</div>
-            <div class="s-row"><span class="s-label">Source priority (drag to reorder)</span></div>
-            <div id="services-list" class="sort-list"></div>
+            <div class="s-title">Performance</div>
+            <div class="s-row">
+              <span class="s-label">Parallel downloads<small>Tracks fetched at the same time (CLI: --max-concurrent)</small></span>
+              <input type="number" id="config-concurrent" value="2" min="1" max="8">
+            </div>
+            <div class="s-row">
+              <span class="s-label">Metadata request delay (seconds)<small>Random range between Spotify/metadata requests</small></span>
+              <div class="u-gap-6 u-items-center" style="display:flex;">
+                <input type="number" id="config-metadata-delay-min" value="0" min="0" step="0.1" aria-label="Minimum metadata delay">
+                <span>to</span>
+                <input type="number" id="config-metadata-delay-max" value="0" min="0" step="0.1" aria-label="Maximum metadata delay">
+              </div>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Provider request delay (seconds)<small>Random range between provider download attempts</small></span>
+              <div class="u-gap-6 u-items-center" style="display:flex;">
+                <input type="number" id="config-provider-delay-min" value="0" min="0" step="0.1" aria-label="Minimum provider delay">
+                <span>to</span>
+                <input type="number" id="config-provider-delay-max" value="0" min="0" step="0.1" aria-label="Maximum provider delay">
+              </div>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Automatic 429 cooldown<small>Pause all requests for Retry-After (or 60s) after a rate limit</small></span>
+              <label class="toggle">
+                <input type="checkbox" id="config-auto-rate-limit-cooldown" checked>
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
+          </div>
+          <div class="s-section">
+            <div class="s-title">Retry & Loop</div>
+            <div class="s-row">
+              <span class="s-label">Extra retries per track<small>Cycles through all providers</small></span>
+              <input type="number" id="config-retries" value="0" min="0" max="10">
+            </div>
+            <div class="s-row">
+              <span class="s-label">Loop failed tracks every<small>N minutes (0 = disabled)</small></span>
+              <input type="number" id="config-loop" value="0" min="0" max="999">
+            </div>
+          </div>
+          <div class="s-section">
+            <div class="s-title">Transcoding</div>
+            <div class="s-row">
+              <span class="s-label">Output format<small>Converted after download — requires ffmpeg</small></span>
+              <select id="config-transcode" data-onchange="onTranscodeChange()">
+                <option value="none">Original (FLAC/M4A)</option>
+                <optgroup label="Lossless">
+                  <option value="flac">FLAC — universal default</option>
+                  <option value="alac">ALAC (.m4a) — native on macOS/iOS</option>
+                  <option value="wavpack">WavPack (.wv)</option>
+                  <option value="tta">TTA (.tta)</option>
+                  <option value="wav">WAV — uncompressed PCM</option>
+                  <option value="aiff">AIFF — uncompressed PCM</option>
+                </optgroup>
+                <optgroup label="Lossy">
+                  <option value="aac">AAC (.m4a)</option>
+                  <option value="opus">Opus</option>
+                  <option value="mp3">MP3</option>
+                </optgroup>
+              </select>
+            </div>
+            <div class="s-row transcode-lossy u-bl-2-solid-border2 u-ml-4" style="display:none;">
+              <span class="s-label">Bitrate</span>
+              <select id="config-transcode-bitrate">
+                <option value="320k">320 kbps</option>
+                <option value="256k">256 kbps</option>
+                <option value="192k">192 kbps</option>
+                <option value="128k">128 kbps</option>
+              </select>
+            </div>
+            <div class="s-row transcode-opt u-bl-2-solid-border2 u-ml-4" style="display:none;">
+              <span class="s-label">Keep original file<small>Off = the downloaded source is deleted after conversion</small></span>
+              <label class="toggle">
+                <input type="checkbox" id="config-transcode-keep">
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
+          </div>
+          <div class="s-section">
+            <div class="s-title">Post-Download Action</div>
+            <div class="s-row">
+              <span class="s-label">Action</span>
+              <select id="config-post-action" data-onchange="onPostChange()">
+                <option value="none">None</option>
+                <option value="open_folder">Open folder</option>
+                <option value="notify">System notification</option>
+                <option value="command">Shell command</option>
+              </select>
+            </div>
+            <div id="post-cmd-row" style="display:none;" class="s-row">
+              <input type="text" id="config-post-cmd" class="full u-w-100pct" placeholder="rsync -av {folder}/ user@nas:/music/">
+            </div>
+          </div>
+          <div class="s-section">
+            <div class="s-title">Profiles</div>
+            <div class="s-row">
+              <span class="s-label">Save</span>
+              <input class="u-w-120" type="text" id="profile-name" placeholder="Profile name">
+              <button data-onclick="saveProfile()" class="act-btn secondary u-p-5-10 u-fs-11_5">Save</button>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Load</span>
+              <select class="u-flex-1" id="profile-select"><option value="">Select…</option></select>
+              <button data-onclick="loadProfile()" class="act-btn secondary u-p-5-10 u-fs-11_5">Load</button>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Delete</span>
+              <button data-onclick="deleteProfile()" class="act-btn danger u-p-5-10 u-fs-11_5">Delete</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="tc" id="tc-files" data-title="Files">
+          <div class="s-section">
+            <div class="s-title">Download Location</div>
+            <div class="s-row u-justify-flex-start u-gap-12">
+              <button class="act-btn secondary" type="button" data-onclick="pyWin('choose_folder')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                Choose Folder
+              </button>
+              <span class="folder-pill" id="folder-path">…</span>
+            </div>
+          </div>
+          <div class="s-section">
+            <div class="s-title">Filename Format</div>
+            <div class="s-row"><span class="s-label u-fs-11 u-c-muted">{title} {artist} {album} {album_artist} {year} {track} {disc} {isrc} {position}</span></div>
+            <input type="text" id="config-filename" class="full u-w-100pct u-mb-8" value="{title} - {artist}">
+            <div class="s-sep"></div>
+            <div class="s-row">
+              <span class="s-label">Add track number to filename</span>
+              <label class="toggle">
+                <input type="checkbox" id="config-track-numbers" data-onchange="onTNChange()">
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
+            <div class="s-row u-bl-2-solid-border2 u-ml-4" id="album-track-row" style="display:none;">
+              <span class="s-label">Use original album track number</span>
+              <label class="toggle">
+                <input type="checkbox" id="config-album-track-numbers">
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="s-section">
+            <div class="s-title">Folder Organization</div>
+            <div class="s-row">
+              <span class="s-label">Artist subfolders</span>
+              <label class="toggle">
+                <input type="checkbox" id="config-artist-sub">
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Album subfolders</span>
+              <label class="toggle">
+                <input type="checkbox" id="config-album-sub">
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Playlist subfolders</span>
+              <label class="toggle">
+                <input type="checkbox" id="config-playlist-sub">
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Existing library folders<small>Playlists and single tracks already here are not downloaded again; the playlist file links to them. Separate folders with ;</small></span>
+              <input class="u-w-220" type="text" id="config-library-scan-dirs" placeholder="e.g. /music/old-library">
+            </div>
+            <div class="s-row">
+              <span class="s-label">First artist only in tags & filename</span>
+              <label class="toggle">
+                <input type="checkbox" id="config-first-artist">
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
+            <div class="s-row u-bl-2-solid-border2 u-ml-4" id="config-artist-sep-row">
+              <span class="s-label">Artist Separator<small>(e.g. ", " or " / ")</small></span>
+              <input class="u-w-160" type="text" id="config-artist-separator" placeholder="None (Standard Vorbis array)">
+            </div>
           </div>
           <div class="s-section s-wide network-destinations">
             <div class="s-title">Network Destinations</div>
@@ -905,13 +1122,13 @@
                   </label>
                   <label class="network-destination-field" for="network-destination-profile">
                     <span>Saved network destination</span>
-                    <select id="network-destination-profile" onchange="selectNetworkDestination(); updateNetworkDestinationFields()">
+                    <select id="network-destination-profile" data-onchange="selectNetworkDestination(); updateNetworkDestinationFields()">
                       <option value="">New destination…</option>
                     </select>
                   </label>
                   <label class="network-destination-field" for="network-destination-type">
                     <span>Protocol</span>
-                    <select id="network-destination-type" onchange="updateNetworkDestinationFields()">
+                    <select id="network-destination-type" data-onchange="updateNetworkDestinationFields()">
                       <option value="smb">SMB</option>
                       <option value="webdav">WebDAV</option>
                       <option value="http">HTTP(S) upload</option>
@@ -977,9 +1194,9 @@
                   </div>
                 </div>
                 <div class="network-destination-actions">
-                  <button class="act-btn primary" type="button" onclick="saveNetworkDestination()">Save Profile</button>
-                  <button class="act-btn secondary" type="button" onclick="testNetworkDestination()">Test Connection</button>
-                  <button class="act-btn secondary" type="button" onclick="removeNetworkDestination()">Remove</button>
+                  <button class="act-btn primary" type="button" data-onclick="saveNetworkDestination()">Save Profile</button>
+                  <button class="act-btn secondary" type="button" data-onclick="testNetworkDestination()">Test Connection</button>
+                  <button class="act-btn secondary" type="button" data-onclick="removeNetworkDestination()">Remove</button>
                   <span id="network-destination-status" role="status"></span>
                 </div>
               </div>
@@ -990,180 +1207,8 @@
               </label>
               <div class="network-destination-retry-controls">
                 <input type="text" id="network-destination-retry-id" placeholder="32-character retry identifier" autocomplete="off">
-                <button class="act-btn secondary" type="button" onclick="retryNetworkDelivery()">Retry</button>
+                <button class="act-btn secondary" type="button" data-onclick="retryNetworkDelivery()">Retry</button>
               </div>
-            </div>
-          </div>
-          <div class="s-section">
-            <div class="s-title">Transcoding</div>
-            <div class="s-row">
-              <span class="s-label">Output format<small>Converted after download — requires ffmpeg</small></span>
-              <select id="config-transcode" onchange="onTranscodeChange()">
-                <option value="none">Original (FLAC/M4A)</option>
-                <optgroup label="Lossless">
-                  <option value="flac">FLAC — universal default</option>
-                  <option value="alac">ALAC (.m4a) — native on macOS/iOS</option>
-                  <option value="wavpack">WavPack (.wv)</option>
-                  <option value="tta">TTA (.tta)</option>
-                  <option value="wav">WAV — uncompressed PCM</option>
-                  <option value="aiff">AIFF — uncompressed PCM</option>
-                </optgroup>
-                <optgroup label="Lossy">
-                  <option value="aac">AAC (.m4a)</option>
-                  <option value="opus">Opus</option>
-                  <option value="mp3">MP3</option>
-                </optgroup>
-              </select>
-            </div>
-            <div class="s-row transcode-lossy u-pl-16 u-bl-2-solid-border2 u-ml-4" style="display:none;">
-              <span class="s-label">Bitrate</span>
-              <select id="config-transcode-bitrate">
-                <option value="320k">320 kbps</option>
-                <option value="256k">256 kbps</option>
-                <option value="192k">192 kbps</option>
-                <option value="128k">128 kbps</option>
-              </select>
-            </div>
-            <div class="s-row transcode-opt u-pl-16 u-bl-2-solid-border2 u-ml-4" style="display:none;">
-              <span class="s-label">Keep original file<small>Off = the downloaded source is deleted after conversion</small></span>
-              <label class="toggle">
-                <input type="checkbox" id="config-transcode-keep">
-                <span class="toggle-sl"></span>
-              </label>
-            </div>
-          </div>
-          <div class="s-section">
-            <div class="s-title">Performance</div>
-            <div class="s-row">
-              <span class="s-label">Parallel downloads<small>Tracks fetched at the same time (CLI: --max-concurrent)</small></span>
-              <input type="number" id="config-concurrent" value="2" min="1" max="8">
-            </div>
-          </div>
-          <div class="s-section">
-            <div class="s-title">Retry & Loop</div>
-            <div class="s-row">
-              <span class="s-label">Extra retries per track<small>Cycles through all providers</small></span>
-              <input type="number" id="config-retries" value="0" min="0" max="10">
-            </div>
-            <div class="s-row">
-              <span class="s-label">Loop failed tracks every<small>N minutes (0 = disabled)</small></span>
-              <input type="number" id="config-loop" value="0" min="0" max="999">
-            </div>
-          </div>
-          <div class="s-section">
-            <div class="s-title">Post-Download Action</div>
-            <div class="s-row">
-              <span class="s-label">Action</span>
-              <select id="config-post-action" onchange="onPostChange()">
-                <option value="none">None</option>
-                <option value="open_folder">Open folder</option>
-                <option value="notify">System notification</option>
-                <option value="command">Shell command</option>
-              </select>
-            </div>
-            <div id="post-cmd-row" style="display:none;" class="s-row">
-              <input type="text" id="config-post-cmd" class="full u-w-100pct" placeholder="rsync -av {folder}/ user@nas:/music/">
-            </div>
-          </div>
-          <div class="s-section">
-            <div class="s-title">Auth & APIs</div>
-            <div class="s-row">
-              <span class="s-label">Provider APIs<small>The APIs each download service uses (Tidal's download API, Deezer's resolver, Qobuz app ID, country codes…) are set in that extension's own settings</small></span>
-              <button class="act-btn secondary u-p-5-12 u-fs-11_5" type="button" onclick="switchTab('extensions', document.querySelector('.stab[onclick*=&quot;extensions&quot;]'))">Extension Settings</button>
-            </div>
-            <div class="s-row">
-              <span class="s-label">AcoustID API key<small>Optional. Identifying untagged files uses a key shared by all users, capped at 3 lookups/second between everyone; your own key gets its own budget. Free from acoustid.org/new-application</small></span>
-              <input class="u-w-190" type="text" id="config-acoustid-key" placeholder="Using the shared key">
-            </div>
-          </div>
-          <div class="s-section">
-            <div class="s-title">Profiles</div>
-            <div class="s-row">
-              <span class="s-label">Save</span>
-              <input class="u-w-120" type="text" id="profile-name" placeholder="Profile name">
-              <button onclick="saveProfile()" class="act-btn secondary u-p-5-10 u-fs-11_5">Save</button>
-            </div>
-            <div class="s-row">
-              <span class="s-label">Load</span>
-              <select class="u-flex-1" id="profile-select"><option value="">Select…</option></select>
-              <button onclick="loadProfile()" class="act-btn secondary u-p-5-10 u-fs-11_5">Load</button>
-            </div>
-            <div class="s-row">
-              <span class="s-label">Delete</span>
-              <button onclick="deleteProfile()" class="act-btn danger u-p-5-10 u-fs-11_5">Delete</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="tc" id="tc-files" data-title="Files">
-          <div class="s-section">
-            <div class="s-title">Download Location</div>
-            <div class="s-row u-justify-flex-start u-gap-12">
-              <button class="act-btn secondary" type="button" onclick="pyWin('choose_folder')">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                Choose Folder
-              </button>
-              <span class="folder-pill" id="folder-path">…</span>
-            </div>
-          </div>
-          <div class="s-section">
-            <div class="s-title">Filename Format</div>
-            <div class="s-row"><span class="s-label u-fs-11 u-c-muted">{title} {artist} {album} {album_artist} {year} {track} {disc} {isrc} {position}</span></div>
-            <input type="text" id="config-filename" class="full u-w-100pct u-mb-8" value="{title} - {artist}">
-            <div class="s-sep"></div>
-            <div class="s-row">
-              <span class="s-label">Add track number to filename</span>
-              <label class="toggle">
-                <input type="checkbox" id="config-track-numbers" onchange="onTNChange()">
-                <span class="toggle-sl"></span>
-              </label>
-            </div>
-            <div class="s-row u-pl-16 u-bl-2-solid-border2 u-ml-4" id="album-track-row" style="display:none;">
-              <span class="s-label">Use original album track number</span>
-              <label class="toggle">
-                <input type="checkbox" id="config-album-track-numbers">
-                <span class="toggle-sl"></span>
-              </label>
-            </div>
-          </div>
-
-          <div class="s-section">
-            <div class="s-title">Folder Organization</div>
-            <div class="s-row">
-              <span class="s-label">Artist subfolders</span>
-              <label class="toggle">
-                <input type="checkbox" id="config-artist-sub">
-                <span class="toggle-sl"></span>
-              </label>
-            </div>
-            <div class="s-row">
-              <span class="s-label">Album subfolders</span>
-              <label class="toggle">
-                <input type="checkbox" id="config-album-sub">
-                <span class="toggle-sl"></span>
-              </label>
-            </div>
-            <div class="s-row">
-              <span class="s-label">Playlist subfolders</span>
-              <label class="toggle">
-                <input type="checkbox" id="config-playlist-sub">
-                <span class="toggle-sl"></span>
-              </label>
-            </div>
-            <div class="s-row">
-              <span class="s-label">Existing library folders<small>Playlists and single tracks already here are not downloaded again; the playlist file links to them. Separate folders with ;</small></span>
-              <input class="u-w-220" type="text" id="config-library-scan-dirs" placeholder="e.g. /music/old-library">
-            </div>
-            <div class="s-row">
-              <span class="s-label">First artist only in tags & filename</span>
-              <label class="toggle">
-                <input type="checkbox" id="config-first-artist">
-                <span class="toggle-sl"></span>
-              </label>
-            </div>
-            <div class="s-row u-pl-16 u-bl-2-solid-border2 u-ml-4" id="config-artist-sep-row">
-              <span class="s-label">Artist Separator<small>(e.g. ", " or " / ")</small></span>
-              <input class="u-w-160" type="text" id="config-artist-separator" placeholder="None (Standard Vorbis array)">
             </div>
           </div>  
 
@@ -1175,7 +1220,7 @@
             <div class="s-row">
               <span class="s-label">Embed synced lyrics (LRC)</span>
               <label class="toggle">
-                <input type="checkbox" id="config-lyrics" checked onchange="onLyricsChange()">
+                <input type="checkbox" id="config-lyrics" checked data-onchange="onLyricsChange()">
                 <span class="toggle-sl"></span>
               </label>
             </div>
@@ -1196,7 +1241,7 @@
             <div class="s-row">
               <span class="s-label">Enrich metadata (genre, BPM, HD cover…)</span>
               <label class="toggle">
-                <input type="checkbox" id="config-enrich" checked onchange="onEnrichChange()">
+                <input type="checkbox" id="config-enrich" checked data-onchange="onEnrichChange()">
                 <span class="toggle-sl"></span>
               </label>
             </div>
@@ -1214,7 +1259,7 @@
             <div class="s-row">
               <span class="s-label">Animated artwork API URL<small>Leave blank to use the configured environment default</small></span>
               <div class="u-gap-8 u-items-center u-wrap-wrap" style="display:flex;">
-                <button class="act-btn secondary u-p-5-12 u-fs-11_5" type="button" onclick="openApiConfigPopup('animated')">Configure</button>
+                <button class="act-btn secondary u-p-5-12 u-fs-11_5" type="button" data-onclick="openApiConfigPopup('animated')">Configure</button>
                 <span id="config-animated-artwork-api-display" class="api-config-pill">Not set</span>
               </div>
               <input type="hidden" id="config-animated-artwork-api-url">
@@ -1230,7 +1275,7 @@
                 <p class="u-fs-12 u-c-muted u-mb-12 u-lh-1_6">Check endpoint reachability for each Mornye provider.</p>
               </div>
               <div class="status-toolbar">
-                <button class="status-check-all" onclick="checkAll()">Check</button>
+                <button class="status-check-all" data-onclick="checkAll()">Check</button>
                 <div id="status-overall" class="status-overall idle"><span class="status-overall-icon">—</span><span class="status-overall-text">No checks yet</span></div>
               </div>
             </div>
@@ -1249,37 +1294,6 @@
         </div>
 
         <div class="tc" id="tc-extensions" data-title="Extensions">
-          <div class="s-section" id="custom-endpoints">
-            <div class="s-title">Self-hosted Endpoints</div>
-            <p class="u-fs-12 u-c-muted u-m-n4-0-12 u-lh-1_6">
-              Download through your own server. It is tried first; if it fails the
-              extension falls back to its default API. Tidal expects a
-              <a class="u-c-accent" href="https://github.com/binimum/hifi-api" target="_blank" rel="noopener">hifi-api</a>
-              compatible server, Qobuz a
-              <a class="u-c-accent" href="https://github.com/BartolomeoRusso9/qobuz-rest-api" target="_blank" rel="noopener">qobuz-rest-api</a>
-              compatible one. A server on this machine or your LAN
-              (<code>http://192.168.1.10:8000</code>) is allowed for that address only.
-            </p>
-            <div class="s-row">
-              <span class="s-label">Tidal endpoint<small id="ce-tidal-note">tidal-web</small></span>
-              <input style="flex:1 1 220px;min-width:180px;max-width:320px;" type="text" class="full" id="ce-tidal" placeholder="http://192.168.1.10:8000">
-              <button class="act-btn secondary u-p-6-14 u-fs-12" type="button" id="ce-tidal-test" onclick="testCustomEndpoint('tidal')">Test</button>
-            </div>
-            <div class="ce-result" id="ce-tidal-result" role="status" aria-live="polite" hidden></div>
-            <div class="s-row">
-              <span class="s-label">Qobuz endpoint<small id="ce-qobuz-note">qobuz-web</small></span>
-              <input style="flex:1 1 220px;min-width:180px;max-width:320px;" type="text" class="full" id="ce-qobuz" placeholder="http://127.0.0.1:8000">
-              <button class="act-btn secondary u-p-6-14 u-fs-12" type="button" id="ce-qobuz-test" onclick="testCustomEndpoint('qobuz')">Test</button>
-            </div>
-            <div class="ce-result" id="ce-qobuz-result" role="status" aria-live="polite" hidden></div>
-            <div class="s-row">
-              <span class="s-label">Qobuz API key<small>Sent as X-API-Key; leave empty to keep the saved one</small></span>
-              <input style="flex:1 1 220px;min-width:180px;max-width:320px;" type="password" class="full" id="ce-qobuz-key" autocomplete="off" placeholder="Not set">
-            </div>
-            <div class="s-row u-items-stretch u-gap-8">
-              <button class="act-btn u-p-8-16 u-fs-12" type="button" id="ce-save" onclick="saveCustomEndpoints()">Save endpoints</button>
-            </div>
-          </div>
 
           <div class="s-section">
             <div class="s-title">Extension Settings</div>
@@ -1291,7 +1305,7 @@
               to keep the current one.
             </p>
             <div class="s-row u-items-stretch u-gap-8">
-              <button class="act-btn secondary u-p-8-16 u-fs-12" type="button" onclick="loadExtensionSettings()">Refresh</button>
+              <button class="act-btn secondary u-p-8-16 u-fs-12" type="button" data-onclick="loadExtensionSettings()">Refresh</button>
             </div>
             <div id="ext-settings-list" class="sort-list u-mt-12">
               <div class="s-label u-fs-11_5">Loading extension settings…</div>
@@ -1308,8 +1322,8 @@
               earlier in your service order keeps succeeding first.
             </p>
             <div class="s-row u-items-stretch u-gap-8">
-              <button class="act-btn secondary u-p-8-16 u-fs-12" type="button" onclick="loadExtensionHealth()">Refresh</button>
-              <button class="act-btn secondary u-p-8-16 u-fs-12" type="button" onclick="resetExtensionHealth()" title="Clear the recorded counters — useful after fixing a broken extension, so old failures stop dominating its success rate.">Reset stats</button>
+              <button class="act-btn secondary u-p-8-16 u-fs-12" type="button" data-onclick="loadExtensionHealth()">Refresh</button>
+              <button class="act-btn secondary u-p-8-16 u-fs-12" type="button" data-onclick="resetExtensionHealth()" title="Clear the recorded counters — useful after fixing a broken extension, so old failures stop dominating its success rate.">Reset stats</button>
             </div>
             <div id="ext-health-list" class="sort-list u-mt-12">
               <div class="s-label u-fs-11_5">Loading extension health…</div>
@@ -1325,8 +1339,8 @@
               extension update and are never used again.
             </p>
             <div class="s-row u-items-stretch u-gap-8">
-              <button class="act-btn secondary u-p-8-16 u-fs-12" type="button" onclick="loadSignedSessions()">Refresh</button>
-              <button class="act-btn secondary u-p-8-16 u-fs-12" type="button" onclick="pruneSignedSessions()" title="Delete session files no installed extension uses any more.">Remove orphaned</button>
+              <button class="act-btn secondary u-p-8-16 u-fs-12" type="button" data-onclick="loadSignedSessions()">Refresh</button>
+              <button class="act-btn secondary u-p-8-16 u-fs-12" type="button" data-onclick="pruneSignedSessions()" title="Delete session files no installed extension uses any more.">Remove orphaned</button>
             </div>
             <div id="signed-sessions-list" class="sort-list u-mt-12">
               <div class="s-label u-fs-11_5">Loading signed sessions…</div>
@@ -1342,7 +1356,7 @@
             </p>
             <div class="s-row u-items-stretch u-gap-8">
               <input style="flex:1;" type="text" id="registry-url-input" class="full" placeholder="https://example.com/registry.json">
-              <button class="act-btn primary u-p-8-16 u-fs-12 u-ws-nowrap" type="button" onclick="addRegistryLink()">Add Link</button>
+              <button class="act-btn primary u-p-8-16 u-fs-12 u-ws-nowrap" type="button" data-onclick="addRegistryLink()">Add Link</button>
             </div>
             <div id="registry-list" class="sort-list u-mt-12">
               <div class="s-label u-fs-11_5">Loading registries…</div>
@@ -1359,13 +1373,13 @@
             </p>
             <div class="s-row u-items-stretch u-gap-8">
               <input style="flex:1;" type="text" id="directory-url-input" class="full" placeholder="https://example.com/my-directory.json">
-              <button class="act-btn primary u-p-8-16 u-fs-12 u-ws-nowrap" type="button" onclick="addDirectoryLink()">Add Link</button>
+              <button class="act-btn primary u-p-8-16 u-fs-12 u-ws-nowrap" type="button" data-onclick="addDirectoryLink()">Add Link</button>
             </div>
             <div id="directory-list" class="sort-list u-mt-12">
               <div class="s-label u-fs-11_5">Loading directories…</div>
             </div>
             <div class="s-row u-mt-12">
-              <button class="act-btn secondary u-fs-12" type="button" onclick="runDiscovery()" id="btn-run-discovery">Discover Registries</button>
+              <button class="act-btn secondary u-fs-12" type="button" data-onclick="runDiscovery()" id="btn-run-discovery">Discover Registries</button>
             </div>
             <div id="discovery-results" class="sort-list u-mt-12"></div>
           </div>
@@ -1380,7 +1394,7 @@
             <div class="s-row u-items-stretch u-gap-8 u-wrap-wrap">
               <input style="flex:1;min-width:140px;" type="text" id="trust-key-name-input" placeholder="Key name (e.g. a maintainer's handle)">
               <input style="flex:2;min-width:200px;" type="text" id="trust-key-value-input" class="full" placeholder="Base64 Ed25519 public key">
-              <button class="act-btn primary u-p-8-16 u-fs-12 u-ws-nowrap" type="button" onclick="addTrustedKeyLink()">Add Key</button>
+              <button class="act-btn primary u-p-8-16 u-fs-12 u-ws-nowrap" type="button" data-onclick="addTrustedKeyLink()">Add Key</button>
             </div>
             <div id="trust-key-list" class="sort-list u-mt-12">
               <div class="s-label u-fs-11_5">Loading trusted keys…</div>
@@ -1399,20 +1413,21 @@
       <div class="s-header">
         <h1>Queue</h1>
         <div class="s-actions">
-          <button class="act-btn primary" type="button" id="sq-start-all" onclick="startStaged(false)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg>Start all</button>
+          <button class="act-btn secondary" type="button" data-onclick="stopAllDownloads()">Stop all downloads</button>
+          <button class="act-btn primary" type="button" id="sq-start-all" data-onclick="startStaged(false)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg>Start all</button>
         </div>
       </div>
       <div class="page-body">
         <div class="seg-tabs" role="tablist" aria-label="Queue by type">
-          <button type="button" class="seg-tab active" data-kind="" onclick="setStagedKind('')" role="tab" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg><span>All</span><span class="seg-count" id="sq-count-all">0</span></button>
-          <button type="button" class="seg-tab" data-kind="track" onclick="setStagedKind('track')" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg><span>Tracks</span><span class="seg-count" id="sq-count-track">0</span></button>
-          <button type="button" class="seg-tab" data-kind="album" onclick="setStagedKind('album')" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg><span>Albums</span><span class="seg-count" id="sq-count-album">0</span></button>
-          <button type="button" class="seg-tab" data-kind="playlist" onclick="setStagedKind('playlist')" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15V6"/><path d="M18.5 18a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/><path d="M12 12H3"/><path d="M16 6H3"/><path d="M12 18H3"/></svg><span>Playlists</span><span class="seg-count" id="sq-count-playlist">0</span></button>
-          <button type="button" class="seg-tab" data-kind="artist" onclick="setStagedKind('artist')" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg><span>Artists</span><span class="seg-count" id="sq-count-artist">0</span></button>
+          <button type="button" class="seg-tab active" data-kind="" data-onclick="setStagedKind('')" role="tab" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg><span>All</span><span class="seg-count" id="sq-count-all">0</span></button>
+          <button type="button" class="seg-tab" data-kind="track" data-onclick="setStagedKind('track')" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg><span>Tracks</span><span class="seg-count" id="sq-count-track">0</span></button>
+          <button type="button" class="seg-tab" data-kind="album" data-onclick="setStagedKind('album')" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg><span>Albums</span><span class="seg-count" id="sq-count-album">0</span></button>
+          <button type="button" class="seg-tab" data-kind="playlist" data-onclick="setStagedKind('playlist')" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15V6"/><path d="M18.5 18a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/><path d="M12 12H3"/><path d="M16 6H3"/><path d="M12 18H3"/></svg><span>Playlists</span><span class="seg-count" id="sq-count-playlist">0</span></button>
+          <button type="button" class="seg-tab" data-kind="artist" data-onclick="setStagedKind('artist')" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg><span>Artists</span><span class="seg-count" id="sq-count-artist">0</span></button>
         </div>
         <div class="page-toolbar">
-          <label class="tb-field tb-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="search" id="sq-search" placeholder="Search the queue…" oninput="renderStaged()" aria-label="Search the queue"></label>
-          <label class="tb-field tb-select"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg><select id="sq-status" onchange="renderStaged()" aria-label="Filter by status">
+          <label class="tb-field tb-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="search" id="sq-search" placeholder="Search the queue…" data-oninput="renderStaged()" aria-label="Search the queue"></label>
+          <label class="tb-field tb-select"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg><select id="sq-status" data-onchange="renderStaged()" aria-label="Filter by status">
             <option value="">All statuses</option>
             <option value="pending">Waiting</option>
             <option value="running">Downloading</option>
@@ -1420,15 +1435,15 @@
             <option value="failed">Failed</option>
           </select></label>
           <span class="tb-spacer"></span>
-          <button class="act-btn secondary" type="button" onclick="clearStaged('finished')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4l10-10a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>Clear finished</button>
-          <button class="act-btn danger" type="button" onclick="clearStaged('all')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>Clear all</button>
-          <button class="act-btn primary" type="button" onclick="startStaged(true)" title="Start the waiting items shown here"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg>Start</button>
+          <button class="act-btn secondary" type="button" data-onclick="clearStaged('finished')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4l10-10a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>Clear finished</button>
+          <button class="act-btn danger" type="button" data-onclick="clearStaged('all')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>Clear all</button>
+          <button class="act-btn secondary" type="button" data-onclick="startStaged(true)" title="Start the waiting items shown here"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg>Start</button>
         </div>
         <div id="sq-list" class="page-list" aria-live="polite"></div>
 
         <h2 class="page-section-title">Downloading now</h2>
       <div id="queue-drawer">
-        <div id="queue-backdrop" onclick="toggleQueueDrawer()"></div>
+        <div id="queue-backdrop" data-onclick="toggleQueueDrawer()"></div>
         <div class="queue-panel live-panel">
           <!-- One header row: live numbers on the left, list actions on the right. -->
           <div class="live-head">
@@ -1439,21 +1454,21 @@
               <div class="metric"><span class="metric-label">Elapsed</span><strong id="qd-duration">0s</strong></div>
             </div>
             <div class="live-actions">
-              <button type="button" class="act-btn ghost" onclick="exportFailures()" title="Save the failed tracks to a text file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export failures</button>
-              <button type="button" class="act-btn ghost" onclick="clearQueue()" title="Clear finished rows from this list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>Clear list</button>
+              <button type="button" class="act-btn ghost" data-onclick="exportFailures()" title="Save the failed tracks to a text file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export failures</button>
+              <button type="button" class="act-btn ghost" data-onclick="clearQueue()" title="Clear finished rows from this list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>Clear list</button>
             </div>
           </div>
           <!-- The counters are also the filters: pressing one narrows the
                list below to what it counts, pressing it again clears it. -->
           <div class="live-filters">
             <div class="queue-summary" role="group" aria-label="Filter by status">
-              <button type="button" class="qs-item queued" onclick="filterQueue('waiting')" aria-pressed="false"><span class="qs-dot"></span>Queued<strong id="q-queued">0</strong></button>
-              <button type="button" class="qs-item completed" onclick="filterQueue('done')" aria-pressed="false"><span class="qs-dot"></span>Completed<strong id="q-completed">0</strong></button>
-              <button type="button" class="qs-item skipped" onclick="filterQueue('skipped')" aria-pressed="false"><span class="qs-dot"></span>Skipped<strong id="q-skipped">0</strong></button>
-              <button type="button" class="qs-item failed" onclick="filterQueue('error')" aria-pressed="false"><span class="qs-dot"></span>Failed<strong id="q-failed">0</strong></button>
+              <button type="button" class="qs-item queued" data-onclick="filterQueue('waiting')" aria-pressed="false"><span class="qs-dot"></span>Queued<strong id="q-queued">0</strong></button>
+              <button type="button" class="qs-item completed" data-onclick="filterQueue('done')" aria-pressed="false"><span class="qs-dot"></span>Completed<strong id="q-completed">0</strong></button>
+              <button type="button" class="qs-item skipped" data-onclick="filterQueue('skipped')" aria-pressed="false"><span class="qs-dot"></span>Skipped<strong id="q-skipped">0</strong></button>
+              <button type="button" class="qs-item failed" data-onclick="filterQueue('error')" aria-pressed="false"><span class="qs-dot"></span>Failed<strong id="q-failed">0</strong></button>
             </div>
-            <label class="tb-field tb-search live-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="queue-search" type="search" placeholder="Search downloads…" oninput="onQueueSearch(this.value)" aria-label="Search downloads"></label>
-            <button type="button" id="queue-clear-filters" class="act-btn secondary hidden" onclick="clearQueueFilters()">Clear filter</button>
+            <label class="tb-field tb-search live-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="queue-search" type="search" placeholder="Search downloads…" data-oninput="onQueueSearch(this.value)" aria-label="Search downloads"></label>
+            <button type="button" id="queue-clear-filters" class="act-btn secondary hidden" data-onclick="clearQueueFilters()">Clear filter</button>
           </div>
           <!-- The backend's list of tracks that failed and have not downloaded
                since (core/failed_tracks.py), kept across runs and restarts.
@@ -1466,9 +1481,9 @@
                 <span class="fp-sub">Kept until they download, even across restarts.</span>
               </div>
               <div class="fp-actions">
-                <button type="button" class="act-btn secondary" id="fp-toggle" onclick="toggleFailedList()" aria-expanded="false" aria-controls="fp-list">Show</button>
-                <button type="button" class="act-btn secondary" onclick="clearFailedTracks()">Clear list</button>
-                <button type="button" class="act-btn primary" id="fp-retry" onclick="retryFailedTracks()">Retry all</button>
+                <button type="button" class="act-btn secondary" id="fp-toggle" data-onclick="toggleFailedList()" aria-expanded="false" aria-controls="fp-list">Show</button>
+                <button type="button" class="act-btn secondary" data-onclick="clearFailedTracks()">Clear list</button>
+                <button type="button" class="act-btn secondary" id="fp-retry" data-onclick="retryFailedTracks()">Retry all</button>
               </div>
             </div>
             <ul id="fp-list" class="fp-list hidden"></ul>
@@ -1498,37 +1513,37 @@
       </div>
       <div class="page-body">
         <div class="seg-tabs" role="tablist" aria-label="History">
-          <button type="button" class="seg-tab active" data-tab="downloads" onclick="setHistoryTab('downloads')" role="tab" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Downloads</span></button>
-          <button type="button" class="seg-tab" data-tab="fetches" onclick="setHistoryTab('fetches')" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span>Fetches</span></button>
+          <button type="button" class="seg-tab active" data-tab="downloads" data-onclick="setHistoryTab('downloads')" role="tab" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Downloads</span></button>
+          <button type="button" class="seg-tab" data-tab="fetches" data-onclick="setHistoryTab('fetches')" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span>Fetches</span></button>
         </div>
         <div class="page-toolbar">
-          <label class="tb-field tb-search tb-grow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="search" id="hist-search" placeholder="Search downloads…" oninput="onHistorySearch()" aria-label="Search history"></label>
-          <label class="tb-field tb-select" id="hist-sort-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16"/><path d="m3 8 4-4 4 4"/><path d="M17 20V4"/><path d="m21 16-4 4-4-4"/></svg><select id="hist-sort" onchange="loadHistory()" aria-label="Sort">
+          <label class="tb-field tb-search tb-grow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="search" id="hist-search" placeholder="Search downloads…" data-oninput="onHistorySearch()" aria-label="Search history"></label>
+          <label class="tb-field tb-select" id="hist-sort-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16"/><path d="m3 8 4-4 4 4"/><path d="M17 20V4"/><path d="m21 16-4 4-4-4"/></svg><select id="hist-sort" data-onchange="loadHistory()" aria-label="Sort">
             <option value="newest">Newest first</option>
             <option value="oldest">Oldest first</option>
             <option value="title">Title A–Z</option>
             <option value="artist">Artist A–Z</option>
             <option value="size">Largest first</option>
           </select></label>
-          <button class="act-btn danger" type="button" onclick="clearHistory()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>Clear all</button>
+          <button class="act-btn danger" type="button" data-onclick="clearHistory()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>Clear all</button>
         </div>
         <div id="hist-list" class="page-list" aria-live="polite"></div>
       </div>
     </div>
     </div>
   <div id="aiconf-modal" class="api-modal hidden" role="dialog" aria-modal="true" aria-labelledby="aiconf-title">
-    <div class="api-modal-backdrop" onclick="closeAiConfig()"></div>
+    <div class="api-modal-backdrop" data-onclick="closeAiConfig()"></div>
     <div class="api-modal-card">
       <div class="api-modal-header">
         <div>
           <div id="aiconf-title" class="s-title">AI provider for translation</div>
           <div class="u-fs-12 u-c-muted u-mt-4">Requests go straight from this computer to the provider you choose, with your own key.</div>
         </div>
-        <button class="close-btn" type="button" onclick="closeAiConfig()">✕</button>
+        <button class="close-btn" type="button" data-onclick="closeAiConfig()">✕</button>
       </div>
       <div class="api-modal-body">
         <label class="u-fs-12 u-c-muted" for="aiconf-provider">Provider</label>
-        <select class="u-w-100pct u-m-4-0-10" id="aiconf-provider" onchange="updateAiConfigFields()"></select>
+        <select class="u-w-100pct u-m-4-0-10" id="aiconf-provider" data-onchange="updateAiConfigFields()"></select>
         <label class="u-fs-12 u-c-muted" for="aiconf-model">Model</label>
         <input class="u-w-100pct u-m-4-0-10" type="text" id="aiconf-model">
         <div id="aiconf-url-wrap" class="hidden">
@@ -1542,19 +1557,52 @@
       <div class="api-modal-actions">
         <span></span>
         <div class="u-gap-10" style="display:flex;">
-          <button class="act-btn secondary" type="button" onclick="closeAiConfig()">Cancel</button>
-          <button class="act-btn primary" type="button" onclick="saveAiConfig()">Save</button>
+          <button class="act-btn secondary" type="button" data-onclick="closeAiConfig()">Cancel</button>
+          <button class="act-btn primary" type="button" data-onclick="saveAiConfig()">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="provider-picker-modal" class="api-modal hidden" role="dialog" aria-modal="true" aria-labelledby="provider-picker-title">
+    <div class="api-modal-backdrop" data-onclick="closeProviderPicker()"></div>
+    <div class="api-modal-card provider-picker-card">
+      <div class="api-modal-header">
+        <div>
+          <div id="provider-picker-title" class="s-title">Choose download source</div>
+          <p class="provider-picker-description">Choose a source and its quality for this batch. Your saved source order and quality settings won't change.</p>
+        </div>
+        <button class="close-btn" type="button" data-onclick="closeProviderPicker()" aria-label="Close">✕</button>
+      </div>
+      <div class="api-modal-body">
+        <label class="provider-picker-label" for="provider-picker-service">Start with</label>
+        <select id="provider-picker-service"></select>
+        <div class="provider-picker-quality">
+          <label class="provider-picker-label" for="provider-picker-quality">Quality for this source</label>
+          <select id="provider-picker-quality"></select>
+          <p class="provider-picker-quality-note">Fallback sources keep their saved quality choices. Choose “Use global quality” to follow the Audio Quality setting.</p>
+        </div>
+        <label class="provider-picker-fallback">
+          <input type="checkbox" id="provider-picker-fallback">
+          <span><strong>Try other enabled sources if this one fails</strong><small>They'll be attempted in your saved priority order.</small></span>
+        </label>
+      </div>
+      <div class="api-modal-actions">
+        <span></span>
+        <div>
+          <button class="act-btn secondary" type="button" data-onclick="closeProviderPicker()">Cancel</button>
+          <button class="act-btn primary" type="button" data-onclick="confirmProviderPicker()">Start download</button>
         </div>
       </div>
     </div>
   </div>
 
   <div id="concerts-modal" class="api-modal hidden" role="dialog" aria-modal="true" aria-labelledby="concerts-title">
-    <div class="api-modal-backdrop" onclick="closeConcerts()"></div>
+    <div class="api-modal-backdrop" data-onclick="closeConcerts()"></div>
     <div class="api-modal-card u-maxw-640">
       <div class="api-modal-header">
         <div id="concerts-title" class="s-title">Concerts</div>
-        <button class="close-btn" type="button" onclick="closeConcerts()">✕</button>
+        <button class="close-btn" type="button" data-onclick="closeConcerts()">✕</button>
       </div>
       <div class="api-modal-body u-maxh-62vh u-oy-auto">
         <div class="u-dir-column u-gap-8" id="concerts-list" style="display:flex;"></div>
@@ -1563,22 +1611,22 @@
   </div>
 
   <div id="tagedit-modal" class="api-modal hidden" role="dialog" aria-modal="true" aria-labelledby="tagedit-title">
-    <div class="api-modal-backdrop" onclick="closeTagEditor()"></div>
+    <div class="api-modal-backdrop" data-onclick="closeTagEditor()"></div>
     <div class="api-modal-card u-maxw-620">
       <div class="api-modal-header">
         <div>
           <div id="tagedit-title" class="s-title">Edit tags</div>
           <div class="u-fs-12 u-c-muted u-mt-4 u-wb-break-all" id="tagedit-file"></div>
         </div>
-        <button class="close-btn" type="button" onclick="closeTagEditor()">✕</button>
+        <button class="close-btn" type="button" data-onclick="closeTagEditor()">✕</button>
       </div>
       <div class="api-modal-body u-maxh-62vh u-oy-auto">
         <div class="u-gap-14 u-items-flex-start u-mb-12" style="display:flex;">
           <img class="u-w-96 u-h-96 u-fit-cover u-r-8 u-bg-surface3" id="tagedit-cover" alt="Cover">
           <div class="u-dir-column u-gap-6" style="display:flex;">
-            <button class="act-btn secondary" type="button" onclick="$('tagedit-cover-file').click()">Change cover…</button>
-            <button class="act-btn secondary" type="button" onclick="removeTagEditorCover()">Remove cover</button>
-            <input type="file" id="tagedit-cover-file" accept="image/*" class="hidden" onchange="pickTagEditorCover(this)">
+            <button class="act-btn secondary" type="button" data-onclick="$('tagedit-cover-file').click()">Change cover…</button>
+            <button class="act-btn secondary" type="button" data-onclick="removeTagEditorCover()">Remove cover</button>
+            <input type="file" id="tagedit-cover-file" accept="image/*" class="hidden" data-onchange="pickTagEditorCover(this)">
           </div>
         </div>
         <div class="u-cols-1fr-1fr u-gap-10" id="tagedit-fields" style="display:grid;"></div>
@@ -1586,34 +1634,34 @@
         <textarea class="u-w-100pct u-mt-4 u-ff-font-mono u-fs-12" id="tagedit-lyrics" rows="6"></textarea>
         <div class="u-gap-8 u-items-center u-mt-8 u-wrap-wrap" style="display:flex;">
           <select class="u-maxw-150" id="tagedit-lang" aria-label="Translate to"></select>
-          <button class="act-btn secondary" type="button" onclick="translateTagEditorLyrics()" id="tagedit-translate-btn">Translate</button>
-          <button class="act-btn secondary" type="button" onclick="openAiConfig()" title="Choose the AI provider and enter your API key">AI settings…</button>
+          <button class="act-btn secondary" type="button" data-onclick="translateTagEditorLyrics()" id="tagedit-translate-btn">Translate</button>
+          <button class="act-btn secondary" type="button" data-onclick="openAiConfig()" title="Choose the AI provider and enter your API key">AI settings…</button>
         </div>
         <div id="tagedit-translation-wrap" class="hidden u-mt-8">
           <label class="u-fs-12 u-c-muted" for="tagedit-translation">Translation</label>
           <textarea class="u-w-100pct u-mt-4 u-ff-font-mono u-fs-12" id="tagedit-translation" rows="6"></textarea>
-          <button class="act-btn secondary u-mt-6" type="button" onclick="saveTagEditorTranslation()">Save as .lrc next to the file</button>
+          <button class="act-btn secondary u-mt-6" type="button" data-onclick="saveTagEditorTranslation()">Save as .lrc next to the file</button>
         </div>
       </div>
       <div class="api-modal-actions">
         <span class="u-fs-11_5 u-c-muted">Empty a field to remove that tag.</span>
         <div class="u-gap-10 u-wrap-wrap" style="display:flex;">
-          <button class="act-btn secondary" type="button" onclick="closeTagEditor()">Cancel</button>
-          <button class="act-btn primary" type="button" onclick="saveTagEditor()" id="tagedit-save-btn">Save</button>
+          <button class="act-btn secondary" type="button" data-onclick="closeTagEditor()">Cancel</button>
+          <button class="act-btn primary" type="button" data-onclick="saveTagEditor()" id="tagedit-save-btn">Save</button>
         </div>
       </div>
     </div>
   </div>
 
   <div id="analyze-modal" class="api-modal hidden" role="dialog" aria-modal="true" aria-labelledby="analyze-title">
-    <div class="api-modal-backdrop" onclick="closeAnalyze()"></div>
+    <div class="api-modal-backdrop" data-onclick="closeAnalyze()"></div>
     <div class="api-modal-card u-maxw-780">
       <div class="api-modal-header">
         <div>
           <div id="analyze-title" class="s-title">Audio analysis</div>
           <div class="u-fs-12 u-c-muted u-mt-4 u-wb-break-all" id="analyze-file"></div>
         </div>
-        <button class="close-btn" type="button" onclick="closeAnalyze()">✕</button>
+        <button class="close-btn" type="button" data-onclick="closeAnalyze()">✕</button>
       </div>
       <div class="api-modal-body">
         <div class="u-wrap-wrap u-gap-6-18 u-fs-12 u-mb-10" id="analyze-info" style="display:flex;"></div>
@@ -1627,46 +1675,46 @@
   </div>
 
   <div id="reorg-modal" class="api-modal hidden" role="dialog" aria-modal="true" aria-labelledby="reorg-title">
-    <div class="api-modal-backdrop" onclick="closeReorganize()"></div>
+    <div class="api-modal-backdrop" data-onclick="closeReorganize()"></div>
     <div class="api-modal-card u-maxw-700">
       <div class="api-modal-header">
         <div>
           <div id="reorg-title" class="s-title">Organize library</div>
           <div class="u-fs-12 u-c-muted u-mt-4 u-wb-break-all" id="reorg-root"></div>
         </div>
-        <button class="close-btn" type="button" onclick="closeReorganize()">✕</button>
+        <button class="close-btn" type="button" data-onclick="closeReorganize()">✕</button>
       </div>
       <div class="api-modal-body">
         <label class="u-fs-12 u-c-muted" for="reorg-template">Folder template</label>
-        <input class="u-w-100pct u-m-4-0-6 u-ff-font-mono" type="text" id="reorg-template" oninput="invalidateReorganizePlan()">
+        <input class="u-w-100pct u-m-4-0-6 u-ff-font-mono" type="text" id="reorg-template" data-oninput="invalidateReorganizePlan()">
         <div class="u-fs-11_5 u-c-muted u-mb-10" id="reorg-hint"></div>
-        <button class="act-btn secondary" type="button" onclick="previewReorganize()" id="reorg-preview-btn">Preview</button>
+        <button class="act-btn secondary" type="button" data-onclick="previewReorganize()" id="reorg-preview-btn">Preview</button>
         <div class="u-fs-12_5 u-m-10-0-6" id="reorg-summary"></div>
         <div class="u-maxh-260 u-oy-auto u-ff-font-mono u-fs-11 u-lh-1_6" id="reorg-list"></div>
       </div>
       <div class="api-modal-actions">
         <span class="u-fs-11_5 u-c-muted">Nothing is overwritten. Lyrics files (.lrc) move with their track.</span>
         <div class="u-gap-10 u-wrap-wrap" style="display:flex;">
-          <button class="act-btn secondary" type="button" onclick="closeReorganize()">Close</button>
-          <button class="act-btn primary" type="button" onclick="applyReorganize()" id="reorg-apply-btn" disabled>Move files</button>
+          <button class="act-btn secondary" type="button" data-onclick="closeReorganize()">Close</button>
+          <button class="act-btn primary" type="button" data-onclick="applyReorganize()" id="reorg-apply-btn" disabled>Move files</button>
         </div>
       </div>
     </div>
   </div>
 
   <div id="convert-modal" class="api-modal hidden" role="dialog" aria-modal="true" aria-labelledby="convert-title">
-    <div class="api-modal-backdrop" onclick="closeConvertDialog()"></div>
+    <div class="api-modal-backdrop" data-onclick="closeConvertDialog()"></div>
     <div class="api-modal-card">
       <div class="api-modal-header">
         <div>
           <div id="convert-title" class="s-title">Convert audio</div>
           <div class="u-fs-12 u-c-muted u-mt-4" id="convert-desc"></div>
         </div>
-        <button class="close-btn" type="button" onclick="closeConvertDialog()">✕</button>
+        <button class="close-btn" type="button" data-onclick="closeConvertDialog()">✕</button>
       </div>
       <div class="api-modal-body">
         <label class="u-fs-12 u-c-muted" for="convert-format">Format</label>
-        <select class="u-w-100pct u-m-4-0-12" id="convert-format" onchange="updateConvertOptions()"></select>
+        <select class="u-w-100pct u-m-4-0-12" id="convert-format" data-onchange="updateConvertOptions()"></select>
         <div class="u-mb-12" id="convert-lossy-opts">
           <label class="u-fs-12 u-c-muted" for="convert-bitrate">Bitrate</label>
           <select class="u-w-100pct u-mt-4" id="convert-bitrate"></select>
@@ -1694,36 +1742,36 @@
       <div class="api-modal-actions">
         <span></span>
         <div class="u-gap-10 u-wrap-wrap" style="display:flex;">
-          <button class="act-btn secondary" type="button" onclick="closeConvertDialog()">Cancel</button>
-          <button class="act-btn primary" type="button" onclick="startConvert()" id="convert-start-btn">Convert</button>
+          <button class="act-btn secondary" type="button" data-onclick="closeConvertDialog()">Cancel</button>
+          <button class="act-btn primary" type="button" data-onclick="startConvert()" id="convert-start-btn">Convert</button>
         </div>
       </div>
     </div>
   </div>
 
   <div id="api-config-modal" class="api-modal hidden">
-    <div class="api-modal-backdrop" onclick="closeApiConfigPopup()"></div>
+    <div class="api-modal-backdrop" data-onclick="closeApiConfigPopup()"></div>
     <div class="api-modal-card">
       <div class="api-modal-header">
         <div>
           <div id="api-config-title" class="s-title">Configure API</div>
           <div class="u-fs-12 u-c-muted u-mt-4" id="api-config-desc">Enter the URL and verify the endpoint.</div>
         </div>
-        <button class="close-btn" type="button" onclick="closeApiConfigPopup()">✕</button>
+        <button class="close-btn" type="button" data-onclick="closeApiConfigPopup()">✕</button>
       </div>
       <div class="api-modal-body">
         <input type="text" id="api-config-value" placeholder="https://...">
         <div class="u-gap-8 u-items-center u-mt-12 u-wrap-wrap" style="display:flex;">
-          <button class="act-btn secondary" type="button" onclick="checkApiConfig()" id="api-config-check-btn">Check API</button>
-          <button class="act-btn secondary" type="button" onclick="clearApiConfigValue()" id="api-config-clear-btn">Clear</button>
+          <button class="act-btn secondary" type="button" data-onclick="checkApiConfig()" id="api-config-check-btn">Check API</button>
+          <button class="act-btn secondary" type="button" data-onclick="clearApiConfigValue()" id="api-config-clear-btn">Clear</button>
           <span class="u-fs-12" id="api-config-status" data-tone="muted">Enter a URL and press Check.</span>
         </div>
       </div>
       <div class="api-modal-actions">
         <a id="api-config-help" class="api-config-help" href="#" target="_blank" rel="noreferrer">How to create your own instance</a>
         <div class="u-gap-10 u-wrap-wrap" style="display:flex;">
-          <button class="act-btn secondary" type="button" onclick="closeApiConfigPopup()">Cancel</button>
-          <button class="act-btn primary" type="button" onclick="saveApiConfig()" id="api-config-save-btn">Save</button>
+          <button class="act-btn secondary" type="button" data-onclick="closeApiConfigPopup()">Cancel</button>
+          <button class="act-btn primary" type="button" data-onclick="saveApiConfig()" id="api-config-save-btn">Save</button>
         </div>
       </div>
     </div>
@@ -1745,13 +1793,35 @@
       </div>
       <div class="api-modal-body">
         <input type="text" id="login-username" placeholder="Username" autocomplete="username">
-        <input class="u-mt-8" type="password" id="login-password" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter') doLogin();">
+        <input class="u-mt-8" type="password" id="login-password" placeholder="Password" autocomplete="current-password" data-onkeydown="if(event.key==='Enter') doLogin();">
         <div class="u-fs-12 u-c-red u-mt-8 u-minh-16" id="login-error"></div>
       </div>
       <div class="api-modal-actions">
         <div></div>
         <div class="u-gap-10 u-wrap-wrap" style="display:flex;">
-          <button class="act-btn primary" type="button" onclick="doLogin()" id="login-submit-btn">Sign in</button>
+          <button class="act-btn primary" type="button" data-onclick="doLogin()" id="login-submit-btn">Sign in</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- In-app confirmation (F7): askConfirm() in app.js opens it in place
+       of the native confirm(), which pywebview draws in the OS style and
+       outside the window. Escape and the backdrop count as Cancel. -->
+  <div id="confirm-modal" class="api-modal hidden" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+    <div class="api-modal-backdrop" data-confirm="cancel"></div>
+    <div class="api-modal-card confirm-card">
+      <div class="api-modal-header">
+        <div id="confirm-title" class="s-title">Are you sure?</div>
+      </div>
+      <div class="api-modal-body">
+        <p id="confirm-message" class="confirm-message"></p>
+      </div>
+      <div class="api-modal-actions">
+        <span></span>
+        <div class="u-gap-10 u-wrap-wrap" style="display:flex;">
+          <button class="act-btn secondary" type="button" data-confirm="cancel" id="confirm-cancel">Cancel</button>
+          <button class="act-btn primary" type="button" data-confirm="ok" id="confirm-ok">OK</button>
         </div>
       </div>
     </div>
@@ -1766,31 +1836,26 @@
        makes it a stacking context, so the dock's own --z-dock could
        not lift it above the 58px sidebar rail: the rail painted over
        its left edge, and the drawer's backdrop stopped at the rail. -->
-      <div id="queue-dock" onclick="toggleQueueDrawer()" title="Open download queue">
-        <!-- Inline, and stroked with currentColor, like every other icon in
-             the app: assets/icons/download.svg paints a hardcoded #231f20,
-             which as an <img> cannot inherit colour — a near-black glyph on
-             the dark theme's dark tile, i.e. an empty square. -->
-        <div class="qd-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        </div>
+      <div id="queue-dock" role="button" tabindex="0" data-activate aria-label="Open download queue" data-onclick="toggleQueueDrawer()" title="Open download queue">
+        <span class="qd-label label">Downloads</span>
+        <!-- A segmented meter: app.js sizes the fill in whole 8px steps. -->
+        <div class="qd-bar" aria-hidden="true"><i id="qd-bar-fill"></i></div>
         <div class="qd-body">
           <div class="qd-downloaded" id="qd-downloaded">0.00 MB</div>
           <div class="qd-speed" id="qd-speed">Idle</div>
         </div>
         <div class="qd-chevron">›</div>
-        <div class="qd-bar"><i id="qd-bar-fill"></i></div>
       </div>
 <div id="folder-browser-modal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="folder-browser-title" tabindex="-1">
     <div class="fb-card">
       <div class="fb-header">
         <div id="folder-browser-title">Select Folder</div>
-        <button class="fb-close" onclick="closeFolderBrowser()">×</button>
+        <button class="fb-close" data-onclick="closeFolderBrowser()">×</button>
       </div>
       <div class="fb-toolbar">
-        <button id="fb-back" onclick="goFolderBrowserBack()">← Back</button>
+        <button id="fb-back" data-onclick="goFolderBrowserBack()">← Back</button>
         <input type="text" id="fb-path" readonly>
-        <button class="fb-select" onclick="setFolderPath()">Select</button>
+        <button class="fb-select" data-onclick="setFolderPath()">Select</button>
       </div>
       <div id="fb-entries"></div>
     </div>
@@ -1798,16 +1863,26 @@
 
 <div id="player-bar" class="hidden" role="region" aria-label="Player">
   <audio id="player-audio" preload="metadata"></audio>
-  <div class="pl-info u-cursor-pointer" onclick="openNowPlaying()" title="Open the full player">
-    <div id="pl-title" class="pl-title">—</div>
-    <div id="pl-quality" class="pl-quality" title="Played exactly as stored. Formats the window cannot decode are played as a lossless FLAC copy. The operating system may still resample to your output device's rate."></div>
+  <div class="pl-info u-cursor-pointer" role="button" tabindex="0" data-activate data-onclick="openNowPlaying()" title="Open the full player">
+    <span id="pl-artwork" class="pl-artwork" aria-hidden="true">
+      <img id="pl-cover" alt="">
+      <svg class="pl-artwork-placeholder" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M9 18V5l12-2v13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="6" cy="18" r="3" stroke="currentColor" stroke-width="1.7"/>
+        <circle cx="18" cy="16" r="3" stroke="currentColor" stroke-width="1.7"/>
+      </svg>
+    </span>
+    <span class="pl-track-meta">
+      <span id="pl-title" class="pl-title">—</span>
+      <span id="pl-quality" class="pl-quality" title="Played exactly as stored. Formats the window cannot decode are played as a lossless FLAC copy. The operating system may still resample to your output device's rate."></span>
+    </span>
   </div>
   <div class="pl-controls">
-    <button type="button" class="pl-btn pl-mode" id="pl-shuffle" onclick="playerToggleShuffle()" aria-label="Shuffle" title="Shuffle"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg></button>
-    <button type="button" class="pl-btn" onclick="playerPrev()" aria-label="Previous"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
-    <button type="button" class="pl-btn pl-main" id="pl-play" onclick="playerToggle()" aria-label="Play or pause"><svg id="pl-play-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
-    <button type="button" class="pl-btn" onclick="playerNext()" aria-label="Next"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
-    <button type="button" class="pl-btn pl-mode" id="pl-repeat" data-mode="off" onclick="playerCycleRepeat()" aria-label="Repeat" title="Repeat"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg><span class="rep1">1</span></button>
+    <button type="button" class="pl-btn pl-mode" id="pl-shuffle" data-onclick="playerToggleShuffle()" aria-label="Shuffle" title="Shuffle"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg></button>
+    <button type="button" class="pl-btn" data-onclick="playerPrev()" aria-label="Previous"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
+    <button type="button" class="pl-btn pl-main" id="pl-play" data-onclick="playerToggle()" aria-label="Play or pause"><svg id="pl-play-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
+    <button type="button" class="pl-btn" data-onclick="playerNext()" aria-label="Next"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 5h2v14h-2zM4 5v14l11-7z"/></svg></button>
+    <button type="button" class="pl-btn pl-mode" id="pl-repeat" data-mode="off" data-onclick="playerCycleRepeat()" aria-label="Repeat" title="Repeat"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg><span class="rep1">1</span></button>
   </div>
   <div class="pl-seek">
     <span id="pl-cur" class="pl-time">0:00</span>
@@ -1815,13 +1890,13 @@
     <span id="pl-dur" class="pl-time">0:00</span>
   </div>
   <input type="range" id="pl-vol" class="pl-vol" min="0" max="100" value="100" aria-label="Volume">
-  <button type="button" class="pl-btn" onclick="openNowPlaying()" aria-label="Open the full player" title="Open the full player"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>
-  <button type="button" class="pl-btn" onclick="closePlayer()" aria-label="Close player">✕</button>
+  <button type="button" class="pl-btn" data-onclick="openNowPlaying()" aria-label="Open the full player" title="Open the full player"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>
+  <button type="button" class="pl-btn" data-onclick="closePlayer()" aria-label="Close player">✕</button>
 </div>
 
 <div id="np-view" class="hidden" role="dialog" aria-modal="true" aria-label="Now playing">
   <div id="np-bg"></div>
-  <button type="button" class="np-close" onclick="closeNowPlaying()" aria-label="Back to the library">✕</button>
+  <button type="button" class="np-close" data-onclick="closeNowPlaying()" aria-label="Back to the library">✕</button>
   <div class="np-volume">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9z"/></svg>
     <input type="range" id="np-vol" min="0" max="100" value="100" aria-label="Volume">
@@ -1836,44 +1911,40 @@
     <input type="range" id="np-seek" class="np-seek" min="0" max="1000" value="0" aria-label="Seek">
     <div class="np-times"><span id="np-cur">0:00</span><span id="np-tech" class="np-tech" title="Played exactly as stored. Formats the window cannot decode are played as a lossless FLAC copy."></span><span id="np-rem">-0:00</span></div>
     <div class="np-controls">
-      <button type="button" class="np-btn np-mode" id="np-shuffle" onclick="playerToggleShuffle()" aria-label="Shuffle"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg></button>
-      <button type="button" class="np-btn" onclick="playerPrev()" aria-label="Previous"><svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor"><path d="M11 18V6l-8.5 6zm.5-6 8.5 6V6z"/></svg></button>
-      <button type="button" class="np-btn np-play" onclick="playerToggle()" aria-label="Play or pause"><svg id="np-play-icon" width="44" height="44" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
-      <button type="button" class="np-btn" onclick="playerNext()" aria-label="Next"><svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor"><path d="M13 6v12l8.5-6zM4 18l8.5-6L4 6z"/></svg></button>
-      <button type="button" class="np-btn np-mode" id="np-repeat" data-mode="off" onclick="playerCycleRepeat()" aria-label="Repeat"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg><span class="rep1">1</span></button>
+      <button type="button" class="np-btn np-mode" id="np-shuffle" data-onclick="playerToggleShuffle()" aria-label="Shuffle"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg></button>
+      <button type="button" class="np-btn" data-onclick="playerPrev()" aria-label="Previous"><svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor"><path d="M11 18V6l-8.5 6zm.5-6 8.5 6V6z"/></svg></button>
+      <button type="button" class="np-btn np-play" data-onclick="playerToggle()" aria-label="Play or pause"><svg id="np-play-icon" width="44" height="44" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
+      <button type="button" class="np-btn" data-onclick="playerNext()" aria-label="Next"><svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor"><path d="M13 6v12l8.5-6zM4 18l8.5-6L4 6z"/></svg></button>
+      <button type="button" class="np-btn np-mode" id="np-repeat" data-mode="off" data-onclick="playerCycleRepeat()" aria-label="Repeat"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg><span class="rep1">1</span></button>
     </div>
   </div>
   <div class="np-right">
+    <div class="np-lyrics-toolbar">
+      <details class="np-sync-controls">
+        <summary>Lyrics sync</summary>
+        <div class="np-sync-panel">
+          <label for="np-sync-offset">Advance / delay <output id="np-sync-offset-value">0.0 s</output></label>
+          <input id="np-sync-offset" type="range" min="-5" max="5" step="0.1" value="0"
+            aria-label="Lyrics advance or delay" data-oninput="npSetSync('offset', this.value)">
+          <label for="np-sync-speed">Lyrics speed <output id="np-sync-speed-value">1.00×</output></label>
+          <input id="np-sync-speed" type="range" min="0.90" max="1.10" step="0.01" value="1"
+            aria-label="Lyrics synchronization speed" data-oninput="npSetSync('speed', this.value)">
+          <small>Changes affect lyrics only and reset when the track changes.</small>
+        </div>
+      </details>
+    </div>
     <div id="np-lyrics" class="np-lyrics"></div>
     <div id="np-queue" class="np-queue hidden"></div>
   </div>
   <div class="np-tabs">
-    <button type="button" id="np-tab-lyrics" class="np-tab active" onclick="npShow('lyrics')" aria-label="Lyrics"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
-    <button type="button" id="np-tab-queue" class="np-tab" onclick="npShow('queue')" aria-label="Queue"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></button>
+    <button type="button" id="np-tab-lyrics" class="np-tab active" data-onclick="npShow('lyrics')" aria-label="Lyrics"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
+    <button type="button" id="np-tab-queue" class="np-tab" data-onclick="npShow('queue')" aria-label="Queue"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></button>
   </div>
 </div>
 
   <!--MORNYE-APP-SCRIPTS: webapp.py injects the browser shim right here-->
-  <script>
-    (function () {
-      var t = Date.now();
-      document.write('<script src="toast-system.js?_=' + t + '"><\/script>');
-      document.write('<script src="app.js?_=' + t + '"><\/script>');
-    })();
-  </script>
-  <script>
-    // --web mode only (see sw.js's own comment for what the service worker
-    // actually does — installability, not offline caching of live data).
-    // window.__MORNYE_WEB_MODE__ is set by webapp.py's index() route
-    // before this script runs; the desktop pywebview window never sets it,
-    // so this is a no-op there.
-    if (window.__MORNYE_WEB_MODE__ && 'serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').catch(() => {
-        // Registration failing (e.g. served over plain http:// on a LAN
-        // address, where service workers require a secure context) should
-        // never block the app itself from working.
-      });
-    }
-  </script>
+  <!-- boot-tail.js writes the app scripts (with a fresh ?_= timestamp) and,
+       in --web mode, registers the service worker. -->
+  <script src="boot-tail.js"></script>
 </body>
 </html>

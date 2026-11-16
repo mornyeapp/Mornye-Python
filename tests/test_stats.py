@@ -29,6 +29,7 @@ def _add(
     success: bool = True,
     owner: str = "",
     at: float | None = None,
+    file_path: str = "",
 ) -> None:
     with db.transaction() as conn:
         conn.execute(
@@ -37,7 +38,7 @@ def _add(
                 owner, spotify_id, isrc, title, artist, album, provider,
                 file_path, format, bytes, success, downloaded_at,
                 genre, release_year, duration_ms
-            ) VALUES (?, '', '', ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, '', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 owner,
@@ -45,6 +46,7 @@ def _add(
                 artist,
                 album,
                 provider,
+                file_path,
                 fmt,
                 size_bytes,
                 1 if success else 0,
@@ -54,6 +56,26 @@ def _add(
                 duration_ms,
             ),
         )
+
+
+def test_existing_file_stats_exclude_deleted_files_without_erasing_history(
+    tmp_path,
+) -> None:
+    present = tmp_path / "present.flac"
+    present.touch()
+    _add(title="Present", file_path=str(present))
+    _add(title="Deleted", file_path=str(tmp_path / "deleted.flac"))
+    _add(title="Failed", success=False)
+
+    current = stats.wrapped(existing_files=True)
+    history = stats.wrapped()
+
+    assert current["totals"]["tracks"] == 1
+    assert current["totals"]["attempts"] == 1
+    assert current["top_tracks"] == []
+    assert current["last"]["title"] == "Present"
+    assert history["totals"]["tracks"] == 2
+    assert history["totals"]["attempts"] == 3
 
 
 def _at(days_ago: float, hour: int = 12) -> float:

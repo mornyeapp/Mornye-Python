@@ -31,7 +31,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
-from typing_extensions import Self
+from typing import Self
 
 from mornye.core.base import BaseProvider
 from mornye.core.errors import ErrorKind, MornyeError
@@ -335,7 +335,7 @@ class JSExtensionProvider(BaseProvider):
                     kind=ErrorKind.NETWORK_ERROR,
                     message="Timeout: all extension processes are busy.",
                     provider=self.name,
-                )
+                ) from None
 
         try:
             yield rt

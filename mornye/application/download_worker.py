@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import os
+import shutil
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -13,6 +16,66 @@ TrackExecutor = Callable[[TrackMetadata, str, int], Awaitable[DownloadResult]]
 OutputDirectory = Callable[[TrackMetadata], Awaitable[str]]
 ResultCallback = Callable[[TrackMetadata, DownloadResult], Awaitable[None]]
 StartCallback = Callable[[TrackMetadata, int], Awaitable[None]]
+
+logger = logging.getLogger(__name__)
+
+
+def _inside(path: Path, root: Path) -> bool:
+    try:
+        return path.resolve().is_relative_to(root.resolve())
+    except OSError:
+        return False
+
+
+def _same_file(a: Path, b: Path) -> bool:
+    """The same audio: one inode, or a copy made earlier (same size and
+    modification time, which shutil.copy2 keeps)."""
+    try:
+        if a.samefile(b):
+            return True
+        sa, sb = a.stat(), b.stat()
+        return sa.st_size == sb.st_size and int(sa.st_mtime) == int(sb.st_mtime)
+    except OSError:
+        return False
+
+
+def _free_target(existing: Path, folder: Path) -> Path:
+    """Where `existing` goes in `folder`: its own name, unless a different
+    track already holds it ("Intro.flac" by two artists); then "Name (2)",
+    "Name (3)"… An earlier placement of the same file is found again."""
+    candidate = folder / existing.name
+    n = 2
+    while candidate.exists() and not _same_file(existing, candidate):
+        candidate = folder / f"{existing.stem} ({n}){existing.suffix}"
+        n += 1
+    return candidate
+
+
+def bring_into_library(existing: Path, output_dir: str) -> Path:
+    """`existing` placed in `output_dir`: a hard link, else a copy.
+
+    For a playlist's M3U a track found outside the library (one of the
+    user's other music folders, issue #272) is listed as ``../../elsewhere``,
+    a path a media server scanning only the library cannot follow (issue
+    #277). Placing the file beside the playlist keeps what #272 was for, no
+    second download, and the link costs no space on the same disk. Falls
+    back to `existing` itself if neither works.
+    """
+    try:
+        target = _free_target(existing, Path(output_dir))
+        if target.exists():
+            return target
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.link(existing, target)
+        except OSError:
+            shutil.copy2(existing, target)
+        return target
+    except OSError as exc:
+        logger.warning(
+            "[library] Could not place %s in %s: %s", existing, output_dir, exc
+        )
+        return existing
 
 
 @dataclass
@@ -39,6 +102,7 @@ class ApplicationDownloadWorker:
         positions: list[int] | None = None,
         on_result: ResultCallback | None = None,
         on_start: StartCallback | None = None,
+        library_root: str | None = None,
     ) -> None:
         self._tracks = tracks
         self._max_concurrent = max(1, max_concurrent)
@@ -50,6 +114,9 @@ class ApplicationDownloadWorker:
         self._positions = positions or list(range(1, len(tracks) + 1))
         self._on_result = on_result
         self._on_start = on_start
+        # Set for a playlist run: a track already on disk outside this
+        # folder is placed inside it rather than linked where it is.
+        self._library_root = Path(library_root) if library_root else None
 
     async def run(self, options: Any) -> WorkerReport:
         report = WorkerReport()
@@ -60,6 +127,15 @@ class ApplicationDownloadWorker:
                 if self._on_start is not None:
                     await self._on_start(track, index)
                 existing = self._existing_paths.get(track.id)
+                if existing is not None and self._library_root is not None:
+                    if not await asyncio.to_thread(
+                        _inside, existing, self._library_root
+                    ):
+                        existing = await asyncio.to_thread(
+                            bring_into_library,
+                            existing,
+                            await self._output_directory(track),
+                        )
                 if existing is not None:
                     result = DownloadResult.skipped_result(
                         self._skipped_provider,

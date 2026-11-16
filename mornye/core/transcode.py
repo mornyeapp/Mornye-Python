@@ -33,7 +33,7 @@ import os
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Mapping
+from collections.abc import Mapping
 
 from .errors import ErrorKind, MornyeError
 from .tagger import transfer_tags_async

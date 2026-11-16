@@ -23,7 +23,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from typing_extensions import Self
+from typing import Self
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable
@@ -370,7 +370,7 @@ class JSRuntime:
             self._pending.pop(seq, None)
             self._progress_cbs.pop(seq, None)
             msg_0 = f"Timeout ({timeout}s) calling {method}"
-            raise ExtensionRuntimeError(msg_0)
+            raise ExtensionRuntimeError(msg_0) from None
         finally:
             self._progress_cbs.pop(seq, None)
 

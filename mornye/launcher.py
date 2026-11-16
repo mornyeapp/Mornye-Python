@@ -1243,6 +1243,43 @@ def parse_args(profile_defaults: dict | None = None) -> argparse.Namespace:
         "sequential downloads with no interleaved console output.",
     )
 
+    rate_limit_grp = parser.add_argument_group("Rate limiting")
+    rate_limit_grp.add_argument(
+        "--metadata-delay-min",
+        type=float,
+        default=pd.get("metadata_delay_min_s", 0.0),
+        metavar="SECONDS",
+        help="Minimum random spacing between metadata requests (default: 0).",
+    )
+    rate_limit_grp.add_argument(
+        "--metadata-delay-max",
+        type=float,
+        default=pd.get("metadata_delay_max_s", 0.0),
+        metavar="SECONDS",
+        help="Maximum random spacing between metadata requests (default: 0).",
+    )
+    rate_limit_grp.add_argument(
+        "--provider-delay-min",
+        type=float,
+        default=pd.get("provider_delay_min_s", 0.0),
+        metavar="SECONDS",
+        help="Minimum random spacing between provider attempts (default: 0).",
+    )
+    rate_limit_grp.add_argument(
+        "--provider-delay-max",
+        type=float,
+        default=pd.get("provider_delay_max_s", 0.0),
+        metavar="SECONDS",
+        help="Maximum random spacing between provider attempts (default: 0).",
+    )
+    rate_limit_grp.add_argument(
+        "--auto-rate-limit-cooldown",
+        action=argparse.BooleanOptionalAction,
+        default=pd.get("auto_rate_limit_cooldown", True),
+        help="Pause all download requests after a 429; disable with "
+        "--no-auto-rate-limit-cooldown (default: enabled).",
+    )
+
     # ── Timeout ──────────────────────────────────────────────────────────────
     timeout_grp = parser.add_argument_group("Timeout")
     timeout_grp.add_argument(
@@ -1552,6 +1589,11 @@ def _subscription_downloader(profile_defaults: dict, output_dir_override: str | 
             transcode_max_sample_rate=pd.get("transcode_max_sample_rate", 0),
             transcode_max_bit_depth=pd.get("transcode_max_bit_depth", 0),
             max_concurrent_downloads=pd.get("max_concurrent_downloads", 2),
+            metadata_delay_min_s=pd.get("metadata_delay_min_s", 0.0),
+            metadata_delay_max_s=pd.get("metadata_delay_max_s", 0.0),
+            provider_delay_min_s=pd.get("provider_delay_min_s", 0.0),
+            provider_delay_max_s=pd.get("provider_delay_max_s", 0.0),
+            auto_rate_limit_cooldown=pd.get("auto_rate_limit_cooldown", True),
             verify_hires=pd.get("verify_hires", False),
             redownload_fake_hires=pd.get("redownload_fake_hires", False),
         )
@@ -1828,6 +1870,11 @@ async def _run_download_async(
     m3u_format: str = "m3u8",
     library_scan_dirs: list[str] | None = None,
     max_concurrent_downloads: int = 2,
+    metadata_delay_min_s: float = 0.0,
+    metadata_delay_max_s: float = 0.0,
+    provider_delay_min_s: float = 0.0,
+    provider_delay_max_s: float = 0.0,
+    auto_rate_limit_cooldown: bool = True,
     extension_quality: dict[str, str] | None = None,
     verify_hires: bool = False,
     redownload_fake_hires: bool = False,
@@ -1983,6 +2030,11 @@ async def _run_download_async(
         transcode_max_sample_rate=transcode_max_sample_rate,
         transcode_max_bit_depth=transcode_max_bit_depth,
         max_concurrent_downloads=max(1, max_concurrent_downloads),
+        metadata_delay_min_s=metadata_delay_min_s,
+        metadata_delay_max_s=metadata_delay_max_s,
+        provider_delay_min_s=provider_delay_min_s,
+        provider_delay_max_s=provider_delay_max_s,
+        auto_rate_limit_cooldown=auto_rate_limit_cooldown,
         verify_hires=verify_hires,
         redownload_fake_hires=redownload_fake_hires,
         save_lrc=save_lrc,
@@ -2236,6 +2288,11 @@ async def run_download_from_cfg(cfg: dict, log_level: int) -> None:
             transcode_max_sample_rate=cfg.get("transcode_max_sample_rate", 0),
             transcode_max_bit_depth=cfg.get("transcode_max_bit_depth", 0),
             max_concurrent_downloads=cfg.get("max_concurrent_downloads", 2),
+            metadata_delay_min_s=cfg.get("metadata_delay_min_s", 0.0),
+            metadata_delay_max_s=cfg.get("metadata_delay_max_s", 0.0),
+            provider_delay_min_s=cfg.get("provider_delay_min_s", 0.0),
+            provider_delay_max_s=cfg.get("provider_delay_max_s", 0.0),
+            auto_rate_limit_cooldown=cfg.get("auto_rate_limit_cooldown", True),
             extension_quality=dict(cfg.get("extension_quality") or {}),
             verify_hires=cfg.get("verify_hires", False),
             redownload_fake_hires=cfg.get("redownload_fake_hires", False),
@@ -2251,6 +2308,725 @@ async def run_download_from_cfg(cfg: dict, log_level: int) -> None:
 
     if cfg.get("watch"):
         await watch_forever(_run_once, cfg["watch"])
+
+
+def _cli_gui() -> None:
+    """The --gui command, as amain runs it (split out of amain, M2)."""
+    from .app import run_gui
+
+    run_gui()
+
+
+async def _cli_tui() -> None:
+    """The --tui, --interactive command, as amain runs it (split out of amain, M2)."""
+    from .core.ffmpeg_check import print_ffmpeg_warning
+    from .core.node_check import print_node_warning
+
+    if "--interactive" in sys.argv and "--tui" not in sys.argv:
+        # A warning rather than a silent redirect: the two are not the
+        # same shape, and somebody driving the wizard from a script
+        # deserves to be told before the screen changes under them.
+        warnings.warn(
+            "--interactive is deprecated and now opens --tui, the "
+            "terminal UI. It will be removed in a future release; use "
+            "--tui, or the command line for a scripted run.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        print(
+            "--interactive now opens the terminal UI (--tui). "
+            "For a scripted or piped run, use the command line instead: "
+            "mornye --help",
+            file=sys.stderr,
+        )
+
+    print_ffmpeg_warning()
+    print_node_warning()
+
+    from .tui.app import run_tui_async
+
+    await run_tui_async(min_trust_tier=_early_min_trust_from_argv())
+    return
+
+
+async def _cli_web() -> None:
+    """The --web command, as amain runs it (split out of amain, M2)."""
+    # --host/--port need the parsed args (argparse), not a raw sys.argv
+    # scan like the flags above, since they take a value.
+    # allow_abbrev=False is load-bearing, not tidiness: argparse expands
+    # unambiguous prefixes by default, and `--web` — the flag that got us
+    # into this branch and is therefore always present — is a prefix of
+    # both --web-token and --web-multiuser. With abbreviation on, argparse
+    # calls that ambiguous and exits(2), so plain `mornye --web` could
+    # never start the server at all.
+    web_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    web_parser.add_argument("--host", default="127.0.0.1")
+    web_parser.add_argument("--port", type=int, default=8000)
+    web_parser.add_argument("--web-token", dest="token", default=None)
+    web_parser.add_argument("--web-multiuser", dest="multiuser", action="store_true")
+    web_args, _ = web_parser.parse_known_args(sys.argv[1:])
+
+    try:
+        from .webapp import resolve_web_token
+        from .webapp import run_async as run_web
+    except ImportError as exc:
+        # webapp.py imports FastAPI at module level. FastAPI and uvicorn
+        # are base dependencies now — they used to sit in a `web` extra,
+        # which meant `pip install Mornye && mornye --web` died on
+        # an ImportError — so reaching here means a broken environment
+        # rather than a missing extra. Say so instead of handing over a
+        # bare traceback.
+        print(
+            f"--web could not import its server dependencies ({exc}).\n"
+            "FastAPI and uvicorn ship with Mornye, so this environment "
+            "looks incomplete. Try:\n"
+            "    pip install --force-reinstall fastapi 'uvicorn[standard]'",
+            file=sys.stderr,
+        )
+        raise SystemExit(1) from exc
+
+    await run_web(
+        host=web_args.host,
+        port=web_args.port,
+        token=resolve_web_token(web_args.token),
+        multiuser=web_args.multiuser,
+    )
+
+
+def _cli_web_user_add() -> None:
+    """The --web-user-add command, as amain runs it (split out of amain, M2)."""
+    user_parser = argparse.ArgumentParser(add_help=False)
+    user_parser.add_argument(
+        "--web-user-add", dest="creds", nargs=2, metavar=("USERNAME", "PASSWORD")
+    )
+    user_parser.add_argument(
+        "--role",
+        choices=list(WEB_USER_ROLES),
+        default="user",
+        help="'admin' may see instance-wide metrics and manage other "
+        "accounts' quotas; 'user' (default) may not.",
+    )
+    user_parser.add_argument(
+        "--daily-tracks",
+        type=int,
+        default=0,
+        help="Tracks this account may download per rolling 24h. "
+        "0 (default) is unlimited.",
+    )
+    user_parser.add_argument(
+        "--daily-mb",
+        type=int,
+        default=0,
+        help="Megabytes per rolling 24h. 0 (default) is unlimited.",
+    )
+    user_args, _ = user_parser.parse_known_args(sys.argv[1:])
+
+    from .core.web_users import WebUserError, create_user
+
+    try:
+        create_user(
+            *user_args.creds,
+            role=user_args.role,
+            daily_track_quota=user_args.daily_tracks,
+            daily_byte_quota=user_args.daily_mb * 1024 * 1024,
+        )
+    except WebUserError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    print(f"Web user '{user_args.creds[0]}' created ({user_args.role}).")
+    return
+
+
+def _cli_web_user_quota() -> None:
+    """The --web-user-quota command, as amain runs it (split out of amain, M2)."""
+    quota_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    quota_parser.add_argument("--web-user-quota", dest="username", metavar="USERNAME")
+    quota_parser.add_argument("--daily-tracks", type=int, default=None)
+    quota_parser.add_argument("--daily-mb", type=int, default=None)
+    quota_args, _ = quota_parser.parse_known_args(sys.argv[1:])
+
+    from .core.web_users import quota_usage, set_quota
+
+    updated = set_quota(
+        quota_args.username,
+        daily_track_quota=quota_args.daily_tracks,
+        daily_byte_quota=(
+            None if quota_args.daily_mb is None else quota_args.daily_mb * 1024 * 1024
+        ),
+    )
+    if not updated:
+        print(f"No web user named '{quota_args.username}'.", file=sys.stderr)
+        sys.exit(1)
+    usage = quota_usage(quota_args.username)
+    print(
+        f"{quota_args.username}: "
+        f"{usage['tracks_used']}/{usage['tracks_limit'] or '∞'} tracks, "
+        f"{usage['bytes_used'] // (1024 * 1024)}/"
+        f"{(usage['bytes_limit'] // (1024 * 1024)) if usage['bytes_limit'] else '∞'}"
+        f" MB in the last {int(usage['window_hours'])}h."
+    )
+
+
+def _cli_web_user_role() -> None:
+    """The --web-user-role command, as amain runs it (split out of amain, M2)."""
+    role_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    role_parser.add_argument(
+        "--web-user-role",
+        dest="pair",
+        nargs=2,
+        metavar=("USERNAME", "ROLE"),
+    )
+    role_args, _ = role_parser.parse_known_args(sys.argv[1:])
+
+    from .core.web_users import WebUserError, set_role
+
+    try:
+        updated = set_role(*role_args.pair)
+    except WebUserError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    print(
+        f"'{role_args.pair[0]}' is now {role_args.pair[1]}."
+        if updated
+        else f"No web user named '{role_args.pair[0]}'."
+    )
+    return
+
+
+def _cli_web_user_remove() -> None:
+    """The --web-user-remove command, as amain runs it (split out of amain, M2)."""
+    user_rm_parser = argparse.ArgumentParser(add_help=False)
+    user_rm_parser.add_argument(
+        "--web-user-remove", dest="username", metavar="USERNAME"
+    )
+    user_rm_args, _ = user_rm_parser.parse_known_args(sys.argv[1:])
+
+    from .core.web_users import delete_user
+
+    found = delete_user(user_rm_args.username)
+    print(
+        f"Web user '{user_rm_args.username}' removed."
+        if found
+        else f"No web user named '{user_rm_args.username}'."
+    )
+
+
+async def _cli_stats() -> None:
+    """The --stats command, as amain runs it (split out of amain, M2)."""
+    from .core import stats
+
+    # allow_abbrev=False: "--stats" is a prefix of every other flag in
+    # this group, and argparse would rather exit(2) than guess.
+    stats_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    stats_parser.add_argument("--stats", action="store_true")
+    stats_parser.add_argument(
+        "--stats-year", dest="year", type=int, default=None, metavar="YYYY"
+    )
+    stats_parser.add_argument(
+        "--stats-days", dest="days", type=int, default=None, metavar="N"
+    )
+    stats_parser.add_argument(
+        "--stats-user", dest="owner", default=None, metavar="USERNAME"
+    )
+    stats_parser.add_argument(
+        "--stats-top", dest="top", type=int, default=stats.DEFAULT_TOP
+    )
+    stats_parser.add_argument("--json", dest="as_json", action="store_true")
+    stats_args, _ = stats_parser.parse_known_args(sys.argv[1:])
+
+    window = stats.parse_window(year=stats_args.year, days=stats_args.days)
+    document = await asyncio.to_thread(
+        stats.wrapped,
+        owner=stats_args.owner,
+        window=window,
+        top=max(1, stats_args.top),
+    )
+    print(
+        json.dumps(document, indent=2)
+        if stats_args.as_json
+        else stats.format_wrapped(document)
+    )
+    return
+
+
+def _cli_cache_stats() -> None:
+    """The --cache-stats command, as amain runs it (split out of amain, M2)."""
+    from .core import cache_admin
+
+    cache_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    cache_parser.add_argument("--cache-stats", action="store_true")
+    cache_parser.add_argument("--cache-prune", action="store_true")
+    cache_parser.add_argument("--cache-clear", action="store_true")
+    cache_parser.add_argument(
+        "--cache-max-age-days",
+        type=float,
+        default=cache_admin.DEFAULT_MAX_AGE_S / 86400,
+    )
+    cache_parser.add_argument("--dry-run", action="store_true")
+    cache_parser.add_argument("--json", dest="as_json", action="store_true")
+    cache_args, _ = cache_parser.parse_known_args(sys.argv[1:])
+
+    if cache_args.cache_clear:
+        result = cache_admin.clear(dry_run=cache_args.dry_run)
+        if cache_args.as_json:
+            print(cache_admin.to_json(result))
+        else:
+            verb = "Would remove" if result["dry_run"] else "Removed"
+            items = ", ".join(result["removed"]) or "nothing"
+            print(f"{verb}: {items}")
+            print(f"Freed: {cache_admin.human_bytes(result['freed_bytes'])}")
+            if result["preserved"]:
+                print(f"Kept (configuration): {', '.join(result['preserved'])}")
+    elif cache_args.cache_prune:
+        # --cache-max-age-days is a float, so argparse happily accepts
+        # -1, nan and inf; prune() rejects them rather than silently
+        # deleting everything or nothing. A bad flag value is a usage
+        # error, so report it the way argparse reports every other one
+        # (message on stderr, exit 2) instead of a traceback.
+        try:
+            result = cache_admin.prune(
+                max_age_s=cache_args.cache_max_age_days * 86400,
+                dry_run=cache_args.dry_run,
+            )
+        except ValueError as exc:
+            cache_parser.error(str(exc))
+        if cache_args.as_json:
+            print(cache_admin.to_json(result))
+        else:
+            verb = "Would remove" if result["dry_run"] else "Removed"
+            print(
+                f"{verb} {result['removed_files']} cached response(s), "
+                f"{cache_admin.human_bytes(result['freed_bytes'])}"
+            )
+    else:
+        data = cache_admin.stats()
+        print(
+            cache_admin.to_json(data)
+            if cache_args.as_json
+            else cache_admin.format_stats(data)
+        )
+
+
+def _cli_web_user_list() -> None:
+    """The --web-user-list command, as amain runs it (split out of amain, M2)."""
+    from .core.web_users import list_users
+
+    users = list_users()
+    if not users:
+        print("No web users configured.")
+        return
+    for user in users:
+        tracks = user["daily_track_quota"] or "∞"
+        size = (
+            f"{user['daily_byte_quota'] // (1024 * 1024)} MB"
+            if user["daily_byte_quota"]
+            else "∞"
+        )
+        print(f"{user['username']}  [{user['role']}]  {tracks} tracks/day, {size}/day")
+    return
+
+
+def _cli_signed_sessions() -> None:
+    """The  command, as amain runs it (split out of amain, M2)."""
+    # allow_abbrev=False: otherwise a bare --signed-sessions is an
+    # "ambiguous option" between the other two.
+    # --signed-sessions is declared too, so a malformed "--signed-sessions=x"
+    # errors out instead of silently listing.
+    ss_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    ss_parser.add_argument("--signed-sessions", action="store_true")
+    ss_parser.add_argument("--signed-sessions-clear", default=None)
+    ss_parser.add_argument("--signed-sessions-prune", action="store_true")
+    ss_args, _ = ss_parser.parse_known_args(sys.argv[1:])
+
+    from .core import signed_session_status as sss
+
+    if ss_args.signed_sessions_clear is not None:
+        if not sss.clear_signed_session(ss_args.signed_sessions_clear):
+            print(f"No signed session with key '{ss_args.signed_sessions_clear}'.")
+            sys.exit(1)
+        print(f"Cleared {ss_args.signed_sessions_clear}.")
+    if ss_args.signed_sessions_prune:
+        removed = sss.prune_orphaned_sessions()
+        print(
+            f"Removed {len(removed)} orphaned session file(s)"
+            + (": " + ", ".join(removed) if removed else ".")
+        )
+    if ss_args.signed_sessions_clear is not None or ss_args.signed_sessions_prune:
+        print()
+    sss.print_signed_sessions_report(sss.list_signed_sessions())
+
+
+async def _cli_health_check() -> None:
+    """The --health-check command, as amain runs it (split out of amain, M2)."""
+    # --lyrics-providers narrows which servers get probed, same as for
+    # --host/--port above: needs the parsed value, not a raw sys.argv scan.
+    hc_parser = argparse.ArgumentParser(add_help=False)
+    hc_parser.add_argument("--lyrics-providers", nargs="+", default=None)
+    hc_args, _ = hc_parser.parse_known_args(sys.argv[1:])
+
+    from .core.health_check import (
+        print_extension_health_report,
+        print_health_report,
+        run_extension_health_check,
+        run_health_check,
+    )
+
+    # The extensions' own checks first: they are what downloads need.
+    extension_rows = await run_extension_health_check()
+    if extension_rows:
+        print("Extensions:")
+        print_extension_health_report(extension_rows)
+        print("Lyrics:")
+    results = await run_health_check(hc_args.lyrics_providers)
+    print_health_report(results)
+    if not all(r.ok for r in results) or not all(row["ok"] for row in extension_rows):
+        sys.exit(1)
+    return
+
+
+def _cli_ext_settings() -> None:
+    """The --ext-settings, --ext-set command, as amain runs it (split out of amain, M2)."""
+    settings_parser = argparse.ArgumentParser(add_help=False)
+    settings_parser.add_argument("--ext-settings", dest="show", default=None)
+    settings_parser.add_argument(
+        "--ext-set", dest="assignments", action="append", default=[]
+    )
+    settings_args, _ = settings_parser.parse_known_args(sys.argv[1:])
+    sys.exit(_ext_settings_command(settings_args.show, settings_args.assignments))
+
+
+def _cli_ext_scaffold() -> None:
+    """The --ext-scaffold command, as amain runs it (split out of amain, M2)."""
+    scaffold_parser = argparse.ArgumentParser(add_help=False)
+    scaffold_parser.add_argument("--ext-scaffold", dest="name", required=True)
+    scaffold_parser.add_argument(
+        "--runtime", choices=["python", "javascript"], default="python"
+    )
+    scaffold_parser.add_argument("--output-dir", default=None)
+    scaffold_args, _ = scaffold_parser.parse_known_args(sys.argv[1:])
+
+    from .tools.ext_scaffold import scaffold_extension
+
+    try:
+        target = scaffold_extension(
+            scaffold_args.name,
+            runtime=scaffold_args.runtime,
+            output_dir=scaffold_args.output_dir,
+        )
+    except (ValueError, FileExistsError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    print(f"Created {scaffold_args.runtime} extension skeleton at: {target}")
+    print(f"Next: see {target / 'README.md'}")
+
+
+def _cli_ext_dry_run() -> None:
+    """The --ext-dry-run command, as amain runs it (split out of amain, M2)."""
+    dryrun_parser = argparse.ArgumentParser(add_help=False)
+    dryrun_parser.add_argument("--ext-dry-run", dest="path", required=True)
+    dryrun_args, _ = dryrun_parser.parse_known_args(sys.argv[1:])
+
+    from .tools.ext_dryrun import dry_run
+
+    report = dry_run(dryrun_args.path)
+    print(report.summary())
+    if not report.passed:
+        sys.exit(1)
+    return
+
+
+def _cli_trust_key_add() -> None:
+    """The --trust-key-add command, as amain runs it (split out of amain, M2)."""
+    trust_parser = argparse.ArgumentParser(add_help=False)
+    trust_parser.add_argument(
+        "--trust-key-add", dest="key", nargs=2, metavar=("NAME", "PUBLIC_KEY_B64")
+    )
+    trust_args, _ = trust_parser.parse_known_args(sys.argv[1:])
+
+    from .extensions.trust import TrustKeyError, add_trusted_key
+
+    try:
+        add_trusted_key(*trust_args.key)
+    except TrustKeyError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    print(f"Trusted key '{trust_args.key[0]}' added.")
+
+
+def _cli_trust_key_remove() -> None:
+    """The --trust-key-remove command, as amain runs it (split out of amain, M2)."""
+    trust_rm_parser = argparse.ArgumentParser(add_help=False)
+    trust_rm_parser.add_argument("--trust-key-remove", dest="name", metavar="NAME")
+    trust_rm_args, _ = trust_rm_parser.parse_known_args(sys.argv[1:])
+
+    from .extensions.trust import remove_trusted_key
+
+    found = remove_trusted_key(trust_rm_args.name)
+    print(
+        f"Trusted key '{trust_rm_args.name}' removed."
+        if found
+        else f"No trusted key named '{trust_rm_args.name}'."
+    )
+    return
+
+
+def _cli_trust_key_list() -> None:
+    """The --trust-key-list command, as amain runs it (split out of amain, M2)."""
+    # Names only, by construction: signer_names() never returns key
+    # material, so this listing cannot print any. Read trusted_keys.json
+    # directly if you need the public key bytes.
+    #
+    # Labelled `signer-N` rather than `key-N` because what is on the line
+    # is the label you chose when adding the key, not the key.
+    from .extensions.trust import signer_names
+
+    names = signer_names()
+    if not names:
+        print("No trusted keys configured.")
+    for idx, name in enumerate(names, start=1):
+        print(f"signer-{idx}: {name or '(unnamed)'}")
+
+
+async def _cli_split_cue() -> None:
+    """The --split-cue command, as amain runs it (split out of amain, M2)."""
+    # Single-file album + .cue → one file per track (core/cue_split.py).
+    # The source is never modified; existing outputs are kept unless
+    # --cue-overwrite is given.
+    cue_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    cue_parser.add_argument("--split-cue", dest="path", required=True)
+    cue_parser.add_argument("--cue-output", dest="output_dir", default=None)
+    cue_parser.add_argument(
+        "--cue-format", dest="fmt", default="flac", choices=["flac", "alac", "wav"]
+    )
+    cue_parser.add_argument("--cue-encoding", dest="encoding", default=None)
+    cue_parser.add_argument("--cue-overwrite", dest="overwrite", action="store_true")
+    cue_parser.add_argument("--cue-dry-run", dest="dry_run", action="store_true")
+    cue_parser.add_argument("--no-recursive", dest="recursive", action="store_false")
+    cue_parser.add_argument("--json", dest="as_json", action="store_true")
+    cue_args, _ = cue_parser.parse_known_args(sys.argv[1:])
+
+    from .tools.cue_split_cli import run_async as run_cue_split_async
+
+    sys.exit(
+        await run_cue_split_async(
+            cue_args.path,
+            output_dir=cue_args.output_dir,
+            fmt=cue_args.fmt,
+            encoding=cue_args.encoding,
+            overwrite=cue_args.overwrite,
+            dry_run=cue_args.dry_run,
+            recursive=cue_args.recursive,
+            as_json=cue_args.as_json,
+        )
+    )
+
+
+def _cli_dedup_restore() -> None:
+    """The --dedup-restore command, as amain runs it (split out of amain, M2)."""
+    restore_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    restore_parser.add_argument("--dedup-restore", dest="manifest", required=True)
+    restore_parser.add_argument("--json", dest="as_json", action="store_true")
+    restore_parser.add_argument("--verbose", "-v", action="store_true")
+    restore_args, _ = restore_parser.parse_known_args(sys.argv[1:])
+
+    from .tools.library_dedup_cli import run_restore
+
+    run_restore(
+        restore_args.manifest,
+        as_json=restore_args.as_json,
+        verbose=restore_args.verbose,
+    )
+
+
+def _cli_dedup_library() -> None:
+    """The --dedup-library, --dedup-from-db command, as amain runs it (split out of amain, M2)."""
+    # allow_abbrev=False for the same reason the upgrade block below
+    # needs it: `--dedup-library` is a prefix of `--dedup-library-…`
+    # were one ever added, and an ambiguous flag exits(2) instead of
+    # running.
+    dd_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    # Not required: --dedup-from-db carries the library's identity in
+    # the database itself, so a resolution run needs no folder.
+    dd_parser.add_argument("--dedup-library", dest="path", default="")
+    dd_parser.add_argument(
+        "--dedup-match",
+        dest="match",
+        choices=("isrc", "tags", "both"),
+        default="both",
+        help="Which signal decides that two files are one recording "
+        "(default: both — ISRC first, artist/title+duration for the rest).",
+    )
+    dd_parser.add_argument(
+        "--dedup-tolerance", dest="tolerance", type=float, default=4.0
+    )
+    dd_parser.add_argument(
+        "--dedup-keep-version-noise",
+        dest="keep_version_noise",
+        action="store_true",
+        help="Treat '(2011 Remaster)' as part of the title, so a "
+        "remaster is not a duplicate of the original.",
+    )
+    dd_parser.add_argument(
+        "--dedup-verify",
+        dest="verify",
+        action="store_true",
+        help="Confirm each group against the audio with Chromaprint "
+        "before offering it. Needs the fpcalc binary (Chromaprint).",
+    )
+    dd_parser.add_argument(
+        "--dedup-threshold", dest="threshold", type=float, default=0.95
+    )
+    dd_parser.add_argument("--dedup-no-cache", dest="use_cache", action="store_false")
+    dd_parser.add_argument(
+        "--dedup-apply",
+        dest="apply",
+        action="store_true",
+        help="Actually resolve them. Without it the command only reports "
+        "(a scan is safe; removing files is not).",
+    )
+    dd_parser.add_argument(
+        "--dedup-delete",
+        dest="delete",
+        action="store_true",
+        help="With --dedup-apply, unlink instead of quarantining. Not undoable.",
+    )
+    dd_parser.add_argument("--dedup-trash", dest="trash_dir", default=None)
+    dd_parser.add_argument("--dedup-limit", dest="limit", type=int, default=None)
+    dd_parser.add_argument(
+        "--dedup-db",
+        dest="db_path",
+        default=None,
+        metavar="FILE.db",
+        help="Also write the scan to a SQLite database: one row per "
+        "file, duplicate groups on top of it.",
+    )
+    dd_parser.add_argument(
+        "--dedup-from-db",
+        dest="from_db",
+        default=None,
+        metavar="FILE.db",
+        help="Skip the scan and read the report back from a database a "
+        "previous run wrote.",
+    )
+    dd_parser.add_argument("--no-recursive", dest="recursive", action="store_false")
+    dd_parser.add_argument("--json", dest="as_json", action="store_true")
+    dd_parser.add_argument("--verbose", "-v", action="store_true")
+    dd_args, _ = dd_parser.parse_known_args(sys.argv[1:])
+
+    from .tools.library_dedup_cli import run as run_dedup
+
+    if not dd_args.path and not dd_args.from_db:
+        print(
+            "Error: --dedup-library needs a folder, or --dedup-from-db a "
+            "database a previous run wrote.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    run_dedup(
+        dd_args.path,
+        recursive=dd_args.recursive,
+        match=dd_args.match,
+        duration_tolerance_s=dd_args.tolerance,
+        keep_version_noise=dd_args.keep_version_noise,
+        verify=dd_args.verify,
+        threshold=dd_args.threshold,
+        use_cache=dd_args.use_cache,
+        apply=dd_args.apply,
+        delete=dd_args.delete,
+        trash_dir=dd_args.trash_dir,
+        limit=dd_args.limit,
+        db_path=dd_args.db_path,
+        from_db=dd_args.from_db,
+        as_json=dd_args.as_json,
+        verbose=dd_args.verbose,
+    )
+    return
+
+
+async def _cli_upgrade_library() -> None:
+    """The --upgrade-library command, as amain runs it (split out of amain, M2)."""
+    # allow_abbrev=False: `--upgrade-library` is a prefix of
+    # `--upgrade-library-target`, and argparse would call a bare
+    # `--upgrade-library` ambiguous and exit(2).
+    up_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    up_parser.add_argument("--upgrade-library", dest="path", required=True)
+    up_parser.add_argument(
+        "--upgrade-target",
+        dest="target",
+        default="LOSSLESS",
+        help="Quality to bring the library up to (default: LOSSLESS). "
+        "Anything normalize_quality() understands: LOSSLESS, HI_RES, …",
+    )
+    up_parser.add_argument(
+        "--upgrade-verify-hires",
+        dest="verify",
+        action="store_true",
+        help="Also reclassify files that declare Hi-Res but whose audio "
+        "stops at CD range. Needs the 'hires' extra, and decodes ~30s per "
+        "file — slow on a large library.",
+    )
+    up_parser.add_argument(
+        "--upgrade-download",
+        dest="download",
+        action="store_true",
+        help="Actually re-download what was found. Without this the "
+        "command only reports (a scan is safe; a re-download is not).",
+    )
+    up_parser.add_argument("--upgrade-limit", dest="limit", type=int, default=None)
+    up_parser.add_argument("--no-recursive", dest="recursive", action="store_false")
+    up_parser.add_argument("--verbose", "-v", action="store_true")
+    up_parser.add_argument("--json", dest="as_json", action="store_true")
+    up_parser.add_argument("--profile", dest="profile", default=None)
+    up_parser.add_argument("--output-dir", dest="output_dir", default=None)
+    up_args, _ = up_parser.parse_known_args(sys.argv[1:])
+
+    from .tools.library_upgrade_cli import run as run_upgrade_scan
+    from .tools.library_upgrade_cli import run_and_upgrade_async
+
+    if not up_args.download:
+        run_upgrade_scan(
+            up_args.path,
+            up_args.target,
+            recursive=up_args.recursive,
+            verify_hires=up_args.verify,
+            as_json=up_args.as_json,
+            verbose=up_args.verbose,
+        )
+        return
+
+    upgrade_profile_defaults = (
+        await _load_profile_into_defaults(up_args.profile) if up_args.profile else {}
+    ) or load_config()
+    # The upgraded file goes back where the library already is unless
+    # told otherwise, which is what makes this an *upgrade* rather than a
+    # second copy somewhere else.
+    destination = (
+        up_args.output_dir or upgrade_profile_defaults.get("output_dir") or up_args.path
+    )
+    downloader = _subscription_downloader(
+        {**upgrade_profile_defaults, "quality": up_args.target}, destination
+    )
+
+    async def _download(url: str) -> None:
+        await downloader(url, destination)
+
+    await run_and_upgrade_async(
+        up_args.path,
+        up_args.target,
+        _download,
+        recursive=up_args.recursive,
+        verify_hires=up_args.verify,
+        limit=up_args.limit,
+        as_json=up_args.as_json,
+        verbose=up_args.verbose,
+    )
+
+
+async def _cli_subscribe_reset() -> None:
+    """The --subscribe-reset command, as amain runs it (split out of amain, M2)."""
+    await _handle_subscriptions()
+    return
 
 
 async def amain() -> None:
@@ -2289,311 +3065,45 @@ async def amain() -> None:
             pass
 
     if "--gui" in sys.argv:
-        from .app import run_gui
-
-        run_gui()
+        _cli_gui()
         return
 
     if _argv_has("--tui", "--interactive"):
-        if "--interactive" in sys.argv and "--tui" not in sys.argv:
-            # A warning rather than a silent redirect: the two are not the
-            # same shape, and somebody driving the wizard from a script
-            # deserves to be told before the screen changes under them.
-            warnings.warn(
-                "--interactive is deprecated and now opens --tui, the "
-                "terminal UI. It will be removed in a future release; use "
-                "--tui, or the command line for a scripted run.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            print(
-                "--interactive now opens the terminal UI (--tui). "
-                "For a scripted or piped run, use the command line instead: "
-                "mornye --help",
-                file=sys.stderr,
-            )
-
-        print_ffmpeg_warning()
-        print_node_warning()
-
-        from .tui.app import run_tui_async
-
-        await run_tui_async(min_trust_tier=_early_min_trust_from_argv())
+        await _cli_tui()
         return
 
     if "--web" in sys.argv:
-        # --host/--port need the parsed args (argparse), not a raw sys.argv
-        # scan like the flags above, since they take a value.
-        # allow_abbrev=False is load-bearing, not tidiness: argparse expands
-        # unambiguous prefixes by default, and `--web` — the flag that got us
-        # into this branch and is therefore always present — is a prefix of
-        # both --web-token and --web-multiuser. With abbreviation on, argparse
-        # calls that ambiguous and exits(2), so plain `mornye --web` could
-        # never start the server at all.
-        web_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
-        web_parser.add_argument("--host", default="127.0.0.1")
-        web_parser.add_argument("--port", type=int, default=8000)
-        web_parser.add_argument("--web-token", dest="token", default=None)
-        web_parser.add_argument(
-            "--web-multiuser", dest="multiuser", action="store_true"
-        )
-        web_args, _ = web_parser.parse_known_args(sys.argv[1:])
-
-        try:
-            from .webapp import resolve_web_token
-            from .webapp import run_async as run_web
-        except ImportError as exc:
-            # webapp.py imports FastAPI at module level. FastAPI and uvicorn
-            # are base dependencies now — they used to sit in a `web` extra,
-            # which meant `pip install Mornye && mornye --web` died on
-            # an ImportError — so reaching here means a broken environment
-            # rather than a missing extra. Say so instead of handing over a
-            # bare traceback.
-            print(
-                f"--web could not import its server dependencies ({exc}).\n"
-                "FastAPI and uvicorn ship with Mornye, so this environment "
-                "looks incomplete. Try:\n"
-                "    pip install --force-reinstall fastapi 'uvicorn[standard]'",
-                file=sys.stderr,
-            )
-            raise SystemExit(1) from exc
-
-        await run_web(
-            host=web_args.host,
-            port=web_args.port,
-            token=resolve_web_token(web_args.token),
-            multiuser=web_args.multiuser,
-        )
+        await _cli_web()
         return
 
     if "--web-user-add" in sys.argv:
-        user_parser = argparse.ArgumentParser(add_help=False)
-        user_parser.add_argument(
-            "--web-user-add", dest="creds", nargs=2, metavar=("USERNAME", "PASSWORD")
-        )
-        user_parser.add_argument(
-            "--role",
-            choices=list(WEB_USER_ROLES),
-            default="user",
-            help="'admin' may see instance-wide metrics and manage other "
-            "accounts' quotas; 'user' (default) may not.",
-        )
-        user_parser.add_argument(
-            "--daily-tracks",
-            type=int,
-            default=0,
-            help="Tracks this account may download per rolling 24h. "
-            "0 (default) is unlimited.",
-        )
-        user_parser.add_argument(
-            "--daily-mb",
-            type=int,
-            default=0,
-            help="Megabytes per rolling 24h. 0 (default) is unlimited.",
-        )
-        user_args, _ = user_parser.parse_known_args(sys.argv[1:])
-
-        from .core.web_users import WebUserError, create_user
-
-        try:
-            create_user(
-                *user_args.creds,
-                role=user_args.role,
-                daily_track_quota=user_args.daily_tracks,
-                daily_byte_quota=user_args.daily_mb * 1024 * 1024,
-            )
-        except WebUserError as e:
-            print(f"Error: {e}", file=sys.stderr)
-            sys.exit(1)
-        print(f"Web user '{user_args.creds[0]}' created ({user_args.role}).")
+        _cli_web_user_add()
         return
 
     if _argv_has("--web-user-quota"):
-        quota_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
-        quota_parser.add_argument(
-            "--web-user-quota", dest="username", metavar="USERNAME"
-        )
-        quota_parser.add_argument("--daily-tracks", type=int, default=None)
-        quota_parser.add_argument("--daily-mb", type=int, default=None)
-        quota_args, _ = quota_parser.parse_known_args(sys.argv[1:])
-
-        from .core.web_users import quota_usage, set_quota
-
-        updated = set_quota(
-            quota_args.username,
-            daily_track_quota=quota_args.daily_tracks,
-            daily_byte_quota=(
-                None
-                if quota_args.daily_mb is None
-                else quota_args.daily_mb * 1024 * 1024
-            ),
-        )
-        if not updated:
-            print(f"No web user named '{quota_args.username}'.", file=sys.stderr)
-            sys.exit(1)
-        usage = quota_usage(quota_args.username)
-        print(
-            f"{quota_args.username}: "
-            f"{usage['tracks_used']}/{usage['tracks_limit'] or '∞'} tracks, "
-            f"{usage['bytes_used'] // (1024 * 1024)}/"
-            f"{(usage['bytes_limit'] // (1024 * 1024)) if usage['bytes_limit'] else '∞'}"
-            f" MB in the last {int(usage['window_hours'])}h."
-        )
+        _cli_web_user_quota()
         return
 
     if "--web-user-role" in sys.argv:
-        role_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
-        role_parser.add_argument(
-            "--web-user-role",
-            dest="pair",
-            nargs=2,
-            metavar=("USERNAME", "ROLE"),
-        )
-        role_args, _ = role_parser.parse_known_args(sys.argv[1:])
-
-        from .core.web_users import WebUserError, set_role
-
-        try:
-            updated = set_role(*role_args.pair)
-        except WebUserError as e:
-            print(f"Error: {e}", file=sys.stderr)
-            sys.exit(1)
-        print(
-            f"'{role_args.pair[0]}' is now {role_args.pair[1]}."
-            if updated
-            else f"No web user named '{role_args.pair[0]}'."
-        )
+        _cli_web_user_role()
         return
 
     if "--web-user-remove" in sys.argv:
-        user_rm_parser = argparse.ArgumentParser(add_help=False)
-        user_rm_parser.add_argument(
-            "--web-user-remove", dest="username", metavar="USERNAME"
-        )
-        user_rm_args, _ = user_rm_parser.parse_known_args(sys.argv[1:])
-
-        from .core.web_users import delete_user
-
-        found = delete_user(user_rm_args.username)
-        print(
-            f"Web user '{user_rm_args.username}' removed."
-            if found
-            else f"No web user named '{user_rm_args.username}'."
-        )
+        _cli_web_user_remove()
         return
 
     if _argv_has("--stats"):
-        from .core import stats
-
-        # allow_abbrev=False: "--stats" is a prefix of every other flag in
-        # this group, and argparse would rather exit(2) than guess.
-        stats_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
-        stats_parser.add_argument("--stats", action="store_true")
-        stats_parser.add_argument(
-            "--stats-year", dest="year", type=int, default=None, metavar="YYYY"
-        )
-        stats_parser.add_argument(
-            "--stats-days", dest="days", type=int, default=None, metavar="N"
-        )
-        stats_parser.add_argument(
-            "--stats-user", dest="owner", default=None, metavar="USERNAME"
-        )
-        stats_parser.add_argument(
-            "--stats-top", dest="top", type=int, default=stats.DEFAULT_TOP
-        )
-        stats_parser.add_argument("--json", dest="as_json", action="store_true")
-        stats_args, _ = stats_parser.parse_known_args(sys.argv[1:])
-
-        window = stats.parse_window(year=stats_args.year, days=stats_args.days)
-        document = await asyncio.to_thread(
-            stats.wrapped,
-            owner=stats_args.owner,
-            window=window,
-            top=max(1, stats_args.top),
-        )
-        print(
-            json.dumps(document, indent=2)
-            if stats_args.as_json
-            else stats.format_wrapped(document)
-        )
+        await _cli_stats()
         return
 
     if any(
         flag in sys.argv for flag in ("--cache-stats", "--cache-prune", "--cache-clear")
     ):
-        from .core import cache_admin
-
-        cache_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
-        cache_parser.add_argument("--cache-stats", action="store_true")
-        cache_parser.add_argument("--cache-prune", action="store_true")
-        cache_parser.add_argument("--cache-clear", action="store_true")
-        cache_parser.add_argument(
-            "--cache-max-age-days",
-            type=float,
-            default=cache_admin.DEFAULT_MAX_AGE_S / 86400,
-        )
-        cache_parser.add_argument("--dry-run", action="store_true")
-        cache_parser.add_argument("--json", dest="as_json", action="store_true")
-        cache_args, _ = cache_parser.parse_known_args(sys.argv[1:])
-
-        if cache_args.cache_clear:
-            result = cache_admin.clear(dry_run=cache_args.dry_run)
-            if cache_args.as_json:
-                print(cache_admin.to_json(result))
-            else:
-                verb = "Would remove" if result["dry_run"] else "Removed"
-                items = ", ".join(result["removed"]) or "nothing"
-                print(f"{verb}: {items}")
-                print(f"Freed: {cache_admin.human_bytes(result['freed_bytes'])}")
-                if result["preserved"]:
-                    print(f"Kept (configuration): {', '.join(result['preserved'])}")
-        elif cache_args.cache_prune:
-            # --cache-max-age-days is a float, so argparse happily accepts
-            # -1, nan and inf; prune() rejects them rather than silently
-            # deleting everything or nothing. A bad flag value is a usage
-            # error, so report it the way argparse reports every other one
-            # (message on stderr, exit 2) instead of a traceback.
-            try:
-                result = cache_admin.prune(
-                    max_age_s=cache_args.cache_max_age_days * 86400,
-                    dry_run=cache_args.dry_run,
-                )
-            except ValueError as exc:
-                cache_parser.error(str(exc))
-            if cache_args.as_json:
-                print(cache_admin.to_json(result))
-            else:
-                verb = "Would remove" if result["dry_run"] else "Removed"
-                print(
-                    f"{verb} {result['removed_files']} cached response(s), "
-                    f"{cache_admin.human_bytes(result['freed_bytes'])}"
-                )
-        else:
-            data = cache_admin.stats()
-            print(
-                cache_admin.to_json(data)
-                if cache_args.as_json
-                else cache_admin.format_stats(data)
-            )
+        _cli_cache_stats()
         return
 
     if "--web-user-list" in sys.argv:
-        from .core.web_users import list_users
-
-        users = list_users()
-        if not users:
-            print("No web users configured.")
-            return
-        for user in users:
-            tracks = user["daily_track_quota"] or "∞"
-            size = (
-                f"{user['daily_byte_quota'] // (1024 * 1024)} MB"
-                if user["daily_byte_quota"]
-                else "∞"
-            )
-            print(
-                f"{user['username']}  [{user['role']}]  {tracks} tracks/day, {size}/day"
-            )
+        _cli_web_user_list()
         return
 
     if any(
@@ -2605,398 +3115,55 @@ async def amain() -> None:
             "--signed-sessions-prune",
         )
     ):
-        # allow_abbrev=False: otherwise a bare --signed-sessions is an
-        # "ambiguous option" between the other two.
-        # --signed-sessions is declared too, so a malformed "--signed-sessions=x"
-        # errors out instead of silently listing.
-        ss_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
-        ss_parser.add_argument("--signed-sessions", action="store_true")
-        ss_parser.add_argument("--signed-sessions-clear", default=None)
-        ss_parser.add_argument("--signed-sessions-prune", action="store_true")
-        ss_args, _ = ss_parser.parse_known_args(sys.argv[1:])
-
-        from .core import signed_session_status as sss
-
-        if ss_args.signed_sessions_clear is not None:
-            if not sss.clear_signed_session(ss_args.signed_sessions_clear):
-                print(f"No signed session with key '{ss_args.signed_sessions_clear}'.")
-                sys.exit(1)
-            print(f"Cleared {ss_args.signed_sessions_clear}.")
-        if ss_args.signed_sessions_prune:
-            removed = sss.prune_orphaned_sessions()
-            print(
-                f"Removed {len(removed)} orphaned session file(s)"
-                + (": " + ", ".join(removed) if removed else ".")
-            )
-        if ss_args.signed_sessions_clear is not None or ss_args.signed_sessions_prune:
-            print()
-        sss.print_signed_sessions_report(sss.list_signed_sessions())
+        _cli_signed_sessions()
         return
 
     if "--health-check" in sys.argv:
-        # --lyrics-providers narrows which servers get probed, same as for
-        # --host/--port above: needs the parsed value, not a raw sys.argv scan.
-        hc_parser = argparse.ArgumentParser(add_help=False)
-        hc_parser.add_argument("--lyrics-providers", nargs="+", default=None)
-        hc_args, _ = hc_parser.parse_known_args(sys.argv[1:])
-
-        from .core.health_check import (
-            print_extension_health_report,
-            print_health_report,
-            run_extension_health_check,
-            run_health_check,
-        )
-
-        # The extensions' own checks first: they are what downloads need.
-        extension_rows = await run_extension_health_check()
-        if extension_rows:
-            print("Extensions:")
-            print_extension_health_report(extension_rows)
-            print("Lyrics:")
-        results = await run_health_check(hc_args.lyrics_providers)
-        print_health_report(results)
-        if not all(r.ok for r in results) or not all(
-            row["ok"] for row in extension_rows
-        ):
-            sys.exit(1)
+        await _cli_health_check()
         return
 
     if "--ext-settings" in sys.argv or "--ext-set" in sys.argv:
-        settings_parser = argparse.ArgumentParser(add_help=False)
-        settings_parser.add_argument("--ext-settings", dest="show", default=None)
-        settings_parser.add_argument(
-            "--ext-set", dest="assignments", action="append", default=[]
-        )
-        settings_args, _ = settings_parser.parse_known_args(sys.argv[1:])
-        sys.exit(_ext_settings_command(settings_args.show, settings_args.assignments))
+        _cli_ext_settings()
+        return
 
     if "--ext-scaffold" in sys.argv:
-        scaffold_parser = argparse.ArgumentParser(add_help=False)
-        scaffold_parser.add_argument("--ext-scaffold", dest="name", required=True)
-        scaffold_parser.add_argument(
-            "--runtime", choices=["python", "javascript"], default="python"
-        )
-        scaffold_parser.add_argument("--output-dir", default=None)
-        scaffold_args, _ = scaffold_parser.parse_known_args(sys.argv[1:])
-
-        from .tools.ext_scaffold import scaffold_extension
-
-        try:
-            target = scaffold_extension(
-                scaffold_args.name,
-                runtime=scaffold_args.runtime,
-                output_dir=scaffold_args.output_dir,
-            )
-        except (ValueError, FileExistsError) as e:
-            print(f"Error: {e}", file=sys.stderr)
-            sys.exit(1)
-        print(f"Created {scaffold_args.runtime} extension skeleton at: {target}")
-        print(f"Next: see {target / 'README.md'}")
+        _cli_ext_scaffold()
         return
 
     if "--ext-dry-run" in sys.argv:
-        dryrun_parser = argparse.ArgumentParser(add_help=False)
-        dryrun_parser.add_argument("--ext-dry-run", dest="path", required=True)
-        dryrun_args, _ = dryrun_parser.parse_known_args(sys.argv[1:])
-
-        from .tools.ext_dryrun import dry_run
-
-        report = dry_run(dryrun_args.path)
-        print(report.summary())
-        if not report.passed:
-            sys.exit(1)
+        _cli_ext_dry_run()
         return
 
     if "--trust-key-add" in sys.argv:
-        trust_parser = argparse.ArgumentParser(add_help=False)
-        trust_parser.add_argument(
-            "--trust-key-add", dest="key", nargs=2, metavar=("NAME", "PUBLIC_KEY_B64")
-        )
-        trust_args, _ = trust_parser.parse_known_args(sys.argv[1:])
-
-        from .extensions.trust import TrustKeyError, add_trusted_key
-
-        try:
-            add_trusted_key(*trust_args.key)
-        except TrustKeyError as e:
-            print(f"Error: {e}", file=sys.stderr)
-            sys.exit(1)
-        print(f"Trusted key '{trust_args.key[0]}' added.")
+        _cli_trust_key_add()
         return
 
     if "--trust-key-remove" in sys.argv:
-        trust_rm_parser = argparse.ArgumentParser(add_help=False)
-        trust_rm_parser.add_argument("--trust-key-remove", dest="name", metavar="NAME")
-        trust_rm_args, _ = trust_rm_parser.parse_known_args(sys.argv[1:])
-
-        from .extensions.trust import remove_trusted_key
-
-        found = remove_trusted_key(trust_rm_args.name)
-        print(
-            f"Trusted key '{trust_rm_args.name}' removed."
-            if found
-            else f"No trusted key named '{trust_rm_args.name}'."
-        )
+        _cli_trust_key_remove()
         return
 
     if "--trust-key-list" in sys.argv:
-        # Names only, by construction: signer_names() never returns key
-        # material, so this listing cannot print any. Read trusted_keys.json
-        # directly if you need the public key bytes.
-        #
-        # Labelled `signer-N` rather than `key-N` because what is on the line
-        # is the label you chose when adding the key, not the key.
-        from .extensions.trust import signer_names
-
-        names = signer_names()
-        if not names:
-            print("No trusted keys configured.")
-        for idx, name in enumerate(names, start=1):
-            print(f"signer-{idx}: {name or '(unnamed)'}")
+        _cli_trust_key_list()
         return
 
     if _argv_has("--split-cue"):
-        # Single-file album + .cue → one file per track (core/cue_split.py).
-        # The source is never modified; existing outputs are kept unless
-        # --cue-overwrite is given.
-        cue_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
-        cue_parser.add_argument("--split-cue", dest="path", required=True)
-        cue_parser.add_argument("--cue-output", dest="output_dir", default=None)
-        cue_parser.add_argument(
-            "--cue-format", dest="fmt", default="flac", choices=["flac", "alac", "wav"]
-        )
-        cue_parser.add_argument("--cue-encoding", dest="encoding", default=None)
-        cue_parser.add_argument(
-            "--cue-overwrite", dest="overwrite", action="store_true"
-        )
-        cue_parser.add_argument("--cue-dry-run", dest="dry_run", action="store_true")
-        cue_parser.add_argument(
-            "--no-recursive", dest="recursive", action="store_false"
-        )
-        cue_parser.add_argument("--json", dest="as_json", action="store_true")
-        cue_args, _ = cue_parser.parse_known_args(sys.argv[1:])
-
-        from .tools.cue_split_cli import run_async as run_cue_split_async
-
-        sys.exit(
-            await run_cue_split_async(
-                cue_args.path,
-                output_dir=cue_args.output_dir,
-                fmt=cue_args.fmt,
-                encoding=cue_args.encoding,
-                overwrite=cue_args.overwrite,
-                dry_run=cue_args.dry_run,
-                recursive=cue_args.recursive,
-                as_json=cue_args.as_json,
-            )
-        )
+        await _cli_split_cue()
+        return
 
     if _argv_has("--dedup-restore"):
-        restore_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
-        restore_parser.add_argument("--dedup-restore", dest="manifest", required=True)
-        restore_parser.add_argument("--json", dest="as_json", action="store_true")
-        restore_parser.add_argument("--verbose", "-v", action="store_true")
-        restore_args, _ = restore_parser.parse_known_args(sys.argv[1:])
-
-        from .tools.library_dedup_cli import run_restore
-
-        run_restore(
-            restore_args.manifest,
-            as_json=restore_args.as_json,
-            verbose=restore_args.verbose,
-        )
+        _cli_dedup_restore()
         return
 
     if _argv_has("--dedup-library", "--dedup-from-db"):
-        # allow_abbrev=False for the same reason the upgrade block below
-        # needs it: `--dedup-library` is a prefix of `--dedup-library-…`
-        # were one ever added, and an ambiguous flag exits(2) instead of
-        # running.
-        dd_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
-        # Not required: --dedup-from-db carries the library's identity in
-        # the database itself, so a resolution run needs no folder.
-        dd_parser.add_argument("--dedup-library", dest="path", default="")
-        dd_parser.add_argument(
-            "--dedup-match",
-            dest="match",
-            choices=("isrc", "tags", "both"),
-            default="both",
-            help="Which signal decides that two files are one recording "
-            "(default: both — ISRC first, artist/title+duration for the rest).",
-        )
-        dd_parser.add_argument(
-            "--dedup-tolerance", dest="tolerance", type=float, default=4.0
-        )
-        dd_parser.add_argument(
-            "--dedup-keep-version-noise",
-            dest="keep_version_noise",
-            action="store_true",
-            help="Treat '(2011 Remaster)' as part of the title, so a "
-            "remaster is not a duplicate of the original.",
-        )
-        dd_parser.add_argument(
-            "--dedup-verify",
-            dest="verify",
-            action="store_true",
-            help="Confirm each group against the audio with Chromaprint "
-            "before offering it. Needs the fpcalc binary (Chromaprint).",
-        )
-        dd_parser.add_argument(
-            "--dedup-threshold", dest="threshold", type=float, default=0.95
-        )
-        dd_parser.add_argument(
-            "--dedup-no-cache", dest="use_cache", action="store_false"
-        )
-        dd_parser.add_argument(
-            "--dedup-apply",
-            dest="apply",
-            action="store_true",
-            help="Actually resolve them. Without it the command only reports "
-            "(a scan is safe; removing files is not).",
-        )
-        dd_parser.add_argument(
-            "--dedup-delete",
-            dest="delete",
-            action="store_true",
-            help="With --dedup-apply, unlink instead of quarantining. Not undoable.",
-        )
-        dd_parser.add_argument("--dedup-trash", dest="trash_dir", default=None)
-        dd_parser.add_argument("--dedup-limit", dest="limit", type=int, default=None)
-        dd_parser.add_argument(
-            "--dedup-db",
-            dest="db_path",
-            default=None,
-            metavar="FILE.db",
-            help="Also write the scan to a SQLite database: one row per "
-            "file, duplicate groups on top of it.",
-        )
-        dd_parser.add_argument(
-            "--dedup-from-db",
-            dest="from_db",
-            default=None,
-            metavar="FILE.db",
-            help="Skip the scan and read the report back from a database a "
-            "previous run wrote.",
-        )
-        dd_parser.add_argument("--no-recursive", dest="recursive", action="store_false")
-        dd_parser.add_argument("--json", dest="as_json", action="store_true")
-        dd_parser.add_argument("--verbose", "-v", action="store_true")
-        dd_args, _ = dd_parser.parse_known_args(sys.argv[1:])
-
-        from .tools.library_dedup_cli import run as run_dedup
-
-        if not dd_args.path and not dd_args.from_db:
-            print(
-                "Error: --dedup-library needs a folder, or --dedup-from-db a "
-                "database a previous run wrote.",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-
-        run_dedup(
-            dd_args.path,
-            recursive=dd_args.recursive,
-            match=dd_args.match,
-            duration_tolerance_s=dd_args.tolerance,
-            keep_version_noise=dd_args.keep_version_noise,
-            verify=dd_args.verify,
-            threshold=dd_args.threshold,
-            use_cache=dd_args.use_cache,
-            apply=dd_args.apply,
-            delete=dd_args.delete,
-            trash_dir=dd_args.trash_dir,
-            limit=dd_args.limit,
-            db_path=dd_args.db_path,
-            from_db=dd_args.from_db,
-            as_json=dd_args.as_json,
-            verbose=dd_args.verbose,
-        )
+        _cli_dedup_library()
         return
 
     if _argv_has("--upgrade-library"):
-        # allow_abbrev=False: `--upgrade-library` is a prefix of
-        # `--upgrade-library-target`, and argparse would call a bare
-        # `--upgrade-library` ambiguous and exit(2).
-        up_parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
-        up_parser.add_argument("--upgrade-library", dest="path", required=True)
-        up_parser.add_argument(
-            "--upgrade-target",
-            dest="target",
-            default="LOSSLESS",
-            help="Quality to bring the library up to (default: LOSSLESS). "
-            "Anything normalize_quality() understands: LOSSLESS, HI_RES, …",
-        )
-        up_parser.add_argument(
-            "--upgrade-verify-hires",
-            dest="verify",
-            action="store_true",
-            help="Also reclassify files that declare Hi-Res but whose audio "
-            "stops at CD range. Needs the 'hires' extra, and decodes ~30s per "
-            "file — slow on a large library.",
-        )
-        up_parser.add_argument(
-            "--upgrade-download",
-            dest="download",
-            action="store_true",
-            help="Actually re-download what was found. Without this the "
-            "command only reports (a scan is safe; a re-download is not).",
-        )
-        up_parser.add_argument("--upgrade-limit", dest="limit", type=int, default=None)
-        up_parser.add_argument("--no-recursive", dest="recursive", action="store_false")
-        up_parser.add_argument("--verbose", "-v", action="store_true")
-        up_parser.add_argument("--json", dest="as_json", action="store_true")
-        up_parser.add_argument("--profile", dest="profile", default=None)
-        up_parser.add_argument("--output-dir", dest="output_dir", default=None)
-        up_args, _ = up_parser.parse_known_args(sys.argv[1:])
-
-        from .tools.library_upgrade_cli import run as run_upgrade_scan
-        from .tools.library_upgrade_cli import run_and_upgrade_async
-
-        if not up_args.download:
-            run_upgrade_scan(
-                up_args.path,
-                up_args.target,
-                recursive=up_args.recursive,
-                verify_hires=up_args.verify,
-                as_json=up_args.as_json,
-                verbose=up_args.verbose,
-            )
-            return
-
-        upgrade_profile_defaults = (
-            await _load_profile_into_defaults(up_args.profile)
-            if up_args.profile
-            else {}
-        ) or load_config()
-        # The upgraded file goes back where the library already is unless
-        # told otherwise, which is what makes this an *upgrade* rather than a
-        # second copy somewhere else.
-        destination = (
-            up_args.output_dir
-            or upgrade_profile_defaults.get("output_dir")
-            or up_args.path
-        )
-        downloader = _subscription_downloader(
-            {**upgrade_profile_defaults, "quality": up_args.target}, destination
-        )
-
-        async def _download(url: str) -> None:
-            await downloader(url, destination)
-
-        await run_and_upgrade_async(
-            up_args.path,
-            up_args.target,
-            _download,
-            recursive=up_args.recursive,
-            verify_hires=up_args.verify,
-            limit=up_args.limit,
-            as_json=up_args.as_json,
-            verbose=up_args.verbose,
-        )
+        await _cli_upgrade_library()
         return
 
     if _argv_has(*SUBSCRIPTION_FLAGS, "--subscribe-reset"):
-        await _handle_subscriptions()
+        await _cli_subscribe_reset()
         return
 
     if len(sys.argv) == 1:
@@ -3227,6 +3394,11 @@ async def amain() -> None:
             csv_unresolved=args.csv_unresolved,
             m3u_format=args.m3u_format,
             max_concurrent_downloads=args.max_concurrent,
+            metadata_delay_min_s=args.metadata_delay_min,
+            metadata_delay_max_s=args.metadata_delay_max,
+            provider_delay_min_s=args.provider_delay_min,
+            provider_delay_max_s=args.provider_delay_max,
+            auto_rate_limit_cooldown=args.auto_rate_limit_cooldown,
             extension_quality=extension_quality,
             verify_hires=args.verify_hires,
             redownload_fake_hires=args.redownload_fake_hires,
@@ -3284,6 +3456,11 @@ async def amain() -> None:
                 "loop": args.loop,
                 "watch": args.watch,
                 "max_concurrent_downloads": args.max_concurrent,
+                "metadata_delay_min_s": args.metadata_delay_min,
+                "metadata_delay_max_s": args.metadata_delay_max,
+                "provider_delay_min_s": args.provider_delay_min,
+                "provider_delay_max_s": args.provider_delay_max,
+                "auto_rate_limit_cooldown": args.auto_rate_limit_cooldown,
                 "verify_hires": args.verify_hires,
                 "redownload_fake_hires": args.redownload_fake_hires,
                 "save_lrc": args.save_lrc,

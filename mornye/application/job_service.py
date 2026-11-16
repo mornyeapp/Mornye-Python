@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from typing import Any, List as TypingList
+from typing import Any
 from pathlib import Path
 
 from mornye.application.download_service import DownloadService
@@ -10,6 +10,7 @@ from mornye.application.event_bus import EventBus
 from mornye.application.queue_service import QueueService
 from mornye.core.config import DownloadRequest, MornyeConfig
 from mornye.core.repositories import JobRepository
+import builtins
 
 
 class JobService:
@@ -231,10 +232,10 @@ class JobService:
     def get(self, job_id: str) -> dict[str, Any]:
         return self._repo.get(job_id)
 
-    def list(self) -> TypingList[dict[str, Any]]:
+    def list(self) -> builtins.list[dict[str, Any]]:
         return self._repo.list()
 
-    def items(self, job_id: str) -> TypingList[dict[str, Any]]:
+    def items(self, job_id: str) -> builtins.list[dict[str, Any]]:
         return self._repo.list_items(job_id)
 
     async def pause(self, job_id: str) -> dict[str, Any]:

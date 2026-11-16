@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mornye"
-version = "2.0.6"
+version = "2.1.0"
 description = "A Python module for metadata and user-configured music-provider extensions."
 readme = "README.md"
 # 3.11 is the floor because Pillow 13+ now requires it. This aligns the
@@ -106,6 +106,8 @@ include-package-data = true
     "frontend/*",
     "frontend/assets/icons/*",
     "frontend/assets/fonts/*",
+    "frontend/css/*",
+    "frontend/css/views/*",
     # Textual reads the TUI's stylesheet from disk at startup (CSS_PATH), so
     # an install without it opens on an unstyled screen rather than failing
     # loudly — worth listing here explicitly.
@@ -147,7 +149,34 @@ line-length = 88
 # turned CI red (500+ findings: BLE001, RUF012, S110, N999, …) with zero code
 # changes. This is the historical default set; broaden it deliberately later
 # and fix findings in batches rather than having a release do it for us.
-select = ["E4", "E7", "E9", "F"]
+select = [
+    "E4", "E7", "E9", "F",
+    # M3 (docs/redesign-plan.md), first batch: rules that find real bugs.
+    "RUF006",  # a task created without keeping a reference (F2)
+    "B",       # flake8-bugbear
+    "ASYNC",   # blocking calls inside async functions (F3)
+    "UP",      # pyupgrade, for the 3.11 floor
+]
+ignore = [
+    # A `timeout` parameter on an async function is this codebase's
+    # convention (callers pass it to asyncio.wait_for); not a bug.
+    "ASYNC109",
+    # The F3 remainder: a single exists()/stat() on a local disk inside an
+    # async function. Left on purpose (plan §0); revisit per call site.
+    "ASYNC240",
+    # `class X(str, Enum)` -> StrEnum changes str() of the members, which
+    # the config files and the API write out.
+    "UP042",
+    # setattr/getattr with a constant name: used on purpose where the
+    # attribute is not declared on the class (mypy rejects the plain
+    # spelling the auto-fix writes).
+    "B009",
+    "B010",
+]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency markers are meant to be called in defaults.
+extend-immutable-calls = ["fastapi.Body", "fastapi.Depends", "fastapi.Query", "fastapi.Header"]
 
 [tool.ruff.lint.per-file-ignores]
 # Imports deliberately placed after module-level setup code (see the
@@ -160,6 +189,10 @@ select = ["E4", "E7", "E9", "F"]
 "mornye/core/__init__.py" = ["E402"]
 "mornye/tools/hires_check_cli.py" = ["E402"]
 "tests/test_launcher_web_flags.py" = ["E402"]
+# Tests that stand in for a blocking provider or an endless download on
+# purpose (M3).
+"tests/test_gui_batch_downloads.py" = ["ASYNC251"]
+"tests/test_tui_runner.py" = ["ASYNC110"]
 
 [tool.mypy]
 python_version = "3.11"

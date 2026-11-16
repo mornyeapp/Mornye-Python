@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import copy
+import inspect
+import logging
 import shutil
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from collections.abc import Awaitable, Callable
+from typing import Any
 from pathlib import Path
 
 from mornye.application.event_bus import EventBus
@@ -36,7 +40,10 @@ from mornye.core.config import (
     DownloadSkip,
 )
 from mornye.core.models import DownloadResult, TrackMetadata
+from mornye.core.rate_limiting import await_or_stop, download_rate_limiter
 from mornye.core.retry import RetryPolicy
+
+logger = logging.getLogger(__name__)
 
 
 class DownloadService:
@@ -63,6 +70,7 @@ class DownloadService:
         canvas_writer: Callable[[str, object], Awaitable[None]] | None = None,
         transcoder: Callable[[str, DownloadRequest], Awaitable[str]] | None = None,
         indexer: Callable[[str, object], Awaitable[None]] | None = None,
+        stop_event: threading.Event | None = None,
     ) -> None:
         self._event_bus = event_bus or EventBus()
         self._downloader = downloader
@@ -76,6 +84,7 @@ class DownloadService:
         self._provider_executor = normalized_executor
         self._metadata_service = metadata_service or MetadataService()
         self._provider_resolver = provider_resolver or ProviderResolver()
+        self._stop_event = stop_event
         self._pipeline = DownloadPipeline(
             [ResolveStep(), ProviderStep(self._provider_resolver)],
             event_bus=self._event_bus,
@@ -100,7 +109,7 @@ class DownloadService:
         event_bus: EventBus | None = None,
         prefetched: dict[str, TrackMetadata] | None = None,
         downloader: object | None = None,
-    ) -> "DownloadService":
+    ) -> DownloadService:
         if downloader is not None:
             legacy_downloader = LegacyDownloadAdapter(
                 downloader,
@@ -120,6 +129,7 @@ class DownloadService:
             event_bus=event_bus,
             downloader=legacy_downloader.downloader,
             provider_executor=legacy_downloader,
+            stop_event=getattr(options, "stop_event", None),
             metadata_service=MetadataService(
                 timeout_s=int(timeout_s),
                 compatibility_fallback=False,
@@ -175,7 +185,7 @@ class DownloadService:
         """
         request = copy.copy(request)
         request.config = copy.deepcopy(request.config)
-        started_at = datetime.now(timezone.utc)
+        started_at = datetime.now(UTC)
         succeeded: list[DownloadResult] = []
         failed: list[DownloadFailure] = []
         skipped: list[DownloadSkip] = []
@@ -212,7 +222,42 @@ class DownloadService:
 
         resolved_metadata = dict(request.prefetched or {})
         if request.prefetched is None:
-            for metadata in await self._metadata_service.resolve(request):
+
+            async def wait_for_metadata_slot() -> None:
+                await download_rate_limiter.wait(
+                    "metadata",
+                    request.config.download.metadata_delay_min_s,
+                    request.config.download.metadata_delay_max_s,
+                    stop_event=self._stop_event,
+                )
+
+            try:
+                resolver = self._metadata_service.resolve
+                parameters = inspect.signature(resolver).parameters.values()
+                accepts_keywords = any(
+                    parameter.kind is inspect.Parameter.VAR_KEYWORD
+                    for parameter in parameters
+                )
+                parameter_names = {parameter.name for parameter in parameters}
+                resolve_kwargs: dict[str, Any] = {}
+                if accepts_keywords or "before_resolve" in parameter_names:
+                    resolve_kwargs["before_resolve"] = wait_for_metadata_slot
+                if accepts_keywords or "stop_event" in parameter_names:
+                    resolve_kwargs["stop_event"] = self._stop_event
+                resolved_tracks = await resolver(request, **resolve_kwargs)
+            except Exception as exc:
+                if (
+                    request.config.download.auto_rate_limit_cooldown
+                    and download_rate_limiter.is_rate_limited(exc)
+                ):
+                    seconds = download_rate_limiter.cooldown_after_429(exc)
+                    logger.warning(
+                        "[rate-limit] Pausing all download requests for %.0f seconds "
+                        "after a metadata 429",
+                        seconds,
+                    )
+                raise
+            for metadata in resolved_tracks:
                 if metadata.external_url:
                     resolved_metadata[metadata.external_url] = metadata
                 resolved_metadata[f"spotify:track:{metadata.id}"] = metadata
@@ -324,12 +369,44 @@ class DownloadService:
                     },
                 )
                 last_error = None
+
+                # The executor is bound as a default: the retry helper calls
+                # these within this iteration, and the binding keeps it so.
+                async def wait_for_provider_slot(
+                    provider_executor: Any = provider_executor,
+                ) -> None:
+                    if isinstance(provider_executor, LegacyDownloadAdapter):
+                        return
+                    await download_rate_limiter.wait(
+                        "provider",
+                        request.config.download.provider_delay_min_s,
+                        request.config.download.provider_delay_max_s,
+                        stop_event=self._stop_event,
+                    )
+
+                async def pause_after_provider_429(
+                    error: BaseException, provider_executor: Any = provider_executor
+                ) -> None:
+                    if (
+                        isinstance(provider_executor, LegacyDownloadAdapter)
+                        or not request.config.download.auto_rate_limit_cooldown
+                    ):
+                        return
+                    seconds = download_rate_limiter.cooldown_after_429(error)
+                    logger.warning(
+                        "[rate-limit] Pausing all download requests for %.0f seconds "
+                        "after a provider 429",
+                        seconds,
+                    )
+
                 last_error = await provider_executor.execute_with_retry(
                     provider,
                     source,
                     policy,
                     timeout_s=request.config.download.timeout,
                     resume_event=resume_event,
+                    before_attempt=wait_for_provider_slot,
+                    on_rate_limited=pause_after_provider_429,
                 )
                 if last_error is None:
                     break
@@ -461,15 +538,22 @@ class DownloadService:
                 )
             )
             try:
-                remote_paths = await asyncio.shield(upload_task)
+                remote_paths = await await_or_stop(
+                    asyncio.shield(upload_task),
+                    self._stop_event,
+                    on_stop=cancelled.set,
+                )
             except asyncio.CancelledError:
                 cancelled.set()
-                try:
+                with contextlib.suppress(Exception):
                     await asyncio.shield(upload_task)
-                except Exception:
-                    pass
                 raise
             except Exception as exc:
+                cancelled.set()
+                await asyncio.gather(upload_task, return_exceptions=True)
+                # A failed delivery names the staging folder it left behind,
+                # so the user can retry it. This branch used to sit behind
+                # an earlier bare `except Exception` and never ran (B025).
                 staging_id = smb_staging_dir.name.removeprefix("delivery-")
                 from mornye.core.network_destinations import DestinationError
 
@@ -497,7 +581,7 @@ class DownloadService:
                 )
             shutil.rmtree(smb_staging_dir)
 
-        finished_at = datetime.now(timezone.utc)
+        finished_at = datetime.now(UTC)
         return DownloadReport(
             succeeded=succeeded,
             failed=failed,

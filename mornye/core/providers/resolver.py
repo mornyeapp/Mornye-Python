@@ -22,7 +22,7 @@ class ProviderProfile:
     @classmethod
     def from_manifest(
         cls, manifest: dict, *, name: str | None = None
-    ) -> "ProviderProfile":
+    ) -> ProviderProfile:
         compatible = dict(manifest)
         if name and not compatible.get("id") and not compatible.get("name"):
             compatible["id"] = name
@@ -73,7 +73,7 @@ class ProviderResolver:
         self._profiles = {profile.name: profile for profile in profiles or []}
 
     @classmethod
-    def from_extensions(cls, extensions: list[object]) -> "ProviderResolver":
+    def from_extensions(cls, extensions: list[object]) -> ProviderResolver:
         profiles = []
         for extension in extensions:
             manifest = getattr(extension, "manifest", None)
@@ -89,13 +89,30 @@ class ProviderResolver:
     def resolve(self, request: DownloadRequest) -> list[str]:
         return [candidate.name for candidate in self.resolve_candidates(request)]
 
+    @staticmethod
+    def _service_key(service: str) -> str:
+        value = (
+            service.removeprefix("ext:")
+            .removesuffix("-web")
+            .removesuffix("-py")
+            .lower()
+        )
+        if value.startswith("apple-"):
+            return "apple"
+        if value.startswith(("ytmusic", "youtube-music")):
+            return "youtube"
+        return value
+
     def resolve_candidates(self, request: DownloadRequest) -> list[ProviderCandidate]:
         quality = request.config.download.quality.upper()
         configured = [
-            service.removeprefix("ext:").removesuffix("-web").removesuffix("-py")
-            for service in request.config.download.services
+            self._service_key(service) for service in request.config.download.services
         ]
         configured_services = set(configured)
+        preferred = self._service_key(request.config.download.preferred_service or "")
+        if preferred and configured_services and preferred not in configured_services:
+            return []
+        allow_provider_fallback = request.config.download.fallback_services
         configured_order = (
             {name: index for index, name in enumerate(configured)}
             if configured
@@ -111,14 +128,15 @@ class ProviderResolver:
                 )
                 for name in self._provider_priority
                 if not configured_services
-                or name.removeprefix("ext:").removesuffix("-web").removesuffix("-py")
-                in configured_services
+                or self._service_key(name) in configured_services
             ]
             if configured:
                 candidates.sort(
                     key=lambda c: configured_order.get(c.name, len(configured_order))
                 )
-            return candidates
+            return self._apply_preference(
+                candidates, preferred, allow_provider_fallback
+            )
 
         profiles: list[ProviderProfile] = [
             profile
@@ -126,20 +144,20 @@ class ProviderResolver:
             if profile.supports(quality)
             and (
                 not configured_services
-                or profile.name.removeprefix("ext:")
-                .removesuffix("-web")
-                .removesuffix("-py")
-                in configured_services
+                or self._service_key(profile.name) in configured_services
             )
         ]
         profiles.sort(
             key=lambda profile: (
+                0 if preferred and self._service_key(profile.name) == preferred else 1,
                 -profile.priority,
-                configured_order.get(profile.name, len(configured_order)),
+                configured_order.get(
+                    self._service_key(profile.name), len(configured_order)
+                ),
                 profile.name,
             )
         )
-        return [
+        candidates = [
             ProviderCandidate(
                 name=profile.name,
                 priority=profile.priority,
@@ -147,4 +165,29 @@ class ProviderResolver:
                 qualities=profile.qualities,
             )
             for profile in profiles
+        ]
+        return self._apply_preference(candidates, preferred, allow_provider_fallback)
+
+    @staticmethod
+    def _apply_preference(
+        candidates: list[ProviderCandidate],
+        preferred: str,
+        allow_fallback: bool,
+    ) -> list[ProviderCandidate]:
+        if not preferred:
+            return candidates
+        preferred_candidates = [
+            candidate
+            for candidate in candidates
+            if ProviderResolver._service_key(candidate.name) == preferred
+        ]
+        if not preferred_candidates:
+            return []
+        if not allow_fallback:
+            return preferred_candidates
+        preferred_names = {candidate.name for candidate in preferred_candidates}
+        return preferred_candidates + [
+            candidate
+            for candidate in candidates
+            if candidate.name not in preferred_names
         ]

@@ -19,7 +19,8 @@ import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Literal, cast
+from typing import Any, Literal, cast
+from collections.abc import Callable
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
@@ -172,9 +173,8 @@ class _ErrorShapeRoute(APIRoute):
         return handler
 
 
-def build_v1_router(deps: ApiDeps) -> APIRouter:
-    router = APIRouter(prefix="/api/v1", tags=["v1"], route_class=_ErrorShapeRoute)
-
+def _instance_routes(router: APIRouter, deps: ApiDeps) -> None:
+    """The instance: what this server is. Split out of build_v1_router (M2)."""
     # ── Instance ──────────────────────────────────────────────────────────
 
     @router.get("/info", response_model=ApiInfo, summary="What this instance is")
@@ -186,6 +186,9 @@ def build_v1_router(deps: ApiDeps) -> APIRouter:
             authenticated=deps.multiuser or deps.token_required,
         )
 
+
+def _metadata_routes(router: APIRouter) -> None:
+    """Metadata: resolving links and searching. Split out of build_v1_router (M2)."""
     # ── Metadata ──────────────────────────────────────────────────────────
 
     @router.post(
@@ -277,6 +280,9 @@ def build_v1_router(deps: ApiDeps) -> APIRouter:
             tracks=[TrackOut.from_metadata(t) for t in results.get("tracks") or []],
         )
 
+
+def _download_routes(router: APIRouter, deps: ApiDeps) -> None:
+    """Downloads: jobs, their history and statistics. Split out of build_v1_router (M2)."""
     # ── Downloads ─────────────────────────────────────────────────────────
 
     @router.post(
@@ -551,6 +557,9 @@ def build_v1_router(deps: ApiDeps) -> APIRouter:
         )
         return StatsResponse(**document)
 
+
+def _csv_routes(router: APIRouter) -> None:
+    """CSV input. Split out of build_v1_router (M2)."""
     # ── CSV input ─────────────────────────────────────────────────────────
 
     @router.post(
@@ -593,6 +602,9 @@ def build_v1_router(deps: ApiDeps) -> APIRouter:
             urls=resolution.urls,
         )
 
+
+def _subscription_routes(router: APIRouter, deps: ApiDeps) -> None:
+    """Subscriptions to artists and playlists. Split out of build_v1_router (M2)."""
     # ── Subscriptions ─────────────────────────────────────────────────────
 
     @router.get(
@@ -675,6 +687,9 @@ def build_v1_router(deps: ApiDeps) -> APIRouter:
             results=[SubscriptionCheckOut(**r.to_dict()) for r in results],
         )
 
+
+def _extension_routes(router: APIRouter, deps: ApiDeps) -> None:
+    """Extension health. Split out of build_v1_router (M2)."""
     # ── Extensions ────────────────────────────────────────────────────────
 
     @router.get(
@@ -689,6 +704,9 @@ def build_v1_router(deps: ApiDeps) -> APIRouter:
             raise _fail(500, "Could not read extension health.")
         return ExtensionHealthResponse(**data)
 
+
+def _library_routes(router: APIRouter, deps: ApiDeps) -> None:
+    """Library scans and duplicates. Split out of build_v1_router (M2)."""
     # ── Library ───────────────────────────────────────────────────────────
 
     @router.post(
@@ -767,4 +785,15 @@ def build_v1_router(deps: ApiDeps) -> APIRouter:
 
         return LibraryDuplicatesResponse(**report.to_dict(), database=database)
 
+
+def build_v1_router(deps: ApiDeps) -> APIRouter:
+    router = APIRouter(prefix="/api/v1", tags=["v1"], route_class=_ErrorShapeRoute)
+
+    _instance_routes(router, deps)
+    _metadata_routes(router)
+    _download_routes(router, deps)
+    _csv_routes(router)
+    _subscription_routes(router, deps)
+    _extension_routes(router, deps)
+    _library_routes(router, deps)
     return router

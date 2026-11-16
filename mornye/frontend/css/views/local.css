@@ -1,0 +1,105 @@
+/* frontend/css/views/local.css — Fix Local Files in the console look
+   (redesign voce 15). Sections, buttons and the result rows come from the
+   shared sheets (legacy.css, settings.css's .s-section, home.css's
+   .track-row); this adds the drop zone and the view's own fields.
+
+   The view's structure (grids, positions, the phone layout) comes first,
+   moved out of styles.css in voce 22; the console look follows it.
+   Semantic tokens only; ids and handlers untouched. */
+
+/* ══════════ LOCAL AUTO-TAGGER ══════════ */
+.local-drop-zone { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.local-drop-zone svg { color: var(--text-muted); transition: color var(--motion) var(--ease); }
+.local-drop-zone-text { text-align: center; }
+.local-drop-zone.drag-over svg { color: var(--signal-text); }
+.local-cell-content { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.local-thumb { width: 44px; height: 44px; border-radius: 6px; background: var(--selected); display: flex; align-items: center; justify-content: center; font-size: 16px; overflow: hidden; border: 1px solid var(--rule); flex-shrink: 0; }
+.local-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.local-info { min-width: 0; display: flex; flex-direction: column; flex: 1; gap: 2px; }
+
+.local-title { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); transition: color var(--motion) var(--ease); }
+.local-artist { font-size: var(--text-md); color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color var(--motion) var(--ease); }
+
+/* Highlight for changed tags (Diffing) */
+.local-title.diff, .local-artist.diff { color: var(--signal-text); }
+
+.local-badge { font-family: var(--font); font-size: var(--text-xs); padding: 3px var(--space-2); border-radius: 999px; font-weight: 700; display: inline-block; }
+.local-badge.ok { background: transparent; color: var(--ok); }
+.local-badge.warn { background: transparent; color: var(--signal-text); }
+.local-badge.err { background: transparent; color: var(--error); }
+
+/* ── Scrolling panels whose cards must not be squeezed ────────────────────
+   #view-local's .s-body is `display:flex; flex-direction:column` (inline,
+   in index.html), which makes its .s-section cards flex items — and a flex
+   item's default flex-shrink is 1. In a container tall enough for all of
+   them that changes nothing, which is why this looks fine on a desktop.
+   When the content is taller than the panel, though, the cards are shrunk
+   to fit it instead of overflowing it, and .s-section is overflow:hidden,
+   so the surplus is simply cut off: the panel reports nothing to scroll and
+   the bottom of each card is unreachable. Measured at 360x740 that is 130px
+   of the Target Directory card — its path field's help line, and the start
+   of the row below it — gone with no way to reach it.
+
+   A card keeps its content height and the panel scrolls, which is what
+   .s-body's own overflow-y:auto was always there to do. Not inside a media
+   query: the trigger is content taller than the panel, which a short
+   desktop window reaches the same way a phone does. */
+#view-local > .s-body > * { flex-shrink: 0; }
+
+@media (max-width: 700px) {
+  /* The Local view's path field carries an inline `flex:1`, so it shares a
+     line with the Browse button and gets ~250px of it — an absolute path is
+     longer than that at the best of times. !important is the only thing
+     that outranks an inline style, and this is what it is for. */
+  #local-path-input { flex: 1 1 100% !important; }
+}
+
+.local-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.local-convert-btn {
+  padding: 1px 7px; border: 1px solid var(--rule); border-radius: 6px;
+  background: transparent; color: var(--text-2); font: inherit; font-size: 9.5px; cursor: pointer;
+}
+.local-convert-btn:hover { color: var(--signal); border-color: var(--signal); }
+
+/* The focus ring (layout.css) loads before this sheet now: restated at its
+   specificity for the controls above that draw their own radius or
+   outline, so focused they keep the ring's shape, as before. */
+:where(button, a, input, select, textarea, [tabindex]):where(.local-convert-btn):focus-visible {
+  border-radius: var(--radius-1);
+}
+
+/* The drop target: a dashed rule, flat, the signal while dragging over. */
+.local-drop-zone {
+  padding: var(--space-5) var(--space-4);
+  border: 1px dashed var(--rule-strong);
+  border-radius: var(--radius-1);
+  background: var(--surface);
+  color: var(--text-muted);
+  transition: border-color var(--motion-fast) var(--ease);
+}
+.local-drop-zone.drag-over {
+  border-color: var(--signal-strong);
+  background: var(--selected);
+  color: var(--signal-text);
+}
+.local-drop-zone-text { font-size: var(--text-sm); }
+
+/* Fields of the view, at the console's field; :where() keeps the type
+   filter weightless. */
+#view-local input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"])),
+#view-local select {
+  height: var(--row);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background-color: var(--raised);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+  box-shadow: none;
+}
+#view-local input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"])):focus,
+#view-local select:focus { border-color: var(--signal-strong); box-shadow: none; outline: none; }
+#view-local input[type="checkbox"] { accent-color: var(--signal-strong); }
+
+/* The footer under the results: a ruled strip, not a tinted band. */
+#view-local .s-footer { background: var(--surface); border-top: 1px solid var(--rule); }

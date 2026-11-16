@@ -265,6 +265,47 @@ _MIGRATIONS: tuple[tuple[str, ...], ...] = (
         "UPDATE subscriptions SET baselined = 1 WHERE id IN "
         "(SELECT DISTINCT subscription_id FROM subscription_seen)",
     ),
+    # v8 — the playlist a failed track belonged to.
+    #
+    # A retry re-submitted the failures as loose tracks, so one that came
+    # from a playlist downloaded into the bare download folder and was left
+    # out of the playlist's M3U (issue #277). The name lets the retry send it
+    # back to that playlist's folder.
+    ("ALTER TABLE failed_tracks ADD COLUMN playlist_name TEXT NOT NULL DEFAULT ''",),
+    # v9 — one failure per track *per collection*.
+    #
+    # Keyed on (owner, track_key) alone, a song missing from two playlists
+    # was one row: the second failure overwrote the first one's source and
+    # playlist, and the retry put the track back in only one of the two
+    # folders and M3Us (issue #277). SQLite cannot change a primary key in
+    # place, so the table is rebuilt; every existing row keeps its values.
+    (
+        """
+        CREATE TABLE failed_tracks_v9 (
+            owner           TEXT NOT NULL DEFAULT '',
+            track_key       TEXT NOT NULL,
+            track           TEXT NOT NULL,
+            source_url      TEXT NOT NULL DEFAULT '',
+            error           TEXT NOT NULL DEFAULT '',
+            attempts        INTEGER NOT NULL DEFAULT 1,
+            first_failed_at REAL NOT NULL,
+            last_failed_at  REAL NOT NULL,
+            playlist_name   TEXT NOT NULL DEFAULT '',
+            PRIMARY KEY (owner, source_url, track_key)
+        )
+        """,
+        """
+        INSERT INTO failed_tracks_v9 (
+            owner, track_key, track, source_url, error, attempts,
+            first_failed_at, last_failed_at, playlist_name
+        )
+        SELECT owner, track_key, track, source_url, error, attempts,
+               first_failed_at, last_failed_at, playlist_name
+        FROM failed_tracks
+        """,
+        "DROP TABLE failed_tracks",
+        "ALTER TABLE failed_tracks_v9 RENAME TO failed_tracks",
+    ),
 )
 
 

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+import threading
 from typing import TYPE_CHECKING, Any, cast
 
 from mornye.core.config import DownloadRequest
 from mornye.core.errors import ErrorKind, InvalidUrlError, MornyeError
 from mornye.core.models import TrackMetadata
+from mornye.core.rate_limiting import await_or_stop
 
 if TYPE_CHECKING:
     from mornye.core.spotify_metadata import SpotifyMetadataClient
@@ -130,13 +132,21 @@ class MetadataService:
             return cast(list[TrackMetadata], value)
         return []
 
-    async def resolve(self, request: DownloadRequest) -> list[TrackMetadata]:
+    async def resolve(
+        self,
+        request: DownloadRequest,
+        *,
+        before_resolve: Callable[[], Awaitable[None]] | None = None,
+        stop_event: threading.Event | None = None,
+    ) -> list[TrackMetadata]:
         resolver = self._get_resolver()
         resolved: list[TrackMetadata] = []
 
         for source in request.sources:
             try:
-                value = await resolver(source)
+                if before_resolve is not None:
+                    await before_resolve()
+                value = await await_or_stop(resolver(source), stop_event)
             except MornyeError as exc:
                 if exc.kind not in _BEST_EFFORT_KINDS:
                     raise

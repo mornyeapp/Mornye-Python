@@ -16,7 +16,7 @@ from typing import Any, cast
 import json
 import shutil
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 from email.utils import formatdate
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -65,7 +65,7 @@ def _fetch(tmp_path, response: _Response, path: str = "/dl/tid") -> dict:
     )
     client.session_id = "sid"
     client.session_secret = "secret"
-    client.expires_at = (datetime.now(timezone.utc) + timedelta(days=1)).strftime(
+    client.expires_at = (datetime.now(UTC) + timedelta(days=1)).strftime(
         "%Y-%m-%dT%H:%M:%SZ"
     )
 

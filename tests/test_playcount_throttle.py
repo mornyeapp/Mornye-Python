@@ -60,7 +60,7 @@ def test_requests_are_spaced_by_the_configured_interval() -> None:
 
     assert len(stats) == len(ids)
     starts = sorted(client.starts)
-    gaps = [b - a for a, b in zip(starts, starts[1:])]
+    gaps = [b - a for a, b in zip(starts, starts[1:], strict=False)]
     # A small tolerance: time.sleep() may wake fractionally early.
     assert min(gaps) >= PLAYCOUNT_MIN_INTERVAL_S - 0.01, (
         f"requests started {min(gaps):.3f}s apart, floor is "

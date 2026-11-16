@@ -172,6 +172,14 @@ def _isolated_extension_dir(request, monkeypatch, tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
+def _isolated_tui_theme(monkeypatch, tmp_path_factory):
+    """The theme picked with `t` is saved; keep it out of ~/.mornye and
+    from carrying over from one test to the next."""
+    base = tmp_path_factory.mktemp("tui_theme")
+    monkeypatch.setenv("MORNYE_TUI_THEME_FILE", str(base / "tui-theme"))
+
+
+@pytest.fixture(autouse=True)
 def _isolated_extension_storage(monkeypatch, tmp_path_factory):
     """Keeps extension `storage.set` (extensions/storage.py) out of ~/.mornye
     and away from the real OS credential store."""

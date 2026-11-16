@@ -24,7 +24,8 @@ import logging
 import threading
 import uuid
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 from urllib.parse import quote
 
 import httpx

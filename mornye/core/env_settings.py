@@ -40,6 +40,11 @@ SETTINGS: dict[str, str] = {
     "max_concurrent_downloads": "int",
     "loop": "int",
     "track_max_retries": "int",
+    "metadata_delay_min_s": "float",
+    "metadata_delay_max_s": "float",
+    "provider_delay_min_s": "float",
+    "provider_delay_max_s": "float",
+    "auto_rate_limit_cooldown": "bool",
     "lyrics_providers": "list",
     "apple_lyrics_word_by_word": "bool",
     "save_lrc": "bool",
@@ -96,10 +101,15 @@ def _parse(kind: str, raw: str) -> Any:
             return False
         raise ValueError("expected true or false")
     if kind == "int":
-        numeric_value = int(text)
-        if numeric_value < 0:
+        integer_value = int(text)
+        if integer_value < 0:
             raise ValueError("expected a number of 0 or more")
-        return numeric_value
+        return integer_value
+    if kind == "float":
+        float_value = float(text)
+        if float_value < 0:
+            raise ValueError("expected a number of 0 or more")
+        return float_value
     if kind == "list":
         return [part.strip() for part in text.split(",") if part.strip()]
     if kind == "map":

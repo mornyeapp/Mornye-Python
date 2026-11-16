@@ -190,6 +190,11 @@ class ConfigState:
     # ── Reliability ─────────────────────────────────────────────────────
     track_max_retries: int = 0
     max_concurrent_downloads: int = 2
+    metadata_delay_min_s: float = 0.0
+    metadata_delay_max_s: float = 0.0
+    provider_delay_min_s: float = 0.0
+    provider_delay_max_s: float = 0.0
+    auto_rate_limit_cooldown: bool = True
     timeout_s: int = 180
     resume: bool = True
 
@@ -417,6 +422,21 @@ class ConfigState:
             int(state.max_concurrent_downloads or 1),
         )
         state.timeout_s = max(0, int(state.timeout_s or 0))
+        for name in (
+            "metadata_delay_min_s",
+            "metadata_delay_max_s",
+            "provider_delay_min_s",
+            "provider_delay_max_s",
+        ):
+            setattr(state, name, max(0.0, float(getattr(state, name) or 0.0)))
+        state.metadata_delay_max_s = max(
+            state.metadata_delay_min_s,
+            state.metadata_delay_max_s,
+        )
+        state.provider_delay_max_s = max(
+            state.provider_delay_min_s,
+            state.provider_delay_max_s,
+        )
 
         return state
 
@@ -472,6 +492,11 @@ class ConfigState:
             "enrich_providers": list(state.enrich_providers),
             "track_max_retries": state.track_max_retries,
             "max_concurrent_downloads": state.max_concurrent_downloads,
+            "metadata_delay_min_s": state.metadata_delay_min_s,
+            "metadata_delay_max_s": state.metadata_delay_max_s,
+            "provider_delay_min_s": state.provider_delay_min_s,
+            "provider_delay_max_s": state.provider_delay_max_s,
+            "auto_rate_limit_cooldown": state.auto_rate_limit_cooldown,
             "timeout_s": state.timeout_s,
             "resume": state.resume,
             "post_download_action": state.post_download_action,

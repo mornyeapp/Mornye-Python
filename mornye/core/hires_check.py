@@ -435,7 +435,7 @@ def _ffmpeg_read_window(
     start_frame: int,
     frames: int,
     sample_rate: int,
-) -> "np.ndarray":
+) -> np.ndarray:
     """The requested window decoded to interleaved 32-bit PCM, 2D (n, ch).
 
     s32le on purpose, and left-justified the way soundfile hands back every
@@ -466,7 +466,7 @@ def _ffmpeg_read_window(
         timeout=_FFMPEG_TIMEOUT_S,
         check=True,
     )
-    raw: "np.ndarray" = np.frombuffer(proc.stdout, dtype="<i4")
+    raw: np.ndarray = np.frombuffer(proc.stdout, dtype="<i4")
     if raw.size == 0:
         raise HiResCheckError(f"ffmpeg decoded an empty window from '{path}'")
 
@@ -504,7 +504,7 @@ def _read_mono_window(
     path: Path,
     start_frame: int,
     frames: int,
-) -> tuple["np.ndarray", int, int]:
+) -> tuple[np.ndarray, int, int]:
     """(mono float32 in full-scale units, sample rate, channel count).
 
     soundfile first, and ffmpeg for what libsndfile cannot open (ALAC/MP4,
@@ -540,8 +540,8 @@ def _read_mono_window(
 
 
 def _analyze_stft(
-    y: "np.ndarray", n_fft: int, sample_rate: int
-) -> tuple["np.ndarray", float, list[float]]:
+    y: np.ndarray, n_fft: int, sample_rate: int
+) -> tuple[np.ndarray, float, list[float]]:
     """(mean magnitude spectrum, quiet-frame floor, music band spreads).
 
     The spectrum matches `np.abs(librosa.stft(y, n_fft)).mean(axis=1)`: a
@@ -642,7 +642,7 @@ def _analyze_stft(
 
 def _music_cutoff(
     spreads: list[float],
-    spec_db: "np.ndarray",
+    spec_db: np.ndarray,
     sample_rate: int,
     n_fft: int,
     noise_floor_db: float,
@@ -699,8 +699,8 @@ def _classify_noise_floor(floor_var: float, channels: int) -> tuple[str, float]:
 
 
 def _band(
-    spec_db: "np.ndarray", sample_rate: int, n_fft: int, low_hz: float, high_hz: float
-) -> "np.ndarray":
+    spec_db: np.ndarray, sample_rate: int, n_fft: int, low_hz: float, high_hz: float
+) -> np.ndarray:
     bin_hz = sample_rate / n_fft
     lo = max(math.ceil(low_hz / bin_hz), 0)
     hi = min(int(high_hz / bin_hz), len(spec_db) - 1)
@@ -708,7 +708,7 @@ def _band(
 
 
 def _detect_brickwall(
-    spec_db: "np.ndarray", sample_rate: int, n_fft: int, noise_floor_db: float
+    spec_db: np.ndarray, sample_rate: int, n_fft: int, noise_floor_db: float
 ) -> float:
     """The source Nyquist (22050 / 24000 Hz) with a resampler's cliff, or 0.
 
@@ -751,7 +751,7 @@ def _detect_brickwall(
 
 
 def _detect_imaging(
-    spec_db: "np.ndarray", sample_rate: int, n_fft: int, noise_floor_db: float
+    spec_db: np.ndarray, sample_rate: int, n_fft: int, noise_floor_db: float
 ) -> bool:
     """Whether the band above a source Nyquist mirrors the band below it.
 
@@ -824,7 +824,7 @@ def _pearson(a: list[float], b: list[float]) -> float:
     mean_a = sum(a) / n
     mean_b = sum(b) / n
     cov = var_a = var_b = 0.0
-    for va, vb in zip(a, b):
+    for va, vb in zip(a, b, strict=False):
         da, db = va - mean_a, vb - mean_b
         cov += da * db
         var_a += da * da

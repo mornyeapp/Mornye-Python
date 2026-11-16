@@ -1707,7 +1707,7 @@ async def embed_metadata_async(
             ErrorKind.FILE_IO,
             f"Failed to embed metadata in {path.name}: {exc}",
             cause=exc,
-        )
+        ) from exc
 
 
 async def _fetch_cover_async(url: str, session: Any | None = None) -> bytes | None:

@@ -193,9 +193,9 @@ def fingerprint_similarity(a: tuple[int, ...], b: tuple[int, ...]) -> float:
 
     for offset in range(-len(b) + 1, len(a)):
         if offset >= 0:
-            pairs = list(zip(a[offset:], b))
+            pairs = list(zip(a[offset:], b, strict=False))
         else:
-            pairs = list(zip(a, b[-offset:]))
+            pairs = list(zip(a, b[-offset:], strict=False))
         if len(pairs) < min_overlap:
             continue
         bit_errors = sum(_popcount(x ^ y) for x, y in pairs)

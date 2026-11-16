@@ -1,0 +1,134 @@
+/* frontend/css/views/stats.css — Stats in the console look (redesign voce 18):
+   the totals as readouts and every ranking as a segmented meter, the second
+   signature element doing what it is for.
+
+   The view's structure (grids, positions, the phone layout) comes first,
+   moved out of styles.css in voce 22; the console look follows it.
+   Semantic tokens only; ids and handlers untouched. */
+
+/* ── Your library, in numbers (view-stats) ─────────────────────────────
+   Deliberately built from the same tokens as the rest of the interface
+   (surface/border/muted/yellow) so the dashboard inherits both themes
+   without a second palette to keep in agreement. */
+.stat-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  margin-bottom: 18px;
+}
+.stats-intro { margin: -4px 0 14px; line-height: 1.6; }
+.stats-actions { gap: 8px; }
+.stats-smb-controls { display: flex; align-items: center; gap: 8px; min-width: 0; }
+#stats-smb-destination { width: min(310px, 28vw); min-width: 200px; min-height: 38px; }
+#stats-smb-scan { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 38px; white-space: nowrap; }
+#stats-smb-scan svg { width: 16px; height: 16px; }
+#stats-smb-scan:disabled { opacity: .5; cursor: not-allowed; }
+.stats-smb-status {
+  margin: 0 0 14px; padding: 9px 12px; border-left: 2px solid var(--signal);
+  background: var(--raised); line-height: 1.5;
+}
+.stats-smb-status.error { border-left-color: var(--error); }
+.stats-source-note {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px;
+  margin-bottom: 14px;
+}
+.stats-source-note strong { color: var(--signal); font-weight: 600; }
+.stats-source-note span { color: var(--text-muted); }
+.stat-tile-value {
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.stat-tile-label {
+  margin-top: 4px;
+}
+.stat-tile-hint { margin-top: 6px; }
+
+.stat-bar-row {
+  display: flex;
+  align-items: center;
+  padding: 4px 0;
+  font-size: var(--text-md);
+}
+.stat-bar-label {
+  flex: 0 0 34%;
+  max-width: 34%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stat-bar-track {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.stat-bar-value {
+  flex: 0 0 52px;
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .stat-bar-label { flex-basis: 44%; max-width: 44%; }
+  .stats-actions { width: 100%; flex-wrap: wrap; justify-content: flex-start; }
+  .stats-smb-controls { flex: 1 1 100%; }
+  #stats-smb-destination { flex: 1 1 auto; width: auto; min-width: 0; max-width: none; }
+  #stats-period { flex: 1 1 auto; }
+}
+
+.stats-intro { color: var(--text-muted); font-size: var(--text-sm); }
+.stats-smb-status { color: var(--text-2); font-size: var(--text-sm); }
+.stats-smb-status.error { color: var(--error); }
+.stats-source-note { color: var(--text-muted); font-size: var(--text-xs); }
+
+#view-stats select {
+  height: var(--row);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background-color: var(--raised);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+}
+#view-stats select:focus { border-color: var(--signal-strong); outline: none; }
+
+/* Totals: a row of readouts divided by rules, label under a big value. */
+.stat-tiles { gap: 0; border: 1px solid var(--rule); border-radius: var(--radius-1); }
+.stat-tile {
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  border-right: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.stat-tile:last-child { border-right: 0; }
+.stat-tile-value {
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+.stat-tile-label {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+.stat-tile-hint { color: var(--text-muted); font-size: var(--text-xs); }
+
+/* Rankings: 20 LED steps; app.js gives the lit share in whole steps (--v). */
+.stat-bar-row { gap: var(--space-3); min-height: var(--row-head); }
+.stat-bar-label { color: var(--text); font-size: var(--text-sm); }
+.stat-bar-value { color: var(--text-2); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.stat-bar-track {
+  --v: 0; /* the lit share; app.js sets it inline per row */
+  height: 10px;
+  border-radius: 0;
+  background: linear-gradient(
+    90deg,
+    var(--signal-strong) 0 calc(var(--v) * 100%),
+    var(--rule-strong) calc(var(--v) * 100%) 100%
+  );
+  -webkit-mask-image: repeating-linear-gradient(90deg, black 0 calc(5% - 2px), transparent calc(5% - 2px) 5%);
+          mask-image: repeating-linear-gradient(90deg, black 0 calc(5% - 2px), transparent calc(5% - 2px) 5%);
+}

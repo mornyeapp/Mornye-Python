@@ -141,7 +141,7 @@ def test_compare_strings_counts_bytes_as_the_go_version_does(js) -> None:
     run, _ = js
     ours = run("matching.compareStrings('밤편지', '밤편자')")
     a, b = "밤편지".encode(), "밤편자".encode()
-    differing = sum(x != y for x, y in zip(a, b))
+    differing = sum(x != y for x, y in zip(a, b, strict=False))
     assert ours == pytest.approx(1 - differing / max(len(a), len(b)))
     assert ours != pytest.approx(1 - 1 / 3)  # not the per-character ratio
 

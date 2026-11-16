@@ -18,7 +18,7 @@ from textual.containers import Container
 from textual.widgets import Static
 
 from .branding import TAGLINE as TAGLINE_ONLY
-from .branding import hint_bar, hint_bar_markup, version, wordmark_for
+from .branding import header_line, hint_bar, hint_bar_markup, version
 
 #: Hints, most important first — the tail is what gets dropped when narrow.
 DEFAULT_HINTS: tuple[tuple[str, str], ...] = (
@@ -57,23 +57,15 @@ class Banner(Container):
         self._redraw()
 
     def _redraw(self) -> None:
-        # The screen's height, not the banner's: the question is how much of
-        # the terminal a six-row logo would be taking, and the banner's own
-        # height is the answer to that, not the input.
-        available_height = self.screen.size.height if self.screen else 24
-        art = wordmark_for(self.size.width or 80, available_height)
-        rows = len(art.split("\n"))
-
-        self.query_one("#wordmark", Static).update(art)
-        self.query_one("#wordmark-subtitle", Static).update(
-            self._subtitle_for(art, self.size.width or 80),
-        )
-        # +1 for the subtitle, +1 for the container's own top padding — leave
-        # the second one out and the subtitle is the row that gets clipped.
-        # Sized here rather than in CSS because the art is the only thing that
-        # knows how tall it decided to be.
-        self.styles.height = rows + 2
-        self.set_class(rows == 1, "banner-plain")
+        # One line (redesign §2): ``MORNYE 2.0.6 ── tagline``. The subtitle
+        # row is kept, empty and hidden, for anything that still looks it up.
+        width = self.size.width or 80
+        self.query_one("#wordmark", Static).update(header_line(width - 2))
+        subtitle = self.query_one("#wordmark-subtitle", Static)
+        subtitle.update("")
+        subtitle.display = False
+        self.styles.height = 1
+        self.set_class(True, "banner-plain")
 
     @staticmethod
     def _subtitle_for(art: str, width: int) -> str:

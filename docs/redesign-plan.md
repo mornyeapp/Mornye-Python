@@ -15,7 +15,7 @@ in cui costa meno farlo.
 
 ---
 
-## 0. Stato e ripartenza (aggiornato 2026-11-12)
+## 0. Stato e ripartenza (aggiornato 2026-11-16)
 
 **Chi riprende legga questa sezione, poi la §2 (direzione scelta) e la §4
 (fasi).** Tutto il lavoro è sul branch `2.0.6`, in commit locali **non
@@ -66,17 +66,360 @@ regola (una parola = un elemento).
 
 ### Non fatto — da qui si riparte
 
-0. **Fase 2 · voce 7 — mock pronti, in attesa di approvazione.** In
-   `docs/mocks/`: `home.html` (Home con album aperto), `queue.html` (Coda con
-   pannello falliti), `tui-download.html` (pannello Download della TUI a
-   120×40, generato da `make_tui_mock.py`), tutti su `console.css`, che
-   contiene la proposta di valori per i token v2 (grafite `#0d0d0d`…`#242424`,
-   segnale `#ffb000`, stato `#5ec46b`/`#ff5a4f`). Si aprono servendo la radice
-   del repo (`python -m http.server`, configurazione `mocks` in
-   `.claude/launch.json`). Regole emerse disegnando: la qualità per riga è una
-   lettura grigia, l'ambra resta a album, selezione, download in corso e
-   azione primaria (una sola per schermata); gli errori stanno in un solo
-   pannello "Failed". Jellyfin compare nel rail come *Library → Server*.
+0. **Fase 3 · voce 10 fatta** (branch `redesign`):
+   - `293aa15` — **tutta la GUI sui token v2.** `index.html` carica
+     `css/tokens.css` prima di `styles.css`; i nomi v1 di `styles.css`
+     diventano alias dei token v2 (blocco "Token v2 bridge"); `--text`,
+     `--surface`, `--ease` tolti dai blocchi v1 perché sono già nomi v2.
+     Font: JetBrains Mono ovunque; `changeFont()` non scrive più Inter
+     inline quando la scelta è quella di default (chi ha scelto un altro
+     carattere lo tiene finché la voce 14 toglie il selettore). Il test di
+     palette ora verifica il ponte; `branding_tokens.DARK/LIGHT` restano
+     solo per la TUI fino alla Fase 4. **Gli accenti `data-accent`
+     sovrascrivono ancora `--accent-*`**: chi ne ha scelto uno non di
+     default lo vede sulle parti vecchie — voce 28.
+   - `351dc22` — **shell.** `css/layout.css` (dopo `styles.css`): titlebar,
+     rail da 176px con etichette in maiuscoletto e barra segnale sulla voce
+     attiva, contatore coda come lettura, dock con meter a 24 tacche
+     (`app.js` arrotonda a tacche intere), player bar piatta. Il dock ora
+     sta sopra la player bar invece di finirci sotto (difetto preesistente).
+     Il layout telefono (barra in basso, ≤700px) è invariato. Verificato
+     in scuro, chiaro, rail compresso e 375px.
+   La baseline della Fase 0 (`tests/visual/baseline/`) resta il riferimento
+   *prima* del redesign e non viene aggiornata: `--compare` ora segnala le
+   viste cambiate, ed è atteso.
+   - `d53e04d` — **voce 11, Home.** `css/views/home.css`: testata compatta
+     al posto dell'hero, barra link/ricerca in controlli da 32px (44px su
+     telefono), Fetch primario solo finché non si apre un album
+     (`body:has(#album-card:not(.hidden))`), card album piatta con
+     copertina quadrata e colonna dati, righe su filetti con lo stato di
+     download come barra di 2px a sinistra e azioni neutre, recenti e
+     risultati di ricerca sullo stesso margine di 20px. In fondo a
+     `styles.css` c'è uno strato di "rebrand" con selettori più specifici
+     (`.search-container .mode-btn`, `#csvBtn:hover`…): va risposto selettore
+     per selettore. `css/legacy.css` ridisegna `.act-btn`, `.page-btn` e il
+     badge "E" in tutte le viste finché ognuna non è rifatta. Il test dei
+     token semantici ora copre tutti i fogli in `frontend/css/`.
+     Verificato con un album vero, una ricerca vera (Utilities e Spotify Web
+     copiate nella sandbox), in chiaro e a 375px.
+     **Note per la voce 21:** l'errore di ricerca compare due volte (riga
+     di stato sotto la barra e riquadro), contro la regola §8; il toast
+     "fetching metadata…" resta visibile durante la ricerca. **Manca** il
+     display di qualità sull'album (`24 / 96 · FLAC`): l'interfaccia non lo
+     conosce prima del download; da decidere se mostrarlo dalla qualità
+     richiesta o dopo il primo brano.
+   - `68723c3` — **voce 12, Coda.** `css/views/queue.css`: pannello
+     "Downloading now" piatto, quattro metriche come letture, contatori come
+     filtri-lettura, elementi in download su filetti con lo stato come parola
+     nel suo tono e meter a 20 tacche scritto da `app.js` (tacche intere); la
+     riga sotto un elemento fermo non ripete più lo stato. Falliti in un solo
+     pannello con filetto rosso a sinistra. `css/legacy.css` ora copre anche
+     le parti condivise con History/Following/Settings (`s-header`,
+     `seg-tab`, `tb-field`, `page-row`, `row-btn`, `status-pill`) e risponde
+     a `.s-actions .act-btn`. Un solo primario: "Start" della barra e "Retry
+     all" dei falliti diventano secondari. Verificato con un job vero e con
+     elementi d'esempio in memoria per gli stati in corso/falliti (la
+     sandbox non ha provider che scaricano).
+     **Note per la voce 21:** aggiungere alla coda mostra due toast con lo
+     stesso messaggio.
+   - **voce 13, History** (commit sotto): nessun foglio proprio, è fatta
+     delle parti condivise di `legacy.css`; aggiunti copertina mancante
+     neutra, filetto rosso sulle righe fallite, totali come lettura.
+     Verificata con le voci vere di "Fetches" e righe di download d'esempio
+     (la sandbox non ne ha), anche a 375px. Lo stato vuoto tratteggiato
+     resta per la voce 21.
+   - `811faac` — **voce 14, Settings, ridisegnata.** `css/views/settings.css`:
+     colonna categorie come il rail (solo ≥701px; sul telefono resta la
+     striscia orizzontale), sezioni come pannelli piatti con titolo in
+     maiuscoletto, righe su filetti, interruttori quadrati, tutti i campi
+     a 32px (regola generica con `:where()` per non pesare sulle eccezioni),
+     liste provider con glifi neutri, pulsante e lettura della scheda
+     Status. **Un solo carattere:** riga del selettore e anteprima tolte,
+     `changeFont()` scarta qualunque font salvato; `#config-font` resta
+     nascosto perché `app.js` lo legge. Verificate tutte e sei le schede,
+     scuro/chiaro/375px.
+     **Non fatto (aperto):** la *riorganizzazione* chiesta dalla voce 14
+     (rivedere raggruppamento di sezioni e schede, 25 sezioni / 54 righe)
+     — questo commit ridisegna, non riordina. Il form "Network
+     destinations" (scheda Download) ha un'impaginazione propria stretta
+     (riquadro SMB3) da rivedere lì. Accento: il selettore dice ancora
+     "Teal" (voce 28).
+   - **voce 15, Fix Local Files** (commit sotto): `css/views/local.css`,
+     riquadro di trascinamento a filetto tratteggiato (segnale durante il
+     trascinamento), campi da 32px, footer a filetto; "Scan Library"
+     diventa secondario. Verificata in scuro/chiaro/375px; i risultati di
+     una scansione (righe `track-row.local-row`, già coperte da `home.css`)
+     non provati: servono file audio veri.
+   - **voce 16, Following** (commit sotto): `css/views/following.css`, campi
+     e textarea, sottotitolo del blocco "segui più artisti", righe
+     settimanali su filetti; "Follow" diventa secondario. Righe degli
+     artisti seguiti e uscite della settimana non provate (servono
+     iscrizioni vere).
+   - **voce 17, Explore** (commit sotto): `css/views/explore.css`, saluto e
+     selettore del feed sulla scala, titoli di sezione in maiuscoletto su
+     filetto, griglia di copertine quadrate con contorno segnale al
+     passaggio. Copertina mancante o non caricata: riquadro neutro con una
+     nota invece del logo verde di Spotify (sbagliato su ogni altro feed).
+     Verificata con sezioni d'esempio (il feed di Apple non rispondeva in
+     quel momento; quello vero era stato provato in J3), scuro/chiaro/375px.
+   - **voce 18, Stats** (commit sotto): `css/views/stats.css`, totali come
+     striscia di letture, classifiche come meter a 20 tacche; `statsBars()`
+     passa `--v` arrotondato a tacche intere. Verificata con dati d'esempio
+     (la sandbox non ha cronologia), scuro/chiaro/375px.
+   - **voce 19, Player e Now Playing** (commit sotto):
+     `css/views/player.css`; righe del player su filetti con barra segnale
+     sul brano in riproduzione, controlli a 32px, "Open" secondario. Now
+     Playing resta bianco sulla tinta della copertina ma con forme quadre e
+     copertina senza alone. `tokens.css` ora include anche `FIXED` e
+     `FIXED_CHANNELS`. Verificato con tre WAV di silenzio nella sandbox.
+   - **voce 20, Logs** (commit sotto): `css/views/logs.css`, pannello a
+     filetto, legenda in maiuscoletto, pulsanti quadrati, messaggi nel colore
+     di stato, niente animazione d'ingresso per riga.
+   - **voce 21, feedback** (commit sotto): `css/feedback.css` — toast come
+     avvisi, modali come dialoghi a filetto, stati vuoti allineati a
+     sinistra senza cornice, stati d'errore con filetto rosso, skeleton
+     fermi, `prefers-reduced-motion` che spegne tutto. Doppioni tolti:
+     errore di ricerca (riga di stato) e toast ripetuto all'aggiunta in
+     coda. **Aperto (F7):** gli 11 `confirm()` nativi non sono ancora
+     sostituiti dal dialogo della styleguide; il toast "fetching metadata…"
+     che resta durante la ricerca non è stato indagato.
+   - **voce 22 — rinviata, da fare in una sessione dedicata.** `styles.css`
+     contiene ancora tutta la *struttura* (griglie, posizionamenti,
+     responsive, barra telefono); i fogli nuovi ne cambiano solo l'aspetto.
+     Toglierlo = riscriverne la struttura nei file nuovi. Metodo proposto,
+     vista per vista: (1) spostare le regole strutturali della vista da
+     `styles.css` al suo `css/views/*.css` (o a `layout.css` per la shell);
+     (2) togliere da `styles.css` le regole ormai sovrascritte; (3) dopo
+     ogni passo, confronto stili calcolati a runtime prima/dopo con lo
+     strumento della Fase 1 (`runtime.py`, ricostruibile: Playwright, GUI
+     web su dati di prova, ogni vista e scheda) → 0 differenze; (4) in
+     fondo: togliere il blocco "Token v2 bridge" sostituendo i nomi v1 con
+     i v2 nei fogli rimasti, rimuovere `styles.css` da `index.html`,
+     `sw.js` (SHELL_FILES), `MANIFEST.in`/package-data, aggiornare
+     `test_brand_tokens.py`, `test_frontend_inline_styles.py` (utility
+     `u-*` → dove finiscono), i font Inter/Fraunces da `assets/fonts/`.
+   - **voce 22 — fatta** (2026-11-13 → 16, sessione dedicata, branch
+     `claude/zen-curran-97cf7a` da `redesign`, un commit per passo).
+     Strumenti ricostruiti nella cartella temporanea della sessione: un
+     modello CSS che conserva gli offset (regole, contesti `@media`,
+     specificità) e il confronto a runtime degli stili calcolati —
+     Playwright, `mornye --web` su una HOME vuota, 140 scenari: le 10 viste,
+     le 6 schede di Settings, la scheda Fetches di History e 18 stati con
+     dati sintetici passati alle funzioni di `app.js` (album, album con
+     selezione, playlist, artista, brano singolo, ricerca, recenti, coda con
+     ogni stato e falliti, staged, cronologia, statistiche, Explore,
+     Following, Local, toast, modali, drawer, rail chiusa), ciascuno a
+     1280×800 e 375×812, scuro e chiaro. Per ogni elemento (e `::before`,
+     `::after`, `::placeholder`, `::marker`) ogni proprietà calcolata,
+     custom property comprese, più il riquadro; animazioni ferme a t=0.
+     Due esecuzioni senza modifiche: 0 differenze.
+     1. **Dichiarazioni morte.** 1134 delle 5055 dichiarazioni di
+        `styles.css` sono ridichiarate più avanti con lo stesso identico
+        selettore, in un contesto uguale o più largo, con importanza pari o
+        maggiore e un valore che ogni motore legge (niente `dvh`, prefissi,
+        `text-wrap`): non vincono mai. Tolte, con i commenti che
+        descrivevano solo loro. Confronto: 0 differenze.
+     2. **Selettori senza markup.** 80 regole (e un selettore di una lista)
+        chiedevano una classe che né `index.html`, né gli script, né il
+        Python scrivono più: la vecchia scheda dettaglio brano
+        (`.track-detail-*`), le righe del vecchio health check (`.hc-*`),
+        `.save-toast`, `.queue-toolbar`, `.queue-stats-bar`, `.sort-btn`,
+        `.artist-section-hdr`, `.hero-badge`, `.clear-link`/`.export-link` e
+        simili (25 nomi, cercati in tutto il repository). Restano le classi
+        composte a runtime (`reg-badge-${…}`, le posizioni dei toast).
+        Confronto: 0 differenze (escluso un elemento di History → Fetches
+        che cambia da solo tra due esecuzioni: il caricamento asincrono
+        corre contro il cambio di scheda).
+     3. **Utility in `css/utilities.css`.** Le 148 classi `u-*` e i toni
+        `[data-tone]` passano in un foglio nuovo, caricato **per ultimo**
+        (in `index.html`, `sw.js` SHELL_FILES, `CACHE_NAME` v20). Metterlo
+        al posto di `styles.css` avrebbe girato 578 coppie di regole, per
+        ultimo 253, quasi tutte la stessa tinta con due nomi (`--muted` /
+        `--text-muted`): il controllo statico (coppie di regole il cui
+        ordine si inverte, proprietà che si toccano, stessa importanza e
+        specificità, elementi in comune nella sonda a runtime, valori
+        diversi anche dopo gli alias del bridge) ne lascia 2. Una era reale:
+        `.s-section > .s-row` di `settings.css` azzera già `u-pl-16` su
+        cinque righe di Settings, che perdono la classe in `index.html`
+        (le righe di `#ext-quality-rows`, non figlie dirette, la tengono).
+        `test_frontend_inline_styles.py` legge `css/utilities.css`.
+        Confronto: 0 differenze.
+     4. **Liste di selettori divise per vista.** 21 regole con una lista
+        che tocca più fogli di destinazione (es. `.explore-grid,
+        .artist-gallery-grid` sul telefono, i blocchi `forced-colors` e
+        `prefers-reduced-motion` che nominano pulsanti di ogni vista)
+        diventano regole consecutive con lo stesso corpo, una per foglio:
+        così ogni override resta nello stesso file della regola base, dopo
+        di essa. Non divise le liste con `:has()`, `:is()`, `:where()` o
+        pseudo con prefisso, dove un motore che non le capisce scarta
+        l'intera regola. Confronto: 0 differenze. (Due liste rimaste
+        intere al primo giro sono divise in `baa50c8`.)
+     5. **Spostamento, foglio per foglio, dall'ultimo al primo** (così un
+        passo intermedio non inverte mai una coppia che il risultato finale
+        non inverta già). Ogni regola va al foglio della vista dove i suoi
+        selettori trovano elementi (sonda a runtime su tutti gli stati di
+        prova), alla shell (`layout.css`), ai dialoghi/toast
+        (`feedback.css`) o, se tocca più viste, a `legacy.css`; i selettori
+        mai trovati seguono le classi già piazzate o i vicini. Le regole
+        spostate vanno in cima al foglio, nell'ordine originale, coi loro
+        commenti; un `@media` è diviso per foglio con lo stesso prelude.
+        Il controllo statico sull'ordine finale lascia 45 coppie, tutte
+        riviste a mano: elementi diversi (`svg` in pulsanti diversi), o
+        risolte mettendo in cima a `legacy.css` le regole che devono restare
+        prima dei campi generici o di `.act-btn` (`.api-modal-body input`,
+        `.s-search input`, `.reg-remove-btn`, la ricerca della coda,
+        `[data-dirty]` di Save), o l'anello di focus: `layout.css` lo dà a
+        specificità (0,1,0) e prima vinceva sui controlli vecchi che
+        disegnano un raggio proprio; dove questi ora caricano dopo, una
+        regola alla stessa specificità ne ripete raggio/contorno.
+        Strumenti in `side-session-notes/…/voce22-tools` (la cartella
+        temporanea è stata svuotata a metà lavoro).
+        - `views/logs.css` (`8ab9132`): 15 blocchi. 0 differenze.
+        - `views/player.css`: 104 blocchi (Player, Now Playing, testi). 0
+          differenze; gli stati di prova non aprono Now Playing, qui vale
+          soprattutto il controllo statico.
+        - `views/stats.css`: 21 blocchi. 0 differenze.
+        - `views/explore.css`: 9 blocchi. 0 differenze.
+        - `views/following.css`: 15 blocchi. 0 differenze.
+        - `views/local.css`: 21 blocchi. 0 differenze.
+        - `views/settings.css`: 134 blocchi. 0 differenze.
+        - `views/queue.css`: 102 blocchi. 0 differenze.
+        - `views/home.css`: 213 blocchi. 0 differenze.
+        - `feedback.css`: 82 blocchi. 0 differenze.
+        - `legacy.css`: 113 blocchi. 0 differenze.
+        - `layout.css`: 113 blocchi (reset, `:root` v1, bridge, `@font-face`,
+          shell, barra telefono). Gli `url()` dei font, relativi, diventano
+          `../assets/fonts/…`: il primo confronto lo ha trovato (larghezze in
+          `ch` diverse di 0,01px con il font di riserva). 0 differenze.
+     6. **`styles.css` tolto** da `index.html` e da `sw.js` (`CACHE_NAME` v21):
+        restavano solo due commenti. I commenti lunghi dei blocchi `@media`
+        divisi (telefono, forced-colors, reduced-motion, tabella brani…)
+        erano finiti in più fogli: il testo resta in uno, negli altri un
+        rimando di una riga. Commenti di `app.js` e `index.html` puntano ai
+        fogli nuovi. Confronto: 0 differenze.
+     7. **Nomi v1 → v2, bridge tolto, font.** Ogni `var(--v1)` dei fogli
+        diventa il token v2 a cui il bridge lo legava (`--muted` →
+        `--text-muted`, `--accent-*` → `--signal*`, `--fs-*`, `--radius-*`…),
+        il token della stessa famiglia con lo stesso valore (`--sp-4` →
+        `--space-3`) o il valore stesso (`--sp-1` → `2px`, `--t` →
+        `var(--motion) var(--ease)`). Restano variabili di `layout.css` solo
+        quelle della shell, che le sue regole di stato cambiano (`--rail-w`,
+        `--dock-h`, `--nav-h`…), e lo z-index. Nuovi token in
+        `branding_tokens.py` (e `tokens.css` rigenerato): i pallini della
+        finestra e `brand-deep` tra i fissi; `scrim`, `overlay`, `chevron`
+        per tema (`V2_THEMED`). `--tracking-label` diventa `0.12em`: il
+        valore v1 vinceva su quello v2 (`.14em`) e la GUI mostrava già
+        quello. Tolti Inter e Fraunces (`@font-face` e file): nessuna regola
+        li usava più. Test: `test_brand_tokens.py` controlla che nessun
+        foglio nomini un token v1; `test_brand_tokens_v2.py` accetta
+        `rgba(var(--…-rgb), α)` (un token, non un colore crudo) e le
+        variabili di `layout.css` e quelle che `app.js` imposta su un
+        elemento. Confronto: 0 differenze sulle proprietà reali (le custom
+        property v1 spariscono, com'è giusto). Suite completa: 2331 passati.
+        **Voce 22 fatta.**
+   **Prossimo:** Fase 4 (TUI, voci 23–26) — fatta, vedi sotto.
+0. **Fasi 4, 5 e 6 fatte** (2026-11-12), su `redesign`, commit locali non
+   pushati. Prima, fuori dal redesign, la **issue #277** (playlist):
+   - `e74767e` — un brano fallito ricorda la playlist (colonna
+     `failed_tracks.playlist_name`, migrazione db v8) e il retry lo rimanda
+     nella cartella della playlist e nella sua M3U, non sciolto nella radice.
+   - `cc1846e` — un brano trovato in una *Existing library folder* (#272)
+     fuori dalla libreria non finisce più nella M3U come `../../altrove/…`
+     (Navidrome non lo segue): viene messo nella cartella della playlist con
+     un hard link (o una copia su un altro disco). Dentro la libreria resta
+     il collegamento relativo di #267.
+   Redesign:
+   - **voci 23–24** (`cf3340b`): TUI con intestazione su una riga
+     (`branding.header_line`), badge come letture tra parentesi
+     (`[HI-RES]`, mai pillole piene), bordi `solid` ovunque, legende a
+     `$text-muted` che diventano segnale sul pannello attivo; temi
+     `mornye-console-dark/light` registrati per primi e di default; la
+     coppia teal resta nel giro di `t`.
+   - **voce 25** (`bdb3fb4`): passata sui 12 pannelli a 80×24 e 120×40,
+     scuro e chiaro (`tests/visual/capture_tui.py`, ora sui temi console).
+     Intro che vanno a capo, pulsanti larghi quanto l'etichetta (la History
+     a 80×24 non taglia più), pulsanti warning/success a filetto: nel tema
+     console `$warning` è il segnale e sembravano un secondo primario.
+   - **voce 26 / F9** (`6c4fce4`): il tema scelto con `t` è salvato in
+     `~/.mornye/tui-theme` e riletto all'avvio; `MORNYE_TUI_THEME_FILE` lo
+     sposta (i test lo puntano in una cartella temporanea, `conftest.py`).
+   - **voce 27** (`df01cbb`): `theme-color`, manifest e finestra pywebview
+     sul fondo v2 (`#0d0d0d` / `#f2f2f0`). Logo invariato: una versione mono
+     non è stata fatta.
+   - **voce 28** (`3f035aa`): gli accenti cambiano solo il segnale
+     (`css/accents.css`, quattro token `--signal*` per accento, tolti i
+     preset da `styles.css`); ambra è il default e il primo del selettore;
+     un `teal`/`green` salvato (vecchio default non toccato) passa ad ambra
+     una volta, `BRAND_VERSION` 3.
+   - **voce 29** (`761acb8`): `docs/site.css` sulla palette console
+     (grafite, ambra, JetBrains Mono, raggi 3px, niente bagliori teal);
+     `CHANGELOG.md` aggiornato. README e guide non hanno screenshot
+     dell'app: niente da sostituire.
+   - **voce 30** (`eed9df8`, `4b28c76`): contrasto AA di ogni accento in
+     entrambi i temi, con test (chiaro: testo green più scuro, inchiostro
+     scuro su orange e cyan); un solo anello di focus da 1px nel segnale
+     (`layout.css`) al posto del 2px di `styles.css`; percorso col Tab di
+     Home, Settings e Queue: ogni fermata ha anello o bordo segnale.
+     Nessuno sbordo orizzontale a 375px e 1280px, scuro e chiaro, in tutte
+     le viste (corretta la toolbar del Player sul telefono).
+   - **voce 31 — verificata solo in parte, qui non si può fare di più:**
+     macOS sì per la GUI web (Chromium del pannello). **Da fare a mano:**
+     finestra pywebview su macOS (WKWebView), Windows (WebView2), Linux
+     (WebKitGTK); `--web` in Docker (qui il demone Docker è spento); PWA
+     su un telefono vero (installazione, barra di stato con `theme-color`).
+     Controllo statico dei fogli nuovi: nessun `@layer`, `@container`,
+     `color-mix()`, `oklch()`; usano `:has()` in 4 regole (WebKitGTK ≥ 2.36,
+     Safari 15.4, Chromium 105) — senza, Home lascia "Fetch" primario
+     accanto alla scheda album e la coda mostra una riga vuota sotto i
+     brani in attesa/errore: estetico, nessuna funzione persa;
+     `text-wrap: pretty` viene ignorato dove manca.
+   **Aperte allora:** F7, riorganizzazione di Settings, quality display
+   dell'album, toast "fetching metadata…" — chiuse nel punto 7; resta la
+   verifica con dati veri (Jellyfin, scansione Local, seguiti, download).
+0. **Fase 2 completa** — sul branch **`redesign`** (creato da `2.0.6` dopo
+   i mock, come da §5: dalla Fase 2 in poi un branch dedicato e un rilascio
+   unico). Commit locali, non pushati.
+   - **Voce 7, mock** (`0e9fc45`, su `2.0.6`): `docs/mocks/home.html`,
+     `queue.html`, `tui-download.html` (generato da `make_tui_mock.py`, 120×40).
+     **Approvati dall'utente.** Regole emerse: la qualità per riga è una
+     lettura grigia; l'ambra solo per album, selezione, download in corso e
+     una sola azione primaria per schermata; gli errori in un solo pannello
+     "Failed"; Jellyfin nel rail come *Library → Server*.
+   - **Voce 8, token v2** (`0430a77`): in `branding_tokens.py`, accanto ai v1
+     che restano finché le Fasi 3–4 non li sostituiscono. Primitivi
+     (`grey-*`, `paper-*`, `amber-*`, verde/rosso per tema) e semantici per
+     tema (`ground`, `surface`, `raised`, `selected`, `rule`, `rule-strong`,
+     `control-border`, `text`, `text-2`, `text-muted`, `signal`,
+     `signal-strong`, `signal-text`, `signal-ink`, `ok`, `error`); spazi su
+     griglia 4px, dimensioni, raggi, scala tipografica unica, elevazione
+     piatta, durate ≤120ms. Il segnale ha tre ruoli perché in chiaro l'ambra
+     piena non regge 3:1: riempimento, grafica/focus, testo.
+     `frontend/css/tokens.css` è **generato** (`python -m
+     mornye.branding_tokens`) e un test lo confronta byte per byte.
+     `v2_textual_theme_kwargs()` costruisce i temi TUI, **non ancora
+     registrati** (voce 24). `tests/test_brand_tokens_v2.py`: parità,
+     contrasto (4.5:1 testo, 3:1 controlli) in entrambi i temi, un solo
+     segnale, griglia, movimento, elevazione, un solo font, componenti solo
+     su token semantici.
+   - **Voce 9, styleguide** (commit sotto): `frontend/css/base.css` e
+     `components.css` sono i file **veri** della Fase 3 (bottoni, campi,
+     check/switch, display di qualità, parole di stato, meter, pannello con
+     legenda, tabella, rail, tab, notice — sostituisce i toast —, fault,
+     blank, skeleton fermo, dialog — sostituisce `confirm()` —, titlebar,
+     dock), non ancora caricati dall'app. La pagina sta in
+     **`docs/styleguide.html`** e non in `frontend/` come diceva la voce 9,
+     così non finisce nel pacchetto; si apre servendo la radice del repo
+     (configurazione `mocks`). Verificata in scuro, chiaro e a 375px (nessuno
+     scorrimento orizzontale).
+   **Da sapere per la Fase 3:** `--text` e `--surface` esistono sia nei
+   token v1 (`styles.css`) sia nei v2 con valori diversi; se i due fogli
+   convivono vince l'ordine di caricamento. Proposta per la voce 10: come
+   primo passo ridefinire i nomi v1 come alias dei v2 (es. `--surface2:
+   var(--raised)`), così tutta la GUI passa alla grafite in un colpo e le
+   viste si rifanno poi una per una. Nomi di classe nuovi verificati liberi
+   in `styles.css` (per questo `notice`/`blank`/`switch` e non
+   `toast`/`empty`/`toggle`).
+   **Prossimo:** Fase 3, voce 10 (shell: rail, titlebar, dock, player bar).
 1. **Fase 1 completa** (voci 4–6) — l'aspetto è identico per costruzione:
    stili calcolati di ogni elemento di `index.html` senza JS (1472 elementi ×
    desktop/telefono × scuro/chiaro) e della GUI in esecuzione (ogni vista e
@@ -97,17 +440,340 @@ regola (una parola = un elemento).
 2. **§2 tutta decisa** (2026-11-12): direzione A, JetBrains Mono come unico
    font, segnale ambra, logo invariato fino alla Fase 5, tema chiaro
    derivato. Nessuna scelta aperta prima della Fase 2.
-3. **F1, F6, F7, F9, M1–M6, N1–N5** — non iniziati.
+3. **F1, F6, F7, M1–M6, N1–N5** — vedi il punto 7 (F9 fatta nella voce 26).
 4. **F3, resto**: restano ~30 avvisi `ASYNC240`, quasi tutti un singolo
    `exists()`/`getsize()` su disco locale. Lasciati di proposito.
 5. **Jellyfin con un server vero** — vedi sopra.
-6. **Note emerse:** a 80×24 il pannello History della TUI taglia il testo a
-   destra (si vede negli snapshot). `mypy mornye` nella venv locale 3.14
+6. **Note emerse:** a 80×24 il pannello History della TUI tagliava il testo
+   a destra (corretto nella voce 25). `mypy mornye` nella venv locale 3.14
    si ferma su uno stub di `numpy` (`python_version = "3.11"`); con
    `--python-version 3.12` resta 1 errore preesistente in
    `core/hires_check.py:469`. `hc-summary` è aggiornato da `app.js` ma non
    esiste più nell'HTML. Suite completa dopo J4: 2249 passati, 357 saltati
    (l'unico fallimento era un test da aggiornare, fatto nello stesso commit).
+7. **Chiusura delle voci aperte** (2026-11-16, sessione dedicata, branch
+   `claude/plan-rest-3e589f` da `2.0.7` a `bd1d93c`, un commit per voce,
+   non pushati). Confronto degli stili calcolati con lo strumento della
+   voce 22 (140 scenari), base presa da un checkout separato di `bd1d93c`.
+   - **F7 · accessibilità** (commit sotto). (a) Gli 11 `confirm()` nativi
+     diventano `askConfirm(domanda, {title, ok, danger})` → `Promise<bool>`,
+     che apre `#confirm-modal`: lo stesso dialogo a filetto degli altri
+     (`api-modal`), stretto (`.confirm-card`, `feedback.css`), su telefono
+     come foglio dal basso. Escape, sfondo e Cancel rispondono no; il Tab
+     resta nei due pulsanti; alla chiusura il focus torna dove era. Le
+     domande distruttive (cancella profilo/file/cronologia, svuota coda…)
+     hanno il pulsante `danger` e partono su Cancel, le altre sul pulsante
+     di conferma. `switchView()` resta sincrona: con modifiche non salvate
+     chiede e, su "Leave", richiama se stessa. (b) 18 elementi cliccabili
+     non controlli (pallini della finestra, versione e badge
+     d'aggiornamento ×5, dock, info del player, righe coda di Now Playing,
+     risultati di ricerca, recenti, righe di History, card di Explore e
+     degli album dell'artista, voci del selettore cartelle, righe della
+     libreria del Player) hanno `tabindex="0"`, `data-activate` e un ruolo;
+     un solo `keydown` in `app.js` trasforma Enter/Spazio sull'elemento
+     stesso nel suo clic (`makeActivatable()` per quelli creati in JS).
+     Lasciati: gli sfondi dei dialoghi (si chiudono con Escape e i
+     pulsanti) e le righe dei testi di Now Playing (centinaia di fermate di
+     Tab; il clic resta una scorciatoia del mouse). (c) `outline: none`:
+     una sonda (ogni controllo visibile di ogni vista, scheda e stato di
+     prova, transizioni spente, elemento e due antenati) trova un solo
+     controllo che a fuoco non cambia aspetto — la casella "Reset seen
+     history" di Following, presa da `#view-following input:focus` che le
+     toglieva l'anello per colorarle un bordo che una casella nativa non
+     disegna; ora la regola esclude caselle/radio come le altre della
+     vista. Gli altri `outline: none` sono campi che mostrano il fuoco sul
+     bordo. (d) `<img>` senza `alt`: due nel markup generato (miniature
+     della ricerca, copertina proposta in Local, ora anche passata da
+     `escHtml`). Test: `tests/test_frontend_a11y.py`. Confronto: cambiano
+     solo gli elementi nuovi del dialogo (nascosto); 0 differenze sul resto.
+     Provato con Playwright: dialogo in scuro/chiaro a 1280 e 375, Tab,
+     Escape, Enter su una card dei recenti.
+   - **Toast "fetching metadata…" durante la ricerca** (commit sotto).
+     Causa: in modalità ricerca `onFetch()` chiama `setFetchingState('start')`
+     (che apre l'avviso in basso a sinistra e blocca i recenti con
+     `fetching-disabled`), ma `app_handle_provider_search_results` in quel
+     ramo azzerava solo `isFetchingData` e il pulsante Fetch: l'avviso e il
+     blocco dei recenti restavano finché un fetch successivo non li
+     sostituiva. Ora i risultati chiamano `setFetchingState('hide')`. Stesso
+     difetto svuotando il campo durante una ricerca: la risposta arriva
+     scartata come vecchia e nessuno chiudeva l'avviso; ora lo chiude lo
+     svuotamento. Riprodotto sul checkout di base e verificato dopo
+     (Playwright: 1 avviso → 0, recenti sbloccati).
+   - **Orfano `hc-summary`** (commit sotto): `updateStatusSummary()` e le
+     sue 7 chiamate tolte; scrivevano in un'etichetta che non esiste più e
+     il conteggio lo mostra già la pillola `#status-overall`. Nessun
+     cambio di comportamento; `KNOWN_ORPHANS` ora è vuoto.
+   - **F6 · `app.py`** (commit sotto): 0 `except Exception: pass` (erano
+     21). `_push()` non solleva mai: un invio fallito va a
+     `_push_failed()`, log a debug sul logger `mornye_gui.app` (fuori da
+     `mornye`, il cui `UILogHandler` rimanderebbe il messaggio attraverso
+     lo stesso invio), con un blocco di rientro per thread. Tolti i 12
+     `try/except` attorno a sole chiamate `_push`; gli altri 8 (versione da
+     `pyproject`, massimizza, playcount, cronologia dei fetch, monitor
+     delle statistiche, ricerca del frontend) loggano a debug con
+     traceback; `remove_history_item` dice all'utente che non è riuscito
+     (`warn`). Restano ~50 casi negli altri moduli (`launcher.py` 4, poi 1–3
+     per file).
+   - **Riorganizzazione di Settings** (voce 14, commit sotto; proposta A
+     scelta dall'utente). Solo spostamenti di sezioni intere: id, campi e
+     salvataggio invariati. General = Appearance, Account, Logging · nuova
+     scheda **Sources** (`#tc-sources`, icona a onde) = Audio Sources,
+     Quality, Auth & APIs, Self-hosted Endpoints (da Extensions) ·
+     Download = Performance, Retry & Loop, Transcoding, Post-Download
+     Action, Profiles · Files = Download Location, Filename Format, Folder
+     Organization, Network Destinations (da Download) · Metadata, Status,
+     Extensions come prima (Extensions senza gli endpoint). A ≥1900px è
+     Files a restare su una colonna (ci sta il form largo delle
+     destinazioni), non più Download. Controllo: nessuna riga del markup
+     persa (multinsieme delle righe prima/dopo). Verificata in scuro a 1280
+     e in chiaro a 375, nessuno sbordo. Lo strumento di confronto ora
+     conosce la scheda `sources`.
+   - **Display di qualità dell'album** (commit sotto; opzione (a) scelta
+     dall'utente). `#album-quality` sotto artista/data nella scheda album:
+     all'apertura mostra la qualità chiesta in Settings, attenuata e
+     marcata (`REQ · LOSSLESS`, `REQ · HI-RES LOSSLESS`, `REQ · DOLBY
+     ATMOS`); quando un brano di quella scheda risulta `completed` nelle
+     statistiche (`app_update_download_stats`, confronto per id), il primo
+     file viene letto con la nuova API `probe_audio_quality(path)` (solo
+     `probe_audio`, senza spettrogramma; percorsi approvati come le altre;
+     nell'allowlist di `webapp.py`) e la lettura diventa reale sul segnale:
+     `24 / 96 · FLAC`, o `320 KBPS · MP3` per un file con perdita. Non
+     considera la qualità per servizio delle estensioni (`ext-quality`):
+     il "richiesto" è il livello globale. Verificato con la scheda di prova
+     e una risposta simulata della sonda, scuro a 1280 e chiaro a 375. Test:
+     `tests/test_album_quality_readout.py` (un WAV vero).
+   - **F1 · Content-Security-Policy** (commit sotto; prima `5fc8a2d`:
+     `probe_audio_quality` mancava in `REMOTE_METHODS` di `web-shim.js`,
+     quindi in `--web` il display di qualità restava "REQ"). (1) I 271
+     handler inline (208 in `index.html`, 62 nel markup di `app.js`, 1 in
+     `toast-system.js`) diventano `data-on<evento>="…"`, stesso codice.
+     `frontend/inline-handlers.js` li lega senza `eval` né `new Function`:
+     un tokenizer e un parser a precedenze per il sottoinsieme che usano
+     (chiamate, membri, `this`, `event`, letterali e array, `! - + === !==
+     == != < > <= >= && ||`, assegnazione, `if`, `return`), compilato una
+     volta per stringa; un listener vero sullo stesso elemento (stessa
+     fase dell'attributo), `return false` → `preventDefault`,
+     `this.onerror = null` toglie il listener (niente cicli sui fallback
+     delle immagini). Il markup aggiunto dopo è legato da un
+     `MutationObserver` prima che i suoi eventi possano arrivare. I nomi
+     sono globali di `window`; l'unico `const` usato dagli handler, `$`, è
+     registrato con `MornyeHandlers.expose()`. Un handler che non si
+     analizza resta morto con un errore in console: un test (node) li
+     analizza tutti. (2) Gli script inline escono in file: `boot-head.js`
+     (fogli con `?_=` e tema/accento prima del primo disegno),
+     `boot-body.js` (classi sul `<body>`), `boot-tail.js` (script dell'app
+     e service worker); `window.__MORNYE_WEB_MODE__` lo imposta
+     `web-shim.js`, non più uno script iniettato. `sw.js` li elenca
+     (`CACHE_NAME` v22). (3) `webapp.py`: la pagina manda
+     `Content-Security-Policy` con `script-src 'self'` (niente
+     `unsafe-inline`/`unsafe-eval`), `object-src 'none'`, `base-uri
+     'none'`, `form-action 'self'`, `frame-ancestors 'none'`,
+     `connect-src` limitato a questo host (anche `ws://`/`wss://`),
+     immagini e audio anche da `https:`/`http:` (copertine e anteprime dei
+     provider), `style-src` con `'unsafe-inline'` (gli `style=""` e
+     `el.style` restano; un hash non li copre) più `X-Frame-Options:
+     DENY`; ogni risposta `X-Content-Type-Options: nosniff` e
+     `Referrer-Policy: same-origin`. Verificato con Playwright sotto la
+     politica vera: clic reali sul rail e sulle schede di Settings, ripiego
+     `onerror` di un'immagine rotta, chiusura di un toast, dialogo di
+     conferma — 0 violazioni (`securitypolicyviolation`), nessun errore di
+     pagina. Confronto degli stili (144 scenari) contro `5fc8a2d`: solo uno
+     `<script>` in meno nel `<body>`, 0 differenze sugli elementi. Test: `tests/test_web_csp.py` (nessuno script/handler inline,
+     intestazioni, ogni handler analizzabile, semantica
+     dell'interprete); `test_webapp_pwa.py` aggiornato. **Da provare a
+     mano:** finestra pywebview (stessi file, nessuna CSP: deve solo
+     comportarsi come prima) e `--web` dietro un proxy che incornicia la
+     pagina (ora rifiutato da `frame-ancestors`).
+   - **M1 · `app.js` in moduli — rinviata, con le misure per farla.** La
+     finestra desktop carica la pagina dal server HTTP di pywebview
+     (`webview.start(http_server=True)`), non da `file://`: i moduli ES
+     si caricherebbero su tutti e tre i backend. Due ostacoli concreti:
+     (a) su Windows `mimetypes` legge il registro e può servire `.js` come
+     `text/plain`, che un `<script type="module">` rifiuta (uno classico
+     no): serve forzare il tipo nel server di pywebview o in `webapp.py`
+     prima; (b) i moduli non mettono le funzioni su `window`, e gli
+     handler `data-on*` le cercano lì (F1): ogni modulo dovrebbe
+     esportarle con `MornyeHandlers.expose()`. Una divisione in script
+     *classici* per vista conserva lo scope globale condiviso, ma sposta
+     il sollevamento delle `function` da tutto `app.js` al singolo file:
+     una chiamata fatta al caricamento verso una funzione di un file
+     successivo, se protetta da `typeof f === 'function'`, smetterebbe in
+     silenzio. Senza un parser JS (qui non c'è: niente acorn/esprima,
+     nessun download) non si può escludere in modo statico, e il
+     confronto a runtime non vede i rami solo-desktop. Ordine proposto:
+     (1) tipo MIME forzato; (2) divisione classica per sezioni `// ──`,
+     con un controllo statico (acorn) delle chiamate al caricamento;
+     (3) moduli vista per vista, con `expose()`.
+   - **M2 · le tre funzioni più intricate** (commit sotto). Complessità
+     (ruff C901): `create_app` 92 → 17, `build_v1_router` 53 → 2,
+     `amain` 73 → 46. `create_app`: otto gruppi di rotte diventano
+     funzioni di modulo (`_install_token_gate`,
+     `_register_multiuser_routes`, `_register_ops_routes`,
+     `_register_method_dispatch`, `_register_file_routes`,
+     `_register_websocket`, `_register_v1_api`, `_register_frontend`),
+     chiamate nello stesso ordine (l'ordine delle rotte conta: il
+     catch-all `/api/{method_name}` e il mount statico restano dopo).
+     Parametri ricavati con `symtable` (le variabili libere di ogni
+     funzione annidata); unico ritorno: `_register_v1_api` restituisce il
+     `DownloadService`, che la coda multi-utente in cima a `create_app`
+     legge quando un job parte. `build_v1_router`: sette gruppi
+     (`_instance_routes` … `_library_routes`). `amain`: i 23 comandi a
+     uscita anticipata (`--gui`, `--tui`, `--web`, `--web-user-*`,
+     `--stats`, `--health-check`, `--trust-key-*`, `--split-cue`,
+     `--dedup-*`, `--upgrade-library`, …) diventano `_cli_*()`; resta in
+     `amain` il percorso di download (lettura degli argomenti e
+     `_run_once`), da spezzare a parte. Nessun cambio di comportamento;
+     test web/API/CLI/TUI verdi.
+   - **M3 · `ruff` allargato, primo lotto** (commit sotto). `select`
+     aggiunge `RUF006`, `B`, `ASYNC`, `UP`; ignorati con motivo scritto in
+     `pyproject.toml`: `ASYNC109` (il parametro `timeout` è la convenzione
+     del codice), `ASYNC240` (il resto di F3: un solo `exists()`/`stat()`
+     su disco locale; lasciato apposta), `UP042` (`StrEnum` cambia `str()`
+     dei membri, che finiscono in config e API), `B009`/`B010`
+     (`getattr`/`setattr` con nome fisso dove l'attributo non è dichiarato:
+     la forma che scrive l'auto-fix la rifiuta mypy). `B008` accetta i
+     marcatori di FastAPI (`Body`, `Depends`, …). Correzioni: `UP`
+     automatiche (`datetime.UTC`, annotazioni senza virgolette, import da
+     `collections.abc`, `TimeoutError`); 12 `zip()` con `strict=False`
+     esplicito (comportamento invariato); 6 `raise … from`; i 7 `B023` con
+     il valore del giro legato (`functools.partial` nelle chiamate SMB e
+     WebDAV, argomento predefinito nei due helper del provider); i due
+     `ASYNC110` del codice sono attese su un lock/evento di *thread*, non
+     sostituibili con un `asyncio.Event`: commentati e marcati; la lettura
+     dei 12 byte di intestazione della WebP animata va in `to_thread`.
+     **Un bug vero (B025):** in `download_service.py` il ramo che aggiunge
+     "Retry identifier: …" a un errore di consegna su destinazione di rete
+     stava dietro un `except Exception` precedente e non girava mai; ora i
+     due rami sono uno solo e l'utente vede l'identificativo per
+     riprovare (test nuovo in `test_architecture_foundation.py`, verificato
+     che fallisce con un'attesa sbagliata). Nei test: `B017` con
+     `WebSocketDisconnect`, due eccezioni per file dove l'attesa bloccante
+     è voluta. `mypy` resta ai 3 errori preesistenti
+     (`core/env_settings.py:109`, `application/download_service.py`
+     ~246–247), uguali sul checkout di base. Prossimi lotti: `SIM`, `PERF`,
+     `BLE`/`S110` (i ~50 `except Exception: pass` fuori da `app.py`), poi
+     `RUF` intero.
+   - **M4 · test per il JavaScript** (commit sotto). `tests/js/*.test.mjs`
+     con `node:test`, senza dipendenze; li lancia `tests/test_js_unit.py`
+     (`node --test`, saltato senza node). `app.js` non si può importare
+     (al caricamento tocca il DOM): `tests/js/load.mjs` ritaglia dal
+     sorgente le funzioni di primo livello per nome e le esegue in un
+     contesto `vm`. Coperti: `escHtml`, `httpUrlOrNull` (rifiuta
+     `javascript:`/`data:`/`file:`), `formatEta`, `normalizeHistoryUrl`
+     (non scambia `open.spotify.com.evil.com`), `fmtTime`, `describeError`
+     (un tipo per errore), `formatAudioQuality`, e l'interprete degli
+     handler di F1 (chiamate, `if`, `expose()`, `return false`, errori mai
+     silenziosi, nessun `eval`). 12 test. Giro di fumo nel browser:
+     `tests/test_gui_smoke.py`, a richiesta (`MORNYE_TEST_BROWSER=1`,
+     extra `visual`): `mornye --web` su una HOME vuota, ogni vista e ogni
+     scheda di Settings con clic veri a 1280 e 375, sotto la CSP vera;
+     fallisce su errori di pagina, di console o violazioni CSP. Passa.
+   - **N2 · "Copia come comando CLI"** (commit sotto). Pulsante "CLI"
+     (icona prompt) nelle azioni della scheda album e brano singolo; copia
+     negli appunti la riga `mornye …` che fa lo stesso download con le
+     impostazioni attuali. Backend: `cli_preview.gui_command(url, cfg,
+     cartella)` mette `buildConfig()` sopra i default completi della TUI
+     (`ConfigState`), con gli stessi default `MORNYE_<SETTING>` di un
+     download dalla GUI (`gui_env_defaults()`), e la passa a
+     `format_command()` — la stessa resa del pannello Command della TUI,
+     quindi solo i flag che differiscono dai default della CLI. Le chiavi
+     solo-GUI (qualità per estensione, destinazione di rete, suoni) restano
+     fuori; `lyrics` → `embed_lyrics`; nessun timeout se la GUI non ne
+     manda. API `get_cli_command(url, config)` (allowlist e
+     `REMOTE_METHODS`). Appunti: `navigator.clipboard`, poi la selezione
+     di una textarea; se mancano entrambi il comando va in Logs. Una
+     ricerca (non un link) non ha comando: avviso. Verificato con
+     Playwright (album di prova, appunti letti: comando corretto; toast
+     "Command copied"), scuro a 1280 e chiaro a 375. Test:
+     `tests/test_cli_command_from_gui.py`. Nota: il suggerimento `data-tip`
+     dei pulsanti sul bordo sinistro esce dallo schermo sul telefono (vale
+     per tutti i pulsanti con `data-tip`, preesistente).
+   - **M5 · soglia di copertura** (commit sotto). Misurata sulla suite
+     completa (`5a7275b`, macOS, Python 3.14): **67%** (31.409 istruzioni,
+     10.282 non coperte; 2348 passati). In CI `--cov-fail-under` passa da
+     30 a 60: margine per i test che un runner salta (senza node, ffmpeg,
+     estensioni vere). Da verificare al primo push: Linux 3.11–3.14 e
+     macOS. Prossimo scatto: 65.
+   - **N1 · palette comandi e scorciatoie** (commit sotto).
+     `frontend/palette.js` (caricato dopo `app.js` da `boot-tail.js`, in
+     `sw.js`, `CACHE_NAME` v23): Ctrl+K / ⌘K apre un dialogo in alto con
+     33 comandi — le dieci viste, le sette schede di Settings, salva
+     impostazioni, barra link/ricerca, fetch, cambio link/ricerca, copia
+     comando CLI e scarica tutto (solo con una scheda aperta), drawer della
+     coda, avvia/ferma, riprova i falliti, controllo provider, play/pausa,
+     Now Playing, tema scuro/chiaro/sistema, rail. Filtro per parole in
+     qualsiasi ordine; ↑/↓, Invio, Esc; il focus torna dove era. Fuori da
+     un campo di testo `/` porta alla barra link/ricerca (come `/` nella
+     TUI) e `?` apre la palette. Ogni comando chiama una funzione che
+     `app.js` ha già: nessun comportamento nuovo. Aspetto in
+     `feedback.css` (famiglia dei dialoghi: filetti, voce attiva con la
+     barra segnale, scorciatoie come `kbd`). Verificato con Playwright a
+     1280 scuro e 375 chiaro (apre, filtra "set fil" → Settings → Files,
+     Invio, Esc, `/`), nessun errore. Test: `tests/test_command_palette.py`
+     (ogni funzione chiamata esiste, ogni scheda esiste, le scorciatoie non
+     scattano nei campi).
+   - **N4 · densità regolabile** (commit sotto). Settings → General →
+     Appearance → **Density**: Comfortable (default, invariato) /
+     Compact. Compact mette `data-density="compact"` su `<html>` e
+     `<body>`; `layout.css` toglie un passo a `--row` (32 → 28),
+     `--row-head` (28 → 24) e agli spazi grandi (`--space-3…8`: 12/16/20/
+     24/32 → 8/12/16/20/24), sempre sulla griglia di 4px; restano 4 e 8px,
+     gli spazi dentro un controllo. Tutto ciò che è costruito sui token
+     segue; le misure scritte in px nei fogli delle viste no (è il limite
+     di questa prima versione). Salvata come l'accento: `localStorage`
+     (`mornye-density`, applicata in `boot-head.js`/`boot-body.js` prima
+     del primo disegno), il blob delle impostazioni e `gui-settings.json`
+     (nuova API `save_density`, valori ammessi controllati). Verificato con
+     Playwright: scelta, `--row` 28px, sopravvive al ricaricamento, nessuno
+     sbordo, scuro a 1280 e chiaro a 375. Test: `tests/test_gui_density.py`.
+   - **N3 · parità TUI — Following fatto; Local ed Explore no** (commit
+     sotto). Pannello nuovo `tui/following_view.py` (voce "Following" nel
+     rail dopo Library, glifo ★/`*`, etichetta `--subscribe`): elenca le
+     iscrizioni dello stesso archivio di GUI e `--subscribe` (nome, tipo,
+     stato, intervallo, ultimo controllo, già viste, errore), segue un
+     nuovo link (Invio nel campo o "Follow"; scarica nella cartella del
+     pannello Download), mette in pausa/riprende e toglie quella
+     selezionata. Solo letture/scritture SQLite locali; il controllo delle
+     uscite resta allo scheduler e a `--subscribe-check` (rete e
+     download). Senza l'estensione `utilities` il tipo di un link non si
+     ricava e il pannello lo dice nella riga di stato, come la GUI.
+     Verificato con un render a 120×40 (schermata SVG) e con pilot. Test:
+     `tests/test_tui_following.py`. **Non fatti:** *Local* (tagging e
+     conversione di file locali: scansione lunga, anteprima delle
+     corrispondenze, applicazione per file — un flusso a più passi, non
+     una tabella) ed *Explore* (il feed è una griglia di copertine; in
+     terminale andrebbe ripensato come elenco di sezioni). Da fare ognuno
+     con la sua sessione. Nota: `tests/visual/capture_tui.py` ora cattura
+     13 pannelli; la baseline ne ha 12.
+   - **M6 e N5 — rinviate insieme, con le misure.** Inventario
+     (2026-11-16): `index.html` ha ~560 stringhe uniche (439 nodi di
+     testo, 124 attributi `placeholder`/`title`/`aria-label`/`data-tip`/
+     `alt`; ~2.300 parole); `app.js` almeno 340 letterali visibili (toast,
+     stati, titoli, `textContent`), quasi tutti in template con
+     interpolazioni e plurali. Un italiano che copre solo il markup
+     statico darebbe un'interfaccia metà italiana e metà inglese (righe,
+     toast, errori generati da JS) — la stessa ragione per cui la §5 vuole
+     un rilascio unico. Piano proposto: (1) `frontend/i18n.js` con
+     `t(chiave, variabili)` e plurali (`Intl.PluralRules`), dizionari in
+     `frontend/locales/en.json`/`it.json`, attributi `data-i18n` /
+     `data-i18n-attr` sul markup applicati da `boot-tail.js` prima di
+     `app.js`; (2) estrazione automatica del markup statico (uno script
+     che assegna chiavi stabili dall'`id`/contesto) con un test che rifiuta
+     testo nuovo fuori dizionario; (3) `app.js` vista per vista, insieme a
+     M1 (i moduli sono il momento naturale per passare ogni stringa da
+     `t()`); (4) N5: `it.json` completo e selettore lingua in General,
+     solo quando (1)–(3) coprono tutto. Testi del backend mostrati nella
+     GUI (`self.log(...)`, errori delle API) restano in inglese: da
+     decidere se tradurli o mostrarli come dettaglio.
+   **Stato di chiusura (2026-11-16):** fatte F7, toast di ricerca,
+   orfano `hc-summary`, F6 (`app.py`), riorganizzazione di Settings,
+   display di qualità, F1, M2, M3, M4, M5, N1, N2, N4; N3 in parte
+   (Following). **Ancora aperte:** M1 (piano sopra), M6 + N5 (piano
+   sopra), N3 Local ed Explore, F6 negli altri moduli (~50 casi, lotto
+   `BLE`/`S110` di M3), F3 resto (deliberato), Jellyfin con un server
+   vero, voce 31 (pywebview su macOS/Windows/Linux, Docker, PWA), mypy:
+   3 errori preesistenti (`core/env_settings.py:109`,
+   `application/download_service.py` ~246–247).
 
 ### Da sapere prima di toccare qualcosa
 

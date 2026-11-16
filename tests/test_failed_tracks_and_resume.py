@@ -58,6 +58,11 @@ def calls(monkeypatch) -> Any:
                 {
                     "url": list(request.sources),
                     "prefetched_tracks": dict(request.prefetched or {}),
+                    "m3u_playlist_tracks": getattr(
+                        getattr(self.provider_executor, "_options", None),
+                        "m3u_playlist_tracks",
+                        None,
+                    ),
                 }
             )
             return None
@@ -111,15 +116,42 @@ def test_retry_groups_keep_the_source_and_clear_takes_keys():
     tidal = "https://tidal.com/browse/playlist/b"
     failed_tracks.hook(source_url=tidal)(DownloadResult.fail("t", "e"), _track(5))
 
-    groups = dict(failed_tracks.retry_groups())
+    groups = {url: tracks for url, _, tracks in failed_tracks.retry_groups()}
     assert set(groups) == {PLAYLIST, tidal}
     assert groups[PLAYLIST][0]["id"] == "sp4"
 
     assert failed_tracks.clear(keys=[failed_tracks.track_key(_track(4))]) == 1
     assert [i["key"] for i in failed_tracks.list_for()] == [
-        failed_tracks.track_key(_track(5))
+        failed_tracks.failure_key(failed_tracks.track_key(_track(5)), tidal)
     ]
     assert failed_tracks.clear() == 1
+
+
+def test_a_track_missing_from_two_playlists_is_two_failures():
+    """Issue #277: each playlist gets its own retry, folder and M3U."""
+    other = "https://open.spotify.com/playlist/other"
+    failed_tracks.hook(source_url=PLAYLIST, playlist_name="Top 50 - India")(
+        DownloadResult.fail("t", "e"), _track(8)
+    )
+    failed_tracks.hook(source_url=other, playlist_name="Top 50 - Global")(
+        DownloadResult.fail("t", "e"), _track(8)
+    )
+
+    groups = {name: url for url, name, _ in failed_tracks.retry_groups()}
+    assert groups == {"Top 50 - India": PLAYLIST, "Top 50 - Global": other}
+
+    # Downloaded for one playlist: the other one's failure stays.
+    failed_tracks.hook(source_url=PLAYLIST)(
+        DownloadResult.ok("t", "/x.flac"), _track(8)
+    )
+    [left] = failed_tracks.list_for()
+    assert left["key"] == failed_tracks.failure_key(
+        failed_tracks.track_key(_track(8)), other
+    )
+
+    # Its list key picks that one failure only.
+    assert failed_tracks.clear(keys=[left["key"]]) == 1
+    assert failed_tracks.list_for() == []
 
 
 # ── Persisted download jobs ───────────────────────────────────────────────
@@ -165,6 +197,33 @@ def test_a_job_resumes_after_a_restart_without_the_tracklist(tmp_path, calls) ->
     assert (
         "app_download_finished" not in names
     ), "a restored job must not close a batch the new page dispatched"
+
+
+def test_a_followed_playlist_job_keeps_the_full_listing_for_m3u_refresh(
+    tmp_path, calls
+):
+    api = _api(tmp_path)
+    current_playlist = [_track(0), _track(1), _track(2)]
+    payload = {
+        "indices": [0],
+        "tracks": [_track(2).model_dump(mode="json")],
+        "playlist_tracks": [
+            track.model_dump(mode="json") for track in current_playlist
+        ],
+        "source_url": PLAYLIST,
+        "whole": False,
+        "playlist_name": "My Playlist",
+        "config": {"services": ["tidal"]},
+    }
+
+    api.run_download_job(payload)
+
+    [call] = calls
+    assert [track.id for track in call["m3u_playlist_tracks"]] == [
+        "sp0",
+        "sp1",
+        "sp2",
+    ]
 
 
 def test_a_whole_playlist_resumes_as_the_playlist(tmp_path, calls):
@@ -219,7 +278,7 @@ def test_a_batchs_failures_are_listed_with_their_source(tmp_path, monkeypatch):
 
     [item] = failed_tracks.list_for()
     assert item["title"] == "Song 1"
-    [(source, _)] = failed_tracks.retry_groups()
+    [(source, _, _)] = failed_tracks.retry_groups()
     assert source == PLAYLIST
 
 
@@ -236,6 +295,30 @@ def test_retry_submits_the_missing_tracks_as_a_background_job():
     assert "session" not in payload, "no open page dispatched a retry"
     # Still listed: only an actual download takes a track off the list.
     assert len(api.get_failed_tracks()["tracks"]) == 1
+    assert "playlist_name" not in payload, "no playlist was recorded"
+
+
+def test_a_retry_goes_back_to_the_playlist_folder_it_failed_in():
+    """Issue #277: a retried playlist track landed loose, off the M3U."""
+    failed_tracks.hook(source_url=PLAYLIST, playlist_name="Top 50 - India")(
+        DownloadResult.fail("t", "e"), _track(8)
+    )
+    api = MornyeAPI()
+    api._download_queue = _RecordingQueue()
+
+    api.retry_failed_tracks({"services": ["tidal"]})
+
+    [(_, payload)] = api._download_queue.jobs
+    assert payload["playlist_name"] == "Top 50 - India"
+    assert payload["whole"] is False
+
+
+def test_a_whole_playlist_job_records_its_name_only_for_failures(tmp_path):
+    api = _api(tmp_path)
+    api.current_playlist_name = "Hot Hits Hindi"
+    payload = api._download_job_payload([0], {})
+    assert payload["collection_name"] == "Hot Hits Hindi"
+    assert "playlist_name" not in payload, "would nest the folder twice"
 
 
 # ── webapp.py wiring ──────────────────────────────────────────────────────

@@ -97,10 +97,17 @@ class LegacyDownloadAdapter(ProviderExecutor):
             create_playlist_subfolders=config.output.playlist_subfolders,
             quality=config.download.quality,
             allow_fallback=config.download.allow_fallback,
+            preferred_service=config.download.preferred_service,
+            fallback_services=config.download.fallback_services,
             max_concurrent_downloads=config.download.max_concurrent,
             track_max_retries=config.download.retries,
             timeout_s=config.download.timeout,
             resume=config.download.resume,
+            metadata_delay_min_s=config.download.metadata_delay_min_s,
+            metadata_delay_max_s=config.download.metadata_delay_max_s,
+            provider_delay_min_s=config.download.provider_delay_min_s,
+            provider_delay_max_s=config.download.provider_delay_max_s,
+            auto_rate_limit_cooldown=config.download.auto_rate_limit_cooldown,
             embed_lyrics=config.lyrics.enabled,
             lyrics_providers=config.lyrics.providers,
             save_lrc=config.lyrics.save_lrc,
@@ -118,7 +125,7 @@ class LegacyDownloadAdapter(ProviderExecutor):
         options: object,
         prefetched: dict[str, TrackMetadata] | None = None,
         forward_metadata: bool = True,
-    ) -> "LegacyDownloadAdapter":
+    ) -> LegacyDownloadAdapter:
         from mornye.downloader import MornyeDownloader
         from mornye.extensions.provider import apply_legacy_endpoint_options
 

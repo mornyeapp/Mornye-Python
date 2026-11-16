@@ -4,7 +4,7 @@ import ast
 import logging
 import sqlite3
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -76,6 +76,11 @@ def test_mornye_config_can_be_built_from_legacy_options():
             quality="HI_RES_LOSSLESS",
             allow_fallback=False,
             max_concurrent_downloads=4,
+            metadata_delay_min_s=0.25,
+            metadata_delay_max_s=0.75,
+            provider_delay_min_s=1.0,
+            provider_delay_max_s=2.0,
+            auto_rate_limit_cooldown=False,
         )
     )
 
@@ -83,6 +88,11 @@ def test_mornye_config_can_be_built_from_legacy_options():
     assert cfg.download.quality == "HI_RES_LOSSLESS"
     assert cfg.download.allow_fallback is False
     assert cfg.download.max_concurrent == 4
+    assert cfg.download.metadata_delay_min_s == 0.25
+    assert cfg.download.metadata_delay_max_s == 0.75
+    assert cfg.download.provider_delay_min_s == 1.0
+    assert cfg.download.provider_delay_max_s == 2.0
+    assert cfg.download.auto_rate_limit_cooldown is False
 
 
 def test_application_imports_legacy_downloader_only_through_adapter():
@@ -188,7 +198,7 @@ def test_download_request_and_report_contract():
         album="Album",
         album_artist="Artist A",
     )
-    started_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    started_at = datetime(2024, 1, 1, tzinfo=UTC)
     finished_at = started_at + timedelta(minutes=2)
 
     report = DownloadReport(
@@ -245,9 +255,15 @@ def test_download_service_builds_structured_report_from_request():
 
 def test_download_service_builds_legacy_download_options_from_config():
     service = DownloadService()
+    config = MornyeConfig()
+    config.download.metadata_delay_min_s = 0.25
+    config.download.metadata_delay_max_s = 0.75
+    config.download.provider_delay_min_s = 1.0
+    config.download.provider_delay_max_s = 2.0
+    config.download.auto_rate_limit_cooldown = False
     request = DownloadRequest(
         sources=["spotify:track:abc123"],
-        config=MornyeConfig(),
+        config=config,
     )
 
     opts = service.legacy_options_for(request)
@@ -255,6 +271,11 @@ def test_download_service_builds_legacy_download_options_from_config():
     assert opts.output_dir == str(request.config.output.directory)
     assert opts.quality == request.config.download.quality
     assert opts.max_concurrent_downloads == request.config.download.max_concurrent
+    assert opts.metadata_delay_min_s == 0.25
+    assert opts.metadata_delay_max_s == 0.75
+    assert opts.provider_delay_min_s == 1.0
+    assert opts.provider_delay_max_s == 2.0
+    assert opts.auto_rate_limit_cooldown is False
 
 
 def test_download_service_uses_legacy_downloader_for_sources(monkeypatch):
@@ -294,8 +315,8 @@ def test_v1_download_route_uses_application_service_boundary():
                 succeeded=[DownloadResult.ok("tidal", "/tmp/example.flac")],
                 failed=[],
                 skipped=[],
-                started_at=datetime.now(timezone.utc),
-                finished_at=datetime.now(timezone.utc),
+                started_at=datetime.now(UTC),
+                finished_at=datetime.now(UTC),
             )
 
     app = FastAPI()
@@ -398,8 +419,8 @@ def test_async_client_exposes_application_download_entrypoint(monkeypatch):
             return DownloadReport(
                 succeeded=[DownloadResult.ok("tidal", "/tmp/track.flac")],
                 failed=[],
-                started_at=datetime.now(timezone.utc),
-                finished_at=datetime.now(timezone.utc),
+                started_at=datetime.now(UTC),
+                finished_at=datetime.now(UTC),
             )
 
     client = AsyncMornye(output_dir="./downloads", sync_extensions=False)
@@ -500,8 +521,8 @@ def test_async_client_batch_and_track_entrypoints_use_application_service(monkey
             succeeded=[],
             failed=[],
             skipped=[],
-            started_at=datetime.now(timezone.utc),
-            finished_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
+            finished_at=datetime.now(UTC),
         )
 
     async def boom(*args, **kwargs):
@@ -575,8 +596,8 @@ def test_run_download_from_cfg_uses_application_service_for_guided_downloads(
                 succeeded=[DownloadResult.ok("tidal", "/tmp/example.flac")],
                 failed=[],
                 skipped=[],
-                started_at=datetime.now(timezone.utc),
-                finished_at=datetime.now(timezone.utc),
+                started_at=datetime.now(UTC),
+                finished_at=datetime.now(UTC),
             )
 
     monkeypatch.setattr("mornye.launcher.DownloadService", FakeDownloadService)
@@ -1338,6 +1359,49 @@ def test_provider_resolver_orders_candidates_by_configured_services():
     request = DownloadRequest(sources=["spotify:track:abc123"], config=config)
 
     assert ProviderResolver().resolve(request) == ["deezer", "tidal"]
+
+
+def test_provider_resolver_tries_preferred_source_before_remaining_sources():
+    config = MornyeConfig()
+    config.download.services = ["tidal", "ext:qobuz-web", "deezer"]
+    config.download.preferred_service = "qobuz"
+    request = DownloadRequest(sources=["spotify:track:abc123"], config=config)
+
+    assert ProviderResolver().resolve(request) == ["qobuz", "tidal", "deezer"]
+
+
+def test_provider_resolver_can_limit_a_batch_to_the_preferred_source():
+    config = MornyeConfig()
+    config.download.services = ["tidal", "qobuz"]
+    config.download.preferred_service = "qobuz"
+    config.download.fallback_services = False
+    request = DownloadRequest(sources=["spotify:track:abc123"], config=config)
+
+    assert ProviderResolver().resolve(request) == ["qobuz"]
+
+
+def test_provider_resolver_does_not_replace_an_unavailable_preferred_source():
+    config = MornyeConfig()
+    config.download.services = ["tidal", "qobuz"]
+    config.download.preferred_service = "unavailable"
+    request = DownloadRequest(sources=["spotify:track:abc123"], config=config)
+
+    assert ProviderResolver().resolve(request) == []
+
+
+def test_provider_resolver_preference_overrides_extension_priority():
+    config = MornyeConfig()
+    config.download.services = ["tidal", "qobuz"]
+    config.download.preferred_service = "qobuz"
+    request = DownloadRequest(sources=["spotify:track:abc123"], config=config)
+    resolver = ProviderResolver(
+        [
+            ProviderProfile("tidal", priority=100),
+            ProviderProfile("ext:qobuz-web", priority=1),
+        ]
+    )
+
+    assert resolver.resolve(request) == ["ext:qobuz-web", "tidal"]
 
 
 def test_download_pipeline_prepares_source_and_provider_context():
@@ -2389,3 +2453,64 @@ def test_legacy_adapter_keeps_collection_links_on_collection_runner():
     asyncio.run(adapter.execute("legacy", playlist))
 
     assert calls == [playlist]
+
+
+def test_failed_smb_delivery_names_its_retry_identifier(tmp_path, monkeypatch):
+    """A DestinationError from the upload carries the staging folder's id, so
+    the user can retry the delivery. The branch that adds it sat behind an
+    earlier bare `except Exception` and never ran (M3, ruff B025)."""
+    from mornye.core import network_destinations
+
+    stage_dir = tmp_path / "delivery-abc123"
+    original_output_dir = tmp_path / "original"
+    monkeypatch.setattr(
+        network_destinations.DESTINATIONS,
+        "get",
+        lambda _id: SimpleNamespace(username="u"),
+    )
+    monkeypatch.setattr(
+        network_destinations.DESTINATIONS, "credentials", lambda _profile: "secret"
+    )
+
+    def create_stage(_owner=""):
+        stage_dir.mkdir()
+        return stage_dir
+
+    monkeypatch.setattr(network_destinations, "create_staging_directory", create_stage)
+
+    class FailingSMBBackend:
+        def __init__(self, *_args):
+            pass
+
+        def test_connection(self):
+            pass
+
+        def upload_tree(self, local_root, **_kwargs):
+            raise network_destinations.DestinationError("The share refused the write.")
+
+    monkeypatch.setattr(network_destinations, "SMBBackend", FailingSMBBackend)
+
+    class FakeDownloader:
+        def __init__(self):
+            self._opts = SimpleNamespace(output_dir=str(original_output_dir))
+
+        async def run_async(self, source):
+            output = Path(self._opts.output_dir) / "track.bin"
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(b"audio")
+            return DownloadResult.ok("legacy", str(output), source=source)
+
+    config = MornyeConfig()
+    config.output.directory = original_output_dir
+    config.output.network_destination_id = "destination1234"
+    request = DownloadRequest(
+        sources=["spotify:track:smb-fail"], config=config, prefetched={}
+    )
+    service = DownloadService(
+        event_bus=EventBus(),
+        provider_resolver=ProviderResolver([ProviderProfile("legacy")]),
+        provider_executor=LegacyDownloadAdapter(FakeDownloader()),
+    )
+    with pytest.raises(network_destinations.DestinationError) as err:
+        asyncio.run(service.download(request))
+    assert "Retry identifier: abc123" in str(err.value)

@@ -202,6 +202,7 @@ _MODE_GLYPHS: dict[str, tuple[str, str]] = {
     "staged": ("☰", "Q"),
     "queue": ("≡", "="),
     "history": ("↺", "h"),
+    "following": ("★", "*"),
     "session": ("◷", "@"),
     "extensions": ("⧉", "+"),
     "health": ("♥", "!"),
@@ -262,14 +263,29 @@ def status_badge(status: str, *, plain: bool | None = None) -> tuple[str, str]:
 
 
 def badge_text(label: str, *, plain: bool | None = None) -> str:
-    """A badge's text: padded for a filled pill, bracketed when it cannot be.
+    """A badge's text: a bracketed readout, ``[HI-RES]``.
 
-    The spaces are the badge — a background colour flush against the text
-    reads as a highlight, not a label.
+    The console look (redesign §2) draws badges as readouts in the signal
+    colour, not as filled pills, so the brackets are the badge in every
+    terminal; ``plain`` is accepted for the callers that pass it.
     """
-    if plain is None:
-        plain = plain_terminal()
-    return f"[{label}]" if plain else f" {label} "
+    return f"[{label}]"
+
+
+def header_line(width: int = 80, *, plain: bool | None = None) -> str:
+    """The one-line masthead: ``MORNYE 2.0.6 ── lossless, from the terminal``.
+
+    Replaces the block-letter wordmark (redesign §2, "Solo TUI"). Cut to
+    ``width`` so it never wraps.
+    """
+    released = version()
+    rule = glyph("──", "--", plain=plain)
+    line = (
+        f"MORNYE {released} {rule} {TAGLINE}"
+        if released
+        else f"MORNYE {rule} {TAGLINE}"
+    )
+    return line[: max(1, width)]
 
 
 # ---------------------------------------------------------------------------

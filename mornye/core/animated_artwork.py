@@ -19,6 +19,12 @@ MAX_ARTWORK_BYTES = 32 * 1024 * 1024
 _MAX_ARTWORK_SECONDS = 20
 
 
+def _read_head(path: Path, size: int) -> bytes:
+    """The first ``size`` bytes of a file (run in a thread from async code)."""
+    with path.open("rb") as handle:
+        return handle.read(size)
+
+
 class AnimatedArtworkError(Exception):
     """The artwork service or its media response could not be used."""
 
@@ -178,7 +184,7 @@ async def convert_stream_to_webp_async(
             process.kill()
             await process.communicate()
             raise
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             process.kill()
             await process.communicate()
             raise AnimatedArtworkError("ffmpeg timed out converting artwork") from exc
@@ -195,8 +201,7 @@ async def convert_stream_to_webp_async(
             or temporary_path.stat().st_size > MAX_ARTWORK_BYTES
         ):
             raise AnimatedArtworkError("ffmpeg produced an invalid or oversized WebP")
-        with temporary_path.open("rb") as converted:
-            header = converted.read(12)
+        header = await asyncio.to_thread(_read_head, temporary_path, 12)
         if len(header) < 12 or header[:4] != b"RIFF" or header[8:12] != b"WEBP":
             raise AnimatedArtworkError("ffmpeg output was not a WebP image")
 

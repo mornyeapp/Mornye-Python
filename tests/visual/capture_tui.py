@@ -3,7 +3,7 @@
 Fase 0, voce 2 of ``docs/redesign-plan.md``. Each of the twelve panels is
 opened through the sidebar and exported with ``App.export_screenshot`` at
 80×24 (the compact layout) and 120×40, in the default theme and in
-``mornye-light``. The result is a folder of SVGs to compare before and after
+``mornye-console-light``. The result is a folder of SVGs to compare before and after
 a change — by eye, or with ``--compare`` against a saved baseline.
 
 The app runs against an empty, throw-away home so that nothing from this
@@ -29,7 +29,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 
 SIZES: tuple[tuple[int, int], ...] = ((80, 24), (120, 40))
-THEMES: tuple[str, ...] = ("mornye-dark", "mornye-light")
+THEMES: tuple[str, ...] = ("mornye-console-dark", "mornye-console-light")
 
 #: Settling cycles after switching panel. The slowest panels in the suite
 #: (extensions, tracklist) need 15; a picture taken earlier is half drawn.

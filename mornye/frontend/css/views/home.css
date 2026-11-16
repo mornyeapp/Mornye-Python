@@ -1,0 +1,1540 @@
+/* frontend/css/views/home.css — Home in the console look (redesign voce 11):
+   hero, link/search bar, album card, track table, recent fetches.
+
+   The structure comes first (moved out of styles.css in voce 22); the
+   console look after it restates each property it changes (radii,
+   shadows, transforms included). Semantic tokens only; ids and
+   handlers untouched. Reference: docs/mocks/home.html. */
+
+/* Display face for the few titles that name a place or a record. */
+.hero-title, #album-title {
+  font-family: var(--font);
+  font-optical-sizing: auto;
+  font-variation-settings: 'SOFT' 50;
+}
+.hero-update-badge {
+  cursor: pointer;
+}
+
+.hero-update-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font);
+  font-weight: 700;
+  margin-left: 10px;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+/* ══════════ HOME VIEW ══════════ */
+#view-home { overflow: visible; }
+
+/* Centred, as before the sidebar: logo, name and version on one line,
+   the line of what it does under them, the search bar below. */
+#home-hero {
+  display: flex;
+}
+/* This was a bordered card around the title — a hard-edged rectangle
+   whose only content was the thing it framed, which is what made the
+   top of the window read as a box inside a box. The light it was
+   carrying is worth keeping; the edge is not, so the panel becomes a
+   radial glow that fades out before it reaches a border. */
+.hero-headline {
+  display: flex; align-items: center;
+  flex-wrap: wrap;
+}
+.hero-logo {
+  place-items: center;
+  gap: var(--space-2); text-align: center;
+}
+.hero-icon {
+  background: var(--brand-deep);
+  display: block;
+  object-fit: contain; padding: var(--space-2); box-sizing: border-box;
+}
+.hero-main {
+  /* Name and version on one line, centred on each other. */
+  display: flex; align-items: center; flex-wrap: nowrap;
+}
+.hero-version { flex-shrink: 0; }
+/* Keep the wordmark compact and let the system display face carry it. */
+.hero-title {
+  color: var(--text);
+}
+.hero-version {
+  display: inline-flex; align-items: center; justify-content: center;
+  box-shadow: none;
+}
+.hero-subtitle {
+  /* No single trailing word on its own line. */
+  text-wrap: balance;
+}
+
+/* The one line that says what the app is doing right now — see the
+   #status-bar comment in index.html for why it is not decorative. */
+.status-bar {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 15px;
+}
+.status-spinner {
+  display: none;
+  flex: none;
+  width: 11px; height: 11px;
+  border: 2px solid var(--rule-strong);
+  border-top-color: var(--signal);
+  border-radius: 50%;
+  animation: status-spin 0.7s linear infinite;
+}
+@keyframes status-spin { to { transform: rotate(360deg); } }
+
+.search-container {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+.search-container > * { position: relative; z-index: 1; }
+.mode-wrap {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.mode-btn {
+  font-size: 14px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* Set while a CSV is being matched — a file of titles is one catalogue
+   lookup per row, so the button stays busy for a while and the running
+   count sits in its tooltip. */
+.mode-btn.is-busy { border-color: var(--signal-strong); }
+.mode-btn.is-busy .mode-btn-icon { animation: csv-matching 1.2s ease-in-out infinite; }
+@keyframes csv-matching { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .mode-btn.is-busy .mode-btn-icon { animation: none; opacity: .7; }
+}
+.mode-btn-icon { display: inline-flex; align-items: center; justify-content: center; font-size: 14px; }
+.search-source {
+  max-width: 120px;
+  cursor: pointer;
+}
+/* Fetch mode shows the chain, Search mode the magnifier. The button
+   already gets .active in search mode, so the swap needs no JS — and
+   because these are `stroke: currentColor` SVGs they invert with the
+   button when .mode-btn.active turns it yellow, which an emoji could
+   not do. */
+.mode-btn-icon .icon-search,
+.mode-btn.active .mode-btn-icon .icon-link { display: none; }
+.mode-btn.active .mode-btn-icon .icon-search { display: block; }
+#searchModeText { display: none; }
+
+.url-wrap { 
+  flex: 1; /* Takes up exactly all the remaining space up to 820px */
+  position: relative; 
+  min-width: 0; 
+}
+.url-icon { position: absolute; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none; }
+/* 36px is the control height the whole app now uses — their h-9, applied
+   to the input, the two mode buttons and the fetch button so the search
+   bar is one continuous band of equal-height controls rather than three
+   different heights (40 / 40 / 44) sharing a row. */
+#urlInput {
+  width: 100%;
+}
+#urlInput:disabled { opacity: .45; }
+
+#fetchBtn {
+  padding: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+}
+#fetchBtn:disabled { opacity: .35; cursor: not-allowed; }
+
+#track-render-status {
+  padding: var(--space-2) var(--space-3);
+  line-height: 1.35;
+}
+
+/* Main split */
+#main-split { flex: 1; display: flex; overflow: visible; min-height: 0; }
+
+/* Result panel */
+#result-panel { flex: 1; display: flex; flex-direction: column; overflow: visible; min-width: 0; }
+
+/* Album card */
+#album-card {
+  width: 100%;
+  display: flex; align-items: flex-start;
+  flex-shrink: 0; position: relative; overflow: hidden;
+}
+#album-card.hidden { display: none; }
+/* Artwork-derived glow: app.js samples the cover's average colour once
+   it loads and sets --album-glow on this element; unset (no JS support,
+   CORS-blocked canvas read, or no cover) it falls back to transparent —
+   the card is exactly the flat --surface it was before. Sits behind
+   #album-card's own content (z-index:0 vs the >* rule below) and is
+   capped low-alpha so it reads as ambient light, not a tinted panel. */
+#album-card::before {
+  content: '';
+  position: absolute; inset: -20%;
+  background: radial-gradient(ellipse at 0% 0%, var(--album-glow, transparent) 0%, transparent 65%);
+  opacity: .5;
+  pointer-events: none;
+  z-index: 0;
+}
+#album-card > * { position: relative; z-index: 1; }
+/* The card is a cover plus a text column whose every line is short, so
+   the right third of it was always empty. #album-tech fills that with
+   the facts a download actually carries — label, the ℗ line, ISRC/UPC,
+   runtime — in a column of its own, divided off with a hairline. It
+   hides itself when there is nothing to show (artist pages), and it
+   drops below the text column on a narrow window (see the media query)
+   rather than crushing either side. */
+#album-tech {
+  flex-shrink: 0;
+  align-self: stretch;
+  display: flex; flex-direction: column;
+}
+#album-tech.hidden { display: none; }
+#album-tech .tech-row { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+#album-tech .tech-k {
+  text-transform: uppercase;
+}
+#album-tech .tech-v {
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  /* A copyright line runs long; four lines is plenty of it, the rest is
+     on the title attribute. */
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4;
+  overflow: hidden;
+  /* body sets user-select: none window-wide; an ISRC or a catalogue
+     number is here specifically to be copied out. */
+  user-select: text; -webkit-user-select: text;
+}
+#album-tech .tech-barcode {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  width: 100%; padding: 10px 10px 7px; border: 0;
+  background: var(--paper); color: var(--ink); cursor: pointer; font: inherit;
+}
+#album-tech .tech-barcode-svg { width: 100%; height: 56px; display: block; fill: var(--ink); }
+#album-tech .tech-barcode-num {
+  font-family: var(--font); font-size: 11.5px; font-weight: 600;
+  letter-spacing: .18em; color: var(--ink);
+}
+#album-tech .tech-barcode:hover { filter: brightness(.94); }
+#album-cover {
+  flex-shrink: 0;
+  border: 1px solid var(--rule);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 42px; overflow: hidden; position: relative;
+}
+#album-cover img {
+  width: 100%; height: 100%; object-fit: cover;
+  filter: blur(0); opacity: 1;
+  transition: filter var(--motion) var(--ease), opacity var(--motion) var(--ease);
+}
+/* Blur-up: app.js sets this class the instant the <img> is inserted and
+   clears it once decode() resolves — on a cached/local image that's one
+   frame (no visible flicker), on a slow remote cover it's the difference
+   between an empty tile and something recognisable while the real
+   pixels arrive. */
+#album-cover img.cover-loading {
+  filter: blur(14px);
+  opacity: .65;
+  transform: scale(1.04); /* hides the blur's soft edge against the tile's border */
+}
+#album-cover:hover .cover-download-btn { opacity: 1; }
+.cover-download-btn {
+  position: absolute; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center;
+  background: var(--overlay); border-radius: var(--radius-2); opacity: 0; transition: all 0.2s ease;
+  border: none; cursor: pointer; color: var(--text); font-family: inherit;
+}
+.cover-download-btn:hover { background: rgba(var(--shade-rgb), 0.85); transform: scale(1.1); }
+.cover-download-btn svg { width: 24px; height: 24px; }
+.cover-download-btn.loading svg { animation: spin 0.8s linear infinite; }
+.cover-download-btn.success { background: var(--ok); opacity: 1; }
+.cover-download-btn.error { background: var(--error); opacity: 1; }
+.cover-download-btn.success:hover, .cover-download-btn.error:hover { cursor: default; transform: none; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+/* The cover is the tallest thing in the card, so the text column is
+   always shorter — the question is only where its leftover height goes.
+   Top-aligned put all of it under the buttons (a card that stopped
+   halfway down); bottom-aligned put all of it above them (a hole
+   between the artist and the actions). Centred, it splits in two and
+   reads as margin on both sides of a block set against the artwork,
+   which is what it actually is. */
+#album-info {
+  flex: 1; min-width: 0;
+  align-self: stretch;
+  display: flex; flex-direction: column; justify-content: center;
+}
+#album-type-badge {
+  display: inline-block;
+  /* #album-info is a flex column now, and a flex item stretches to the
+     column's width by default — which turned this pill into a full-width
+     bar. It sizes to its own text again. */
+  align-self: flex-start;
+  margin-bottom: 10px;
+}
+#album-type-badge:empty { display: none; }
+/* The album name is the subject of the card and sits beside ~270px of
+   artwork; at --fs-600 it read as a caption next to a poster. --fs-700
+   gives the text column enough mass to hold its own half of the card,
+   which is also what stops the space between it and the buttons from
+   reading as a gap rather than as breathing room. Clamped at two lines
+   so a long title cannot push the layout around. */
+#album-title {
+  margin-bottom: var(--space-1); overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical;
+}
+#album-subtitle {
+  font-size: var(--text-lg); color: var(--text-2); margin-bottom: 12px;
+  line-height: 1.5;
+}
+/* Not display:none by default — app.js's updateAlbumMeta() already
+   toggles this per fetch (hidden for an album, where the artist is
+   folded into #album-subtitle instead; shown for a track/single, where
+   #album-subtitle is hidden and this span is the only place the artist
+   name appears at all). A hardcoded display:none here silently beat
+   that toggle every time, since JS setting style.display='' just falls
+   back to this rule instead of overriding it — a single track fetch
+   showed a title with no artist under it, no matter what the JS did. */
+#album-artist {
+  display: inline;
+}
+/* Clickable artist name — app.js's artistNameHtml() only ever wraps a
+   name in this span when a real artist_url resolved, so the cursor/
+   hover treatment never shows on a name that goes nowhere. */
+.artist-link {
+  cursor: pointer;
+  transition: color var(--motion) var(--ease);
+}
+.artist-link:hover { color: var(--signal-text); text-decoration: underline; }
+/* "Drake · 2026-05-15 · 18 tracks" was one flat grey line in which the
+   only clickable thing looked exactly like the two facts either side of
+   it. The artist steps forward (it is the name of the thing, and the
+   one part that does something when clicked); the date and the count
+   step back to a supporting weight. */
+#album-subtitle .artist-link {
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+#album-meta {
+  margin-bottom: 12px;
+  display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+}
+#album-meta.no-artist .dot-sep { display: none; }
+#album-meta-details {
+  font-size: var(--text-md); color: var(--text-2); margin-bottom: 12px;
+  display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+}
+.owner-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--raised); display: inline-grid; place-items: center;
+  color: var(--text); font-weight: 700; font-size: var(--text-md); flex-shrink:0;
+  border: 1px solid var(--rule); margin-right: 6px;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.owner-avatar.hidden { display: none; }
+#album-description {
+  font-size: var(--text-lg); color: var(--text-2); line-height: 1.55;
+  margin-bottom: 12px; display: none; max-height: 4.65em;
+  overflow: hidden; text-overflow: ellipsis;
+  -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical;
+}
+#album-description.visible {
+  display: -webkit-box;
+  display: block;
+}
+/* margin-top, not auto: an auto margin here would eat all the free
+   height and defeat #album-info's centring. A fixed step just sets the
+   buttons apart from the text above them. */
+#album-actions { display: flex; flex-wrap: wrap; }
+/* Single-track view only (app.js's showSingleTrackCard) — quality +
+   duration chips under the action row, filling what was otherwise dead
+   space below the buttons on a short left column next to the taller
+   technical-sheet column. */
+.track-quality-row { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-4); }
+.track-quality-row.hidden { display: none; }
+.track-quality-chip {
+  display: inline-flex; align-items: center;
+  padding: var(--space-1) var(--space-3); border-radius: var(--radius-2);
+  background: var(--raised); border: 1px solid var(--rule);
+  color: var(--text-2); font-family: var(--font);
+  font-size: var(--text-sm); letter-spacing: 0.04em;
+}
+
+/* Track controls */
+#track-controls {
+  width: 100%; /* ADDED: forces the container to take up all the space */
+  display: flex; gap: var(--space-4); align-items: center; flex-shrink: 0;
+  justify-content: space-between;
+  padding: 0 14px; /* MODIFICATO: da 32px a 14px per allinearlo alla tabella */
+}
+#track-search-wrap { 
+  flex: 1; 
+  position: relative; 
+  min-width: 0; /* Impedisce che la barra rompa il layout restringendo la finestra */
+}
+.sort-wrap { 
+  flex-shrink: 0; /* Impedisce che il menu si rimpicciolisca o si sposti male */
+}
+#trackSearch {
+  width: 100%; padding: 7px 11px 7px 30px;
+  outline: none; transition: border-color var(--motion) var(--ease);
+  user-select: text;
+}
+#trackSearch::placeholder { color: var(--text-muted); }
+.ts-icon {
+  position: absolute; left: 9px; top: 50%; transform: translateY(-50%);
+  color: var(--text-muted); pointer-events: none; font-size: var(--text-lg);
+}
+.sort-wrap { display: flex; align-items: center; gap: 6px; }
+#sort-select {
+  padding: 6px 28px 6px 10px; background-color: var(--raised);
+  border: 1.5px solid var(--rule); border-radius: var(--radius-1);
+  color: var(--text-2); font-family: var(--font); font-size: var(--text-md);
+  outline: none; cursor: pointer;
+  background-position: right 8px center;
+}
+
+/* ── Text Search Results ── */
+#text-search-container {
+  padding: 0 var(--space-5) var(--space-3);
+  border-bottom: 1px solid var(--rule);
+  max-width: 100%;
+}
+/* ── Search results panel (tab-based) ─────────────────────────────────── */
+#text-search-results {
+  display: flex;
+  flex-direction: column;
+}
+
+.sr-panel {
+  overflow: hidden;
+}
+
+/* Tab bar */
+.sr-tab-bar {
+  display: flex;
+  align-items: stretch;
+  background: var(--raised);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.sr-tab-bar::-webkit-scrollbar { display: none; }
+
+.sr-tab {
+  padding: 10px var(--space-4);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  transition: color var(--motion) var(--ease), border-color var(--motion) var(--ease);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sr-tab-badge {
+  font-family: var(--font);
+  font-size: var(--text-xs);
+  padding: 1px 6px;
+  font-weight: 600;
+}
+
+/* Filter row */
+.sr-filter-row {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--surface);
+}
+.sr-filter-input {
+  width: 100%;
+  padding: 6px 10px;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color var(--motion) var(--ease);
+}
+.sr-filter-input::placeholder { color: var(--text-muted); }
+
+/* Results list */
+.sr-tab-content {
+  display: flex;
+  flex-direction: column;
+  max-height: 380px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule-strong) transparent;
+}
+.sr-tab-content::-webkit-scrollbar { width: 4px; }
+.sr-tab-content::-webkit-scrollbar-thumb { background: var(--rule-strong); border-radius: 99px; }
+
+/* Individual result row */
+.search-result-item {
+  padding: var(--space-3) 14px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  cursor: pointer;
+}
+.search-result-item:last-child { border-bottom: none; }
+
+.search-result-thumbnail {
+  background: var(--selected);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-xl);
+  flex-shrink: 0;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+}
+.search-result-thumbnail img { width: 100%; height: 100%; object-fit: cover; }
+
+.search-result-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+.search-result-title {
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.search-result-meta {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sr-duration {
+  font-family: var(--font);
+  flex-shrink: 0;
+}
+
+.search-result-empty {
+  padding: 28px 14px;
+  color: var(--text-muted);
+  font-size: var(--text-md);
+  text-align: center;
+}
+
+/* Track table */
+
+#track-table-wrap {
+  flex: 1; overflow: visible; min-height: 0;
+  /* Column collapse below (@container tracktable) reacts to this
+     element's own width, not the viewport's — correct today since it's
+     always full-bleed, and correct if it's ever dropped into a narrower
+     split/sidebar layout later without redoing the breakpoints.
+     width:100% looks redundant next to flex:1, but it isn't: a flex
+     item with flex-basis 0% (what `flex:1` shorthand sets) normally
+     gets its size from the flex algorithm regardless of content — until
+     container-type adds size containment, which for a "flex-basis:0
+     + containment" combination made Chrome compute this item's box as
+     near-zero (confirmed live: dropped to 36px) instead of filling the
+     row. An explicit width gives it a definite size the flex algorithm
+     no longer needs to derive, sidestepping the interaction. */
+  width: 100%;
+  container-type: inline-size;
+  container-name: tracktable;
+}
+#track-table-wrap::-webkit-scrollbar { width: 4px; }
+#track-table-wrap::-webkit-scrollbar-thumb { background: var(--rule-strong); border-radius: 99px; }
+/* "Actions" over a right-aligned button cluster — was left-aligned, so
+   the word floated on its own halfway across an otherwise idle column. */
+.track-table-header > div:nth-child(6) {
+  text-align: right; padding-right: 4px;
+}
+#pagetion-controls {
+  display: flex; justify-content: center; align-items: center;
+  gap: var(--space-2); padding: var(--space-4) var(--space-2);
+  margin: 0 auto; max-width: 100%; font-size: var(--text-md);
+}
+#page-info { color: var(--text-muted); min-width: 120px; text-align: center; font-family: var(--font); }
+/* Per-row download progress — app.js's syncTrackRowsWithQueue() mirrors
+   each queue item onto its row (matched by data-spotify-id, so it
+   survives a re-sort) whenever the queue re-renders, setting
+   --row-progress and toggling .dl-active. A thin bar along the row's
+   own bottom edge means "how is *this* download doing" reads without
+   leaving the table for the queue drawer. */
+.track-row.dl-active::after {
+  content: '';
+  position: absolute; left: 0; bottom: 0;
+  width: var(--row-progress, 0%);
+}
+.tr-num {
+  text-align: left; padding-right: 6px;
+}
+.tr-title-cell { display: flex; align-items: center; min-width: 0; }
+.tr-info { display: flex; flex-direction: column; }
+
+/* Cover thumbnail next to title */
+.tr-thumb {
+  background: var(--selected); flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; overflow: hidden;
+  background-size: cover; background-position: center;
+  transition: transform var(--motion) var(--ease);
+}
+.tr-thumb img { width: 100%; height: 100%; object-fit: cover; }
+/* Neutralized by the global reduced-motion rule further down. */
+
+.tr-info { min-width: 0; }
+.tr-name {
+  white-space: normal; /* allow wrapping vertically */
+  overflow: visible; /* don't clip */
+  word-break: break-word;
+  display: block;
+  gap: 5px;
+}
+.explicit-badge {
+  font-size: 8.5px;
+  padding: 1px var(--space-1);
+  flex-shrink: 0;
+}
+.tr-artist { white-space: normal; overflow: visible; text-overflow: unset; }
+
+.tr-dur { text-align: right; }
+.tr-playcount {
+  display: flex; align-items: center; justify-content: center;
+  text-align: center; white-space: normal; overflow: visible;
+  word-break: break-word; line-height: 1.2;
+}
+
+/* Spacing between duration and actions */
+.tr-dur { padding-right: 22px; }
+.tr-actions { margin-left: 10px; }
+
+/* Action area. Download is the one thing a row is for, so it is the only
+   button shown at rest; lyrics / preview / cover / open are identical on
+   every one of 25+ rows, which turns them into noise, so they wait for
+   the row to be hovered or to hold keyboard focus. The column keeps its
+   width whichever state it is in — the hidden buttons still take their
+   space — so a row never reflows as the pointer crosses it. */
+.tr-actions { display: flex; gap: 3px; align-items: center; justify-content: flex-end; width: 100%;}
+.ta-btn {
+  cursor: pointer; font-size: var(--text-md);
+  display: flex; align-items: center; justify-content: center;
+  transition: all var(--motion) var(--ease); flex-shrink: 0;
+  position: relative;
+}
+.ta-btn:hover { background: var(--selected); border-color: var(--rule-strong); color: var(--text-2); }
+.tr-actions .ta-btn:not(.dl) {
+  opacity: 0;
+  transition: opacity var(--motion) var(--ease), background var(--motion) var(--ease), border-color var(--motion) var(--ease), color var(--motion) var(--ease);
+}
+.track-row:hover  .tr-actions .ta-btn:not(.dl),
+.track-row:focus-within .tr-actions .ta-btn:not(.dl) {
+  opacity: 1;
+}
+
+/* No hover to reveal them with — keep the whole set visible. */
+@media (hover: none) {
+  .tr-actions .ta-btn:not(.dl) { opacity: 1; }
+}
+.ta-btn.dl:hover { background: var(--signal); }
+
+/* Tooltip — .ta-btn and .act-btn[data-tip] were two copies of the same
+   above-anchored bubble (only the offset differed by 1px, not a real
+   distinction); merged into one rule. The sidebar's .nav-btn[data-label]
+   tooltip (further down) stays separate — it anchors to the side with a
+   border + drop shadow, a deliberately richer treatment for the rail. */
+.ta-btn::after,
+.act-btn[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute; bottom: calc(100% + 6px); left: 50%;
+  transform: translateX(-50%);
+  background: var(--selected); color: var(--text);
+  font-family: var(--font); font-size: var(--text-xs);
+  padding: 3px 7px; border-radius: 4px; white-space: nowrap;
+  pointer-events: none; opacity: 0; transition: opacity .15s;
+  z-index: 100;
+}
+.act-btn[data-tip] { position: relative; }
+.ta-btn:hover::after,
+.act-btn[data-tip]:hover::after { opacity: 1; }
+
+/* ── RECENT FETCHES ── */
+#recent-wrap { 
+  padding: 24px 0 0; 
+  overflow: visible; 
+  min-height: 0; 
+}
+
+/* New container to align it with the Search Bar */
+.recent-container {
+  width: 100%;
+}
+.list-container {
+  width: 100%;
+  /* Was 820px. The album card lives here and now has a third column;
+     the tracklist below keeps its own 950px cap and stays centred
+     inside the wider track. */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+/* Same ultrawide tiers the track table below already uses, so the card
+   and the list stay the same width instead of stepping in and out of
+   alignment. It also stops #album-actions wrapping its last icon button
+   onto a line of its own: at 960px the three buttons are ~30px wider
+   than the middle column, which is the whole reason it wrapped. */
+#recent-grid {
+  display: grid;
+  /* auto-FILL, not auto-fit. auto-fit collapses the empty tracks and
+     lets the surviving ones absorb the freed space, so a single recent
+     fetch stretched across the full 820px row — and since .rc-cover is
+     aspect-ratio 1, that made the artwork ~780px tall. auto-fill keeps
+     the empty tracks, so one card is one card whatever the count. */
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  justify-content: start;
+  gap: var(--space-3);
+  width: 100%;
+  margin: 0 auto;
+}
+.recent-card {
+  width: 100%;
+  max-width: none;
+}
+/* Recent *searches* share this grid but are one-line rows, not artwork
+   tiles — a 120px track would squeeze and truncate them — so the grid
+   drops to a single full-width column for them (see the .searches class
+   set by renderRecentSearches()). */
+/* Recent *searches* are chips that wrap, not cards in a grid: each one is
+   a couple of words, and a row apiece meant five past queries filled the
+   screen. display:flex overrides the artwork grid the same element uses
+   for recent fetches. */
+#recent-grid.searches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.search-chip {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  max-width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface); border: 1px solid var(--rule);
+  border-radius: var(--radius-2);
+  color: var(--text); font-family: var(--font); font-size: var(--text-md);
+  cursor: pointer;
+  transition: background var(--motion) var(--ease), border-color var(--motion) var(--ease), color var(--motion) var(--ease);
+}
+.search-chip:hover { background: var(--raised); border-color: var(--signal-strong); color: var(--text); }
+.search-chip .rc-search-icon { color: var(--text-muted); }
+.search-chip:hover .rc-search-icon { color: var(--signal-text); }
+/* A pasted URL can be a search too, and one of those is 90 characters —
+   it gets an ellipsis rather than a chip the width of the window. */
+.search-chip-text {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 340px;
+}
+.rc-search-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.recent-card {
+  overflow: hidden; cursor: pointer;
+}
+.recent-card.active {
+  background: var(--selected);
+  transform: scale(1.04);
+}
+.rc-cover {
+  width: 100%; aspect-ratio: 1; background: var(--selected);
+  background-size: cover; background-position: center;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 35px; color: var(--text-muted);
+  position: relative;
+}
+.rc-remove {
+  position: absolute; top: 7px; right: 7px;
+  width: 24px; height: 24px;
+  border: none; border-radius: 999px;
+  background: var(--overlay); color: var(--text);
+  font-size: var(--text-sm); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity .2s ease;
+}
+.recent-card:hover .rc-remove { opacity: 1; }
+.rc-remove:hover { background: var(--error) !important; opacity: 1 !important; }
+.rc-info { padding: var(--space-2) 10px 10px; display: flex; flex-direction: column; gap: 2px; }
+.rc-title { font-size: var(--text-sm); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rc-sub { font-size: var(--text-xs); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rc-badge {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  font-size: 9px; font-weight: 600; letter-spacing: .01em;
+  padding: 2px 6px; border-radius: 999px;
+  align-self: flex-start; margin-top: 5px;
+}
+/* Was per-card inline color/background from a JS BADGE_CFG map — moved
+   to the same util-color families used elsewhere (lyrics/preview/cover/
+   link) so a recent-fetch type reads with the app's existing palette
+   instead of its own one-off hues. */
+.rc-badge.track    { color: var(--text-2);  background: transparent; }
+.rc-badge.album    { color: var(--ok); background: transparent; }
+.rc-badge.artist   { color: var(--text-2); background: transparent; }
+.rc-badge.playlist { color: var(--text-2);   background: transparent; }
+
+/* Reduced motion: see the note in layout.css. */
+@media (prefers-reduced-motion: reduce) {
+  .status-spinner,
+  .cover-download-btn.loading svg {
+    animation-duration: 2.4s !important;
+    animation-iteration-count: infinite !important;
+  }
+  #fetchBtn:hover, #fetchBtn:active, .recent-card:hover {
+    transform: none;
+  }
+}
+
+/* Forced colours: see the note in layout.css. */
+@media (forced-colors: active) {
+  #fetchBtn, .mode-btn, .ta-btn {
+    forced-color-adjust: none;
+    border: 1px solid ButtonText;
+  }
+  .mode-btn.active {
+    background: Highlight; color: HighlightText; border-color: HighlightText;
+  }
+  #fetchBtn, .ta-btn.dl {
+    background: Highlight; color: HighlightText; border-color: HighlightText;
+  }
+}
+
+  /* ── SINGLE TRACK CARD ENHANCEMENTS ── */
+#album-cover .cover-duration {
+  position: absolute; bottom: 6px; right: 6px;
+  background: var(--overlay); color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-xs); font-weight: 700;
+  padding: 3px 7px; border-radius: 4px;
+  pointer-events: none; z-index: 2;
+}
+.track-explicit-title {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--error); color: var(--text);
+  font-family: var(--font);
+  font-size: 9px; font-weight: 700;
+  width: 16px; height: 16px; border-radius: 3px;
+  vertical-align: middle; margin-left: 7px; flex-shrink: 0;
+}
+/* The single-track card's below-the-title meta grid (.track-meta-grid) was
+   replaced by #album-tech — the card's right-hand column — which carries the
+   same fields plus ISRC and label. #track-meta-section is kept in the markup
+   as an empty, hidden container so the JS that clears it stays harmless. */
+
+/* ── ARTIST VIEW: sections Albums + Tracks ── */
+.artist-albums-grid {
+  max-width: min(100%, 950px); margin: 0 auto 4px;
+  padding: 0 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+.artist-album-card {
+  background: var(--surface); border: 1px solid var(--rule);
+  border-radius: var(--radius-2); overflow: hidden; cursor: pointer;
+  transition: border-color var(--motion) var(--ease), transform .15s, box-shadow .15s;
+}
+.artist-album-card:hover {
+  border-color: var(--signal); transform: translateY(-2px);
+  box-shadow: none;
+}
+.aac-cover {
+  width: 100%; aspect-ratio: 1; background: var(--raised);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px; overflow: hidden;
+  position: relative;
+}
+.aac-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Downloading a whole album is now a deliberate press on this, not a side
+   effect of clicking the card (which opens the album). Hidden until the card
+   is hovered or holds focus, the same way the per-row track actions are —
+   twenty covers each wearing a button is noise. */
+.aac-dl {
+  position: absolute; right: 8px; bottom: 8px;
+  width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--signal); color: var(--signal-ink);
+  border: none; cursor: pointer;
+  box-shadow: none;
+  opacity: 0; transform: translateY(4px);
+  transition: opacity var(--motion) var(--ease), transform var(--motion) var(--ease), background var(--motion) var(--ease);
+}
+.artist-album-card:hover .aac-dl,
+.artist-album-card:focus-within .aac-dl { opacity: 1; transform: none; }
+.aac-dl:hover { background: var(--signal); }
+
+@media (hover: none) {
+  .aac-dl { opacity: 1; transform: none; }
+}
+.aac-body { padding: var(--space-2) 10px 10px; }
+.aac-name {
+  font-size: 11.5px; font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px;
+}
+.aac-meta { font-size: var(--text-xs); color: var(--text-muted); }
+/* ── ARTIST TABS ── */
+.artist-tabs-bar {
+  max-width: min(100%, 950px); margin: 14px auto 0;
+  padding: 0 14px;
+  display: flex; gap: 2px;
+  border-bottom: 2px solid var(--rule);
+}
+.artist-tab {
+  padding: var(--space-2) 18px;
+  font-size: 12.5px; font-weight: 600;
+  color: var(--text-muted); background: none; border: none;
+  border-bottom: 2px solid transparent; margin-bottom: -2px;
+  cursor: pointer; font-family: var(--font);
+  transition: color var(--motion) var(--ease), border-color var(--motion) var(--ease);
+  white-space: nowrap;
+}
+.artist-tab:hover { color: var(--text-2); }
+.artist-tab.active { color: var(--text); border-bottom-color: var(--signal); }
+
+/* Gallery */
+.artist-gallery-grid {
+  max-width: min(100%, 950px); margin: 12px auto;
+  padding: 0 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+}
+.artist-gallery-img {
+  width: 100%; aspect-ratio: 1; object-fit: cover;
+  border-radius: 10px; border: 1.5px solid var(--rule);
+  cursor: pointer; transition: transform .15s, border-color var(--motion) var(--ease);
+  display: block;
+}
+.artist-gallery-img:hover { transform: scale(1.02); border-color: var(--signal); }
+.artist-gallery-empty {
+  grid-column: 1 / -1; color: var(--text-muted);
+  font-size: var(--text-lg); padding: 32px 0; text-align: center;
+}
+
+/* ── ARTIST CARD ENHANCEMENTS ── */
+.artist-verified-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  vertical-align: middle; margin-left: 7px; flex-shrink: 0;
+}
+#album-subtitle.artist-bio {
+  font-size: 12.5px; color: var(--text-2); line-height: 1.6;
+  display: -webkit-box; -webkit-line-clamp: 4; line-clamp: 4; -webkit-box-orient: vertical;
+  overflow: hidden; margin-bottom: 8px;
+  /* body is user-select: none; let the bio be selected and copied */
+  user-select: text; -webkit-user-select: text; cursor: text;
+}
+#album-subtitle.artist-bio.expanded {
+  display: block; -webkit-line-clamp: unset; line-clamp: unset; overflow: visible;
+}
+.artist-bio-toggle {
+  background: none; border: 0; padding: 0; margin: -4px 0 8px;
+  color: var(--signal); font: inherit; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; align-self: flex-start;
+}
+.artist-bio-toggle:hover { text-decoration: underline; }
+.artist-bio-toggle[hidden] { display: none; }
+
+/* =========================================
+   RESPONSIVITY ADJUSTMENTS
+   ========================================= */
+@media (max-width: 900px) {
+  /* The technical sheet can't hold a 216px column next to the cover and the
+     text at this width — it moves under the text as a wrapping row. */
+  #album-card { flex-wrap: wrap; }
+  #album-tech {
+    align-self: auto;
+    flex-direction: row; flex-wrap: wrap;
+    margin-top: 4px; padding: 14px 0 0;
+    border-top: 1px solid var(--rule);
+  }
+  #album-tech .tech-row { flex: 0 1 auto; }
+}
+
+@media (max-width: 600px) {
+  #main-split { flex-direction: column; }
+}
+
+/* Track table column collapse — was @media, now keyed off #track-table-wrap's
+   own inline size (container-type set where #track-table-wrap is defined).
+   Same two breakpoints, same nth-child hides, same !important grid override
+   — only what they measure changed, not what they do. */
+/* Thresholds are 900/600 minus 102px, not 900/600 — a container query
+   measures #track-table-wrap's own box, which sits inside the 58px sidebar
+   + the surrounding containers' padding chain, so it's consistently 102px
+   narrower than the viewport at the widths that matter here (measured live:
+   innerWidth 900/700/600 -> wrap 798/598/498, offset exactly 102px each
+   time, no dependency on #track-table-wrap's own 950px cap since that
+   never engages this low). Using literal 900/600 here would collapse the
+   table ~102px too early compared to the old @media behaviour. */
+@container tracktable (max-width: 798px) {
+  .track-table-header > div:nth-child(5), .track-row > div:nth-child(5) {
+    display: none !important;
+  }
+}
+
+/* Phone layout: see the note in layout.css. */
+
+/* Touch ergonomics: see the note in layout.css. */
+@media (hover: none) and (pointer: coarse) {
+  .mode-btn, .ta-btn, .recent-card, .artist-album-card {
+    touch-action: manipulation;
+  }
+  #track-table-wrap {
+    overscroll-behavior: contain;
+  }
+}
+
+@media (max-width: 700px) {
+  #urlInput {
+    font-size: 16px;
+  }
+
+  /* ── Search bar ──
+     Touch sizing only; the two-row arrangement itself is in the 900px block
+     further down, which is where the stacking it replaces already lived. */
+  .status-bar { padding: 0 var(--space-3); }
+
+  /* ── Album card ──
+     The 900px rule already drops the tech column below the text. Below
+     700px the cover has to go above the text as well: clamp(200px, 22vw,
+     240px) resolves to its 200px floor on a phone, which left ~110px for a
+     title, an artist list and four metadata lines. */
+  #album-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  #album-cover {
+    align-self: center;
+  }
+  .artist-gallery-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: var(--space-2);
+  }
+  .artist-albums-grid {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: var(--space-2);
+  }
+
+  #pagetion-controls { flex-wrap: wrap; gap: var(--space-1); }
+  #page-info { min-width: 0; }
+}
+
+/* ── Search bar, narrow windows ───────────────────────────────────────────
+   The responsivity section above turns the bar into a column below 900px,
+   which gives each of its three children a row: the two 36px mode buttons
+   centred on one, the 36px fetch button centred and alone on another, and
+   the input — the one control anyone came here to use — on a third. Three
+   rows of mostly air.
+
+   Two rows instead, by re-wrapping rather than re-stacking. The input
+   claims a whole line with flex-basis:100%, the three buttons fall onto the
+   next, and fetch takes whatever the two fixed-width mode buttons leave, so
+   the primary action is also the widest target on the row. `order` rather
+   than moving anything in index.html: the DOM order is mode / input /
+   fetch, which is the tab order and the order a screen reader reads, and
+   both are right as they stand. */
+@media (max-width: 900px) {
+  .search-container {
+    flex-direction: row;
+    flex-wrap: wrap;
+    height: auto;
+  }
+  .url-wrap { order: 1; flex: 1 1 100%; width: 100%; }
+  .mode-wrap { order: 2; flex: 0 0 auto; }
+  #fetchBtn { order: 3; flex: 1 1 auto; }
+}
+
+/* ── Track row action column ──────────────────────────────────────────────
+   A container query, not a media query, because that is what the two column
+   collapses above already use — #track-table-wrap's own box, not the
+   viewport (see their comment for the 102px offset).
+
+   At 498px the grid gives the actions column 130px. A row renders five
+   .ta-btn at 30px with a 3px gap: 162px. On a desktop that overflow is
+   invisible because four of the five are opacity:0 — but they still occupy
+   their width, and @media (hover:none) makes them opaque again on exactly
+   the devices where the column is narrowest.
+
+   The fix is to stop asking one line to hold both. Checkbox and title keep
+   the first line, the action cluster drops to a second, right-aligned,
+   where there is room to give each button a 38px target instead of shaving
+   pixels off five of them. The header's "Actions" label has nothing left to
+   sit over and goes. */
+@container tracktable (max-width: 498px) {
+  .track-table-header > div:nth-child(6) { display: none; }
+  .tr-actions {
+    grid-column: 1 / -1;
+    margin-left: 0;
+    justify-content: flex-end;
+    gap: var(--space-1);
+  }
+}
+
+.hero-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.hero-title {
+  text-shadow: none;
+}
+
+#fetchBtn {
+  box-shadow: none;
+}
+
+.recent-label {
+  margin-bottom: 14px;
+}
+.mode-btn {
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recent-card:hover {
+    transform: none;
+  }
+}
+
+/* The focus ring (layout.css) loads before this sheet now: restated at its
+   specificity for the controls above that draw their own radius or
+   outline, so focused they keep the ring's shape, as before. */
+:where(button, a, input, select, textarea, [tabindex]):where(.cover-download-btn, .rc-remove, .aac-dl):focus-visible {
+  border-radius: var(--radius-1);
+}
+:where(.sr-filter-input):focus-visible {
+  outline: 1px solid var(--signal-strong);
+}
+
+/* ── Hero: a compact masthead, not a splash ───────────────────────────── */
+#home-hero { padding: var(--space-6) var(--space-5) var(--space-2); justify-content: flex-start; }
+.hero-text { max-width: none; text-align: left; padding: 0; border-radius: 0; }
+.hero-headline { justify-content: flex-start; gap: var(--space-3); }
+.hero-logo { display: none; }
+.hero-main { justify-content: flex-start; gap: var(--space-3); }
+.hero-title {
+  font-family: var(--font);
+  font-size: var(--text-xl);
+  line-height: 1.2;
+  font-weight: var(--weight-bold);
+  letter-spacing: .24em;
+  text-transform: uppercase;
+}
+.hero-version {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-regular);
+  letter-spacing: .08em;
+}
+.hero-update-badge {
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-1);
+  background: transparent;
+  border: 1px solid var(--signal-strong);
+  color: var(--signal-text);
+  font-size: var(--text-xs);
+}
+.hero-update-badge:hover { transform: none; }
+.hero-subtitle {
+  max-width: 72ch;
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading);
+  text-wrap: pretty;
+}
+
+/* ── Link / search bar: one row of 32px controls ─────────────────────── */
+#search-bar { padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--rule); }
+.search-container {
+  max-width: none;
+  margin: 0;
+  gap: var(--space-2);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.mode-wrap { gap: var(--space-2); }
+.mode-btn, .search-source {
+  width: var(--row);
+  height: var(--row);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background: var(--raised);
+  color: var(--text-2);
+  transition: border-color var(--motion-fast) var(--ease);
+}
+.search-source { width: auto; padding: 0 var(--space-2); font-family: var(--font); font-size: var(--text-sm); }
+.mode-btn:hover, .search-source:hover { background: var(--raised); border-color: var(--text-2); color: var(--text); }
+.mode-btn.active { background: var(--selected); border-color: var(--signal-strong); color: var(--signal-text); }
+.mode-btn-icon { width: 14px; height: 14px; }
+#urlInput {
+  height: var(--row);
+  padding: 0 var(--space-6) 0 calc(var(--space-6) + var(--space-2));
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background: var(--raised);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-md);
+}
+#urlInput::placeholder { color: var(--text-muted); font-size: var(--text-md); }
+#urlInput:focus { border-color: var(--signal-strong); box-shadow: none; }
+.url-icon { left: var(--space-3); }
+#fetchBtn {
+  width: var(--row);
+  height: var(--row);
+  border-radius: var(--radius-1);
+  background: var(--signal);
+  border: 1px solid var(--signal);
+  color: var(--signal-ink);
+  transition: border-color var(--motion-fast) var(--ease);
+}
+#fetchBtn:hover, #fetchBtn:active { transform: none; background: var(--signal); border-color: var(--signal-strong); }
+/* One primary action per screen: with an album open that is "Download". */
+body:has(#album-card:not(.hidden)) #fetchBtn {
+  background: var(--raised);
+  border-color: var(--control-border);
+  color: var(--text);
+}
+
+.status-bar { max-width: none; margin: var(--space-2) 0 0; color: var(--text-muted); font-size: var(--text-sm); }
+#track-render-status {
+  margin: var(--space-2) 0 0;
+  border: 0;
+  border-left: 2px solid var(--signal-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/* ── Album card: the panel of the mock ───────────────────────────────── */
+#album-card {
+  margin: var(--space-5) 0 0;
+  padding: var(--space-4);
+  gap: var(--space-5);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-1);
+  box-shadow: none;
+}
+#album-card::before { display: none; }
+#album-cover,
+#album-cover img {
+  border-radius: 0;
+  box-shadow: none;
+}
+#album-cover { width: 168px; height: 168px; background: var(--raised); }
+@media (min-width: 1440px) { #album-cover { width: 200px; height: 200px; } }
+#album-info { gap: var(--space-2); }
+#album-type-badge {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+#album-title {
+  font-family: var(--font);
+  font-size: var(--text-2xl);
+  line-height: 1.2;
+  font-weight: var(--weight-bold);
+  letter-spacing: -.01em;
+}
+#album-meta, #album-artist { color: var(--text-2); font-size: var(--text-md); }
+.album-meta-details, .album-subtitle, .album-description { color: var(--text-muted); font-size: var(--text-sm); }
+.dot-sep { color: var(--rule-strong); }
+#album-actions { gap: var(--space-2); margin-top: var(--space-2); }
+
+/* The facts column: label + value pairs, a readout panel. */
+#album-tech { width: 200px; padding-left: var(--space-4); border-left: 1px solid var(--rule); gap: var(--space-3); }
+#album-tech .tech-k {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+}
+#album-tech .tech-v { color: var(--text); font-family: var(--font); font-size: var(--text-sm); }
+#album-tech .tech-barcode { border-radius: 0; }
+
+/* ── Track controls ───────────────────────────────────────────────────── */
+#trackSearch {
+  height: var(--row);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background: var(--raised);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+  box-shadow: none;
+}
+#trackSearch:focus { border-color: var(--signal-strong); box-shadow: none; }
+
+/* ── Track table: rows on rules, no cards ────────────────────────────── */
+#track-table-wrap { padding: 0 var(--space-5) var(--space-4); }
+.track-table-header, .track-row {
+  padding: 0 var(--space-3);
+  border-radius: 0;
+  border-bottom: 1px solid var(--rule);
+}
+.track-table-header {
+  min-height: var(--row-head);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+.track-table-header input,
+.tr-check input { accent-color: var(--signal-strong); width: 13px; height: 13px; }
+.track-row {
+  min-height: 40px;
+  transition: background var(--motion-fast) var(--ease);
+}
+.track-row:hover { background: var(--raised); box-shadow: none; transform: none; }
+.track-row:focus-within { background: var(--raised); box-shadow: inset 2px 0 0 var(--signal-strong); }
+.tr-num {
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.tr-title-cell { gap: var(--space-3); }
+.tr-thumb {
+  width: 28px; height: 28px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background-color: var(--raised);
+}
+.tr-thumb img { border-radius: 0; }
+.track-row:hover .tr-thumb { transform: none; }
+.tr-name {
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  line-height: 1.3;
+}
+.tr-artist, .tr-artist a { color: var(--text-muted); font-size: var(--text-sm); }
+.tr-playcount, .tr-dur {
+  color: var(--text-2);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.ta-btn {
+  width: 24px; height: 24px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-1);
+  background: transparent;
+  color: var(--text-muted);
+  box-shadow: none;
+}
+.ta-btn:hover:not(:disabled) { transform: none; background: var(--raised); border-color: var(--rule-strong); color: var(--text); }
+
+/* Download state on the row: a 2px bar on the left edge, no tint. */
+.track-row.done, .track-row.failed, .track-row.skipped, .track-row.dl-active { background: transparent; }
+.track-row.done { box-shadow: inset 2px 0 0 var(--ok); }
+.track-row.failed { box-shadow: inset 2px 0 0 var(--error); }
+.track-row.skipped { box-shadow: inset 2px 0 0 var(--text-muted); }
+.track-row.dl-active { background: var(--selected); box-shadow: inset 2px 0 0 var(--signal-strong); }
+.track-row.dl-active::after { height: 2px; border-radius: 0; background: var(--signal-strong); transition: none; }
+
+/* ── Recent fetches: square covers on rules ──────────────────────────── */
+.recent-label {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+.recent-card {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-1);
+  background: var(--surface);
+  box-shadow: none;
+  transition: border-color var(--motion-fast) var(--ease);
+}
+.recent-card:hover { transform: none; box-shadow: none; border-color: var(--rule-strong); background: var(--surface); }
+.recent-card.active { border-color: var(--signal-strong); box-shadow: none; }
+.rc-cover { border-radius: 0; box-shadow: none; }
+
+/* ── One left edge for the whole view ───────────────────────────────────
+   The old layout centred the card and the table at their own max widths;
+   here they share the search bar's 20px gutter and use the full width. */
+.list-container, .recent-container {
+  max-width: none;
+  margin: 0;
+  padding: 0 var(--space-5);
+}
+#track-controls, #track-table-wrap {
+  max-width: none;
+  margin: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+/* The margin:0 above glued the search bar to the card's bottom border. */
+#album-card:not(.hidden) ~ #track-controls { margin-top: var(--space-4); }
+
+/* ── Album card: compact layout ─────────────────────────────────────────
+   The facts column was a 200px single file of six label/value pairs, so it
+   ran ~300px tall, wrapped every label and copyright line, and set the card
+   height; the text column, centred in that height, floated with a hole above
+   and below it. The facts now sit in two columns (copyright across both) so
+   the card is about as tall as the cover, and the text column starts at the
+   top, level with the artwork. */
+#album-card { align-items: flex-start; }
+#album-info { justify-content: flex-start; align-self: flex-start; padding-top: var(--space-1); }
+#album-tech {
+  width: clamp(300px, 34%, 440px);
+  align-self: flex-start;
+  display: grid;
+  /* Left column as wide as its longest value (the release date line),
+     the rest to the right one — two equal halves wrapped both. */
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: var(--space-4);
+  row-gap: var(--space-3);
+  align-content: start;
+}
+#album-tech.hidden { display: none; }
+#album-tech .tech-row.wide,
+#album-tech .tech-row:has(.tech-barcode) { grid-column: 1 / -1; }
+#album-tech .tech-v { -webkit-line-clamp: 2; }
+@media (max-width: 900px) {
+  #album-tech { width: 100%; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+}
+
+/* A download per row would be a column of signal: neutral until pointed at. */
+.ta-btn.dl { background: transparent; border-color: var(--rule-strong); color: var(--text-2); }
+.ta-btn.dl:hover:not(:disabled) { background: var(--signal); border-color: var(--signal); color: var(--signal-ink); }
+
+/* The structure above has a rebrand layer that names these more specifically
+   (.search-container .mode-btn, #csvBtn:hover…); answered here in kind. */
+#search-bar { padding: var(--space-4) var(--space-5); }
+#urlInput,
+.search-container .mode-btn,
+#fetchBtn { border-radius: var(--radius-1); }
+#urlInput { background: var(--raised); border-color: var(--control-border); }
+#urlInput:focus { border-color: var(--signal-strong); }
+.search-container .mode-btn:not(.active) {
+  background: var(--raised);
+  border-color: var(--control-border);
+  color: var(--text-2);
+}
+#searchModeToggle:hover,
+#csvBtn:hover,
+#pasteBtn:hover { background: var(--raised); border-color: var(--text-2); color: var(--text); }
+#recent-wrap { padding-top: var(--space-5); }
+
+/* ── Text search results: a full-width panel of rows ─────────────────── */
+#text-search-results { max-width: none; margin: 0; gap: var(--space-4); }
+.sr-panel { border: 1px solid var(--rule); border-radius: var(--radius-1); background: var(--surface); }
+.sr-tab-bar { border-bottom: 1px solid var(--rule); }
+.sr-tab {
+  color: var(--text-2);
+  font-family: var(--font);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+.sr-tab:hover { color: var(--text); }
+.sr-tab.active { color: var(--text); border-bottom-color: var(--signal-strong); }
+.sr-tab-badge, .sr-tab.active .sr-tab-badge {
+  background: transparent;
+  border-radius: 0;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.sr-tab.active .sr-tab-badge { color: var(--signal-text); }
+.sr-filter-input {
+  height: var(--row);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background: var(--raised);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+}
+.sr-filter-input:focus { border-color: var(--signal-strong); }
+.search-result-item {
+  min-height: 48px;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  transition: background var(--motion-fast) var(--ease);
+}
+.search-result-item:hover { background: var(--raised); }
+.search-result-thumbnail,
+.search-result-thumbnail.artist-thumb {
+  width: 32px; height: 32px;
+  border-radius: 0;
+  box-shadow: none;
+}
+.search-result-title { font-size: var(--text-md); font-weight: var(--weight-medium); }
+.search-result-meta { color: var(--text-muted); font-size: var(--text-sm); }
+.sr-duration { color: var(--text-2); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+
+/* Phone: controls keep the 44px touch size the phone rules give them. */
+@media (max-width: 700px) {
+  .mode-btn, .search-container .mode-btn, #fetchBtn { width: 44px; height: 44px; min-width: 44px; }
+  .search-source { height: 44px; }
+  #urlInput { height: 44px; }
+}
+
+/* ── Album quality readout (§2, signature 1) ──────────────────────────
+   A display on the signal once the first downloaded file has been read
+   (24 / 96 · FLAC); before that the tier asked for in Settings, dimmed and
+   marked REQ — a request, not a promise. */
+.album-quality {
+  display: inline-flex; align-items: center; align-self: flex-start;
+  height: 20px; padding: 0 6px; margin-bottom: 12px;
+  border: 1px solid var(--signal-strong); border-radius: var(--radius-1);
+  color: var(--signal-text); font-family: var(--font); font-size: var(--text-xs);
+  font-weight: var(--weight-medium); letter-spacing: .06em;
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.album-quality.hidden { display: none; }
+.album-quality[data-state="requested"] { border-color: var(--rule-strong); color: var(--text-2); }

@@ -1,23 +1,22 @@
-/* Mornye's terminal UI. The layout grammar comes from MovieBox-Tui; the
-   identity is Mornye's own, shared with the GUI: the default `mornye-dark`
-   / `mornye-light` themes are built from mornye/branding_tokens.py — warm
-   near-black surfaces, the logo's teal as $primary (focus, selection, the
-   wordmark) and a warm amber as $accent (panel tags, the Atmos badge).
+/* Mornye's terminal UI in the console look (redesign plan, Fase 4).
 
-   Everything is a theme variable, never a literal: MovieBox reads its
-   palette rather than hard-coding Catppuccin, which is why all nine of its
-   themes look deliberate instead of one looking right and eight looking
-   tinted. `t` cycles them, and every rule below follows.
+   The default `mornye-console-dark` / `mornye-console-light` themes are
+   built from the v2 tokens in mornye/branding_tokens.py, the same ones the
+   GUI draws with: grey ground, one amber signal as $primary (focus, the
+   active mode, panel titles), green and red only for state.
 
-   The grammar, in four parts: rounded borders on everything that is a panel;
-   titles decorated as `─ ✦  Name` with an accent tag on the right; selection
-   as bold text on a raised surface rather than an inverted bar; and badges —
-   a short label on a solid colour, with contrasting text. */
+   Everything is a theme variable, never a literal, so the built-in themes
+   `t` cycles through still look deliberate.
+
+   The grammar, in four parts: square single-line rules on every panel; a
+   one-line masthead instead of a block wordmark; selection as a raised row,
+   never an inverted bar; badges as bracketed readouts in a state colour,
+   never filled pills. */
 
 /* The whole app sits on the panel surface. $background is a shade darker,
    and wherever it showed through — the column of padding either side of
    #body, the status line — it read as a black gap rather than as depth.
-   The rounded $panel borders are what separate the cards, not the ground. */
+   The rules around the panels are what separate them, not the ground. */
 Screen {
     background: $surface;
 }
@@ -41,33 +40,25 @@ Screen {
 
 /* ── Wordmark ──────────────────────────────────────────────────────── */
 
-/* The wordmark sits on the same raised surface as the panels below it, so
-   the top of the screen reads as one band rather than a logo floating on
-   the void. Full width, unlike #body, which is inset by a column. */
+/* One line: `MORNYE 2.0.6 ── tagline`, left-aligned on the ground, like
+   the GUI's title bar. */
 #banner {
     width: 100%;
-    height: auto;
-    padding-top: 1;
+    height: 1;
+    padding: 0 2;
     background: $surface;
 }
 
 #wordmark {
     width: 100%;
-    text-align: center;
-    color: $primary;
+    text-align: left;
+    color: $text;
     text-style: bold;
     background: transparent;
 }
 
 #wordmark-subtitle {
-    width: 100%;
-    text-align: left;
-    color: $text-muted;
-    background: transparent;
-}
-
-.banner-plain #wordmark {
-    text-style: bold;
+    display: none;
 }
 
 /* ── Frame ─────────────────────────────────────────────────────────── */
@@ -81,9 +72,16 @@ Screen {
     width: 26;
     height: 100%;
     padding: 1 1;
-    border: round $panel;
+    border: solid $border-blurred;
     border-title-align: left;
+    border-title-color: $text-muted;
     background: $surface;
+}
+
+/* Textual tints a focused list; here that drew the nav column one shade
+   off its own rows. The focus is already the signal bar on the row. */
+#sidebar:focus {
+    background-tint: $foreground 0%;
 }
 
 /* Three rows a mode, not one. Eight single-row entries in a 22-column
@@ -150,11 +148,14 @@ Screen {
     width: 1fr;
 }
 
-/* Every panel is a rounded card with a decorated title. */
+/* Every panel is a ruled box with a legend set in its top rule. */
 #panels > * {
-    border: round $panel;
+    border: solid $border-blurred;
     border-title-align: left;
     border-subtitle-align: right;
+    /* The legend reads at text-muted, not at the rule's own dim grey. */
+    border-title-color: $text-muted;
+    border-subtitle-color: $text-muted;
     padding: 1 2;
     background: $surface;
 }
@@ -163,7 +164,8 @@ Screen {
    fills the dot in its title; the two together say it twice, which is the
    point — a highlight you have to hunt for is not a highlight. */
 #panels > *:focus-within {
-    border: round $primary;
+    border: solid $primary;
+    border-title-color: $primary;
 }
 
 /* ── Settings form ─────────────────────────────────────────────────── */
@@ -224,16 +226,16 @@ Screen {
 }
 
 Input {
-    border: round $panel-lighten-1;
+    border: solid $border;
     background: $boost;
 }
 
 Input:focus {
-    border: round $primary;
+    border: solid $primary;
 }
 
 Select > SelectCurrent {
-    border: round $panel-lighten-1;
+    border: solid $border;
 }
 
 SelectionList,
@@ -242,14 +244,14 @@ OptionList {
     max-height: 12;
     margin-bottom: 1;
     padding: 0 1;
-    border: round $panel-lighten-1;
+    border: solid $border;
     border-title-align: left;
     background: $boost;
 }
 
 SelectionList:focus,
 OptionList:focus {
-    border: round $primary;
+    border: solid $primary;
 }
 
 Collapsible {
@@ -262,9 +264,30 @@ Collapsible > CollapsibleTitle {
     text-style: bold;
 }
 
+/* As wide as the label, not Textual's 16: four 16-cell buttons are 68
+   cells, wider than an 80x24 panel, and the last one was cut off. */
 Button {
-    border: round $panel-lighten-1;
+    border: solid $border;
     margin-right: 1;
+    width: auto;
+    min-width: 10;
+}
+
+/* Only the primary action is filled. In the console theme $warning is the
+   signal itself, so a filled warning button read as a second primary; it
+   and the success variant are ruled buttons with the colour in the label. */
+Button.-warning,
+Button.-success {
+    background: $surface;
+    border: solid $border;
+    text-style: bold;
+}
+Button.-warning { color: $warning; }
+Button.-success { color: $success; }
+Button.-warning:hover,
+Button.-success:hover {
+    background: $boost;
+    border: solid $primary;
 }
 
 .section-heading {
@@ -273,7 +296,10 @@ Button {
     text-style: bold;
 }
 
+/* Full width, so it wraps: a Label is as wide as its text, and the
+   sentence ran off the right edge at 80 columns. */
 .panel-intro {
+    width: 100%;
     padding-bottom: 1;
     color: $text-muted;
 }
@@ -283,12 +309,12 @@ Button {
 #config-problems {
     padding: 0 2;
     margin-top: 1;
-    border: round $success;
+    border: solid $success;
     color: $text-muted;
 }
 
 #config-problems.blocking {
-    border: round $warning;
+    border: solid $warning;
     color: $warning;
 }
 
@@ -296,13 +322,15 @@ Button {
 
 /* A short label on a solid colour, MovieBox's resolution chip. The text is
    the theme's darkest surface so it stays legible on every accent. */
-.badge-gold    { background: $warning;      color: $background; text-style: bold; }
-.badge-sapphire{ background: $primary;      color: $background; text-style: bold; }
-.badge-teal    { background: $secondary;    color: $background; text-style: bold; }
-.badge-lavender{ background: $accent;       color: $background; text-style: bold; }
-.badge-success { background: $success;      color: $background; text-style: bold; }
-.badge-error   { background: $error;        color: $background; text-style: bold; }
-.badge-muted   { background: $panel;        color: $text-muted; }
+/* Readouts, not pills: the brackets are in the text (branding.badge_text),
+   the colour says what kind. Quality in the signal, state in green or red. */
+.badge-gold    { color: $primary;    text-style: bold; }
+.badge-sapphire{ color: $primary;    text-style: bold; }
+.badge-teal    { color: $secondary;  text-style: bold; }
+.badge-lavender{ color: $accent;     text-style: bold; }
+.badge-success { color: $success;    text-style: bold; }
+.badge-error   { color: $error;      text-style: bold; }
+.badge-muted   { color: $text-muted; }
 
 /* ── Queue ─────────────────────────────────────────────────────────── */
 
@@ -341,9 +369,7 @@ Button {
 
 .track-badge {
     width: 11;
-    /* Two cells, not one. The badge is a solid block of colour and the
-       title starts right after it; a single space read as the two of them
-       touching. */
+    /* A readout, then two cells of air before the title. */
     padding-right: 2;
 }
 
@@ -453,7 +479,7 @@ ProgressBar > Bar > .bar--indeterminate {
 #registry-table {
     height: auto;
     max-height: 20;
-    border: round $panel-lighten-1;
+    border: solid $border;
 }
 
 #library-report {
@@ -461,7 +487,7 @@ ProgressBar > Bar > .bar--indeterminate {
     min-height: 8;
     max-height: 24;
     padding: 1 2;
-    border: round $panel-lighten-1;
+    border: solid $border;
     color: $text;
 }
 
@@ -524,7 +550,7 @@ SelectionList > .option-list--option-highlighted {
     width: 1fr;
     height: 1fr;
     margin-left: 1;
-    border: round $panel;
+    border: solid $border-blurred;
     border-title-align: left;
 }
 
@@ -579,7 +605,7 @@ CsvPickerScreen {
     height: auto;
     max-height: 85%;
     padding: 1 3;
-    border: round $primary;
+    border: solid $primary;
     border-title-align: left;
     background: $surface;
 }
@@ -635,7 +661,7 @@ CsvPickerScreen {
 #tracks-table {
     height: auto;
     max-height: 24;
-    border: round $panel-lighten-1;
+    border: solid $border;
 }
 
 /* ── Toasts ────────────────────────────────────────────────────────── */
@@ -650,7 +676,7 @@ Toast {
     max-width: 50%;
     padding: 0 1;
     background: $surface;
-    border: round $primary;
+    border: solid $primary;
     border-title-align: left;
 }
 
@@ -660,7 +686,7 @@ Toast .toast--title {
 }
 
 Toast.-information {
-    border: round $primary;
+    border: solid $primary;
 }
 
 Toast.-information .toast--title {
@@ -668,7 +694,7 @@ Toast.-information .toast--title {
 }
 
 Toast.-warning {
-    border: round $warning;
+    border: solid $warning;
 }
 
 Toast.-warning .toast--title {
@@ -676,7 +702,7 @@ Toast.-warning .toast--title {
 }
 
 Toast.-error {
-    border: round $error;
+    border: solid $error;
 }
 
 Toast.-error .toast--title {
@@ -712,12 +738,12 @@ Toast.-error .toast--title {
     height: auto;
     min-height: 5;
     max-height: 22;
-    border: round $panel;
+    border: solid $border-blurred;
     background: $surface;
     padding: 0 1;
 }
 
 #staged-list:focus,
 #hist-list:focus {
-    border: round $primary;
+    border: solid $primary;
 }

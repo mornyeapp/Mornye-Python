@@ -8,6 +8,7 @@ name-parity check in test_web_shim_methods_in_sync.py.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import pytest
 
@@ -111,7 +112,7 @@ def test_the_download_dock_lives_outside_the_views(client) -> None:
     assert html.index('id="queue-dock"') > last_view
     assert html.index('id="queue-drawer"') > last_view
 
-    css = client.get("/styles.css").text
+    css = client.get("/css/layout.css").text
     # And it is a bar along the bottom that starts beside the sidebar
     # rather than under it.
     assert "position: fixed; left: var(--rail-w); right: 0; bottom: 0;" in css
@@ -215,6 +216,8 @@ def test_the_dashboard_and_csv_import_are_in_the_page(client) -> None:
     # The CSV button sits next to the link/search toggle: a third way in.
     assert 'id="csvFileInput"' in html
     assert 'onclick="openCsvPicker()"' in html
+    app_js = Path(__file__).resolve().parents[1] / "mornye" / "frontend" / "app.js"
+    assert "get_stats(year, days, 10, true)" in app_js.read_text(encoding="utf-8")
 
 
 def test_the_dashboard_round_trips_over_http(client) -> None:
@@ -225,11 +228,40 @@ def test_the_dashboard_round_trips_over_http(client) -> None:
     )
 
     # Positional arguments, exactly as web-shim.js sends them:
-    # get_stats(year, days, top).
+    # get_stats(year, days, top, existing_files).
     result = client.post("/api/get_stats", json=[None, None, 5]).json()["result"]
 
     assert result["totals"]["tracks"] == 1
     assert result["top_artists"][0]["name"] == "Queen"
+
+
+def test_current_file_dashboard_refreshes_after_a_track_is_deleted(
+    client, tmp_path
+) -> None:
+    from mornye.core import download_log
+
+    path = tmp_path / "Song.flac"
+    path.touch()
+    download_log.record(
+        title="Song",
+        artist="Queen",
+        provider="ext:tidal-web",
+        file_path=str(path),
+    )
+
+    current = client.post("/api/get_stats", json=[None, None, 10, True]).json()[
+        "result"
+    ]
+    assert current["totals"]["tracks"] == 1
+
+    path.unlink()
+
+    refreshed = client.post("/api/get_stats", json=[None, None, 10, True]).json()[
+        "result"
+    ]
+    history = client.post("/api/get_stats", json=[None, None, 10]).json()["result"]
+    assert refreshed["totals"]["tracks"] == 0
+    assert history["totals"]["tracks"] == 1
 
 
 def test_csv_preview_round_trips_over_http(client) -> None:

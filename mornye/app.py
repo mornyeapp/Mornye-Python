@@ -15,6 +15,7 @@ import sys
 import threading
 import time
 import uuid
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, cast
@@ -197,6 +198,14 @@ class UILogHandler(CallbackLogHandler):
         self.api = api
 
 
+# F6: failures that used to vanish behind `except Exception: pass`. Debug
+# level: none of them is the user's to act on, but a --log-level DEBUG run
+# shows them. Not under "mornye", whose UILogHandler pushes every record to
+# the GUI: a failing push would log about itself through the push that fails.
+_quiet_log = logging.getLogger("mornye_gui.app")
+_push_guard = threading.local()
+
+
 class MornyeAPI(
     SearchMixin,
     LocalTaggingMixin,
@@ -239,6 +248,9 @@ class MornyeAPI(
         # Held for the whole of a download batch, so two of them never share
         # a process — see _await_download_slot().
         self._download_lock = threading.Lock()
+        self._active_download_events: set[threading.Event] = set()
+        self._active_download_events_lock = threading.Lock()
+        self._stop_generation = 0
         # Set by webapp.py in --web mode: a persisted JobQueue that
         # download_tracks() writes each batch into instead of starting a bare
         # thread, so a restart resumes it (see run_download_job). None
@@ -265,6 +277,14 @@ class MornyeAPI(
         self.owner = ""
         self.current_tracks = []
         self.current_url = ""
+        # The fetched collection's name when it is a playlist, else "": what
+        # a failed track records so its retry goes back to that folder.
+        self.current_playlist_name = ""
+        # The last tracklists shown on Home, by the id each pushed track
+        # carries (list_id): the Queue holds tracks from several of them, and
+        # its indices only mean something against the list they came from.
+        self._tracklists: OrderedDict[int, tuple[list, str, str]] = OrderedDict()
+        self._tracklist_seq = 0
         self.app_version = "unknown"
         # determine application version at construction time so JS can query it early
         try:
@@ -289,7 +309,9 @@ class MornyeAPI(
                         if m:
                             v = m.group(1)
             except Exception:
-                pass
+                _quiet_log.debug(
+                    "Could not read the version from pyproject.toml", exc_info=True
+                )
         self.app_version = v
 
     def set_window(self, window) -> None:
@@ -306,12 +328,29 @@ class MornyeAPI(
                 js_args = ", ".join(json.dumps(a) for a in args)
                 self._window.evaluate_js(f"window.{fn_name}({js_args});")
             except Exception:
-                pass
+                self._push_failed(fn_name, "window")
         if self._ws_broadcast:
             try:
                 self._ws_broadcast(fn_name, list(args))
             except Exception:
-                pass
+                self._push_failed(fn_name, "websocket")
+
+    @staticmethod
+    def _push_failed(fn_name: str, path: str) -> None:
+        """Never raises, and never recurses: logging about a failed push
+        must not reach the push again (a re-entrant failure is dropped)."""
+        if getattr(_push_guard, "active", False):
+            return
+        _push_guard.active = True
+        try:
+            with contextlib.suppress(
+                Exception
+            ):  # logging itself failed: nothing left to tell
+                _quiet_log.debug(
+                    "GUI push %s via %s failed", fn_name, path, exc_info=True
+                )
+        finally:
+            _push_guard.active = False
 
     def _on_loaded(self) -> None:
         """Initializes the frontend after the webview finishes loading.
@@ -340,11 +379,26 @@ class MornyeAPI(
         except Exception as e:
             self.log(f"Could not start the subscription scheduler: {e}", "warn")
         app_version = self.app_version
+        self._push("loadHistoryAndProfiles")
+        self._push("__set_version_label", app_version)
+
+    def get_cli_command(self, url: str, config: dict | None = None) -> dict:
+        """The CLI command equivalent to downloading `url` with the GUI's
+        current settings (N2): what the TUI's Command panel shows."""
+        from .core.cli_preview import gui_command
+        from .core.env_settings import gui_env_defaults
+
+        url = str(url or "").strip()
+        if not url:
+            return {"status": "error", "error": "No link to turn into a command."}
         try:
-            self._push("loadHistoryAndProfiles")
-            self._push("__set_version_label", app_version)
-        except Exception:
-            pass
+            # Same layering as a GUI download (_queue_download_batch): the
+            # MORNYE_<SETTING> defaults, then what the page sends.
+            merged = {**gui_env_defaults(), **dict(config or {})}
+            command = gui_command(url, merged, str(self.download_dir))
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+        return {"status": "ok", "command": command}
 
     # Expose simple getters to the frontend via pywebview
     def get_version(self):
@@ -419,10 +473,7 @@ class MornyeAPI(
                     "install: https://ffmpeg.org/download.html",
                     "error",
                 )
-                try:
-                    self._push("showFfmpegWarning", result)
-                except Exception:
-                    pass
+                self._push("showFfmpegWarning", result)
         except Exception as exc:
             self.log(f"ffmpeg check error: {exc}", "warn")
 
@@ -447,10 +498,7 @@ class MornyeAPI(
                     "https://nodejs.org/en/download",
                     "error",
                 )
-                try:
-                    self._push("showNodeWarning", result)
-                except Exception:
-                    pass
+                self._push("showNodeWarning", result)
         except Exception as exc:
             self.log(f"Node.js check error: {exc}", "warn")
 
@@ -491,16 +539,10 @@ class MornyeAPI(
         ("error-quiet", "warn-quiet"): the line keeps its colour there and
         raises no toast, leaving one summary toast to stand for the list.
         """
-        try:
-            self._push("app_log", str(message), type)
-        except Exception:
-            pass
+        self._push("app_log", str(message), type)
 
     def set_progress(self, label="") -> None:
-        try:
-            self._push("app_set_progress", label)
-        except Exception:
-            pass
+        self._push("app_set_progress", label)
 
     def set_metadata(
         self,
@@ -558,10 +600,7 @@ class MornyeAPI(
         if track_count is not None:
             payload["track_count"] = track_count
 
-        try:
-            self._push("app_set_metadata", payload)
-        except Exception:
-            pass
+        self._push("app_set_metadata", payload)
 
     def _fetch_track_playcounts(
         self,
@@ -682,10 +721,12 @@ class MornyeAPI(
             self.log(f"Failed to save theme: {e}", "error")
             return {"ok": False, "error": str(e)}
 
-    #: Accents the frontend has an --accent-* block for (styles.css). Kept
-    #: here as well so an unknown value can't be written to disk and then
-    #: applied at boot as a data-accent nothing styles.
+    #: Accents the frontend has a block for (css/accents.css; amber, the
+    #: default, is tokens.css itself). Kept here as well so an unknown value
+    #: can't be written to disk and then applied at boot as a data-accent
+    #: nothing styles.
     ACCENTS = (
+        "amber",
         "teal",
         "green",
         "blue",
@@ -694,15 +735,14 @@ class MornyeAPI(
         "orange",
         "red",
         "cyan",
-        "amber",
     )
     #: Matches BRAND_VERSION in frontend/app.js: stored next to the accent so
-    #: the one-off green -> teal migration there runs once per install.
-    BRAND_VERSION = 2
+    #: the one-off teal/green -> amber migration there runs once per install.
+    BRAND_VERSION = 3
 
     def save_accent(self, accent: str) -> dict:
         """Persists the accent colour, same reasoning as save_theme()."""
-        accent = str(accent or "teal")
+        accent = str(accent or "amber")
         if accent not in self.ACCENTS:
             return {"ok": False, "error": f"unknown accent: {accent}"}
         try:
@@ -710,6 +750,49 @@ class MornyeAPI(
             return {"ok": True, "accent": accent}
         except Exception as e:
             self.log(f"Failed to save accent: {e}", "error")
+            return {"ok": False, "error": str(e)}
+
+    #: Row and gap density of the GUI (N4): frontend/css/layout.css.
+    DENSITIES = ("comfortable", "compact", "large")
+
+    def set_page_zoom(self, factor: float) -> dict:
+        """Zoom the whole page natively (the 'large' density).
+
+        WKWebView's pageZoom is the same zoom as Cmd-+ in Safari: layout,
+        media queries and getBoundingClientRect all agree, so popovers and
+        tooltips stay where they belong — CSS zoom does not promise that in
+        WebKit. Cocoa only; elsewhere the frontend falls back to CSS zoom.
+        """
+        try:
+            factor = min(max(float(factor), 0.5), 2.0)
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "invalid zoom factor"}
+        if sys.platform != "darwin" or not self._window:
+            return {"ok": False, "error": "native zoom unavailable"}
+        try:
+            from PyObjCTools import AppHelper
+            from webview.platforms.cocoa import BrowserView
+
+            view = BrowserView.instances.get(self._window.uid)
+            webview_ = getattr(view, "webview", None)
+            if webview_ is None or not hasattr(webview_, "setPageZoom_"):
+                return {"ok": False, "error": "native zoom unavailable"}
+            AppHelper.callAfter(webview_.setPageZoom_, factor)
+            return {"ok": True, "zoom": factor}
+        except Exception as e:
+            _quiet_log.debug("Native page zoom failed", exc_info=True)
+            return {"ok": False, "error": str(e)}
+
+    def save_density(self, density: str) -> dict:
+        """Persists the density, same reasoning as save_theme()."""
+        density = str(density or "comfortable")
+        if density not in self.DENSITIES:
+            return {"ok": False, "error": f"unknown density: {density}"}
+        try:
+            self._update_settings({"density": density})
+            return {"ok": True, "density": density}
+        except Exception as e:
+            self.log(f"Failed to save density: {e}", "error")
             return {"ok": False, "error": str(e)}
 
     def load_settings(self) -> dict:
@@ -941,8 +1024,8 @@ class MornyeAPI(
             from .core.session_memory import remove_url_from_history_async
 
             run_sync(remove_url_from_history_async(url))
-        except Exception:
-            pass
+        except Exception as exc:
+            self.log(f"Could not remove the link from the history: {exc}", "warn")
 
     def save_profile_data(self, name, cfg) -> bool | None:
         try:
@@ -1004,8 +1087,33 @@ class MornyeAPI(
         if self._window:
             self._window.minimize()
 
+    def _toggle_zoom_macos(self) -> bool:
+        """Toggle the native macOS zoom on the frameless window.
+
+        pywebview's Cocoa backend implements maximize() as a resize to the
+        screen size anchored at the window's current origin (so it overflows
+        the screen) and restore() as deminiaturize, which does nothing for a
+        window that isn't minimised: the green dot could grow the window but
+        never bring it back. NSWindow.zoom: fills the visible frame (menu bar
+        and Dock excluded) and toggles back to the previous frame.
+        """
+        native = getattr(self._window, "native", None)
+        if native is None:
+            return False
+        try:
+            from PyObjCTools import AppHelper
+
+            AppHelper.callAfter(native.zoom_, None)
+        except Exception:
+            _quiet_log.debug("Native macOS zoom failed", exc_info=True)
+            return False
+        self._is_maximized = not getattr(self, "_is_maximized", False)
+        return True
+
     def WindowToggleMaximise(self) -> None:
         if not self._window:
+            return
+        if sys.platform == "darwin" and self._toggle_zoom_macos():
             return
         if getattr(self, "_is_maximized", False):
             self._window.restore()
@@ -1056,7 +1164,7 @@ class MornyeAPI(
                     self._window.maximize()
                     self._is_maximized = True
                 except Exception:
-                    pass
+                    _quiet_log.debug("Window maximize fallback failed", exc_info=True)
         else:
             self._window.maximize()
             self._is_maximized = True
@@ -1327,6 +1435,8 @@ class MornyeAPI(
                 return
 
             self.current_tracks = tracks
+            self.current_playlist_name = collection_name if is_playlist else ""
+            list_id = self._remember_tracklist(tracks, url, self.current_playlist_name)
             track_data = []
 
             # Retrieve playcount from Spotify if applicable (non-blocking)
@@ -1379,7 +1489,7 @@ class MornyeAPI(
                         )
 
                 except Exception:
-                    pass  # Silently skip playcount on any error
+                    _quiet_log.debug("Playcount lookup failed", exc_info=True)
 
             # ── Enhanced metadata-extraction loop ──
             for i, t in enumerate(tracks):
@@ -1413,6 +1523,7 @@ class MornyeAPI(
                 track_data.append(
                     {
                         "index": i,
+                        "list_id": list_id,
                         "id": track_id,
                         "title": title,
                         "artist": artist,
@@ -1531,12 +1642,11 @@ class MornyeAPI(
                     artist=_artist,
                 )
             except Exception:
-                pass
+                _quiet_log.debug(
+                    "Could not add %s to the fetch history", url, exc_info=True
+                )
 
-            try:
-                self._push("showTracklist", track_data)
-            except Exception:
-                pass
+            self._push("showTracklist", track_data)
 
         except Exception as e:
             self.log(f"Error fetching metadata: {e!s}", "error")
@@ -1544,19 +1654,61 @@ class MornyeAPI(
 
     # ── Phase 2: Download ─────────────────────────────────────────────────────
 
-    def download_tracks(self, selected_indices, config) -> None:
-        if self._download_queue is not None:
-            payload = self._download_job_payload(selected_indices, config)
-            if payload is not None:
-                self._submit_download_job(payload)
+    def _remember_tracklist(self, tracks: list, url: str, playlist_name: str) -> int:
+        """Keeps a tracklist shown on Home; its id rides on every pushed track."""
+        self._tracklist_seq += 1
+        self._tracklists[self._tracklist_seq] = (list(tracks), url or "", playlist_name)
+        while len(self._tracklists) > 16:
+            self._tracklists.popitem(last=False)
+        return self._tracklist_seq
+
+    def download_tracks(self, selected_indices, config, list_id=None) -> None:
+        """Downloads tracks picked out of a tracklist shown on Home.
+
+        `list_id` names that tracklist (every track the page got carries it).
+        The Queue can hold tracks from several lists by the time it starts,
+        and positions read against whatever was fetched last downloaded the
+        wrong tracks into the wrong playlist (issue #277). Without it the
+        current list is meant, as before.
+        """
+        context = None
+        if list_id is not None:
+            try:
+                context = self._tracklists.get(int(list_id))
+            except (TypeError, ValueError):
+                context = None
+            if context is None:
+                self.log(
+                    "That list is no longer loaded: open it again and re-queue "
+                    "its tracks.",
+                    "error",
+                )
+                self._push_safe("app_download_finished", False)
                 return
+        payload = self._download_job_payload(selected_indices, config, context)
+        if payload is not None:
+            if self._download_queue is not None:
+                self._submit_download_job(payload)
+            else:
+                # Self-contained in the desktop window too: the batch may wait
+                # for the one before it, and by then Home can show another list.
+                payload["_stop_generation"] = self._current_stop_generation()
+                self._start_download_job(payload)
+            return
+        if context is not None and context[0] is not self.current_tracks:
+            self.log("Could not queue these tracks.", "error")
+            self._push_safe("app_download_finished", False)
+            return
         threading.Thread(
             target=self._download_task,
             args=(selected_indices, config),
+            kwargs={"expected_generation": self._current_stop_generation()},
             daemon=True,
         ).start()
 
-    def _download_job_payload(self, selected_indices, config) -> dict | None:
+    def _download_job_payload(
+        self, selected_indices, config, context: tuple | None = None
+    ) -> dict | None:
         """One download request, in a form that outlives the process.
 
         The tracks themselves rather than their positions: `current_tracks`
@@ -1565,20 +1717,32 @@ class MornyeAPI(
         indices ride along only so the page that asked can close the right
         rows when the batch ends. None when a selected track cannot be written
         down; the batch then runs the old, unpersisted way rather than not at
-        all.
+        all. `context` is ``(tracks, url, playlist_name)`` of the tracklist the
+        indices point into; the current one when not given.
         """
+        if context is None:
+            context = (
+                self.current_tracks,
+                self.current_url or "",
+                getattr(self, "current_playlist_name", ""),
+            )
+        listed, url, playlist_name = context
         try:
             indices = [int(i) for i in selected_indices]
-            tracks = [self.current_tracks[i].model_dump(mode="json") for i in indices]
+            tracks = [listed[i].model_dump(mode="json") for i in indices]
         except (AttributeError, IndexError, TypeError, ValueError):
             return None
         return {
             "indices": indices,
             "tracks": tracks,
-            "source_url": self.current_url or "",
+            "source_url": url,
             # Decided now, against the tracklist the user was looking at:
             # after a restart there is no tracklist left to compare with.
-            "whole": sorted(indices) == list(range(len(self.current_tracks))),
+            "whole": sorted(indices) == list(range(len(listed))),
+            # Only recorded with a failure (core/failed_tracks.py), never a
+            # folder for this job: a whole playlist gets its folder from the
+            # downloader, and "playlist_name" would nest it twice.
+            "collection_name": playlist_name,
             "config": dict(config or {}),
             "session": self._session_id,
         }
@@ -1599,7 +1763,10 @@ class MornyeAPI(
             queue = self._download_queue
             if queue is None:
                 return
-            queue.submit(self.owner, payload)
+            payload = dict(payload)
+            with self._active_download_events_lock:
+                payload.setdefault("_stop_generation", self._stop_generation)
+                queue.submit(self.owner, payload)
         except QueueFullError as exc:
             self.log(
                 f"{exc.pending} downloads are already waiting (limit {exc.limit}); "
@@ -1624,10 +1791,19 @@ class MornyeAPI(
         if len(raw_tracks) != len(indices):
             msg = "Malformed download job: tracks and indices do not match"
             raise ValueError(msg)
+        expected_generation = payload.get(
+            "_stop_generation", self._current_stop_generation()
+        )
+        if expected_generation != self._current_stop_generation():
+            raise RuntimeError("Cancelled before starting.")
         tracks = {
             i: TrackMetadata.model_validate(t)
             for i, t in zip(indices, raw_tracks, strict=True)
         }
+        playlist_tracks = [
+            TrackMetadata.model_validate(track)
+            for track in payload.get("playlist_tracks") or []
+        ]
         self._download_task(
             indices,
             dict(payload.get("config") or {}),
@@ -1635,7 +1811,10 @@ class MornyeAPI(
             source_url=str(payload.get("source_url") or ""),
             whole=bool(payload.get("whole")),
             playlist_name=str(payload.get("playlist_name") or ""),
+            playlist_tracks=playlist_tracks,
+            collection_name=str(payload.get("collection_name") or ""),
             announce=payload.get("session") == self._session_id,
+            expected_generation=expected_generation,
         )
         return {"tracks": len(indices)}
 
@@ -1665,7 +1844,18 @@ class MornyeAPI(
         )
         self._download_lock.acquire()
 
-    def _download_task(self, selected_indices, config, **batch) -> None:
+    def _current_stop_generation(self) -> int:
+        with self._active_download_events_lock:
+            return self._stop_generation
+
+    def _download_task(
+        self,
+        selected_indices,
+        config,
+        *,
+        expected_generation: int | None = None,
+        **batch,
+    ) -> None:
         """Runs one batch start to finish, never overlapping another one.
 
         The lock is taken and released here rather than around the body
@@ -1674,8 +1864,22 @@ class MornyeAPI(
         that would not build — would otherwise leave it held, and every
         later download in the process would wait on it forever.
         """
-        self._await_download_slot(selected_indices)
+        with self._active_download_events_lock:
+            if (
+                expected_generation is not None
+                and expected_generation != self._stop_generation
+            ):
+                self.log("Download stopped before it started.", "warning")
+                return
+            stop_event = threading.Event()
+            self._active_download_events.add(stop_event)
+        lock_acquired = False
         try:
+            self._await_download_slot(selected_indices)
+            lock_acquired = True
+            if stop_event.is_set():
+                self.log("Download stopped before it started.", "warning")
+                return
             # Settings the page does not send (timeout_s, save_lrc, …) come
             # from MORNYE_<SETTING> when the container sets them; whatever
             # the page did send wins (core/env_settings.py).
@@ -1683,9 +1887,41 @@ class MornyeAPI(
                 from .core.env_settings import gui_env_defaults
 
                 config = {**gui_env_defaults(), **config}
-            self._run_download_batch(selected_indices, config, **batch)
+            self._run_download_batch(
+                selected_indices,
+                config,
+                stop_event=stop_event,
+                **batch,
+            )
         finally:
-            self._download_lock.release()
+            if lock_acquired:
+                self._download_lock.release()
+            with self._active_download_events_lock:
+                self._active_download_events.discard(stop_event)
+
+    def stop_all_downloads(self) -> dict[str, int | bool]:
+        """Stop current batches and cancel this account's queued downloads."""
+        with self._active_download_events_lock:
+            self._stop_generation += 1
+            active = tuple(self._active_download_events)
+            for event in active:
+                event.set()
+            queue = self._download_queue
+            cancelled_pending = (
+                queue.cancel_pending(getattr(self, "owner", "") or "")
+                if callable(getattr(queue, "cancel_pending", None))
+                else 0
+            )
+        self.log(
+            f"Stopping {len(active)} active download(s); cancelled "
+            f"{cancelled_pending} queued download(s).",
+            "warning",
+        )
+        return {
+            "ok": True,
+            "stopped": len(active),
+            "cancelled_pending": cancelled_pending,
+        }
 
     def _log_hires_verification(self, quality: str, redownload: bool) -> None:
         """Says what Hi-Res verification will actually do for this run.
@@ -1739,7 +1975,10 @@ class MornyeAPI(
         source_url: str | None = None,
         whole: bool | None = None,
         playlist_name: str = "",
+        playlist_tracks: list | None = None,
+        collection_name: str | None = None,
         announce: bool = True,
+        stop_event: threading.Event | None = None,
     ) -> None:
         """One batch, start to finish.
 
@@ -1828,7 +2067,38 @@ class MornyeAPI(
             allow_fallback = config.get("allow_fallback", True)
             embed_lyrics = config.get("lyrics", True)
             enrich_metadata = config.get("enrich_metadata", True)
-            services = config.get("services", ["tidal", "qobuz", "deezer"])
+            raw_services = config.get("services", ["tidal", "qobuz", "deezer"])
+            services = (
+                [str(service) for service in raw_services if str(service).strip()]
+                if isinstance(raw_services, (list, tuple))
+                else []
+            )
+            preferred_service = str(
+                config.get("preferred_service") or (services[0] if services else "")
+            ).strip()
+            fallback_services = config.get("fallback_services", True) is not False
+            if preferred_service:
+                from .extensions.catalog import canonical_service_name
+
+                preferred_key = canonical_service_name(preferred_service)
+                matching_service = next(
+                    (
+                        service
+                        for service in services
+                        if canonical_service_name(str(service)) == preferred_key
+                    ),
+                    None,
+                )
+                if matching_service is None:
+                    raise ValueError(
+                        "The preferred download provider is not enabled. "
+                        "Choose an enabled provider in Settings."
+                    )
+                services = [matching_service] + [
+                    service for service in services if service != matching_service
+                ]
+                if not fallback_services:
+                    services = [matching_service]
             filename_format = config.get("filename_format", "{title} - {artist}")
             output_path = config.get("output_path") or None
             if destination_id and output_path:
@@ -1854,11 +2124,14 @@ class MornyeAPI(
                 library_dir = download_output_dir
                 # Tracks picked out of a playlist (a followed playlist's
                 # new ones) download as loose tracks; put them in the
-                # folder the whole playlist would have gone into. Same
-                # sanitising as download_engine._resolve_output_dir_async.
+                # folder the whole playlist would have gone into: the same
+                # safe_dir_name() download_engine names that folder with, or
+                # a name ending in "." or past the length cap would split
+                # one playlist into two folders (issue #277).
+                from .core.models import safe_dir_name
+
                 download_output_dir = os.path.join(
-                    download_output_dir,
-                    re.sub(r'[<>:"/\\|?*]', "_", playlist_name.strip()),
+                    download_output_dir, safe_dir_name(playlist_name)
                 )
                 os.makedirs(download_output_dir, exist_ok=True)
             first_artist_only = config.get("first_artist_only", False)
@@ -2061,7 +2334,15 @@ class MornyeAPI(
             # of failures ends with this call.
             from .core import failed_tracks
 
-            failed_hook = failed_tracks.hook(self.owner, collection_url)
+            if collection_name is None:
+                collection_name = (
+                    getattr(self, "current_playlist_name", "")
+                    if source_url is None
+                    else ""
+                )
+            failed_hook = failed_tracks.hook(
+                self.owner, collection_url, playlist_name or collection_name
+            )
             deferred_download_hooks: list[tuple[Any, Any]] = []
             post_delivery_hooks = [log_hook, failed_hook]
             # Notifications configured by the environment (MORNYE_NOTIFY and
@@ -2084,11 +2365,25 @@ class MornyeAPI(
             else:
                 download_hooks = cast(Any, post_delivery_hooks)
 
+            # Request spacing (issue #279) as (min, max) seconds. A maximum
+            # below the minimum, as "min 2" with max left at 0, means a fixed
+            # delay of the minimum; DownloadConfig would refuse the pair and
+            # every download of the batch would fail.
+            def _delay_range(kind: str) -> tuple[float, float]:
+                low = max(0.0, float(config.get(f"{kind}_delay_min_s") or 0.0))
+                high = max(0.0, float(config.get(f"{kind}_delay_max_s") or 0.0))
+                return low, max(low, high)
+
+            metadata_delay = _delay_range("metadata")
+            provider_delay = _delay_range("provider")
+
             legacy_opts = DownloadOptions(
                 output_dir=download_output_dir,
                 services=services,
                 quality=quality,
                 allow_fallback=allow_fallback,
+                preferred_service=preferred_service or None,
+                fallback_services=fallback_services,
                 filename_format=filename_format,
                 use_track_numbers=use_track_numbers,
                 use_album_track_numbers=use_album_track_numbers,
@@ -2096,6 +2391,7 @@ class MornyeAPI(
                 use_album_subfolders=use_album_subfolders,
                 create_playlist_subfolders=create_playlist_subfolders,
                 m3u_format=str(config.get("m3u_format") or "m3u8"),
+                m3u_playlist_tracks=playlist_tracks or None,
                 library_dir=library_dir,
                 library_scan_dirs=library_scan_dirs_from(
                     config.get("library_scan_dirs")
@@ -2131,6 +2427,13 @@ class MornyeAPI(
                 verify_hires=verify_hires,
                 redownload_fake_hires=redownload_fake_hires,
                 timeout_s=timeout_s,
+                stop_event=stop_event,
+                metadata_delay_min_s=metadata_delay[0],
+                metadata_delay_max_s=metadata_delay[1],
+                provider_delay_min_s=provider_delay[0],
+                provider_delay_max_s=provider_delay[1],
+                auto_rate_limit_cooldown=config.get("auto_rate_limit_cooldown", True)
+                is True,
             )
             from .application.metadata_service import MetadataService
 
@@ -2139,6 +2442,7 @@ class MornyeAPI(
                     legacy_opts,
                     prefetched=prefetched or None,
                 ),
+                stop_event=stop_event,
                 # The real resolver. Left to its default, MetadataService
                 # answers a spotify:track: link with its compatibility stub
                 # ("Example Artist — Example Track"), and every provider was
@@ -2268,20 +2572,17 @@ class MornyeAPI(
                 return
             self.set_progress("Complete!")
             self.log(f"All tracks saved to: {self.download_dir}", "ok")
-            try:
-                # The indices are echoed back so the frontend closes the
-                # items of *this* batch: app_download_finished() used to mark
-                # every 'active' row done, which with a second batch queued
-                # behind this one meant marking tracks finished before they
-                # had started.
-                if announce:
-                    self._push("app_download_finished", True, list(selected_indices))
-                else:
-                    self._push(
-                        "app_background_download_finished", True, len(selected_indices)
-                    )
-            except Exception:
-                pass
+            # The indices are echoed back so the frontend closes the
+            # items of *this* batch: app_download_finished() used to mark
+            # every 'active' row done, which with a second batch queued
+            # behind this one meant marking tracks finished before they
+            # had started. (_push never raises.)
+            if announce:
+                self._push("app_download_finished", True, list(selected_indices))
+            else:
+                self._push(
+                    "app_background_download_finished", True, len(selected_indices)
+                )
 
         except Exception as e:
             self.log(f"Download error: {e!s}", "error")
@@ -2293,15 +2594,12 @@ class MornyeAPI(
                 )
             self.set_progress("Error.")
             self._push_download_stats()
-            try:
-                if announce:
-                    self._push("app_download_finished", False, list(selected_indices))
-                else:
-                    self._push(
-                        "app_background_download_finished", False, len(selected_indices)
-                    )
-            except Exception:
-                pass
+            if announce:
+                self._push("app_download_finished", False, list(selected_indices))
+            else:
+                self._push(
+                    "app_background_download_finished", False, len(selected_indices)
+                )
             if destination_id and self._download_queue is not None:
                 raise
         finally:
@@ -2342,7 +2640,9 @@ class MornyeAPI(
             while not stop_event.wait(0.25):
                 self._push_download_stats(manager.get_stats_sync())
         except Exception:
-            pass
+            _quiet_log.debug(
+                "Download stats monitor stopped on an error", exc_info=True
+            )
         finally:
             self._push_download_stats()
 
@@ -2354,7 +2654,7 @@ class MornyeAPI(
                 stats = DownloadManager().get_stats_sync()
             self._push("app_update_download_stats", stats)
         except Exception:
-            pass
+            _quiet_log.debug("Could not push the download stats", exc_info=True)
 
     def _health_check_task(self, services) -> None:
         """Run lyrics provider health checks and update the frontend."""
@@ -2379,10 +2679,7 @@ class MornyeAPI(
                 f"Health check — {len([r for r in results if r.ok])}/{len(results)} endpoints OK.",
                 "ok" if ok_providers else "error",
             )
-            try:
-                self._push("updateHealthResults", data)
-            except Exception:
-                pass
+            self._push("updateHealthResults", data)
         except ImportError:
             self.log("health_check module not found.", "error")
         except Exception as e:
@@ -2427,7 +2724,7 @@ def _purge_webview_http_cache() -> None:
     That is worse than it sounds: the `?v=` cache-bust that is supposed to
     make a frontend update visible lives *inside* index.html, on the
     <script>/<link> tags. A cached index.html keeps pointing at the old
-    ?v= values, so the old app.js and styles.css stay cached too, and the
+    ?v= values, so the old app.js and stylesheets stay cached too, and the
     whole frontend freezes at whichever version WebKit saw first — through
     any number of restarts, and no matter how often the version is bumped.
     (Observed for real: a window still running a 1 September build days
@@ -2489,7 +2786,9 @@ def run_gui() -> None:
         )
         candidates.append(pkg_frontend)
     except Exception:
-        pass
+        _quiet_log.debug(
+            "mornye package not importable while locating the frontend", exc_info=True
+        )
 
     # 3) original heuristic (parent of site-packages, e.g. lib/pythonX.Y/frontend)
     original_frontend = os.path.abspath(
@@ -2505,7 +2804,9 @@ def run_gui() -> None:
         if data_dir:
             candidates.append(os.path.join(data_dir, "frontend", "index.html"))
     except Exception:
-        pass
+        _quiet_log.debug(
+            "sysconfig data dir unavailable while locating the frontend", exc_info=True
+        )
 
     # Pick the first existing candidate
     html_path = None
@@ -2527,7 +2828,7 @@ def run_gui() -> None:
         min_size=(1000, 800),
         frameless=True,
         easy_drag=False,
-        background_color="#0a0a0a",
+        background_color="#0d0d0d",  # v2 ground, dark: no flash before CSS
     )
     api.set_window(window)
     if window is not None:

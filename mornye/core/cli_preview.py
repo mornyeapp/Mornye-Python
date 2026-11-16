@@ -108,6 +108,16 @@ def build_command_parts(cfg: dict) -> list[str]:
         parts.extend(["--retries", str(cfg["track_max_retries"])])
     if cfg.get("max_concurrent_downloads", 2) != 2:
         parts.extend(["--max-concurrent", str(cfg["max_concurrent_downloads"])])
+    for key, option in (
+        ("metadata_delay_min_s", "--metadata-delay-min"),
+        ("metadata_delay_max_s", "--metadata-delay-max"),
+        ("provider_delay_min_s", "--provider-delay-min"),
+        ("provider_delay_max_s", "--provider-delay-max"),
+    ):
+        if cfg.get(key, 0.0):
+            parts.extend([option, str(cfg[key])])
+    if not cfg.get("auto_rate_limit_cooldown", True):
+        parts.append("--no-auto-rate-limit-cooldown")
     if cfg.get("timeout_s"):
         parts.extend(["--timeout", str(cfg["timeout_s"])])
     if cfg.get("post_download_action") and cfg["post_download_action"] != "none":
@@ -194,3 +204,49 @@ def format_command(cfg: dict) -> str:
         else:
             lines[-1] += f" {quoted}"
     return " \\\n    ".join(lines)
+
+
+#: GUI setting (buildConfig() in frontend/app.js) → launcher `cfg` key, where
+#: the two names differ. A GUI key with no launcher counterpart (extension
+#: quality, network destination, sound…) is GUI-only and stays out.
+_GUI_RENAMES = {"lyrics": "embed_lyrics"}
+
+
+def gui_command(url: str, gui_cfg: dict, output_dir: str) -> str:
+    """The command line equivalent to downloading *url* from the GUI (N2).
+
+    *gui_cfg* is what the GUI's download uses: buildConfig() over the
+    MORNYE_<SETTING> defaults. It is laid over the TUI's complete defaults
+    (ConfigState), so a key the GUI leaves out keeps the launcher's value,
+    and only what differs from the CLI's own defaults is printed.
+    """
+    from ..tui.config_state import ConfigState
+
+    cfg = ConfigState().to_cfg()
+    # The GUI passes no timeout unless one is set: the engine's default.
+    cfg["timeout_s"] = None
+    for key, value in gui_cfg.items():
+        target = _GUI_RENAMES.get(key, key)
+        if target in cfg and value is not None and target not in ("url", "csv_path"):
+            cfg[target] = value
+    configured_services = list(gui_cfg.get("services") or cfg["services"])
+    preferred_service = gui_cfg.get("preferred_service")
+    if preferred_service in configured_services:
+        configured_services = [preferred_service] + [
+            service for service in configured_services if service != preferred_service
+        ]
+        if gui_cfg.get("fallback_services", True) is False:
+            configured_services = [preferred_service]
+    cfg["services"] = configured_services
+    if cfg.get("transcode_to") in ("", "none"):
+        cfg["transcode_to"] = None
+    # INFO is the CLI's own default: only DEBUG is a choice worth printing.
+    if str(cfg.get("log_level") or "").upper() in ("", "INFO"):
+        cfg["log_level"] = None
+    for key in ("artist_separator", "loop"):
+        if not cfg.get(key):
+            cfg[key] = None
+    cfg["url"] = url
+    cfg["csv_path"] = ""
+    cfg["output_dir"] = output_dir
+    return format_command(cfg)

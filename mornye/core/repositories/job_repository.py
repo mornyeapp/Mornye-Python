@@ -8,8 +8,9 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 from collections.abc import Iterator
-from typing import Any, List
+from typing import Any
 from ..paths import data_path
+import builtins
 
 
 class JobRepository:
@@ -237,7 +238,7 @@ class JobRepository:
                 (status, time.time(), error, attempt_id),
             )
 
-    def list_attempts(self, job_id: str) -> List[dict[str, Any]]:
+    def list_attempts(self, job_id: str) -> builtins.list[dict[str, Any]]:
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT id, job_id, status, started_at, finished_at, error "
@@ -246,7 +247,9 @@ class JobRepository:
             ).fetchall()
         return [dict(row) for row in rows]
 
-    def create_items(self, job_id: str, sources: List[str]) -> List[dict[str, Any]]:
+    def create_items(
+        self, job_id: str, sources: builtins.list[str]
+    ) -> builtins.list[dict[str, Any]]:
         now = time.time()
         with self._connect() as conn:
             conn.executemany(
@@ -256,7 +259,7 @@ class JobRepository:
             )
         return self.list_items(job_id)
 
-    def list_items(self, job_id: str) -> List[dict[str, Any]]:
+    def list_items(self, job_id: str) -> builtins.list[dict[str, Any]]:
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT id, job_id, source, status, attempts, provider, error, result, "
@@ -288,7 +291,7 @@ class JobRepository:
             raise KeyError(item_id)
         return dict(row)
 
-    def reset_items_for_retry(self, job_id: str) -> List[dict[str, Any]]:
+    def reset_items_for_retry(self, job_id: str) -> builtins.list[dict[str, Any]]:
         now = time.time()
         with self._connect() as conn:
             conn.execute(

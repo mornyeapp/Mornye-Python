@@ -1,0 +1,660 @@
+/* frontend/css/feedback.css — toasts, modals, empty and error states,
+   skeletons and reduced motion in the console look (redesign voce 21).
+   Shared by every view; mirrors the notice, fault, blank, dialog and skel
+   components of components.css (see docs/styleguide.html) on the class
+   names app.js and toast-system.js already write.
+
+   The structure of toasts, dialogs and banners comes first (moved out of
+   styles.css in voce 22), the console look after it. Semantic tokens only. */
+
+/* Folder browser modal — was a hardcoded rgba(0,0,0,.5) scrim plus a
+   card of inline style="" in index.html, so it never picked up --scrim
+   or any theme token. Moved to real classes: same DOM/ID contract, no
+   JS change needed for this half of it (openFolderBrowser/closeFolderBrowser
+   only toggle .hidden). */
+#folder-browser-modal {
+  position: fixed; inset: 0;
+  background: var(--scrim);
+  display: flex; align-items: center; justify-content: center;
+  z-index: var(--z-modal);
+}
+.fb-card {
+  background: var(--surface); border: 1px solid var(--rule);
+  width: 90%; max-width: 500px; max-height: 80vh;
+  display: flex; flex-direction: column;
+}
+.fb-header {
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--rule);
+  display: flex; justify-content: space-between; align-items: center;
+}
+#folder-browser-title { font-weight: 600; color: var(--text); }
+.fb-close {
+  background: none; border: none; color: var(--text-muted); cursor: pointer;
+  font-size: var(--text-xl); padding: 0; line-height: 1;
+  transition: color var(--motion) var(--ease);
+}
+.fb-close:hover { color: var(--text); }
+.fb-toolbar {
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--rule);
+  display: flex; gap: var(--space-2); align-items: center;
+}
+#fb-back {
+  background: var(--raised); border: 1px solid var(--rule);
+  border-radius: var(--radius-1); padding: var(--space-2) var(--space-3);
+  cursor: pointer; color: var(--text); font-size: var(--text-md);
+  font-family: var(--font); transition: opacity var(--motion) var(--ease);
+}
+#fb-back.is-root { opacity: .5; }
+#fb-path {
+  flex: 1; background: var(--raised); border: 1px solid var(--rule);
+  border-radius: var(--radius-1); padding: var(--space-2) var(--space-3);
+  color: var(--text-2); font-size: var(--text-sm); font-family: var(--font);
+}
+.fb-select {
+  background: var(--signal); border: 1px solid var(--signal);
+  border-radius: var(--radius-1); padding: var(--space-2) var(--space-3);
+  cursor: pointer; color: var(--signal-ink); font-weight: 600;
+  font-size: var(--text-md); font-family: var(--font);
+  transition: background var(--motion) var(--ease);
+}
+.fb-select:hover { background: var(--signal); }
+#fb-entries { flex: 1; overflow-y: auto; padding: var(--space-2); }
+.fb-entry {
+  padding: var(--space-2) var(--space-3); cursor: pointer;
+  border-radius: var(--radius-1);
+  display: flex; align-items: center; gap: var(--space-2);
+  color: var(--text); font-size: var(--text-lg);
+  border: 1px solid transparent;
+  transition: background var(--motion) var(--ease);
+}
+.fb-entry:hover { background: var(--raised); }
+.fb-empty { padding: var(--space-5); text-align: center; color: var(--text-muted); font-size: var(--text-md); }
+
+.api-modal {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-5);
+}
+.api-modal.hidden { display: none; }
+.api-modal-backdrop {
+  position: absolute;
+  inset: 0;
+}
+.api-modal-card {
+  position: relative;
+  width: min(520px, 100%);
+  padding: var(--space-5);
+  z-index: 1;
+}
+.api-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+.api-modal-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+.api-modal-actions > div {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.api-modal-header .close-btn {
+  border: none;
+  width: 34px;
+  height: 34px;
+  cursor: pointer;
+  font-size: 16px;
+}
+.api-config-help {
+  font-size: var(--text-md);
+  color: var(--signal);
+  text-decoration: none;
+  white-space: nowrap;
+  border-bottom: 1px dashed transparent;
+}
+.api-config-help:hover {
+  border-bottom-color: var(--signal);
+}
+
+/* Toasts and the save notice float above the bar, not behind it. */
+@media (min-width: 701px) {
+  body:has(#queue-dock.visible) .toast-container.bottom-right,
+  body:has(#queue-dock.visible) .toast-container.bottom-left,
+  body:has(#queue-dock.visible) .toast-container.bottom-center { bottom: calc(var(--dock-h) + 16px); }
+}
+.close-btn {
+  width: 38px; height: 38px; border-radius: 14px;
+  display: grid; place-items: center;
+  border: 1px solid var(--rule); background: var(--surface);
+  color: var(--text-2); cursor: pointer;
+}
+.close-btn:hover { background: var(--raised); color: var(--text); }
+@keyframes fadein { from { opacity:0; transform: translateY(2px); } to { opacity:1; transform: none; } }
+
+/* ── Error state ──
+   One shape for "this did not work": what happened, what to do, a way to
+   do it, and the raw message folded away for when it is needed. */
+.error-state {
+  display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2);
+  max-width: 560px; margin: var(--space-5) 0; padding: var(--space-5);
+  text-align: left; user-select: text;
+}
+.error-state .es-icon {
+  width: 40px; height: 40px;
+  display: grid; place-items: center;
+}
+.error-state .es-icon svg { width: 20px; height: 20px; }
+.error-state .es-body { margin: 0; line-height: 1.55; max-width: 60ch; }
+.error-state .es-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-1); }
+.error-state .es-detail { width: 100%; }
+.error-state .es-detail summary { cursor: pointer; width: fit-content; }
+.error-state .es-detail summary:hover { color: var(--text-2); }
+.error-state .es-detail code {
+  display: block; margin-top: var(--space-1); padding: var(--space-2);
+  font-family: var(--font); font-size: var(--text-sm); color: var(--text-2);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+#track-rows > .error-state { margin: var(--space-5) auto; }
+.page-list > .error-state {
+  padding: 48px var(--space-5);
+  border-radius: var(--radius-2);
+}
+
+/* Forced colours: see the note in layout.css. */
+@media (forced-colors: active) {
+  .fb-select, #fb-back {
+    forced-color-adjust: none;
+    border: 1px solid ButtonText;
+  }
+  .fb-select {
+    background: Highlight; color: HighlightText; border-color: HighlightText;
+  }
+}
+
+.skeleton-text { height: 16px; margin: 4px 0; width: 80%; }
+.skeleton-text.short { width: 40%; }
+
+/* ── ffmpeg warning banner ── */
+.ffmpeg-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px var(--space-4);
+  background: transparent;
+  border-bottom: 1px solid var(--error);
+  font-size: var(--text-md);
+  color: var(--text-2);
+  flex-shrink: 0;
+  animation: fadein .2s ease;
+}
+.ffmpeg-banner-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+  color: var(--error);
+}
+.ffmpeg-banner-body {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.ffmpeg-banner-body strong { color: var(--error); }
+.ffmpeg-banner-link {
+  color: var(--signal-text);
+  text-decoration: underline;
+  white-space: nowrap;
+}
+.ffmpeg-banner-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: color var(--motion) var(--ease);
+}
+.ffmpeg-banner-close:hover { color: var(--text-2); }
+
+/* ==========================================================================
+   TOAST SYSTEM
+   ========================================================================== */
+.toast-container {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  z-index: var(--z-toast);
+  pointer-events: none;
+}
+
+/* Posizionamenti */
+.toast-container.bottom-right { bottom: 24px; right: 24px; }
+.toast-container.bottom-left { bottom: 24px; left: 24px; }
+.toast-container.top-right { top: 24px; right: 24px; flex-direction: column-reverse; }
+.toast-container.top-left { top: 24px; left: 24px; flex-direction: column-reverse; }
+.toast-container.top-center { top: 24px; left: 50%; transform: translateX(-50%); flex-direction: column-reverse; }
+.toast-container.bottom-center { bottom: 24px; left: 50%; transform: translateX(-50%); }
+
+.toast {
+  display: flex;
+  align-items: center;
+  padding: 14px var(--space-4);
+  min-width: 280px;
+  max-width: 400px;
+  pointer-events: auto;
+  position: relative;
+  overflow: hidden;
+}
+
+.toast-icon {
+  width: 20px;
+  height: 20px;
+  margin-right: 14px;
+  flex-shrink: 0;
+}
+.toast-icon svg { width: 100%; height: 100%; }
+
+.toast-content {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.toast-title {
+  letter-spacing: 0.02em;
+}
+
+.toast-message {
+  line-height: 1.4;
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 4px;
+  margin-left: 12px;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+/* Compact variant (the live download toast): narrower and tighter so it
+   reads as a status chip, not a card over the page. */
+.toast.toast-compact { min-width: 0; width: min(320px, calc(100vw - 32px)); padding: 10px 12px; }
+.toast.toast-compact .toast-icon { width: 16px; height: 16px; margin-right: 10px; }
+.toast.toast-compact .toast-content { gap: 2px; min-width: 0; }
+.toast.toast-compact .toast-title { font-size: 12.5px; }
+.toast.toast-compact .toast-message { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.toast.toast-compact .toast-close { font-size: 17px; margin-left: 8px; }
+
+/* Progress Bar */
+.toast-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  opacity: 0.3;
+  width: 100%;
+  transform-origin: left;
+  animation: toastProgress linear forwards;
+}
+@keyframes toastProgress { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@keyframes toastSpin { 100% { transform: rotate(360deg); } }
+
+.toast-spin { animation: toastSpin 1s linear infinite; }
+
+/* Phone layout: see the note in layout.css. */
+
+/* Touch ergonomics: see the note in layout.css. */
+@media (hover: none) and (pointer: coarse) {
+  .api-modal-card, #fb-entries {
+    overscroll-behavior: contain;
+  }
+}
+
+@media (max-width: 700px) {
+  /* ── Modals as bottom sheets ──
+     A centred 520px card on a 360px screen is a full-screen dialog with a
+     20px margin pretending not to be. Anchored to the bottom edge it is
+     both within thumb reach and the shape a phone user expects. dvh again,
+     so a sheet is never taller than the visible viewport while the URL bar
+     is showing. */
+  .api-modal { padding: 0; align-items: flex-end; }
+  .api-modal-card {
+    width: 100%;
+    max-height: 92dvh;
+    overflow-y: auto;
+    padding: var(--space-5) var(--space-4) calc(var(--space-5) + env(safe-area-inset-bottom));
+  }
+  .api-modal-header .close-btn { min-width: 44px; min-height: 44px; }
+  /* The action row is a space-between pair: a link (or, in the login sheet,
+     an empty <div> holding the left slot open) and a cluster of buttons. At
+     this width the cluster gets the whole row and its buttons split it, so
+     the primary action is a full-width target at the bottom of the sheet
+     rather than a content-width one tucked into the corner. The empty
+     spacer would otherwise contribute a blank row of its own. */
+  .api-modal-actions { flex-wrap: wrap; gap: var(--space-2); }
+  .api-modal-actions > div { flex: 1 1 100%; }
+  .api-modal-actions > div:empty { display: none; }
+  .api-modal-actions .act-btn { flex: 1 1 auto; min-height: 44px; }
+
+  #folder-browser-modal { align-items: flex-end; }
+  .fb-card {
+    width: 100%;
+    max-height: 88dvh;
+    border-bottom: none;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  /* A folder list is a column of things to tap, one per row, and picking
+     the wrong directory here is the sort of mistake that is only obvious
+     three screens later. */
+  .fb-entry { min-height: 44px; }
+  .fb-toolbar { flex-wrap: wrap; }
+  #fb-back, .fb-select, .fb-close { min-height: 44px; min-width: 44px; }
+
+  /* ── Toasts ──
+     Every corner variant becomes the same full-width strip: a 24px inset
+     from a corner is a third of the screen on a phone, and the four
+     positions stop meaning anything once the card is as wide as the
+     viewport. The bottom ones clear the nav bar — see the web-mode block. */
+  .toast-container.bottom-right, .toast-container.bottom-left,
+  .toast-container.bottom-center, .toast-container.top-right,
+  .toast-container.top-left, .toast-container.top-center {
+    left: var(--space-2);
+    right: var(--space-2);
+    transform: none;
+    max-width: none;
+  }
+  .toast-container.top-right, .toast-container.top-left,
+  .toast-container.top-center {
+    top: calc(var(--space-2) + env(safe-area-inset-top));
+  }
+  .toast { width: auto; max-width: none; }
+}
+
+/* Phone nav bar (--web only): see the note in layout.css. */
+@media (max-width: 700px) {
+  /* Toasts sit above the dock too, not on top of it. */
+  body.web-mode:has(#queue-dock.visible) .toast-container.bottom-right,
+  body.web-mode:has(#queue-dock.visible) .toast-container.bottom-left,
+  body.web-mode:has(#queue-dock.visible) .toast-container.bottom-center {
+    bottom: calc(var(--nav-total-h) + 60px + var(--space-2));
+  }
+
+  /* Same for anything else anchored to the bottom edge. The bottom sheets
+     above are deliberately not in this list: a sheet covering the nav bar
+     is the point of a sheet. */
+  body.web-mode .toast-container.bottom-right,
+  body.web-mode .toast-container.bottom-left,
+  body.web-mode .toast-container.bottom-center {
+    bottom: calc(var(--nav-total-h) + var(--space-2));
+  }
+}
+
+/* Short landscape screens: see the note in layout.css. */
+@media (max-height: 480px) and (orientation: landscape) and (pointer: coarse) {
+  .api-modal-card, .fb-card { max-height: 96dvh; }
+}
+
+.api-modal-card, .fb-card {
+  border-radius: 16px;
+  box-shadow: none;
+}
+
+@media (max-width: 700px) {
+  .api-modal-card, .fb-card {
+    border-radius: 32px 32px 0 0;
+  }
+}
+
+/* The focus ring (layout.css) loads before this sheet now: restated at its
+   specificity for the controls above that draw their own radius or
+   outline, so focused they keep the ring's shape, as before. */
+:where(button, a, input, select, textarea, [tabindex]):where(.fb-select, .close-btn, .ffmpeg-banner-close):focus-visible {
+  border-radius: var(--radius-1);
+}
+
+/* ── Toasts → notices: a ruled strip with a state rule on the left ───── */
+.toast {
+  border: 1px solid var(--rule-strong);
+  border-left-width: 2px;
+  border-radius: var(--radius-1);
+  background: var(--raised);
+  color: var(--text);
+  box-shadow: var(--elevation-overlay);
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+  font-family: var(--font);
+}
+.toast.success { border-left-color: var(--ok); }
+.toast.success .toast-icon { color: var(--ok); }
+.toast.error { border-left-color: var(--error); }
+.toast.error .toast-icon { color: var(--error); }
+.toast.warning, .toast.loading { border-left-color: var(--signal-strong); }
+.toast.warning .toast-icon, .toast.loading .toast-icon { color: var(--signal-text); }
+.toast.info { border-left-color: var(--rule-strong); }
+.toast.info .toast-icon { color: var(--text-2); }
+.toast-title { font-size: var(--text-sm); font-weight: var(--weight-medium); }
+.toast-message { color: var(--text-2); font-size: var(--text-xs); }
+.toast-close { border-radius: var(--radius-1); color: var(--text-muted); }
+.toast-close:hover { background: var(--selected); color: var(--text); }
+.toast-progress { height: 2px; border-radius: 0; background: var(--signal-strong); }
+
+/* ── Modals → dialogs: a ruled panel over a dimmed ground ────────────── */
+.api-modal-backdrop {
+  background: var(--ground);
+  opacity: .72;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+.api-modal-card {
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-1);
+  background: var(--surface);
+  box-shadow: var(--elevation-overlay);
+}
+.api-modal-header {
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font);
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+}
+.api-modal-header .close-btn { border-radius: var(--radius-1); background: transparent; color: var(--text-muted); }
+.api-modal-header .close-btn:hover { background: var(--raised); color: var(--text); }
+.api-modal-body { color: var(--text-2); font-size: var(--text-sm); }
+.api-modal-body input:where(:not([type="checkbox"], [type="radio"], [type="range"])),
+.api-modal-body select,
+.api-modal-body textarea {
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background-color: var(--raised);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+}
+.api-modal-actions { border-top: 1px solid var(--rule); }
+.provider-picker-card { width: min(460px, 100%); }
+.provider-picker-description {
+  max-width: 48ch;
+  margin: 7px 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+.provider-picker-card .api-modal-body { padding-top: 18px; }
+.provider-picker-label { display: block; margin-bottom: 6px; color: var(--text-muted); font-size: var(--text-xs); }
+.provider-picker-card select { width: 100%; min-height: 40px; padding: 0 10px; }
+.provider-picker-quality { margin-top: 16px; }
+.provider-picker-quality-note { margin: 6px 0 0; color: var(--text-muted); font-size: var(--text-xs); line-height: 1.45; }
+.provider-picker-card select:disabled { opacity: .65; cursor: not-allowed; }
+.provider-picker-fallback {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-1);
+  background: var(--raised);
+  color: var(--text);
+  cursor: pointer;
+}
+.provider-picker-fallback input { margin-top: 3px; accent-color: var(--signal-strong); }
+.provider-picker-fallback strong,
+.provider-picker-fallback small { display: block; }
+.provider-picker-fallback strong { font-size: var(--text-xs); font-weight: var(--weight-medium); }
+.provider-picker-fallback small { margin-top: 3px; color: var(--text-muted); font-size: var(--text-xs); line-height: 1.4; }
+.provider-picker-card .api-modal-actions > div { display: flex; gap: 8px; }
+
+/* The confirmation dialog (askConfirm in app.js): narrower than a form
+   dialog, the question in the body's tone; a line break in the question
+   (a second sentence that warns) is kept. */
+.confirm-card { width: min(440px, 100%); }
+.confirm-message {
+  margin: var(--space-4) 0 0;
+  color: var(--text);
+  font-size: var(--text-md);
+  line-height: 1.5;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+/* ── Empty state → blank: left-aligned, no dashed frame ──────────────── */
+.empty-state {
+  align-items: flex-start;
+  text-align: left;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.empty-state .es-icon {
+  border-radius: var(--radius-1);
+  background: var(--raised);
+  color: var(--text-muted);
+}
+.empty-state .es-title {
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+.empty-state .es-hint { color: var(--text-2); font-size: var(--text-sm); }
+.page-list > .empty-state, .page-list > .error-state { border: 0; background: transparent; }
+
+/* ── Error state → fault: the one place an error is shown ───────────── */
+.error-state {
+  border: 1px solid var(--rule);
+  border-left: 2px solid var(--error);
+  border-radius: var(--radius-1);
+  background: var(--surface);
+  box-shadow: none;
+}
+.error-state .es-icon,
+.error-state.setup .es-icon,
+.error-state.network .es-icon {
+  border-radius: var(--radius-1);
+  background: transparent;
+  color: var(--error);
+}
+.error-state .es-title {
+  color: var(--error);
+  font-family: var(--font);
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+}
+.error-state .es-body { color: var(--text-2); font-size: var(--text-sm); }
+.error-state .es-detail { color: var(--text-muted); font-size: var(--text-xs); }
+.error-state .es-detail code { border-radius: var(--radius-1); background: var(--raised); }
+
+/* ── Skeletons stand still: motion is for state changes only ────────── */
+.skeleton,
+.skeleton-text {
+  border-radius: var(--radius-1);
+  background: var(--raised);
+  animation: none;
+}
+.skeleton::after, .skeleton-text::after { display: none; }
+
+/* ── Reduced motion: no transitions or animations at all ────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* ── Command palette (N1, palette.js) ─────────────────────────────────
+   A dialog near the top, like a launcher: one field, a list of commands
+   on rules, the active one marked by the signal bar on its left. */
+.palette {
+  position: fixed; inset: 0; z-index: var(--z-modal);
+  display: flex; justify-content: center; align-items: flex-start;
+  padding: 12vh var(--space-4) var(--space-4);
+}
+.palette.hidden { display: none; }
+.palette-backdrop { position: absolute; inset: 0; background: var(--ground); opacity: .72; }
+.palette-card {
+  position: relative; z-index: 1;
+  width: min(560px, 100%); max-height: 70vh;
+  display: flex; flex-direction: column;
+  border: 1px solid var(--rule-strong); border-radius: var(--radius-1);
+  background: var(--surface); box-shadow: var(--elevation-overlay);
+}
+.palette-input {
+  height: 44px; padding: 0 var(--space-4);
+  border: 0; border-bottom: 1px solid var(--rule); border-radius: 0;
+  background: transparent; color: var(--text);
+  font-family: var(--font); font-size: var(--text-md);
+  outline: none; /* focus shows on the rule under it (below) */
+}
+/* Doubled class: outranks the generic input rules of legacy.css (the
+   `input:focus` ring, the phone radius). */
+.palette-input.palette-input { border-radius: 0; }
+.palette-input.palette-input:focus { border-color: var(--signal-strong); border-width: 0 0 1px; box-shadow: none; outline: none; }
+.palette-input::placeholder { color: var(--text-muted); }
+.palette-list { list-style: none; margin: 0; padding: var(--space-1) 0; overflow-y: auto; }
+.palette-item {
+  display: flex; align-items: center; gap: var(--space-3);
+  min-height: var(--row); padding: 0 var(--space-4);
+  border-left: 2px solid transparent;
+  color: var(--text-2); font-size: var(--text-sm); cursor: pointer;
+}
+.palette-item[aria-selected="true"] { border-left-color: var(--signal-strong); background: var(--selected); color: var(--text); }
+.palette-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.palette-group {
+  color: var(--text-muted); font-size: var(--text-xs);
+  letter-spacing: var(--tracking-label); text-transform: uppercase; white-space: nowrap;
+}
+.palette-key {
+  padding: 0 6px; border: 1px solid var(--rule-strong); border-radius: var(--radius-1);
+  color: var(--text-2); font-family: var(--font); font-size: var(--text-xs); line-height: 18px;
+}
+.palette-empty { padding: var(--space-4); color: var(--text-muted); font-size: var(--text-sm); }
+.palette-foot {
+  padding: var(--space-2) var(--space-4); border-top: 1px solid var(--rule);
+  color: var(--text-muted); font-size: var(--text-xs);
+}
+@media (max-width: 700px) {
+  .palette { padding-top: var(--space-4); }
+  .palette-input { font-size: 16px; } /* no iOS focus zoom */
+  .palette-group { display: none; }
+}

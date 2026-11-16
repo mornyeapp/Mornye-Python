@@ -1,0 +1,88 @@
+/* frontend/css/accents.css — the accent choices of Settings → Appearance
+   (redesign voce 28).
+
+   An accent changes the signal and nothing else: the four --signal tokens
+   of tokens.css. Amber is the console look's own signal, the default, and
+   has no block here. Every sheet draws its signal from these tokens, so
+   the whole GUI follows.
+
+   Set as data-accent on <html> and <body> by applyAccent() in app.js. The
+   dark selectors outrank :root; the light ones carry .light-theme so they
+   outrank tokens.css's body.light-theme. The list must match ACCENTS in
+   app.js and MornyeAPI.ACCENTS in app.py.
+
+   Every pair meets WCAG AA (test_brand_tokens.py): --signal-text on the
+   surface and --signal-ink on --signal at 4.5:1, --signal-strong as a
+   control edge at 3:1. Light orange and cyan take dark ink for that. */
+
+html[data-accent="teal"], body[data-accent="teal"] {
+  --signal: #5cd3c3;  --signal-strong: #5cd3c3;
+  --signal-text: #6fdccd;  --signal-ink: #04201c;
+}
+html.light-theme[data-accent="teal"], body.light-theme[data-accent="teal"] {
+  --signal: #12776b;  --signal-strong: #0c5a51;
+  --signal-text: #0f6c61;  --signal-ink: #ffffff;
+}
+
+html[data-accent="green"], body[data-accent="green"] {
+  --signal: #30d158;  --signal-strong: #30d158;
+  --signal-text: #52d979;  --signal-ink: #07190c;
+}
+html.light-theme[data-accent="green"], body.light-theme[data-accent="green"] {
+  --signal: #24863d;  --signal-strong: #19652d;
+  --signal-text: #19652d;  --signal-ink: #ffffff;
+}
+
+html[data-accent="blue"], body[data-accent="blue"] {
+  --signal: #4d9dff;  --signal-strong: #4d9dff;
+  --signal-text: #67abff;  --signal-ink: #0b0b0d;
+}
+html.light-theme[data-accent="blue"], body.light-theme[data-accent="blue"] {
+  --signal: #1f6feb;  --signal-strong: #1258c5;
+  --signal-text: #125ccf;  --signal-ink: #ffffff;
+}
+
+html[data-accent="purple"], body[data-accent="purple"] {
+  --signal: #a97bff;  --signal-strong: #a97bff;
+  --signal-text: #ba95ff;  --signal-ink: #0b0b0d;
+}
+html.light-theme[data-accent="purple"], body.light-theme[data-accent="purple"] {
+  --signal: #7c4fd6;  --signal-strong: #602ec4;
+  --signal-text: #6430cd;  --signal-ink: #ffffff;
+}
+
+html[data-accent="pink"], body[data-accent="pink"] {
+  --signal: #ff6fae;  --signal-strong: #ff6fae;
+  --signal-text: #ff89bc;  --signal-ink: #0b0b0d;
+}
+html.light-theme[data-accent="pink"], body.light-theme[data-accent="pink"] {
+  --signal: #d6337b;  --signal-strong: #b22463;
+  --signal-text: #bb2667;  --signal-ink: #ffffff;
+}
+
+html[data-accent="orange"], body[data-accent="orange"] {
+  --signal: #ff9f45;  --signal-strong: #ff9f45;
+  --signal-text: #ffac5e;  --signal-ink: #0b0b0d;
+}
+html.light-theme[data-accent="orange"], body.light-theme[data-accent="orange"] {
+  --signal: #c76a10;  --signal-strong: #98510c;
+  --signal-text: #a1560d;  --signal-ink: #0b0b0d;
+}
+
+html[data-accent="red"], body[data-accent="red"] {
+  --signal: #ff6b6b;  --signal-strong: #ff6b6b;
+  --signal-text: #ff8585;  --signal-ink: #0b0b0d;
+}
+html.light-theme[data-accent="red"], body.light-theme[data-accent="red"] {
+  --signal: #d13a3a;  --signal-strong: #af2929;
+  --signal-text: #b72b2b;  --signal-ink: #ffffff;
+}
+
+html[data-accent="cyan"], body[data-accent="cyan"] {
+  --signal: #3fd6d6;  --signal-strong: #3fd6d6;
+  --signal-text: #54dada;  --signal-ink: #0b0b0d;
+}
+html.light-theme[data-accent="cyan"], body.light-theme[data-accent="cyan"] {
+  --signal: #0d9a9a;  --signal-strong: #096b6b;
+  --signal-text: #0a7474;  --signal-ink: #0b0b0d;
+}

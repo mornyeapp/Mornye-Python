@@ -127,7 +127,7 @@ class LinkResolver:
         for attempt in range(1, self.MAX_RETRIES + 1):
             try:
                 return await request_callable()
-            except (httpx.HTTPError, asyncio.TimeoutError) as exc:
+            except (TimeoutError, httpx.HTTPError) as exc:
                 last_error = exc
                 delay = min(self.BASE_DELAY_S * 2 ** (attempt - 1), self.MAX_DELAY_S)
                 delay += random.random() * 0.2

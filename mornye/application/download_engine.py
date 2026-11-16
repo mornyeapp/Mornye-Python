@@ -13,11 +13,13 @@ import asyncio
 import contextlib
 import inspect
 import logging
+import math
 import os
 import re
 import shlex
 import shutil
 import sys
+import threading
 import time
 import uuid
 from collections.abc import Callable, Sequence
@@ -75,6 +77,11 @@ from ..core.progress import (
     install_console_interception,
     safe_tqdm_write,
     uninstall_console_interception,
+)
+from ..core.rate_limiting import (
+    DownloadStopRequested,
+    await_or_stop,
+    download_rate_limiter,
 )
 from ..core.quality import (
     normalize_quality,
@@ -194,6 +201,8 @@ class DownloadOptions:
     # the extension does not declare is ignored.
     extension_quality: dict[str, str] = field(default_factory=dict)
     allow_fallback: bool = True
+    preferred_service: str | None = None
+    fallback_services: bool = True
     inter_track_delay_s: float = 1.0
     is_album: bool = False
     output_path: str | None = None
@@ -267,6 +276,12 @@ class DownloadOptions:
     transcode_max_bit_depth: int = 0
 
     track_max_retries: int = 0
+    metadata_delay_min_s: float = 0.0
+    metadata_delay_max_s: float = 0.0
+    provider_delay_min_s: float = 0.0
+    provider_delay_max_s: float = 0.0
+    auto_rate_limit_cooldown: bool = True
+    stop_event: threading.Event | None = None
     post_download_action: str = "none"
     post_download_command: str = ""
     tidal_custom_api: str | None = None
@@ -315,9 +330,10 @@ class DownloadOptions:
 
     # Playlist file written next to a playlist download ("m3u8", "m3u", or
     # "none"). A whole-playlist run rewrites it in playlist order; a run of
-    # loose tracks that belong to a playlist folder (a followed playlist's
-    # new tracks, see `library_dir`) appends to it. Issue #267.
+    # loose tracks that belong to a playlist folder appends unless the full
+    # current listing is supplied for a followed-playlist refresh.
     m3u_format: str = "m3u8"
+    m3u_playlist_tracks: list[TrackMetadata] | None = None
 
     # The library root when `output_dir` is one playlist's subfolder inside
     # it. Loose tracks are then looked up across the whole library first: a
@@ -358,6 +374,20 @@ class DownloadOptions:
         # caller can enable one without the other by omission.
         if self.redownload_fake_hires:
             self.verify_hires = True
+        for field_name in (
+            "metadata_delay_min_s",
+            "metadata_delay_max_s",
+            "provider_delay_min_s",
+            "provider_delay_max_s",
+        ):
+            value = float(getattr(self, field_name) or 0.0)
+            if not math.isfinite(value) or value < 0:
+                raise ValueError(f"{field_name} must be a finite number >= 0")
+            setattr(self, field_name, value)
+        if self.metadata_delay_max_s < self.metadata_delay_min_s:
+            raise ValueError("metadata_delay_max_s must be >= metadata_delay_min_s")
+        if self.provider_delay_max_s < self.provider_delay_min_s:
+            raise ValueError("provider_delay_max_s must be >= provider_delay_min_s")
 
 
 def _build_providers_for_name(name: str, opts: DownloadOptions) -> list[BaseProvider]:
@@ -640,7 +670,7 @@ async def _await_with_stall_timeout(
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError, Exception):
                     await task
-                raise asyncio.TimeoutError
+                raise TimeoutError
     except asyncio.CancelledError:
         task.cancel()
         raise
@@ -1144,6 +1174,19 @@ async def _download_one_pass_async(
     DownloadManager()
     errors: dict[str, str] = {}
     started_at = time.monotonic()
+
+    def pause_after_429(error: object, provider_name: str) -> None:
+        if opts.auto_rate_limit_cooldown and download_rate_limiter.is_rate_limited(
+            error
+        ):
+            seconds = download_rate_limiter.cooldown_after_429(error)
+            logger.warning(
+                "[rate-limit] Pausing all download requests for %.0f seconds "
+                "after %s returned HTTP 429",
+                seconds,
+                provider_name,
+            )
+
     # A provider that answered "503 … try again in about N minutes" is kept
     # out of the rotation until then (see core/provider_cooldown.py).
     provider_cooldown.watch_extension_logs()
@@ -1233,6 +1276,12 @@ async def _download_one_pass_async(
 
             stop_after_atmos_error = False
             try:
+                await download_rate_limiter.wait(
+                    "provider",
+                    opts.provider_delay_min_s,
+                    opts.provider_delay_max_s,
+                    stop_event=opts.stop_event,
+                )
                 # The timeout applies to each provider attempt. A JS provider
                 # may spend time obtaining a ticket before the audio transfer
                 # starts, and that startup time must not consume another
@@ -1287,14 +1336,20 @@ async def _download_one_pass_async(
                     **download_kwargs,
                 )
 
-                if opts.timeout_s:
-                    result = await _await_with_stall_timeout(
+                operation = (
+                    _await_with_stall_timeout(
                         download_task,
                         opts.timeout_s,
                         transfer_activity,
                     )
-                else:
-                    result = await download_task
+                    if opts.timeout_s
+                    else download_task
+                )
+                result = await await_or_stop(
+                    operation,
+                    opts.stop_event,
+                    on_stop=stop_event.set,
+                )
 
                 if (
                     normalize_quality(opts.quality) == "DOLBY_ATMOS"
@@ -1347,16 +1402,27 @@ async def _download_one_pass_async(
                                 )
                                 if opts.timeout_s:
                                     transfer_activity.last_activity = None
-                                    result = await _await_with_stall_timeout(
-                                        fallback_task,
-                                        opts.timeout_s,
-                                        transfer_activity,
+                                    result = await await_or_stop(
+                                        _await_with_stall_timeout(
+                                            fallback_task,
+                                            opts.timeout_s,
+                                            transfer_activity,
+                                        ),
+                                        opts.stop_event,
+                                        on_stop=stop_event.set,
                                     )
                                 else:
-                                    result = await fallback_task
+                                    result = await await_or_stop(
+                                        fallback_task,
+                                        opts.stop_event,
+                                        on_stop=stop_event.set,
+                                    )
+                            except DownloadStopRequested:
+                                stop_event.set()
+                                raise
                             except asyncio.CancelledError:
                                 raise
-                            except asyncio.TimeoutError:
+                            except TimeoutError:
                                 wait_for_idle = getattr(
                                     provider,
                                     "wait_for_idle_async",
@@ -1376,6 +1442,7 @@ async def _download_one_pass_async(
                                     f"Provider timed out after {opts.timeout_s}s",
                                 )
                             except Exception as exc:
+                                pause_after_429(exc, provider.name)
                                 logger.warning(
                                     "[%s] fallback quality %s raised: %s",
                                     provider.name,
@@ -1390,6 +1457,9 @@ async def _download_one_pass_async(
                                 break
                             current_tier = fallback_tier
 
+            except DownloadStopRequested:
+                stop_event.set()
+                raise
             except asyncio.CancelledError:
                 # The only thing that ever raises this event. It is handed to
                 # every provider above ("cooperative shutdown propagation"),
@@ -1400,7 +1470,7 @@ async def _download_one_pass_async(
                 # already torn its output sink down.
                 stop_event.set()
                 raise
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 wait_for_idle = getattr(provider, "wait_for_idle_async", None)
                 if callable(wait_for_idle):
                     await wait_for_idle(5.0)
@@ -1430,9 +1500,13 @@ async def _download_one_pass_async(
                 logger.warning(
                     "[%s] raised instead of failing cleanly: %s", provider.name, exc
                 )
+                pause_after_429(exc, provider.name)
                 result = DownloadResult.fail(
                     provider.name, str(exc) or type(exc).__name__
                 )
+
+            if not result.success:
+                pause_after_429(result.error or "", provider.name)
 
             if result.success and not result.skipped:
                 result = await _reject_wrong_recording_async(
@@ -2073,6 +2147,10 @@ class LegacyDownloadWorker:
             output_directory=output_directory,
             post_processing=self._post_processing,
             existing_paths=self._existing_paths,
+            library_root=(
+                self._opts.library_dir
+                or (self._opts.output_dir if self._is_playlist else None)
+            ),
             skipped_provider=self._providers[0].name,
             positions=self._positions,
             on_result=on_result,
@@ -2285,7 +2363,23 @@ class MornyeDownloader:
 
         pending = await self._resolve_isrc_bulk_async(tracks)
         existing_paths = await self._library_matches_async(pending)
-        playlist_file = "append" if self._opts.library_dir else None
+        # The full current listing rewrites the M3U only inside a library:
+        # without library_dir (playlist subfolders off) the tracks already
+        # downloaded are never looked up, and the rewrite would leave the
+        # playlist's M3U holding just this run's new tracks.
+        current_playlist = (
+            self._opts.m3u_playlist_tracks if self._opts.library_dir else None
+        )
+        playlist_existing_paths = (
+            await self._library_matches_async(current_playlist)
+            if current_playlist is not None
+            else None
+        )
+        playlist_file = (
+            "rewrite"
+            if current_playlist is not None
+            else "append" if self._opts.library_dir else None
+        )
         try:
             while True:
                 failed = await self._run_worker_async(
@@ -2296,6 +2390,8 @@ class MornyeDownloader:
                     False,
                     existing_paths=existing_paths,
                     playlist_file=playlist_file,
+                    playlist_tracks=current_playlist,
+                    playlist_existing_paths=playlist_existing_paths,
                 )
                 if not loop_minutes or loop_minutes <= 0 or not failed:
                     break
@@ -2310,9 +2406,9 @@ class MornyeDownloader:
         """Tracks already in `opts.library_dir` or a scanned library, by id.
 
         `library_dir` is only set when `output_dir` is one playlist's folder
-        inside a bigger library: a followed playlist's new tracks are looked
-        up across every playlist folder, so one that another playlist already
-        has is linked from the M3U instead of downloaded twice (issue #267).
+        inside a bigger library: followed playlist tracks are looked up across
+        every playlist folder, so one that another playlist already has is
+        linked from the M3U instead of downloaded twice (issue #267).
         `library_scan_dirs` are the user's other music folders (issue #272).
         """
         dirs = [self._opts.library_dir] if self._opts.library_dir else []
@@ -2681,7 +2777,7 @@ class MornyeDownloader:
         completed = worker.completed_paths
         return {
             planned.key: Path(completed[track.id])
-            for planned, track in zip(pending, tracks)
+            for planned, track in zip(pending, tracks, strict=False)
             if track.id in completed
         }
 
@@ -2751,6 +2847,34 @@ class MornyeDownloader:
             logger.debug("[downloader] Failed operation: %s", exc)
 
     async def _resolve_metadata_async(
+        self,
+        url: str,
+    ) -> tuple[str, list[TrackMetadata], dict]:
+        await download_rate_limiter.wait(
+            "metadata",
+            self._opts.metadata_delay_min_s,
+            self._opts.metadata_delay_max_s,
+            stop_event=self._opts.stop_event,
+        )
+        try:
+            return await await_or_stop(
+                self._resolve_metadata_impl_async(url),
+                self._opts.stop_event,
+            )
+        except Exception as exc:
+            if (
+                self._opts.auto_rate_limit_cooldown
+                and download_rate_limiter.is_rate_limited(exc)
+            ):
+                seconds = download_rate_limiter.cooldown_after_429(exc)
+                logger.warning(
+                    "[rate-limit] Pausing all download requests for %.0f seconds "
+                    "after a metadata 429",
+                    seconds,
+                )
+            raise
+
+    async def _resolve_metadata_impl_async(
         self,
         url: str,
     ) -> tuple[str, list[TrackMetadata], dict]:
@@ -2883,7 +3007,7 @@ class MornyeDownloader:
         except Exception as exc:
             raise MornyeError(
                 ErrorKind.NETWORK_ERROR, f"Metadata fetch failed: {exc}", cause=exc
-            )
+            ) from exc
 
         if not tracks:
             return collection_name, [], {}
@@ -3104,7 +3228,7 @@ class MornyeDownloader:
                 for _, t in without_album
             )
         )
-        by_track = {i: d for (i, _), d in zip(without_album, track_dates)}
+        by_track = {i: d for (i, _), d in zip(without_album, track_dates, strict=False)}
 
         found = []
         for i, track in missing:
@@ -3142,7 +3266,7 @@ class MornyeDownloader:
             return metadata if isinstance(metadata, dict) else {}
 
         for album_id, metadata in zip(
-            wanted, await asyncio.gather(*(_one(a) for a in wanted))
+            wanted, await asyncio.gather(*(_one(a) for a in wanted)), strict=False
         ):
             albums[album_id] = metadata
 
@@ -3221,12 +3345,14 @@ class MornyeDownloader:
         opts: DownloadOptions | None = None,
         existing_paths: dict[str, Path] | None = None,
         playlist_file: str | None = None,
+        playlist_tracks: list[TrackMetadata] | None = None,
+        playlist_existing_paths: dict[str, Path] | None = None,
     ) -> list[TrackMetadata]:
         """Runs one worker over `tracks`.
 
-        `playlist_file` is "rewrite" for a whole playlist (its M3U is written
-        afresh in playlist order) or "append" for loose tracks that belong to
-        a playlist folder (they are added to the M3U already there).
+        `playlist_file` is "rewrite" for a whole playlist or a followed
+        playlist refresh (using its full current listing), and "append" for
+        loose tracks that belong to a playlist folder.
         """
         effective = opts if opts is not None else self._opts
         updated_tracks = await self._register_queue_async(tracks)
@@ -3249,6 +3375,8 @@ class MornyeDownloader:
                 collection_name,
                 updated_tracks,
                 worker,
+                playlist_tracks=playlist_tracks,
+                existing_paths=playlist_existing_paths,
             )
         failed_ids = {f[0] for f in failed_tuples}
         return [t for t in updated_tracks if t.id in failed_ids]
@@ -3260,6 +3388,9 @@ class MornyeDownloader:
         collection_name: str,
         tracks: list[TrackMetadata],
         worker: LegacyDownloadWorker,
+        *,
+        playlist_tracks: list[TrackMetadata] | None = None,
+        existing_paths: dict[str, Path] | None = None,
     ) -> None:
         """Writes the M3U for a playlist run. Never fails the download.
 
@@ -3271,10 +3402,23 @@ class MornyeDownloader:
         base_out = worker.output_dir
         if fmt not in M3U_FORMATS or opts.output_path or not base_out:
             return
-        completed = worker.completed_paths
+        from .download_worker import _inside, bring_into_library
+
+        completed: dict[str, str] = {}
+        for track_id, path in (existing_paths or {}).items():
+            # A listed track found in one of the user's other music folders
+            # is placed beside the playlist first, as the worker does for
+            # this run's tracks: a ../../elsewhere path is one a media server
+            # scanning only the library cannot follow (issue #277).
+            if opts.library_dir and not await asyncio.to_thread(
+                _inside, Path(path), Path(opts.library_dir)
+            ):
+                path = await asyncio.to_thread(bring_into_library, Path(path), base_out)
+            completed[track_id] = str(path)
+        completed.update(worker.completed_paths)
         entries = [
             entry_for(track, Path(completed[track.id]))
-            for track in tracks
+            for track in (playlist_tracks if playlist_tracks is not None else tracks)
             if completed.get(track.id)
         ]
         if not entries and mode != "rewrite":

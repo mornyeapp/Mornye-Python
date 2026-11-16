@@ -30,9 +30,7 @@ SCRIPTS = ("app.js", "toast-system.js", "web-shim.js")
 # Looked up by app.js but no longer in the markup. Each lookup is guarded,
 # so nothing breaks — the update just lands nowhere. Listed so the test
 # stays strict about everything else; remove an entry once it is resolved.
-KNOWN_ORPHANS = {
-    "hc-summary",  # updateStatusSummary(): the label left the health card
-}
+KNOWN_ORPHANS: set[str] = set()
 
 # Names an inline handler may call without the script defining them.
 _HANDLER_GLOBALS = {

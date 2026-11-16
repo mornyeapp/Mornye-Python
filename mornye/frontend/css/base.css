@@ -1,0 +1,65 @@
+/* frontend/css/base.css — reset, type, focus, scrollbars (token v2).
+   Loads after tokens.css. Uses semantic tokens only. Not wired into the app
+   until Fase 3; docs/styleguide.html is where it is exercised. */
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('../assets/fonts/JetBrainsMono-Variable.woff2') format('woff2');
+  font-weight: 100 800;
+  font-display: swap;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { margin: 0; height: 100%; }
+
+body {
+  background: var(--ground);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-md);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading);
+  /* Data must read as typed: no "fi", "->" or "==" turned into glyphs. */
+  font-variant-ligatures: none;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4, p { margin: 0; }
+h1 { font-size: var(--text-2xl); font-weight: var(--weight-bold); line-height: 1.2; }
+h2 { font-size: var(--text-xl); font-weight: var(--weight-bold); line-height: 1.25; }
+h3 { font-size: var(--text-lg); font-weight: var(--weight-medium); }
+
+a { color: var(--signal-text); text-decoration: underline; text-underline-offset: 2px; }
+
+button, input, select, textarea { font: inherit; color: inherit; }
+
+::selection { background: var(--signal); color: var(--signal-ink); }
+
+/* One focus treatment everywhere: a 1px signal ring, outside the box. */
+:focus { outline: none; }
+:focus-visible { outline: 1px solid var(--signal-strong); outline-offset: 2px; }
+
+/* The silk-screen label: small, spaced capitals. */
+.label {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.muted { color: var(--text-muted); }
+.signal { color: var(--signal-text); }
+.num { font-variant-numeric: tabular-nums; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+* { scrollbar-width: thin; scrollbar-color: var(--rule-strong) transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--rule-strong); border-radius: var(--radius-1); }
+::-webkit-scrollbar-track { background: transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0ms !important; }
+}

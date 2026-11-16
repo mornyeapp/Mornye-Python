@@ -6,6 +6,7 @@ process memory for the current session and are never written to disk.
 
 from __future__ import annotations
 
+import functools
 import builtins
 import hashlib
 import importlib
@@ -22,7 +23,8 @@ import tempfile
 import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 from urllib.parse import unquote, urlsplit
 
 from .atomic_io import write_private_json
@@ -739,20 +741,16 @@ class SMBBackend:
                 else self.root
             )
             try:
-                self._remote_call(lambda: client.makedirs(remote_dir, exist_ok=True))
+                self._remote_call(
+                    functools.partial(client.makedirs, remote_dir, exist_ok=True)
+                )
                 remote_path = self._upload_one(
                     client,
                     local_path,
                     remote_dir,
                     cancel_event=cancel_event,
                     progress=(
-                        (
-                            lambda transferred, total: progress(
-                                relative, transferred, total
-                            )
-                        )
-                        if progress
-                        else None
+                        (functools.partial(progress, relative)) if progress else None
                     ),
                 )
             except DestinationError:
@@ -801,7 +799,7 @@ class SMBBackend:
             )
             final_path = ntpath.join(remote_dir, candidate_name)
             remote_info = self._remote_call(
-                lambda: client.stat(final_path),
+                functools.partial(client.stat, final_path),
                 writing=False,
                 missing_ok=True,
             )
@@ -809,7 +807,7 @@ class SMBBackend:
                 if (
                     int(remote_info.st_size) == size
                     and self._remote_call(
-                        lambda: _hash_remote(client, final_path),
+                        functools.partial(_hash_remote, client, final_path),
                         writing=False,
                     )
                     == digest

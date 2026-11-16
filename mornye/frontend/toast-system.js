@@ -195,7 +195,7 @@ class ToastManager {
     // data (exception text, server responses, filenames) and must always
     // render as plain text, never as HTML.
     let titleHtml = opts.title ? `<div class="toast-title">${escapeHtml(opts.title)}</div>` : '';
-    let dismissHtml = opts.dismissible ? `<button class="toast-close" onclick="toastMgr.dismiss('${id}')">×</button>` : '';
+    let dismissHtml = opts.dismissible ? `<button class="toast-close" data-onclick="toastMgr.dismiss('${id}')">×</button>` : '';
     let progressHtml = opts.duration > 0 ? `<div class="toast-progress" style="animation-duration: ${opts.duration}ms;"></div>` : '';
 
     toast.innerHTML = `

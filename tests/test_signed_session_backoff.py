@@ -15,7 +15,7 @@ import asyncio
 import hashlib
 from typing import Any, cast
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 
 import httpx
 import pytest
@@ -143,7 +143,7 @@ def test_a_successful_verification_clears_the_pause(tmp_path, monkeypatch) -> No
     async def _auth(self, *args, **kwargs):
         self.session_id = "sess"
         self.session_secret = "secret"
-        self.expires_at = (datetime.now(timezone.utc) + timedelta(hours=4)).isoformat()
+        self.expires_at = (datetime.now(UTC) + timedelta(hours=4)).isoformat()
 
     async def _request(self, *args, **kwargs):
         return _Response()
@@ -172,7 +172,7 @@ def test_two_consecutive_audio_timeouts_return_terminal_provider_fallback(
     client = _client(tmp_path)
     client.session_id = "sess"
     client.session_secret = "secret"
-    client.expires_at = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+    client.expires_at = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
 
     async def _timeout(*args, **kwargs):
         """Simulate an audio endpoint that always raises a read timeout."""
@@ -197,7 +197,7 @@ def test_audio_timeout_streak_is_per_track(tmp_path, monkeypatch) -> None:
     client = _client(tmp_path)
     client.session_id = "sess"
     client.session_secret = "secret"
-    client.expires_at = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+    client.expires_at = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
 
     async def _timeout(*args, **kwargs):
         """Simulate a read timeout for each requested audio track."""
@@ -236,7 +236,7 @@ def _session_client(tmp_path) -> ssm.SignedSessionClient:
     client = _client(tmp_path)
     client.session_id = "sess_abc"
     client.session_secret = "secret"
-    client.expires_at = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+    client.expires_at = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
     return client
 
 
@@ -253,7 +253,7 @@ def test_refresh_signs_the_bytes_it_actually_sends(tmp_path) -> None:
     """Regression: it hashed json.dumps(body) and sent httpx's compact form."""
     client = _session_client(tmp_path)
     request = httpx.Request("POST", "https://gateway.invalid/v2/session/refresh")
-    new_expiry = (datetime.now(timezone.utc) + timedelta(hours=4)).isoformat()
+    new_expiry = (datetime.now(UTC) + timedelta(hours=4)).isoformat()
     http = _RecordingHttp(
         httpx.Response(200, json={"expires_at": new_expiry}, request=request)
     )
@@ -308,7 +308,7 @@ def test_a_200_without_a_session_is_a_failed_refresh(tmp_path, body) -> None:
 def test_concurrent_refreshes_post_once(tmp_path) -> None:
     """Two requests past refresh_after, each with its own client, as the
     runtime builds them: only the first may post."""
-    new_expiry = (datetime.now(timezone.utc) + timedelta(hours=4)).isoformat()
+    new_expiry = (datetime.now(UTC) + timedelta(hours=4)).isoformat()
     posts: list[str] = []
 
     class _SlowHttp:
@@ -374,7 +374,7 @@ def test_a_timed_out_request_says_so_instead_of_returning_an_empty_error(
     client = _client(tmp_path)
     client.session_id = "sid"
     client.session_secret = "secret"
-    client.expires_at = (datetime.now(timezone.utc) + timedelta(days=1)).strftime(
+    client.expires_at = (datetime.now(UTC) + timedelta(days=1)).strftime(
         "%Y-%m-%dT%H:%M:%SZ"
     )
 
@@ -394,7 +394,7 @@ def _live(client) -> None:
     """Gives *client* a session that ensure_session() will accept."""
     client.session_id = "sid"
     client.session_secret = "secret"
-    client.expires_at = (datetime.now(timezone.utc) + timedelta(days=1)).strftime(
+    client.expires_at = (datetime.now(UTC) + timedelta(days=1)).strftime(
         "%Y-%m-%dT%H:%M:%SZ"
     )
 

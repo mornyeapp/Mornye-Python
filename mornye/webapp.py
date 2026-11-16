@@ -32,6 +32,7 @@ import re
 import secrets
 import threading
 import time
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -169,6 +170,7 @@ ALLOWED_METHODS: set[str] = {
     "get_track_preview",
     "fetch_metadata",
     "download_tracks",
+    "stop_all_downloads",
     "run_health_check",
     "scan_local",
     "apply_local_tags",
@@ -177,6 +179,9 @@ ALLOWED_METHODS: set[str] = {
     "read_file_tags",
     "save_file_tags",
     "analyze_audio_file",
+    "probe_audio_quality",
+    "get_cli_command",
+    "save_density",
     "get_reorganize_defaults",
     "plan_library_reorganize",
     "apply_library_reorganize",
@@ -486,6 +491,816 @@ def _safe_username(username: str) -> str:
     return f"{cleaned[:55]}-{digest}"
 
 
+def _page_security_headers(request) -> dict[str, str]:
+    """Headers of the page itself (F1, docs/redesign-plan.md).
+
+    Scripts only from this origin: index.html has no inline script and no
+    onclick="" attributes any more (frontend/inline-handlers.js binds the
+    data-on* ones without eval). Styles keep 'unsafe-inline': the markup and
+    app.js set style="" and el.style, which a style hash cannot cover.
+    Covers, artist pictures and track previews come from the providers'
+    hosts, over https and sometimes plain http. The WebSocket is this host.
+    frame-ancestors 'none' (and X-Frame-Options for old engines): nothing
+    may frame the app and click through it.
+    """
+    host = request.headers.get("host", "")
+    ws = f" ws://{host} wss://{host}" if host else ""
+    csp = "; ".join(
+        (
+            "default-src 'self'",
+            "script-src 'self'",
+            "style-src 'self' 'unsafe-inline'",
+            "img-src 'self' data: blob: https: http:",
+            "media-src 'self' data: blob: https: http:",
+            "font-src 'self' data:",
+            f"connect-src 'self'{ws}",
+            "worker-src 'self'",
+            "manifest-src 'self'",
+            "object-src 'none'",
+            "base-uri 'none'",
+            "form-action 'self'",
+            "frame-ancestors 'none'",
+        )
+    )
+    return {"Content-Security-Policy": csp, "X-Frame-Options": "DENY"}
+
+
+def _install_token_gate(app: FastAPI, token: str | None) -> None:
+    """The opt-in shared-secret gate (--web-token). Split out of create_app (M2)."""
+    if token:
+        # Opt-in shared-secret gate (see --web-token / MORNYE_WEB_TOKEN):
+        # every request — page, static asset, or /api/* call — must present
+        # the token, either as a `?token=` query param (the only option a
+        # first plain browser navigation or a WebSocket upgrade can supply)
+        # or the cookie this middleware sets once that query param checks
+        # out. Everything is denied outright when no token is configured
+        # (the default), so this changes nothing unless explicitly enabled.
+        @app.middleware("http")
+        async def _require_web_token(request: Request, call_next):
+            # /healthz is exempt on purpose: an orchestrator's health probe
+            # has no token, and a check that 401s reports "unhealthy" for a
+            # reason that has nothing to do with health. It discloses only
+            # that the process is answering.
+            if request.url.path == HEALTH_PATH:
+                return await call_next(request)
+            supplied = request.query_params.get(
+                WEB_TOKEN_QUERY_PARAM
+            ) or request.cookies.get(WEB_TOKEN_COOKIE)
+            if not _token_matches(supplied, token):
+                return PlainTextResponse(
+                    "Missing or invalid ?token= — this Mornye web instance "
+                    "requires the token configured via --web-token / "
+                    f"{WEB_TOKEN_ENV}.",
+                    status_code=401,
+                )
+            response = await call_next(request)
+            if request.query_params.get(WEB_TOKEN_QUERY_PARAM):
+                # Valid token supplied via URL: persist it as a cookie so the
+                # browser stops needing ?token=... on every single request
+                # (static assets, the WebSocket upgrade, /api/* fetches).
+                response.set_cookie(
+                    WEB_TOKEN_COOKIE,
+                    token,
+                    httponly=True,
+                    samesite="lax",
+                )
+            return response
+
+
+def _register_multiuser_routes(
+    app: FastAPI,
+    multiuser: bool,
+    sessions: Any,
+    job_queue: Any,
+    login_limiter: LoginRateLimiter,
+) -> None:
+    """Login, logout, accounts and the per-user job queue (--web-multiuser).
+
+    Split out of create_app (M2).
+    """
+    if multiuser:
+        from .core.job_queue import QueueFullError
+
+        # Gates /api/* behind a logged-in session — see the "Multi-user mode"
+        # note on SESSION_COOKIE above for what this does and doesn't isolate
+        # between accounts. /ws is gated separately, inside ws_endpoint: HTTP
+        # middleware never runs for WebSocket upgrades. The frontend doesn't
+        # have a login form yet: call POST /api/auth/login directly (curl, a
+        # future UI, ...) to obtain the session cookie.
+        _EXEMPT_PATHS = {"/api/auth/login", "/api/auth/status"}
+
+        @app.middleware("http")
+        async def _require_session(request: Request, call_next):
+            path = request.url.path
+            if not path.startswith("/api/") or path in _EXEMPT_PATHS:
+                return await call_next(request)
+            username = sessions.username_for(request.cookies.get(SESSION_COOKIE))
+            if username is None:
+                return JSONResponse({"error": "Not logged in"}, status_code=401)
+            request.state.username = username
+            return await call_next(request)
+
+        @app.post("/api/auth/login")
+        async def auth_login(
+            request: Request, payload: dict = Body(...)
+        ) -> JSONResponse:
+            from .core.web_users import verify_password
+
+            client_ip = request.client.host if request.client else "unknown"
+            retry_after = login_limiter.retry_after(client_ip)
+            if retry_after is not None:
+                return JSONResponse(
+                    {"error": "Too many failed logins. Try again shortly."},
+                    status_code=429,
+                    headers={"Retry-After": str(retry_after)},
+                )
+
+            username = str(payload.get("username", ""))
+            password = str(payload.get("password", ""))
+            valid = await run_in_threadpool(verify_password, username, password)
+            if not valid:
+                login_limiter.record_failure(client_ip)
+                return JSONResponse(
+                    {"error": "Invalid username or password"}, status_code=401
+                )
+            login_limiter.reset(client_ip)
+            session_token = sessions.create(username)
+            response = JSONResponse({"status": "ok", "username": username})
+            response.set_cookie(
+                SESSION_COOKIE, session_token, httponly=True, samesite="lax"
+            )
+            return response
+
+        @app.post("/api/auth/logout")
+        async def auth_logout(request: Request) -> JSONResponse:
+            sessions.revoke(request.cookies.get(SESSION_COOKIE))
+            response = JSONResponse({"status": "ok"})
+            response.delete_cookie(SESSION_COOKIE)
+            return response
+
+        @app.post("/api/queue/submit-download")
+        async def queue_submit_download(
+            request: Request, payload: dict = Body(...)
+        ) -> JSONResponse:
+            assert job_queue is not None  # always set together with multiuser=True
+            try:
+                job = job_queue.submit(
+                    request.state.username,
+                    {
+                        "owner": request.state.username,
+                        "selected_indices": payload.get("selected_indices", []),
+                        "config": payload.get("config", {}),
+                        "list_id": payload.get("list_id"),
+                    },
+                )
+            except QueueFullError as exc:
+                # Built from the exception's own fields, not str(exc): an
+                # exception message is written for a log reader, and putting
+                # one in a response body is how internals end up in front of
+                # whoever is calling. The caller still learns everything
+                # actionable — how many they have queued, and the limit.
+                logger.info(
+                    "Queue submission refused for %s (%d/%d)",
+                    request.state.username,
+                    exc.pending,
+                    exc.limit,
+                )
+                return JSONResponse(
+                    {
+                        "error": "Too many downloads already queued.",
+                        "pending": exc.pending,
+                        "limit": exc.limit,
+                    },
+                    status_code=429,
+                )
+            return JSONResponse({"job_id": job.id, "status": job.status.value})
+
+        @app.get("/api/queue/mine")
+        async def queue_mine(request: Request) -> JSONResponse:
+            assert job_queue is not None  # always set together with multiuser=True
+            jobs = job_queue.list_for(request.state.username)
+            return JSONResponse({"jobs": [j.to_dict() for j in jobs]})
+
+        @app.get("/api/quota/mine")
+        async def quota_mine(request: Request) -> JSONResponse:
+            """This account's own usage against its own limits.
+
+            Not admin-gated: it is about the caller, and being refused a
+            download without being able to see why is the kind of opacity
+            that generates support requests.
+            """
+            from .core.web_users import quota_usage
+
+            usage = await run_in_threadpool(quota_usage, request.state.username)
+            return JSONResponse(usage)
+
+        # ── Administration ────────────────────────────────────────────────
+        #
+        # Everything below needs the `admin` role. Accounts were flat until
+        # now, which is why /api/metrics hides instance-wide counters in
+        # multi-user mode — there was nobody to show them to. There is now,
+        # so an admin sees them and an ordinary account still does not.
+        async def _require_admin(request: Request) -> str:
+            from .core.web_users import is_admin
+
+            username = request.state.username
+            if not await run_in_threadpool(is_admin, username):
+                # 404, not 403: whether an admin API exists on this instance
+                # is not something an ordinary account needs to learn.
+                raise HTTPException(status_code=404, detail="Not found")
+            return username
+
+        @app.get("/api/admin/users")
+        async def admin_list_users(request: Request) -> JSONResponse:
+            from .core.web_users import list_users, quota_usage
+
+            await _require_admin(request)
+            users = await run_in_threadpool(list_users)
+            for user in users:
+                user["usage"] = await run_in_threadpool(quota_usage, user["username"])
+            return JSONResponse({"users": users})
+
+        @app.post("/api/admin/quota")
+        async def admin_set_quota(
+            request: Request, payload: dict = Body(...)
+        ) -> JSONResponse:
+            from .core.web_users import set_quota
+
+            await _require_admin(request)
+            username = str(payload.get("username", ""))
+            tracks = payload.get("daily_track_quota")
+            size = payload.get("daily_byte_quota")
+            updated = await run_in_threadpool(
+                lambda: set_quota(
+                    username,
+                    daily_track_quota=None if tracks is None else int(tracks),
+                    daily_byte_quota=None if size is None else int(size),
+                )
+            )
+            if not updated:
+                return JSONResponse({"error": "No such user"}, status_code=404)
+            return JSONResponse({"ok": True})
+
+        @app.post("/api/admin/role")
+        async def admin_set_role(
+            request: Request, payload: dict = Body(...)
+        ) -> JSONResponse:
+            from .core.web_users import WebUserError, set_role
+
+            await _require_admin(request)
+            try:
+                updated = await run_in_threadpool(
+                    set_role,
+                    str(payload.get("username", "")),
+                    str(payload.get("role", "")),
+                )
+            except WebUserError:
+                return JSONResponse({"error": "Unable to update role"}, status_code=400)
+            if not updated:
+                return JSONResponse({"error": "No such user"}, status_code=404)
+            return JSONResponse({"ok": True})
+
+        @app.get("/api/admin/queue")
+        async def admin_queue(request: Request) -> JSONResponse:
+            await _require_admin(request)
+            assert job_queue is not None
+            return JSONResponse({"jobs": [j.to_dict() for j in job_queue.list_all()]})
+
+
+def _register_ops_routes(
+    app: FastAPI,
+    api: MornyeAPI,
+    manager: ConnectionManager,
+    token: str | None,
+    multiuser: bool,
+    sessions: Any,
+    job_queue: Any,
+) -> None:
+    """Liveness (/healthz), metrics and the auth status probe. Split out of create_app (M2)."""
+
+    # ── Operations: liveness and metrics ──────────────────────────────────
+    #
+    # /healthz is deliberately outside /api/, and therefore outside the
+    # session gate: a container orchestrator has no cookie, and a health
+    # check that needs credentials is one that reports "unhealthy" for the
+    # wrong reason. It returns no data about the instance beyond "the process
+    # is answering", so there is nothing there to protect.
+    #
+    # /metrics does expose real information (which providers are failing, how
+    # much has been downloaded), so it sits under /api/ and inherits whatever
+    # auth is configured.
+    @app.get(HEALTH_PATH)
+    async def healthz() -> JSONResponse:
+        """Liveness. docker-compose.example.yml used to poll `/` for this,
+        which downloads and renders the whole frontend to answer a yes/no
+        question — and would go on succeeding if every backend component
+        behind it were broken.
+        """
+        # Status and nothing else. Everything this used to add — version,
+        # whether auth is on, how many clients are connected — is a free
+        # fingerprint of the instance for anyone who can reach the port, and
+        # this is the one endpoint deliberately outside the auth gate. The
+        # same fields are in /api/metrics, behind whatever auth is set.
+        return JSONResponse({"status": "ok"})
+
+    @app.get("/api/metrics")
+    async def metrics(request: Request) -> JSONResponse:
+        """Counters worth watching on a long-running instance.
+
+        provider_stats has been recording per-API successes and failures all
+        along, purely to order providers by reliability; nothing ever showed
+        it to anyone.
+        """
+        from .core import provider_stats
+        from .core.progress import DownloadManager
+
+        payload: dict[str, Any] = {
+            "version": api.app_version,
+            "multiuser": multiuser,
+            "auth": bool(token) or multiuser,
+        }
+
+        # Everything below is instance-wide: provider stats, download totals
+        # and queue depth aggregate every account's activity, and the client
+        # count says how many other people are connected. In single-user mode
+        # that is the operator looking at their own instance. In multi-user
+        # mode it is one account being told how much the others are doing, so
+        # it is shown only to an admin (see core/web_users.py, which grew
+        # roles for exactly this). The counters keep being recorded either
+        # way; only this projection is narrowed.
+        visible = not multiuser
+        if multiuser:
+            from .core.web_users import is_admin
+
+            visible = await run_in_threadpool(
+                is_admin, getattr(request.state, "username", None)
+            )
+
+        if visible:
+            payload["providers"] = await run_in_threadpool(provider_stats.snapshot)
+            payload["websocket_clients"] = manager.count()
+
+            with contextlib.suppress(Exception):
+                payload["downloads"] = await DownloadManager().get_stats()
+
+            if job_queue is not None:
+                jobs = job_queue.list_all()
+                counts: dict[str, int] = {}
+                for job in jobs:
+                    counts[job.status.value] = counts.get(job.status.value, 0) + 1
+                payload["queue"] = {"total": len(jobs), "by_status": counts}
+
+        return JSONResponse(payload)
+
+    @app.get("/api/auth/status")
+    async def auth_status(request: Request) -> JSONResponse:
+        """Always registered, regardless of `multiuser` — lets the frontend
+        decide whether to show a login screen at all without needing to
+        know the server's configuration ahead of time. `logged_in` is
+        always True when multiuser is off (nothing to log into).
+        """
+        if not multiuser:
+            return JSONResponse({"multiuser": False, "logged_in": True})
+        username = sessions.username_for(request.cookies.get(SESSION_COOKIE))
+        return JSONResponse({"multiuser": True, "logged_in": username is not None})
+
+
+def _register_method_dispatch(
+    app: FastAPI, api_for: Callable[[Request], MornyeAPI], multiuser: bool
+) -> None:
+    """POST /api/<method>: every method in ALLOWED_METHODS, as the shim calls it.
+
+    Split out of create_app (M2).
+    """
+
+    # ── Dynamic dispatcher for every whitelisted Api method ────────────────
+    @app.post("/api/{method_name}")
+    async def call_method(
+        request: Request, method_name: str, payload: Any = Body(default=None)
+    ) -> JSONResponse:
+        if method_name not in ALLOWED_METHODS:
+            return JSONResponse(
+                {"error": f"Unknown or disallowed method: {method_name}"},
+                status_code=404,
+            )
+        password = None
+        if isinstance(payload, dict):
+            password = payload.get("password")
+        elif isinstance(payload, list) and len(payload) > 1:
+            password = payload[1]
+        if (
+            method_name in {"save_network_destination", "test_network_destination"}
+            and password
+            and request.url.scheme != "https"
+        ):
+            return JSONResponse(
+                {
+                    "error": "Network destination passwords may only be sent to this web interface "
+                    "over HTTPS. Use the desktop app or configure TLS."
+                },
+                status_code=400,
+            )
+        if multiuser and method_name in (
+            NETWORK_DESTINATION_ADMIN_METHODS | EXTENSION_SETTINGS_ADMIN_METHODS
+        ):
+            from .core.web_users import is_admin
+
+            if not await run_in_threadpool(
+                is_admin, getattr(request.state, "username", None)
+            ):
+                return JSONResponse({"error": "Not found"}, status_code=404)
+        # Per-account in multi-user mode, so two people searching at once no
+        # longer overwrite each other's current_tracks.
+        target = api_for(request)
+        fn = getattr(target, method_name, None)
+        if fn is None:
+            return JSONResponse(
+                {"error": f"No such method: {method_name}"}, status_code=404
+            )
+
+        args: list = []
+        kwargs: dict = {}
+        if isinstance(payload, list):
+            args = payload
+        elif isinstance(payload, dict):
+            kwargs = payload
+        # else: no body / None -> call with no arguments
+
+        try:
+            # Every Api method is synchronous (some spawn their own internal
+            # threads for long-running work and return immediately; a few,
+            # like get_latest_version(), call asyncio.run() internally,
+            # which would raise if called directly inside this async route —
+            # running them in a worker thread avoids that).
+            result = await run_in_threadpool(fn, *args, **kwargs)
+        except TypeError:
+            # Log the real exception (may include argument values/internal
+            # details) server-side only; the client gets a generic message
+            # so internals (paths, types, library versions, ...) aren't
+            # exposed to whatever is calling this HTTP API.
+            logger.exception("Bad arguments calling %s", method_name)
+            return JSONResponse(
+                {"error": f"Bad arguments for {method_name}"}, status_code=400
+            )
+        except Exception:
+            logger.exception("Error calling %s", method_name)
+            return JSONResponse(
+                {"error": f"Internal error while calling {method_name}"},
+                status_code=500,
+            )
+
+        return JSONResponse({"result": result})
+
+
+def _register_file_routes(
+    app: FastAPI, api_for: Callable[[Request], MornyeAPI], multiuser: bool
+) -> None:
+    """The server-side folder browser, media streaming and the home folder.
+
+    Split out of create_app (M2).
+    """
+    # ── Server-side folder browser (replaces the native folder dialog) ─────
+    #
+    # Both handlers below answer with one account's private view of the
+    # filesystem: the folder it downloads into, and what is inside it.
+    # Neither response carries a validator, which leaves a browser or an
+    # intermediary free to reuse it heuristically — and on a shared machine
+    # in multi-user mode, the next reuse can be for a different account. In
+    # single-user mode there is nobody to reuse it for, so nothing is added.
+    _private_headers = {"Cache-Control": "no-store"} if multiuser else None
+
+    # `def`, not `async def`: listing a directory is blocking I/O (slow on a
+    # NAS share), and FastAPI runs a plain function in its threadpool instead
+    # of on the event loop that also carries the progress WebSocket.
+    @app.get("/api/browse-folder")
+    def browse_folder(request: Request, path: str | None = None) -> JSONResponse:
+        target_api = api_for(request)
+        # In multi-user mode the only approved root is the caller's own
+        # download folder, and it is also where browsing starts — landing
+        # someone in $HOME would show them the other accounts by name.
+        root = str(Path.home()) if not multiuser else target_api.download_dir
+        try:
+            # Resolve the requested path to a canonical, absolute form and
+            # confirm it sits under an approved root *before* it is ever used
+            # to touch the filesystem. Everything downstream operates on the
+            # sanitized `safe_root` string, never on the raw `path` input.
+            base = (Path(path).expanduser() if path else Path(root)).resolve()
+            approved_roots = [Path(target_api.download_dir).resolve()]
+            if not multiuser:
+                approved_roots.append(Path.home().resolve())
+            if not any(
+                base.is_relative_to(approved_root) for approved_root in approved_roots
+            ):
+                return JSONResponse(
+                    {"error": "Access denied: path is outside approved directories"},
+                    status_code=403,
+                    headers=_private_headers,
+                )
+            if not base.is_dir():
+                base = Path(root).resolve()
+            directories = sorted(
+                (
+                    p.name
+                    for p in base.iterdir()
+                    if p.is_dir() and not p.name.startswith(".")
+                ),
+                key=str.lower,
+            )
+            files = sorted(
+                (
+                    p.name
+                    for p in base.iterdir()
+                    if p.is_file() and not p.name.startswith(".")
+                ),
+                key=str.lower,
+            )
+        except Exception:
+            logger.exception("Error browsing folder %r", path)
+            return JSONResponse(
+                {"error": "Unable to browse this folder"},
+                status_code=400,
+                headers=_private_headers,
+            )
+        parent = str(base.parent) if base.parent != base else None
+        return JSONResponse(
+            {
+                "path": str(base),
+                "parent": parent,
+                "directories": directories,
+                "files": files,
+            },
+            headers=_private_headers,
+        )
+
+    # Also a plain `def`, for the same reason as the folder browser above.
+    @app.get("/api/media")
+    def media(request: Request, path: str):
+        """Streams an audio file (or a player copy of it) with Range support,
+        so the in-page player can seek. Same approved roots as the folder
+        browser: in multi-user mode only the caller's own download folder."""
+        from .core.media_server import content_type_for
+        from .core.paths import cache_path
+
+        target_api = api_for(request)
+        if not path or "\x00" in path:
+            return PlainTextResponse("Bad path", status_code=400)
+        roots = [
+            os.path.realpath(target_api.download_dir),
+            os.path.realpath(cache_path("playback")),
+        ]
+        if not multiuser:
+            roots.append(os.path.realpath(Path.home()))
+        try:
+            full = os.path.realpath(os.path.expanduser(path))
+        except (OSError, ValueError):
+            return PlainTextResponse("Bad path", status_code=400)
+        # Containment first, existence second: a path outside the approved
+        # roots is never probed on disk, so it cannot be told apart from a
+        # missing one. Only `full`, after this check, is ever used.
+        # (A file is never a root itself, so "inside" is a plain prefix test.)
+        for root in roots:
+            if full.startswith(root.rstrip(os.sep) + os.sep):
+                if not os.path.isfile(full):
+                    break
+                return FileResponse(
+                    full,
+                    media_type=content_type_for(Path(full)),
+                    headers={"Cache-Control": "no-store"},
+                )
+        return PlainTextResponse("Not found", status_code=404)
+
+    @app.get("/api/get-home-dir")
+    async def get_home_dir(request: Request) -> JSONResponse:
+        """Where the folder browser should start.
+
+        Named for what the frontend calls it. In multi-user mode it is the
+        account's own download folder, not the OS home — the browser is only
+        allowed inside that root there, so handing back $HOME would just
+        start people somewhere they cannot open.
+        """
+        if multiuser:
+            return JSONResponse(
+                {"home_dir": api_for(request).download_dir},
+                headers=_private_headers,
+            )
+        return JSONResponse({"home_dir": str(Path.home())})
+
+
+def _register_websocket(
+    app: FastAPI,
+    manager: ConnectionManager,
+    registry: ApiRegistry,
+    token: str | None,
+    multiuser: bool,
+    sessions: Any,
+) -> None:
+    """The /ws push channel (log, progress, metadata). Split out of create_app (M2)."""
+
+    # ── WebSocket: push channel for log/progress/metadata/etc. ─────────────
+    @app.websocket("/ws")
+    async def ws_endpoint(ws: WebSocket) -> None:
+        # Neither middleware above runs for WebSocket upgrades — @app.middleware
+        # ("http") only sees scope["type"] == "http" — so *both* gates have to be
+        # repeated here. This channel carries every push event the app emits
+        # (logs, progress, metadata, on-disk paths), so leaving either one out
+        # means an unauthenticated client can watch everything the instance does.
+        if token:
+            supplied = ws.query_params.get(WEB_TOKEN_QUERY_PARAM) or ws.cookies.get(
+                WEB_TOKEN_COOKIE
+            )
+            if not _token_matches(supplied, token):
+                await ws.close(code=1008)  # 1008 = Policy Violation
+                return
+        ws_owner: str | None = None
+        if multiuser:
+            assert sessions is not None  # always set together with multiuser=True
+            ws_owner = sessions.username_for(ws.cookies.get(SESSION_COOKIE))
+            if ws_owner is None:
+                await ws.close(code=1008)
+                return
+            # Make sure the account's Api exists now, so events it emits have
+            # somewhere to be addressed even before its first API call.
+            registry.get(ws_owner)
+        await manager.connect(ws, owner=ws_owner)
+        try:
+            while True:
+                # The frontend doesn't need to send anything; this just
+                # keeps the connection open and detects disconnects.
+                await ws.receive_text()
+        except WebSocketDisconnect:
+            manager.disconnect(ws)
+        except Exception:
+            manager.disconnect(ws)
+
+
+def _register_v1_api(
+    app: FastAPI,
+    api_for: Callable[[Request], MornyeAPI],
+    manager: ConnectionManager,
+    token: str | None,
+    multiuser: bool,
+    job_queue: Any,
+) -> Any:
+    """The versioned REST API under /api/v1. Split out of create_app (M2).
+
+    Returns its DownloadService: the --web-multiuser queue handler set up at
+    the top of create_app runs downloads through it, and looks the name up
+    when a job runs, so create_app binds it before any job can start.
+    """
+    # ── The versioned REST API (/api/v1) ──────────────────────────────────
+    #
+    # Additive: the RPC bridge above is untouched and the frontend still uses
+    # it. This is the surface for everything that is *not* our frontend —
+    # bots, scripts, other services — which needs a declared schema rather
+    # than a list of GUI method names. See webapi/__init__.py.
+    #
+    # Mounted after the middleware that gates /api/*, so it inherits the same
+    # token and session auth rather than reimplementing either.
+    from .application import ApiAdapter, DownloadService, EventBus, JobService
+    from .webapi import ApiDeps, build_v1_router
+
+    application_events = EventBus()
+    application_events.subscribe(
+        "job.created",
+        lambda payload: manager.broadcast("applicationEvent", ["job.created", payload]),
+    )
+    application_events.subscribe(
+        "job.started",
+        lambda payload: manager.broadcast("applicationEvent", ["job.started", payload]),
+    )
+    application_events.subscribe(
+        "job.completed",
+        lambda payload: manager.broadcast(
+            "applicationEvent", ["job.completed", payload]
+        ),
+    )
+    application_events.subscribe(
+        "job.failed",
+        lambda payload: manager.broadcast("applicationEvent", ["job.failed", payload]),
+    )
+    application_events.subscribe(
+        "job.cancelled",
+        lambda payload: manager.broadcast(
+            "applicationEvent", ["job.cancelled", payload]
+        ),
+    )
+    for event_name in (
+        "job.retrying",
+        "job.paused",
+        "job.resumed",
+        "job.item.updated",
+    ):
+
+        def broadcast_application_event(payload: Any, name: str = event_name) -> None:
+            manager.broadcast("applicationEvent", [name, payload])
+
+        application_events.subscribe(
+            event_name,
+            broadcast_application_event,
+        )
+    from .application.metadata_service import MetadataService
+
+    application_download_service = DownloadService(
+        event_bus=application_events,
+        # Real metadata, not the compatibility stub (see app.py).
+        metadata_service=MetadataService(compatibility_fallback=False),
+    )
+    application_job_service = JobService(
+        download_service=application_download_service,
+        event_bus=application_events,
+    )
+    application_adapter = ApiAdapter(
+        job_service=application_job_service,
+        start_background=True,
+        event_bus=application_events,
+    )
+    app.state.application_download_service = application_download_service
+    app.state.application_job_service = application_job_service
+    app.state.application_adapter = application_adapter
+
+    app.include_router(
+        build_v1_router(
+            ApiDeps(
+                api_for=api_for,
+                multiuser=multiuser,
+                token_required=bool(token),
+                # The v1 single-user API has its own application job service.
+                # ``download_queue`` is the legacy GUI queue and accepts a
+                # different payload shape (indices/tracks), so handing it a
+                # v1 URL job silently completed zero tracks.
+                job_queue=job_queue if multiuser else None,
+                adapter=application_adapter if not multiuser else None,
+                download_service=application_download_service,
+                username_for=lambda request: getattr(request.state, "username", None),
+            )
+        )
+    )
+    return application_download_service
+
+
+def _register_frontend(app: FastAPI) -> None:
+    """The page itself (with the shim and security headers), and the static files.
+
+    Split out of create_app (M2).
+    """
+
+    # ── Frontend: same static files the desktop build uses, with a small
+    #    script injected so window.pywebview.api exists in a plain browser.
+    @app.get("/")
+    async def index(request: Request) -> HTMLResponse:
+        html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+        # A file, not inline script: the page's Content-Security-Policy runs
+        # scripts only from this origin (F1). web-shim.js sets
+        # window.__MORNYE_WEB_MODE__ itself.
+        inject = '<script src="/web-shim.js"></script>\n'
+        # Before the first app script. index.html marks the spot with a
+        # comment, because matching the script tag itself silently dropped the
+        # shim (and with it every API call) whenever that tag changed shape —
+        # a bumped `?v=` once, the timestamped loader another time.
+        marker = "<!--MORNYE-APP-SCRIPTS"
+        if marker in html:
+            html = html.replace(marker, inject + marker, 1)
+        else:
+            html = re.sub(
+                r'(<script src="toast-system\.js[^"]*"></script>)',
+                lambda m: inject + m.group(1),
+                html,
+                count=1,
+            )
+        # Marks the document as browser-served before the first paint, so CSS
+        # can drop the chrome that only makes sense in the pywebview window
+        # (the frameless titlebar and its traffic-light buttons, which call
+        # window methods that don't exist here). The desktop build loads
+        # index.html straight from disk and never hits this route, so its
+        # <body> stays unclassed.
+        #
+        # Anchored after </head> rather than replacing the first "<body>" in
+        # the file: index.html's pre-paint script carries a comment that says
+        # "not at the top of <body>", and a plain first-occurrence replace
+        # rewrote *that* — leaving the real tag unclassed, so every
+        # body.web-mode rule silently did nothing in the browser (the desktop
+        # titlebar stayed visible there, complete with buttons that call
+        # pywebview methods a browser doesn't have).
+        head_end = html.find("</head>")
+        body_at = html.find("<body>", head_end if head_end != -1 else 0)
+        if body_at != -1:
+            html = (
+                html[:body_at]
+                + '<body class="web-mode">'
+                + html[body_at + len("<body>") :]
+            )
+        return HTMLResponse(html, headers=_page_security_headers(request))
+
+    @app.get("/web-shim.js")
+    async def web_shim() -> FileResponse:
+        return FileResponse(
+            FRONTEND_DIR / "web-shim.js", media_type="application/javascript"
+        )
+
+    # Everything else (app.js, css/, assets/...) served as-is.
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR)), name="frontend")
+
+
 def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
     """`multiuser=True` gives every account its own MornyeAPI instance,
     download folder and event stream — see the note on SESSION_COOKIE above
@@ -518,7 +1333,7 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
     job_queue: Any = None
     login_limiter = LoginRateLimiter()
     if multiuser:
-        from .core.job_queue import JobQueue, QueueFullError
+        from .core.job_queue import JobQueue
         from .core.web_users import SessionStore, check_quota
 
         sessions = SessionStore()
@@ -551,7 +1366,9 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
                 return owner_api.run_download_job(payload)
             if "selected_indices" in payload:
                 owner_api.download_tracks(
-                    payload["selected_indices"], payload.get("config", {})
+                    payload["selected_indices"],
+                    payload.get("config", {}),
+                    payload.get("list_id"),
                 )
             else:
                 from .core.config import DownloadRequest, MornyeConfig
@@ -683,6 +1500,12 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
     @app.middleware("http")
     async def _no_cache_frontend(request, call_next):
         response = await call_next(request)
+        # F1: on every response. nosniff stops a browser running an uploaded
+        # or proxied file as a script or stylesheet of another type; the
+        # referrer stays on this origin (cover and preview hosts are told
+        # nothing about the page that asked).
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "same-origin")
         if request.url.path.endswith((".js", ".css", ".html")):
             response.headers["Cache-Control"] = (
                 "no-store, no-cache, must-revalidate, max-age=0"
@@ -691,700 +1514,42 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
             response.headers["Expires"] = "0"
         return response
 
-    if token:
-        # Opt-in shared-secret gate (see --web-token / MORNYE_WEB_TOKEN):
-        # every request — page, static asset, or /api/* call — must present
-        # the token, either as a `?token=` query param (the only option a
-        # first plain browser navigation or a WebSocket upgrade can supply)
-        # or the cookie this middleware sets once that query param checks
-        # out. Everything is denied outright when no token is configured
-        # (the default), so this changes nothing unless explicitly enabled.
-        @app.middleware("http")
-        async def _require_web_token(request: Request, call_next):
-            # /healthz is exempt on purpose: an orchestrator's health probe
-            # has no token, and a check that 401s reports "unhealthy" for a
-            # reason that has nothing to do with health. It discloses only
-            # that the process is answering.
-            if request.url.path == HEALTH_PATH:
-                return await call_next(request)
-            supplied = request.query_params.get(
-                WEB_TOKEN_QUERY_PARAM
-            ) or request.cookies.get(WEB_TOKEN_COOKIE)
-            if not _token_matches(supplied, token):
-                return PlainTextResponse(
-                    "Missing or invalid ?token= — this Mornye web instance "
-                    "requires the token configured via --web-token / "
-                    f"{WEB_TOKEN_ENV}.",
-                    status_code=401,
-                )
-            response = await call_next(request)
-            if request.query_params.get(WEB_TOKEN_QUERY_PARAM):
-                # Valid token supplied via URL: persist it as a cookie so the
-                # browser stops needing ?token=... on every single request
-                # (static assets, the WebSocket upgrade, /api/* fetches).
-                response.set_cookie(
-                    WEB_TOKEN_COOKIE,
-                    token,
-                    httponly=True,
-                    samesite="lax",
-                )
-            return response
-
-    if multiuser:
-        # Gates /api/* behind a logged-in session — see the "Multi-user mode"
-        # note on SESSION_COOKIE above for what this does and doesn't isolate
-        # between accounts. /ws is gated separately, inside ws_endpoint: HTTP
-        # middleware never runs for WebSocket upgrades. The frontend doesn't
-        # have a login form yet: call POST /api/auth/login directly (curl, a
-        # future UI, ...) to obtain the session cookie.
-        _EXEMPT_PATHS = {"/api/auth/login", "/api/auth/status"}
-
-        @app.middleware("http")
-        async def _require_session(request: Request, call_next):
-            path = request.url.path
-            if not path.startswith("/api/") or path in _EXEMPT_PATHS:
-                return await call_next(request)
-            username = sessions.username_for(request.cookies.get(SESSION_COOKIE))
-            if username is None:
-                return JSONResponse({"error": "Not logged in"}, status_code=401)
-            request.state.username = username
-            return await call_next(request)
-
-        @app.post("/api/auth/login")
-        async def auth_login(
-            request: Request, payload: dict = Body(...)
-        ) -> JSONResponse:
-            from .core.web_users import verify_password
-
-            client_ip = request.client.host if request.client else "unknown"
-            retry_after = login_limiter.retry_after(client_ip)
-            if retry_after is not None:
-                return JSONResponse(
-                    {"error": "Too many failed logins. Try again shortly."},
-                    status_code=429,
-                    headers={"Retry-After": str(retry_after)},
-                )
-
-            username = str(payload.get("username", ""))
-            password = str(payload.get("password", ""))
-            valid = await run_in_threadpool(verify_password, username, password)
-            if not valid:
-                login_limiter.record_failure(client_ip)
-                return JSONResponse(
-                    {"error": "Invalid username or password"}, status_code=401
-                )
-            login_limiter.reset(client_ip)
-            session_token = sessions.create(username)
-            response = JSONResponse({"status": "ok", "username": username})
-            response.set_cookie(
-                SESSION_COOKIE, session_token, httponly=True, samesite="lax"
-            )
-            return response
-
-        @app.post("/api/auth/logout")
-        async def auth_logout(request: Request) -> JSONResponse:
-            sessions.revoke(request.cookies.get(SESSION_COOKIE))
-            response = JSONResponse({"status": "ok"})
-            response.delete_cookie(SESSION_COOKIE)
-            return response
-
-        @app.post("/api/queue/submit-download")
-        async def queue_submit_download(
-            request: Request, payload: dict = Body(...)
-        ) -> JSONResponse:
-            assert job_queue is not None  # always set together with multiuser=True
-            try:
-                job = job_queue.submit(
-                    request.state.username,
-                    {
-                        "owner": request.state.username,
-                        "selected_indices": payload.get("selected_indices", []),
-                        "config": payload.get("config", {}),
-                    },
-                )
-            except QueueFullError as exc:
-                # Built from the exception's own fields, not str(exc): an
-                # exception message is written for a log reader, and putting
-                # one in a response body is how internals end up in front of
-                # whoever is calling. The caller still learns everything
-                # actionable — how many they have queued, and the limit.
-                logger.info(
-                    "Queue submission refused for %s (%d/%d)",
-                    request.state.username,
-                    exc.pending,
-                    exc.limit,
-                )
-                return JSONResponse(
-                    {
-                        "error": "Too many downloads already queued.",
-                        "pending": exc.pending,
-                        "limit": exc.limit,
-                    },
-                    status_code=429,
-                )
-            return JSONResponse({"job_id": job.id, "status": job.status.value})
-
-        @app.get("/api/queue/mine")
-        async def queue_mine(request: Request) -> JSONResponse:
-            assert job_queue is not None  # always set together with multiuser=True
-            jobs = job_queue.list_for(request.state.username)
-            return JSONResponse({"jobs": [j.to_dict() for j in jobs]})
-
-        @app.get("/api/quota/mine")
-        async def quota_mine(request: Request) -> JSONResponse:
-            """This account's own usage against its own limits.
-
-            Not admin-gated: it is about the caller, and being refused a
-            download without being able to see why is the kind of opacity
-            that generates support requests.
-            """
-            from .core.web_users import quota_usage
-
-            usage = await run_in_threadpool(quota_usage, request.state.username)
-            return JSONResponse(usage)
-
-        # ── Administration ────────────────────────────────────────────────
-        #
-        # Everything below needs the `admin` role. Accounts were flat until
-        # now, which is why /api/metrics hides instance-wide counters in
-        # multi-user mode — there was nobody to show them to. There is now,
-        # so an admin sees them and an ordinary account still does not.
-        async def _require_admin(request: Request) -> str:
-            from .core.web_users import is_admin
-
-            username = request.state.username
-            if not await run_in_threadpool(is_admin, username):
-                # 404, not 403: whether an admin API exists on this instance
-                # is not something an ordinary account needs to learn.
-                raise HTTPException(status_code=404, detail="Not found")
-            return username
-
-        @app.get("/api/admin/users")
-        async def admin_list_users(request: Request) -> JSONResponse:
-            from .core.web_users import list_users, quota_usage
-
-            await _require_admin(request)
-            users = await run_in_threadpool(list_users)
-            for user in users:
-                user["usage"] = await run_in_threadpool(quota_usage, user["username"])
-            return JSONResponse({"users": users})
-
-        @app.post("/api/admin/quota")
-        async def admin_set_quota(
-            request: Request, payload: dict = Body(...)
-        ) -> JSONResponse:
-            from .core.web_users import set_quota
-
-            await _require_admin(request)
-            username = str(payload.get("username", ""))
-            tracks = payload.get("daily_track_quota")
-            size = payload.get("daily_byte_quota")
-            updated = await run_in_threadpool(
-                lambda: set_quota(
-                    username,
-                    daily_track_quota=None if tracks is None else int(tracks),
-                    daily_byte_quota=None if size is None else int(size),
-                )
-            )
-            if not updated:
-                return JSONResponse({"error": "No such user"}, status_code=404)
-            return JSONResponse({"ok": True})
-
-        @app.post("/api/admin/role")
-        async def admin_set_role(
-            request: Request, payload: dict = Body(...)
-        ) -> JSONResponse:
-            from .core.web_users import WebUserError, set_role
-
-            await _require_admin(request)
-            try:
-                updated = await run_in_threadpool(
-                    set_role,
-                    str(payload.get("username", "")),
-                    str(payload.get("role", "")),
-                )
-            except WebUserError:
-                return JSONResponse({"error": "Unable to update role"}, status_code=400)
-            if not updated:
-                return JSONResponse({"error": "No such user"}, status_code=404)
-            return JSONResponse({"ok": True})
-
-        @app.get("/api/admin/queue")
-        async def admin_queue(request: Request) -> JSONResponse:
-            await _require_admin(request)
-            assert job_queue is not None
-            return JSONResponse({"jobs": [j.to_dict() for j in job_queue.list_all()]})
-
-    # ── Operations: liveness and metrics ──────────────────────────────────
-    #
-    # /healthz is deliberately outside /api/, and therefore outside the
-    # session gate: a container orchestrator has no cookie, and a health
-    # check that needs credentials is one that reports "unhealthy" for the
-    # wrong reason. It returns no data about the instance beyond "the process
-    # is answering", so there is nothing there to protect.
-    #
-    # /metrics does expose real information (which providers are failing, how
-    # much has been downloaded), so it sits under /api/ and inherits whatever
-    # auth is configured.
-    @app.get(HEALTH_PATH)
-    async def healthz() -> JSONResponse:
-        """Liveness. docker-compose.example.yml used to poll `/` for this,
-        which downloads and renders the whole frontend to answer a yes/no
-        question — and would go on succeeding if every backend component
-        behind it were broken.
-        """
-        # Status and nothing else. Everything this used to add — version,
-        # whether auth is on, how many clients are connected — is a free
-        # fingerprint of the instance for anyone who can reach the port, and
-        # this is the one endpoint deliberately outside the auth gate. The
-        # same fields are in /api/metrics, behind whatever auth is set.
-        return JSONResponse({"status": "ok"})
-
-    @app.get("/api/metrics")
-    async def metrics(request: Request) -> JSONResponse:
-        """Counters worth watching on a long-running instance.
-
-        provider_stats has been recording per-API successes and failures all
-        along, purely to order providers by reliability; nothing ever showed
-        it to anyone.
-        """
-        from .core import provider_stats
-        from .core.progress import DownloadManager
-
-        payload: dict[str, Any] = {
-            "version": api.app_version,
-            "multiuser": multiuser,
-            "auth": bool(token) or multiuser,
-        }
-
-        # Everything below is instance-wide: provider stats, download totals
-        # and queue depth aggregate every account's activity, and the client
-        # count says how many other people are connected. In single-user mode
-        # that is the operator looking at their own instance. In multi-user
-        # mode it is one account being told how much the others are doing, so
-        # it is shown only to an admin (see core/web_users.py, which grew
-        # roles for exactly this). The counters keep being recorded either
-        # way; only this projection is narrowed.
-        visible = not multiuser
-        if multiuser:
-            from .core.web_users import is_admin
-
-            visible = await run_in_threadpool(
-                is_admin, getattr(request.state, "username", None)
-            )
-
-        if visible:
-            payload["providers"] = await run_in_threadpool(provider_stats.snapshot)
-            payload["websocket_clients"] = manager.count()
-
-            with contextlib.suppress(Exception):
-                payload["downloads"] = await DownloadManager().get_stats()
-
-            if job_queue is not None:
-                jobs = job_queue.list_all()
-                counts: dict[str, int] = {}
-                for job in jobs:
-                    counts[job.status.value] = counts.get(job.status.value, 0) + 1
-                payload["queue"] = {"total": len(jobs), "by_status": counts}
-
-        return JSONResponse(payload)
-
-    @app.get("/api/auth/status")
-    async def auth_status(request: Request) -> JSONResponse:
-        """Always registered, regardless of `multiuser` — lets the frontend
-        decide whether to show a login screen at all without needing to
-        know the server's configuration ahead of time. `logged_in` is
-        always True when multiuser is off (nothing to log into).
-        """
-        if not multiuser:
-            return JSONResponse({"multiuser": False, "logged_in": True})
-        username = sessions.username_for(request.cookies.get(SESSION_COOKIE))
-        return JSONResponse({"multiuser": True, "logged_in": username is not None})
-
-    # ── Dynamic dispatcher for every whitelisted Api method ────────────────
-    @app.post("/api/{method_name}")
-    async def call_method(
-        request: Request, method_name: str, payload: Any = Body(default=None)
-    ) -> JSONResponse:
-        if method_name not in ALLOWED_METHODS:
-            return JSONResponse(
-                {"error": f"Unknown or disallowed method: {method_name}"},
-                status_code=404,
-            )
-        password = None
-        if isinstance(payload, dict):
-            password = payload.get("password")
-        elif isinstance(payload, list) and len(payload) > 1:
-            password = payload[1]
-        if (
-            method_name in {"save_network_destination", "test_network_destination"}
-            and password
-            and request.url.scheme != "https"
-        ):
-            return JSONResponse(
-                {
-                    "error": "Network destination passwords may only be sent to this web interface "
-                    "over HTTPS. Use the desktop app or configure TLS."
-                },
-                status_code=400,
-            )
-        if multiuser and method_name in (
-            NETWORK_DESTINATION_ADMIN_METHODS | EXTENSION_SETTINGS_ADMIN_METHODS
-        ):
-            from .core.web_users import is_admin
-
-            if not await run_in_threadpool(
-                is_admin, getattr(request.state, "username", None)
-            ):
-                return JSONResponse({"error": "Not found"}, status_code=404)
-        # Per-account in multi-user mode, so two people searching at once no
-        # longer overwrite each other's current_tracks.
-        target = api_for(request)
-        fn = getattr(target, method_name, None)
-        if fn is None:
-            return JSONResponse(
-                {"error": f"No such method: {method_name}"}, status_code=404
-            )
-
-        args: list = []
-        kwargs: dict = {}
-        if isinstance(payload, list):
-            args = payload
-        elif isinstance(payload, dict):
-            kwargs = payload
-        # else: no body / None -> call with no arguments
-
-        try:
-            # Every Api method is synchronous (some spawn their own internal
-            # threads for long-running work and return immediately; a few,
-            # like get_latest_version(), call asyncio.run() internally,
-            # which would raise if called directly inside this async route —
-            # running them in a worker thread avoids that).
-            result = await run_in_threadpool(fn, *args, **kwargs)
-        except TypeError:
-            # Log the real exception (may include argument values/internal
-            # details) server-side only; the client gets a generic message
-            # so internals (paths, types, library versions, ...) aren't
-            # exposed to whatever is calling this HTTP API.
-            logger.exception("Bad arguments calling %s", method_name)
-            return JSONResponse(
-                {"error": f"Bad arguments for {method_name}"}, status_code=400
-            )
-        except Exception:
-            logger.exception("Error calling %s", method_name)
-            return JSONResponse(
-                {"error": f"Internal error while calling {method_name}"},
-                status_code=500,
-            )
-
-        return JSONResponse({"result": result})
-
-    # ── Server-side folder browser (replaces the native folder dialog) ─────
-    #
-    # Both handlers below answer with one account's private view of the
-    # filesystem: the folder it downloads into, and what is inside it.
-    # Neither response carries a validator, which leaves a browser or an
-    # intermediary free to reuse it heuristically — and on a shared machine
-    # in multi-user mode, the next reuse can be for a different account. In
-    # single-user mode there is nobody to reuse it for, so nothing is added.
-    _private_headers = {"Cache-Control": "no-store"} if multiuser else None
-
-    # `def`, not `async def`: listing a directory is blocking I/O (slow on a
-    # NAS share), and FastAPI runs a plain function in its threadpool instead
-    # of on the event loop that also carries the progress WebSocket.
-    @app.get("/api/browse-folder")
-    def browse_folder(request: Request, path: str | None = None) -> JSONResponse:
-        target_api = api_for(request)
-        # In multi-user mode the only approved root is the caller's own
-        # download folder, and it is also where browsing starts — landing
-        # someone in $HOME would show them the other accounts by name.
-        root = str(Path.home()) if not multiuser else target_api.download_dir
-        try:
-            # Resolve the requested path to a canonical, absolute form and
-            # confirm it sits under an approved root *before* it is ever used
-            # to touch the filesystem. Everything downstream operates on the
-            # sanitized `safe_root` string, never on the raw `path` input.
-            base = (Path(path).expanduser() if path else Path(root)).resolve()
-            approved_roots = [Path(target_api.download_dir).resolve()]
-            if not multiuser:
-                approved_roots.append(Path.home().resolve())
-            if not any(
-                base.is_relative_to(approved_root) for approved_root in approved_roots
-            ):
-                return JSONResponse(
-                    {"error": "Access denied: path is outside approved directories"},
-                    status_code=403,
-                    headers=_private_headers,
-                )
-            if not base.is_dir():
-                base = Path(root).resolve()
-            directories = sorted(
-                (
-                    p.name
-                    for p in base.iterdir()
-                    if p.is_dir() and not p.name.startswith(".")
-                ),
-                key=str.lower,
-            )
-            files = sorted(
-                (
-                    p.name
-                    for p in base.iterdir()
-                    if p.is_file() and not p.name.startswith(".")
-                ),
-                key=str.lower,
-            )
-        except Exception:
-            logger.exception("Error browsing folder %r", path)
-            return JSONResponse(
-                {"error": "Unable to browse this folder"},
-                status_code=400,
-                headers=_private_headers,
-            )
-        parent = str(base.parent) if base.parent != base else None
-        return JSONResponse(
-            {
-                "path": str(base),
-                "parent": parent,
-                "directories": directories,
-                "files": files,
-            },
-            headers=_private_headers,
-        )
-
-    # Also a plain `def`, for the same reason as the folder browser above.
-    @app.get("/api/media")
-    def media(request: Request, path: str):
-        """Streams an audio file (or a player copy of it) with Range support,
-        so the in-page player can seek. Same approved roots as the folder
-        browser: in multi-user mode only the caller's own download folder."""
-        from .core.media_server import content_type_for
-        from .core.paths import cache_path
-
-        target_api = api_for(request)
-        if not path or "\x00" in path:
-            return PlainTextResponse("Bad path", status_code=400)
-        roots = [
-            os.path.realpath(target_api.download_dir),
-            os.path.realpath(cache_path("playback")),
-        ]
-        if not multiuser:
-            roots.append(os.path.realpath(Path.home()))
-        try:
-            full = os.path.realpath(os.path.expanduser(path))
-        except (OSError, ValueError):
-            return PlainTextResponse("Bad path", status_code=400)
-        # Containment first, existence second: a path outside the approved
-        # roots is never probed on disk, so it cannot be told apart from a
-        # missing one. Only `full`, after this check, is ever used.
-        # (A file is never a root itself, so "inside" is a plain prefix test.)
-        for root in roots:
-            if full.startswith(root.rstrip(os.sep) + os.sep):
-                if not os.path.isfile(full):
-                    break
-                return FileResponse(
-                    full,
-                    media_type=content_type_for(Path(full)),
-                    headers={"Cache-Control": "no-store"},
-                )
-        return PlainTextResponse("Not found", status_code=404)
-
-    @app.get("/api/get-home-dir")
-    async def get_home_dir(request: Request) -> JSONResponse:
-        """Where the folder browser should start.
-
-        Named for what the frontend calls it. In multi-user mode it is the
-        account's own download folder, not the OS home — the browser is only
-        allowed inside that root there, so handing back $HOME would just
-        start people somewhere they cannot open.
-        """
-        if multiuser:
-            return JSONResponse(
-                {"home_dir": api_for(request).download_dir},
-                headers=_private_headers,
-            )
-        return JSONResponse({"home_dir": str(Path.home())})
-
-    # ── WebSocket: push channel for log/progress/metadata/etc. ─────────────
-    @app.websocket("/ws")
-    async def ws_endpoint(ws: WebSocket) -> None:
-        # Neither middleware above runs for WebSocket upgrades — @app.middleware
-        # ("http") only sees scope["type"] == "http" — so *both* gates have to be
-        # repeated here. This channel carries every push event the app emits
-        # (logs, progress, metadata, on-disk paths), so leaving either one out
-        # means an unauthenticated client can watch everything the instance does.
-        if token:
-            supplied = ws.query_params.get(WEB_TOKEN_QUERY_PARAM) or ws.cookies.get(
-                WEB_TOKEN_COOKIE
-            )
-            if not _token_matches(supplied, token):
-                await ws.close(code=1008)  # 1008 = Policy Violation
-                return
-        ws_owner: str | None = None
-        if multiuser:
-            assert sessions is not None  # always set together with multiuser=True
-            ws_owner = sessions.username_for(ws.cookies.get(SESSION_COOKIE))
-            if ws_owner is None:
-                await ws.close(code=1008)
-                return
-            # Make sure the account's Api exists now, so events it emits have
-            # somewhere to be addressed even before its first API call.
-            registry.get(ws_owner)
-        await manager.connect(ws, owner=ws_owner)
-        try:
-            while True:
-                # The frontend doesn't need to send anything; this just
-                # keeps the connection open and detects disconnects.
-                await ws.receive_text()
-        except WebSocketDisconnect:
-            manager.disconnect(ws)
-        except Exception:
-            manager.disconnect(ws)
-
-    # ── The versioned REST API (/api/v1) ──────────────────────────────────
-    #
-    # Additive: the RPC bridge above is untouched and the frontend still uses
-    # it. This is the surface for everything that is *not* our frontend —
-    # bots, scripts, other services — which needs a declared schema rather
-    # than a list of GUI method names. See webapi/__init__.py.
-    #
-    # Mounted after the middleware that gates /api/*, so it inherits the same
-    # token and session auth rather than reimplementing either.
-    from .application import ApiAdapter, DownloadService, EventBus, JobService
-    from .webapi import ApiDeps, build_v1_router
-
-    application_events = EventBus()
-    application_events.subscribe(
-        "job.created",
-        lambda payload: manager.broadcast("applicationEvent", ["job.created", payload]),
+    _install_token_gate(app, token=token)
+    _register_multiuser_routes(
+        app,
+        multiuser=multiuser,
+        sessions=sessions,
+        job_queue=job_queue,
+        login_limiter=login_limiter,
     )
-    application_events.subscribe(
-        "job.started",
-        lambda payload: manager.broadcast("applicationEvent", ["job.started", payload]),
+    _register_ops_routes(
+        app,
+        api=api,
+        manager=manager,
+        token=token,
+        multiuser=multiuser,
+        sessions=sessions,
+        job_queue=job_queue,
     )
-    application_events.subscribe(
-        "job.completed",
-        lambda payload: manager.broadcast(
-            "applicationEvent", ["job.completed", payload]
-        ),
+    _register_method_dispatch(app, api_for=api_for, multiuser=multiuser)
+    _register_file_routes(app, api_for=api_for, multiuser=multiuser)
+    _register_websocket(
+        app,
+        manager=manager,
+        registry=registry,
+        token=token,
+        multiuser=multiuser,
+        sessions=sessions,
     )
-    application_events.subscribe(
-        "job.failed",
-        lambda payload: manager.broadcast("applicationEvent", ["job.failed", payload]),
+    application_download_service = _register_v1_api(
+        app,
+        api_for=api_for,
+        manager=manager,
+        token=token,
+        multiuser=multiuser,
+        job_queue=job_queue,
     )
-    application_events.subscribe(
-        "job.cancelled",
-        lambda payload: manager.broadcast(
-            "applicationEvent", ["job.cancelled", payload]
-        ),
-    )
-    for event_name in (
-        "job.retrying",
-        "job.paused",
-        "job.resumed",
-        "job.item.updated",
-    ):
-
-        def broadcast_application_event(payload: Any, name: str = event_name) -> None:
-            manager.broadcast("applicationEvent", [name, payload])
-
-        application_events.subscribe(
-            event_name,
-            broadcast_application_event,
-        )
-    from .application.metadata_service import MetadataService
-
-    application_download_service = DownloadService(
-        event_bus=application_events,
-        # Real metadata, not the compatibility stub (see app.py).
-        metadata_service=MetadataService(compatibility_fallback=False),
-    )
-    application_job_service = JobService(
-        download_service=application_download_service,
-        event_bus=application_events,
-    )
-    application_adapter = ApiAdapter(
-        job_service=application_job_service,
-        start_background=True,
-        event_bus=application_events,
-    )
-    app.state.application_download_service = application_download_service
-    app.state.application_job_service = application_job_service
-    app.state.application_adapter = application_adapter
-
-    app.include_router(
-        build_v1_router(
-            ApiDeps(
-                api_for=api_for,
-                multiuser=multiuser,
-                token_required=bool(token),
-                # The v1 single-user API has its own application job service.
-                # ``download_queue`` is the legacy GUI queue and accepts a
-                # different payload shape (indices/tracks), so handing it a
-                # v1 URL job silently completed zero tracks.
-                job_queue=job_queue if multiuser else None,
-                adapter=application_adapter if not multiuser else None,
-                download_service=application_download_service,
-                username_for=lambda request: getattr(request.state, "username", None),
-            )
-        )
-    )
-
-    # ── Frontend: same static files the desktop build uses, with a small
-    #    script injected so window.pywebview.api exists in a plain browser.
-    @app.get("/")
-    async def index() -> HTMLResponse:
-        html = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
-        inject = (
-            "<script>window.__MORNYE_WEB_MODE__ = true;</script>\n"
-            '<script src="/web-shim.js"></script>\n'
-        )
-        # Before the first app script. index.html marks the spot with a
-        # comment, because matching the script tag itself silently dropped the
-        # shim (and with it every API call) whenever that tag changed shape —
-        # a bumped `?v=` once, the timestamped loader another time.
-        marker = "<!--MORNYE-APP-SCRIPTS"
-        if marker in html:
-            html = html.replace(marker, inject + marker, 1)
-        else:
-            html = re.sub(
-                r'(<script src="toast-system\.js[^"]*"></script>)',
-                lambda m: inject + m.group(1),
-                html,
-                count=1,
-            )
-        # Marks the document as browser-served before the first paint, so CSS
-        # can drop the chrome that only makes sense in the pywebview window
-        # (the frameless titlebar and its traffic-light buttons, which call
-        # window methods that don't exist here). The desktop build loads
-        # index.html straight from disk and never hits this route, so its
-        # <body> stays unclassed.
-        #
-        # Anchored after </head> rather than replacing the first "<body>" in
-        # the file: index.html's pre-paint script carries a comment that says
-        # "not at the top of <body>", and a plain first-occurrence replace
-        # rewrote *that* — leaving the real tag unclassed, so every
-        # body.web-mode rule silently did nothing in the browser (the desktop
-        # titlebar stayed visible there, complete with buttons that call
-        # pywebview methods a browser doesn't have).
-        head_end = html.find("</head>")
-        body_at = html.find("<body>", head_end if head_end != -1 else 0)
-        if body_at != -1:
-            html = (
-                html[:body_at]
-                + '<body class="web-mode">'
-                + html[body_at + len("<body>") :]
-            )
-        return HTMLResponse(html)
-
-    @app.get("/web-shim.js")
-    async def web_shim() -> FileResponse:
-        return FileResponse(
-            FRONTEND_DIR / "web-shim.js", media_type="application/javascript"
-        )
-
-    # Everything else (app.js, styles.css, assets/...) served as-is.
-    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR)), name="frontend")
+    _register_frontend(app)
 
     return app
 

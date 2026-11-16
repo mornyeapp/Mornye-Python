@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+import math
 from pathlib import Path
 from typing import Any
 
@@ -26,11 +27,34 @@ class OutputConfig:
 class DownloadConfig:
     quality: str = "LOSSLESS"
     services: list[str] = field(default_factory=list)
+    preferred_service: str | None = None
+    fallback_services: bool = True
     allow_fallback: bool = True
     max_concurrent: int = 2
     retries: int = 0
     timeout: int | None = None
     resume: bool = True
+    metadata_delay_min_s: float = 0.0
+    metadata_delay_max_s: float = 0.0
+    provider_delay_min_s: float = 0.0
+    provider_delay_max_s: float = 0.0
+    auto_rate_limit_cooldown: bool = True
+
+    def __post_init__(self) -> None:
+        for name in (
+            "metadata_delay_min_s",
+            "metadata_delay_max_s",
+            "provider_delay_min_s",
+            "provider_delay_max_s",
+        ):
+            value = float(getattr(self, name))
+            if not math.isfinite(value) or value < 0:
+                raise ValueError(f"{name} must be a finite number >= 0")
+            setattr(self, name, value)
+        if self.metadata_delay_max_s < self.metadata_delay_min_s:
+            raise ValueError("metadata_delay_max_s must be >= metadata_delay_min_s")
+        if self.provider_delay_max_s < self.provider_delay_min_s:
+            raise ValueError("provider_delay_max_s must be >= provider_delay_min_s")
 
 
 @dataclass
@@ -87,7 +111,7 @@ class MornyeConfig:
     security: SecurityConfig = field(default_factory=SecurityConfig)
 
     @classmethod
-    def from_legacy_options(cls, options: Any) -> "MornyeConfig":
+    def from_legacy_options(cls, options: Any) -> MornyeConfig:
         """Build the new config model from the current downloader options."""
         config = cls()
         config.output.directory = Path(getattr(options, "output_dir", "./Downloads"))
@@ -104,11 +128,28 @@ class MornyeConfig:
 
         config.download.quality = getattr(options, "quality", "LOSSLESS")
         config.download.services = list(getattr(options, "services", []))
+        config.download.preferred_service = getattr(options, "preferred_service", None)
+        config.download.fallback_services = getattr(options, "fallback_services", True)
         config.download.allow_fallback = getattr(options, "allow_fallback", True)
         config.download.max_concurrent = getattr(options, "max_concurrent_downloads", 2)
         config.download.retries = getattr(options, "track_max_retries", 0)
         config.download.timeout = getattr(options, "timeout_s", None)
         config.download.resume = getattr(options, "resume", True)
+        config.download.metadata_delay_min_s = getattr(
+            options, "metadata_delay_min_s", 0.0
+        )
+        config.download.metadata_delay_max_s = getattr(
+            options, "metadata_delay_max_s", 0.0
+        )
+        config.download.provider_delay_min_s = getattr(
+            options, "provider_delay_min_s", 0.0
+        )
+        config.download.provider_delay_max_s = getattr(
+            options, "provider_delay_max_s", 0.0
+        )
+        config.download.auto_rate_limit_cooldown = getattr(
+            options, "auto_rate_limit_cooldown", True
+        )
 
         config.metadata.enrich = getattr(options, "enrich_metadata", True)
         config.metadata.providers = list(

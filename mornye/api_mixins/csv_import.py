@@ -312,7 +312,8 @@ class CsvImportMixin:
             "ok",
         )
         self.set_progress("Ready for download.")
-        self._push_safe("showTracklist", _tracklist(tracks))
+        list_id = self._remember_tracklist(tracks, "", "")  # type: ignore[attr-defined]
+        self._push_safe("showTracklist", _tracklist(tracks, list_id))
         self._push_safe(
             "app_csv_loaded",
             {
@@ -500,11 +501,12 @@ class CsvImportMixin:
             pass
 
 
-def _tracklist(tracks: list) -> list[dict]:
+def _tracklist(tracks: list, list_id: int | None = None) -> list[dict]:
     """The same rows `fetch_metadata` sends, so the table needs no new case."""
     return [
         {
             "index": index,
+            "list_id": list_id,
             "id": getattr(track, "id", ""),
             "title": getattr(track, "title", f"Track {index + 1}"),
             "artist": getattr(track, "artists", "Unknown"),

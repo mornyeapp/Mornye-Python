@@ -701,7 +701,16 @@ class _AppleMusicMeta:
         out.genre = item.get("primaryGenreName", "")
         out.explicit = item.get("trackExplicitness") == "explicit"
         raw_art = item.get("artworkUrl100", "")
-        out.cover_url_hd = raw_art.replace("100x100", "600x600")
+        found_album = str(item.get("collectionName") or "")
+        if not album_name or _same_release(album_name, found_album):
+            out.cover_url_hd = raw_art.replace("100x100", "600x600")
+        else:
+            logger.debug(
+                "[meta/apple] release mismatch: wanted %r, got %r — keeping "
+                "track metadata only",
+                album_name,
+                found_album,
+            )
         # ISO-8601 with a time part; only the date half is a release date.
         out.release_date = str(item.get("releaseDate") or "")[:10]
         out.total_tracks = int(item.get("trackCount") or 0)
@@ -1158,7 +1167,7 @@ async def enrich_metadata_async(
         # first call also starts their runtime.
         try:
             return await asyncio.wait_for(coro, timeout=limit)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("[meta/enrich] %s timed out after %.1fs", label, limit)
             return None
 
@@ -1182,7 +1191,7 @@ async def enrich_metadata_async(
         for outcome in outcomes[: len(providers)]
         if isinstance(outcome, tuple)
     }
-    ext_results = dict(zip(ext_keys, outcomes[len(providers) :]))
+    ext_results = dict(zip(ext_keys, outcomes[len(providers) :], strict=False))
 
     # Every provider has already answered — gather() above waits for all of
     # them — so this loop spends nothing but the merge. It used to stop at

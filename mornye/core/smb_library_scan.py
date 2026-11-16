@@ -7,7 +7,8 @@ import ntpath
 import posixpath
 import re
 from collections import Counter
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 from urllib.parse import unquote, urlsplit
 
 import mutagen

@@ -1,0 +1,134 @@
+/* frontend/css/views/explore.css — Explore in the console look (redesign
+   voce 17): the greeting, the Feed picker, section labels and a grid of
+   square covers. Artwork stays the only colour on screen; a missing cover
+   is a neutral square, not another service's logo.
+
+   The view's structure (grids, positions, the phone layout) comes first,
+   moved out of styles.css in voce 22; the console look follows it.
+   Semantic tokens only; ids and handlers untouched. */
+
+#explore-greeting {
+  font-family: var(--font);
+  font-optical-sizing: auto;
+  font-variation-settings: 'SOFT' 50;
+}
+
+/* --- EXPLORE VIEW --- */
+.explore-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  margin-bottom: 32px;
+}
+.explore-card {
+  transition: transform 0.2s;
+}
+.explore-card img {
+  object-fit: cover;
+  margin-bottom: 12px;
+}
+.explore-card:hover img {
+  box-shadow: none;
+}
+.explore-card-title {
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.explore-card-subtitle {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2; /* Standard property */
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Phone layout: see the note in layout.css. */
+
+/* Touch ergonomics: see the note in layout.css. */
+@media (hover: none) and (pointer: coarse) {
+  .explore-card {
+    touch-action: manipulation;
+  }
+}
+
+@media (max-width: 700px) {
+  /* ── Card grids ──
+     minmax(180px, 1fr) inside a ~330px content box resolves to exactly one
+     column, so each card drew at double its design size and the view became
+     a very long single file. 140px gives two. */
+  .explore-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: var(--space-2);
+  }
+}
+
+#view-explore .explore-container { padding: var(--space-5) var(--space-5) var(--space-8); }
+#explore-greeting {
+  font-family: var(--font);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  letter-spacing: .02em;
+}
+#explore-source {
+  height: var(--row);
+  /* Room on the right for the chevron (--chevron) drawn on every select. */
+  padding: 0 calc(var(--space-6) + var(--space-1)) 0 var(--space-3);
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-1);
+  background-color: var(--raised);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-sm);
+}
+#explore-source:focus { border-color: var(--signal-strong); outline: none; }
+
+.explore-section-title {
+  margin: var(--space-6) 0 var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--rule);
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+.explore-grid { gap: var(--space-4); }
+
+.explore-card {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+}
+.explore-card:hover { transform: none; box-shadow: none; background: transparent; }
+.explore-card img,
+.explore-cover-blank {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 0;
+  box-shadow: none;
+  outline: 1px solid transparent;
+  outline-offset: -1px;
+  transition: outline-color var(--motion-fast) var(--ease);
+}
+.explore-card:hover img,
+.explore-card:hover .explore-cover-blank { outline-color: var(--signal-strong); transform: none; }
+.explore-cover-blank {
+  display: grid;
+  place-items: center;
+  background: var(--raised);
+  color: var(--text-muted);
+  font-size: var(--text-2xl);
+}
+.explore-card-title {
+  margin-top: var(--space-2);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+.explore-card-subtitle { color: var(--text-muted); font-size: var(--text-xs); }

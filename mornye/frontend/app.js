@@ -80,7 +80,7 @@ function updateSaveButtonVisual() {
     if (isDirty) {
         btn.style.opacity = "1";
         btn.textContent = "Save Changes (Unsaved)";
-        btn.dataset.dirty = "true"; // red border: styles.css
+        btn.dataset.dirty = "true"; // red border: css/legacy.css
     } else {
         btn.textContent = "Save Changes";
         btn.dataset.dirty = "false";
@@ -94,6 +94,9 @@ function clearSearchUI() {
 }
 // ── Helpers ─────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
+// A top-level const is not a window property; the markup's data-on*
+// handlers (inline-handlers.js) name it, so it is registered there.
+window.MornyeHandlers?.expose({ $ });
 const ts = () => new Date().toLocaleTimeString('en-US');
 // ── Global Initialization ──────────────────────────────────────────────────
 const toastMgr = new ToastManager();
@@ -103,15 +106,87 @@ const toastMgr = new ToastManager();
 // sound followed only the browser's own localStorage (issue #254).
 window.toastMgr = toastMgr;
 
+// ── Keyboard reach for clickable non-buttons (F7) ───────────────────────────
+// Rows and cards that act on a click are <div>s (a <button> cannot hold
+// their block layout or nested buttons). Each carries tabindex="0" and
+// data-activate, and Enter or Space on it is its click. Only the element
+// itself: a key typed in a field or on a button inside it is left alone.
+function makeActivatable(el, role = 'button') {
+  el.tabIndex = 0;
+  el.dataset.activate = '';
+  if (role && !el.hasAttribute('role')) el.setAttribute('role', role);
+  return el;
+}
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const el = e.target;
+  if (!(el instanceof Element) || !el.hasAttribute('data-activate')) return;
+  if (e.repeat) return;
+  e.preventDefault();
+  el.click();
+});
+
+// ── Confirmation dialog (F7) ─────────────────────────────────────────────────
+// askConfirm(question, {title, ok, danger}) → Promise<boolean>. Opens
+// #confirm-modal in place of the native confirm(), which pywebview draws in
+// the OS's own style and outside the window. Escape, the backdrop and Cancel
+// answer false. A destructive question (danger) starts on Cancel, so a
+// stray Enter does not delete anything; otherwise on the confirm button.
+let confirmSettle = null;
+function askConfirm(question, { title = 'Are you sure?', ok = 'OK', danger = false } = {}) {
+  const modal = $('confirm-modal');
+  if (confirmSettle) confirmSettle(false);
+  $('confirm-title').textContent = title;
+  $('confirm-message').textContent = question;
+  const okBtn = $('confirm-ok');
+  okBtn.textContent = ok;
+  okBtn.classList.toggle('danger', danger);
+  okBtn.classList.toggle('primary', !danger);
+  const opener = document.activeElement;
+  modal.classList.remove('hidden');
+  (danger ? $('confirm-cancel') : okBtn).focus();
+  return new Promise(resolve => {
+    confirmSettle = (answer) => {
+      confirmSettle = null;
+      modal.classList.add('hidden');
+      if (opener && typeof opener.focus === 'function' && document.contains(opener)) opener.focus();
+      resolve(answer);
+    };
+  });
+}
+(function initConfirmDialog() {
+  const modal = $('confirm-modal');
+  if (!modal) return;
+  modal.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-confirm]');
+    if (b && confirmSettle) confirmSettle(b.dataset.confirm === 'ok');
+  });
+  modal.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault(); e.stopPropagation();
+      if (confirmSettle) confirmSettle(false);
+    } else if (e.key === 'Tab') {
+      // Two buttons: keep the focus inside the dialog while it is open.
+      const first = $('confirm-cancel'), last = $('confirm-ok');
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  });
+})();
+
 // ── View switching ───────────────────────────────────────────────────────────
 function switchView(name) {
   if (isDirty) {
-        if (!confirm("You have unsaved changes. Do you want to leave this page?")) {
-            return; // Cancel view change
-        }
-        isDirty = false; // Force reset when the user chooses to leave
-        updateSaveButtonVisual();
-    }
+    // Ask in the app's own dialog; on "Leave" drop the edits and switch.
+    askConfirm('You have unsaved changes. Leave this page without saving them?',
+      { title: 'Unsaved changes', ok: 'Leave' }).then(leave => {
+      if (!leave) return;
+      isDirty = false; // Force reset when the user chooses to leave
+      updateSaveButtonVisual();
+      switchView(name);
+    });
+    return;
+  }
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-btn[id^="nav-"]').forEach(b => b.classList.remove('active'));
   $('view-' + name)?.classList.add('active');
@@ -243,7 +318,7 @@ function setThemeClass(dark) {
   // when the OS flips under an 'auto' choice.
   try {
     const tc = document.querySelector('meta[name="theme-color"]');
-    if (tc) tc.setAttribute('content', dark ? '#0e0c0b' : '#f6f2ec');
+    if (tc) tc.setAttribute('content', dark ? '#0d0d0d' : '#f2f2f0');
   } catch (e) { /* no <head> access is not worth failing the theme over */ }
 }
 
@@ -285,41 +360,42 @@ function syncSystemTheme(e) {
   if (val === 'auto') applyTheme('auto');
 }
 
-//: Must match MornyeAPI.ACCENTS in app.py and the --accent-* blocks in
-//: styles.css. 'teal' (the logo's colour) is the default and has no block of
-//: its own: it is what :root already says, so it is applied by removing the
-//: attribute.
-const ACCENTS = ['teal', 'green', 'blue', 'purple', 'pink', 'orange', 'red', 'cyan', 'amber'];
+//: Must match MornyeAPI.ACCENTS in app.py and the blocks in css/accents.css.
+//: 'amber' (the console look's signal) is the default and has no block of
+//: its own: it is what tokens.css already says, so it is applied by removing
+//: the attribute. An accent changes the signal tokens and nothing else.
+const ACCENTS = ['amber', 'teal', 'green', 'blue', 'purple', 'pink', 'orange', 'red', 'cyan'];
 //: Bumped by a rebrand that changes the default accent. Stored both in
 //: localStorage ('mornye-brand') and in gui-settings.json ('brand', written by
 //: save_accent()) so the one-off migration below happens once per install.
-const BRAND_VERSION = 2;
+const BRAND_VERSION = 3;
 
-// Before the warm rebrand the default accent was 'green', and nearly every
-// stored 'green' is that untouched default rather than a choice. Move it to
-// the new default once; anyone who picks green again afterwards keeps it.
+// The default was 'green' before the 2026 warm rebrand and 'teal' until the
+// console redesign; a stored one is nearly always that untouched default
+// rather than a choice. Move it to amber once; anyone who picks teal or
+// green again afterwards keeps it.
 function migrateAccent(accent, cfgBrand) {
   let done = Number(cfgBrand) >= BRAND_VERSION;
   try { done = done || localStorage.getItem('mornye-brand') === String(BRAND_VERSION); } catch (e) {}
   try { localStorage.setItem('mornye-brand', String(BRAND_VERSION)); } catch (e) {}
-  return (!done && accent === 'green') ? 'teal' : accent;
+  return (!done && (accent === 'green' || accent === 'teal')) ? 'amber' : accent;
 }
 
 // data-accent goes on <html> *and* <body>, the same pair the theme classes
-// use (see setThemeClass) — styles.css keys the accent blocks off both, so
+// use (see setThemeClass) — css/accents.css keys the blocks off both, so
 // that the token values are in scope no matter which element a rule resolves
 // against.
 function applyAccent(accent) {
-  const val = ACCENTS.includes(accent) ? accent : 'teal';
+  const val = ACCENTS.includes(accent) ? accent : 'amber';
   for (const el of [document.documentElement, document.body]) {
     if (!el) continue;
-    if (val === 'teal') el.removeAttribute('data-accent');
+    if (val === 'amber') el.removeAttribute('data-accent');
     else el.setAttribute('data-accent', val);
   }
 }
 
 function changeAccent() {
-  const val = $('config-accent')?.value || 'teal';
+  const val = $('config-accent')?.value || 'amber';
   applyAccent(val);
   // Three copies for the same reason changeTheme() keeps three: the two
   // localStorage writes are per-origin and can vanish, gui-settings.json is
@@ -335,10 +411,58 @@ function changeAccent() {
   } catch (e) {}
 }
 
+// ── Density (N4) ───────────────────────────────────────────────────────────
+// 'compact' puts data-density on <html> and <body>; css/layout.css shrinks
+// the row height and the spacing tokens a step there. Stored like the
+// accent: localStorage for the next first paint (boot-head.js), the settings
+// blob, and gui-settings.json (save_density), the copy that survives.
+const DENSITIES = ['comfortable', 'compact', 'large'];
+// 'large' magnifies the whole interface. The desktop window zooms natively
+// (set_page_zoom, WKWebView pageZoom — like Cmd-+); where that isn't
+// available (browser tab, other platforms) css/layout.css applies CSS zoom
+// under data-zoom="css".
+const LARGE_ZOOM = 1.15;
+
+function applyDensity(density) {
+  const val = DENSITIES.includes(density) ? density : 'comfortable';
+  for (const el of [document.documentElement, document.body]) {
+    if (!el) continue;
+    if (val !== 'comfortable') el.setAttribute('data-density', val);
+    else el.removeAttribute('data-density');
+  }
+  applyPageZoom(val === 'large' ? LARGE_ZOOM : 1);
+}
+
+function applyPageZoom(factor) {
+  const setCss = (on) => {
+    if (on) document.documentElement.setAttribute('data-zoom', 'css');
+    else document.documentElement.removeAttribute('data-zoom');
+  };
+  const native = window.pywebview?.api?.set_page_zoom;
+  if (typeof native !== 'function') { setCss(factor !== 1); return; }
+  Promise.resolve(native(factor))
+    .then(res => setCss(!(res && res.ok) && factor !== 1))
+    .catch(() => setCss(factor !== 1));
+}
+
+function changeDensity() {
+  const val = $('config-density')?.value || 'comfortable';
+  applyDensity(val);
+  try {
+    localStorage.setItem('mornye-density', val);
+    const stored = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) || '{}');
+    stored.density = val;
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(stored));
+  } catch (e) {}
+  try {
+    window.pywebview?.api?.save_density?.(val);
+  } catch (e) {}
+}
+
 function loadAccentFromStorage() {
   const stored = (() => {
     try { return localStorage.getItem('mornye-accent'); } catch (e) { return null; }
-  })() || 'teal';
+  })() || 'amber';
   const accent = migrateAccent(stored);
   try { localStorage.setItem('mornye-accent', accent); } catch (e) {}
   if ($('config-accent')) $('config-accent').value = accent;
@@ -370,19 +494,12 @@ function changePreviewVolume() {
 }
 
 function changeFont() {
-  const font = $('config-font').value;
-  document.documentElement.style.setProperty('--app-font', font);
-  // Titles use the display face (Fraunces) only with the default font; any
-  // other choice applies to them too, so the whole window follows the
-  // setting instead of the headings staying behind.
-  const isDefault = /^'Inter'/.test(font);
-  if (isDefault) document.documentElement.style.removeProperty('--font-display');
-  else document.documentElement.style.setProperty('--font-display', font);
-  try {
-    const stored = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) || '{}');
-    stored.font = font;
-    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(stored));
-  } catch (e) {}
+  // One typeface (redesign §2: JetBrains Mono for everything, from
+  // css/tokens.css). A font saved by an older version, or chosen in the old
+  // picker, no longer applies: whatever is inline is removed. #config-font
+  // stays in the page, hidden, so settings that still carry the key load.
+  document.documentElement.style.removeProperty('--app-font');
+  document.documentElement.style.removeProperty('--font-display');
 }
 
 function onNotificationSoundChange() {
@@ -428,6 +545,12 @@ function applySettings(settings = {}) {
       };
   }
   if ($('config-fallback')) $('config-fallback').checked = cfg.allow_fallback;
+  if ($('config-provider-fallback')) {
+    $('config-provider-fallback').checked = cfg.fallback_services !== false;
+  }
+  if ($('config-ask-provider')) {
+    $('config-ask-provider').checked = cfg.ask_provider_before_download === true;
+  }
   // The dedicated key wins over the blob's copy: it is what the pre-paint
   // script in index.html already acted on, and a stale cfg.theme here would
   // otherwise flip the UI back a moment after load. When the key is absent —
@@ -444,11 +567,17 @@ function applySettings(settings = {}) {
   // Same dedicated-key-wins-over-blob dance as the theme above, for the
   // same reason: gui-settings.json is what survives, localStorage is what
   // the next launch reads first.
-  let accent = cfg.accent || 'teal';
+  let accent = cfg.accent || 'amber';
   try { accent = localStorage.getItem('mornye-accent') || accent; } catch (e) {}
   accent = migrateAccent(accent, cfg.brand);
   try { localStorage.setItem('mornye-accent', accent); } catch (e) {}
   if ($('config-accent')) $('config-accent').value = accent;
+  let density = cfg.density || 'comfortable';
+  try { density = localStorage.getItem('mornye-density') || density; } catch (e) {}
+  if (!DENSITIES.includes(density)) density = 'comfortable';
+  try { localStorage.setItem('mornye-density', density); } catch (e) {}
+  if ($('config-density')) $('config-density').value = density;
+  applyDensity(density);
   const soundEnabled = cfg.sound_enabled !== false && cfg.notification_sound !== false;
   if ($('config-sound-enabled')) $('config-sound-enabled').checked = soundEnabled;
   if (window.toastMgr) window.toastMgr.setSoundEnabled(soundEnabled);
@@ -498,6 +627,13 @@ function applySettings(settings = {}) {
   if ($('config-loop')) $('config-loop').value = cfg.loop;
   if ($('config-loglevel')) $('config-loglevel').value = cfg.log_level;
   if ($('config-concurrent')) $('config-concurrent').value = cfg.max_concurrent_downloads || 2;
+  if ($('config-metadata-delay-min')) $('config-metadata-delay-min').value = cfg.metadata_delay_min_s ?? 0;
+  if ($('config-metadata-delay-max')) $('config-metadata-delay-max').value = cfg.metadata_delay_max_s ?? 0;
+  if ($('config-provider-delay-min')) $('config-provider-delay-min').value = cfg.provider_delay_min_s ?? 0;
+  if ($('config-provider-delay-max')) $('config-provider-delay-max').value = cfg.provider_delay_max_s ?? 0;
+  if ($('config-auto-rate-limit-cooldown')) {
+    $('config-auto-rate-limit-cooldown').checked = cfg.auto_rate_limit_cooldown !== false;
+  }
   if ($('config-network-destination')) {
     $('config-network-destination').value = cfg.network_destination_id || '';
   }
@@ -537,6 +673,7 @@ function applyListState(id, values = []) {
     items.filter(i => !values.includes(i.dataset.value)).forEach(item => el.appendChild(item));
   }
   renumberList(el);
+  if (id === 'services-list') refreshServicePriorityIndicators();
 }
 
 async function loadSettingsFromStorage() {
@@ -574,6 +711,7 @@ async function saveSettings() {
     const cfg = buildConfig();
     cfg.theme  = $('config-theme')?.value  || DEFAULT_SETTINGS.theme;
     cfg.accent = $('config-accent')?.value || DEFAULT_SETTINGS.accent;
+    cfg.density = $('config-density')?.value || DEFAULT_SETTINGS.density;
     cfg.font   = $('config-font')?.value   || DEFAULT_SETTINGS.font;
     cfg.preview_volume = previewVolume;
     if (window.pywebview?.api) {
@@ -665,12 +803,22 @@ function onVerifyHiresChange() {
 // ── Sortable lists ───────────────────────────────────────────────────────────
 function makeSortable(el) {
   let drag = null;
-  function onDS(e) { drag = e.currentTarget; setTimeout(() => drag?.classList.add('dragging'), 0); }
+  let startingOrder = [];
+  function onDS(e) {
+    drag = e.currentTarget;
+    startingOrder = [...el.querySelectorAll('.sort-item')].map(item => item.dataset.value);
+    setTimeout(() => drag?.classList.add('dragging'), 0);
+  }
   function onDE() {
     drag?.classList.remove('dragging');
     el.querySelectorAll('.sort-item').forEach(i => i.classList.remove('drag-over'));
     drag = null;
     renumberList(el);
+    if (el.id === 'services-list') {
+      refreshServicePriorityIndicators();
+      const currentOrder = [...el.querySelectorAll('.sort-item')].map(item => item.dataset.value);
+      if (currentOrder.some((value, i) => value !== startingOrder[i])) markSettingsDirty();
+    }
   }
   function onDO(e) {
     e.preventDefault();
@@ -735,13 +883,16 @@ const ALL_ENRICH = [
 const SETTINGS_STORAGE_KEY = 'mornye-settings';
 const DEFAULT_SETTINGS = {
   theme: 'auto',
-  accent: 'teal',
+  accent: 'amber',
+  density: 'comfortable',
   sound_enabled: true,
   notification_sound: true,
   preview_volume: 100,
   font: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   quality: 'LOSSLESS',
   allow_fallback: false,
+  fallback_services: true,
+  ask_provider_before_download: false,
   lyrics: true,
   enrich_metadata: true,
   save_animated_artwork: false,
@@ -770,6 +921,11 @@ const DEFAULT_SETTINGS = {
   loop: 0,
   log_level: 'INFO',
   max_concurrent_downloads: 2,
+  metadata_delay_min_s: 0,
+  metadata_delay_max_s: 0,
+  provider_delay_min_s: 0,
+  provider_delay_max_s: 0,
+  auto_rate_limit_cooldown: true,
   services: ['tidal','qobuz','deezer','amazon','joox','netease','migu','kuwo','apple','soundcloud','youtube','pandora'],
   lyrics_providers: ['apple', 'binilyrics', 'lrclib'],
   apple_lyrics_word_by_word: true,
@@ -886,7 +1042,7 @@ function buildSortItem(item, index) {
   d.dataset.value = item.id;
   
   const iconHtml = item.iconFile
-    ? `<span class="svc-icon ${item.iconClass} icon-image"><img src="assets/icons/${item.iconFile}" alt="${item.label}" onerror="this.onerror=null; this.src='assets/icons/${item.id}.png';"></span>`
+    ? `<span class="svc-icon ${item.iconClass} icon-image"><img src="assets/icons/${item.iconFile}" alt="${item.label}" data-onerror="this.onerror=null; this.src='assets/icons/${item.id}.png';"></span>`
     : item.icon ? `<span class="svc-icon ${item.iconClass}">${item.icon}</span>` : '';
   
   // Add the number (index + 1) and the checkbox
@@ -895,11 +1051,87 @@ function buildSortItem(item, index) {
     <span class="priority-num">${index + 1}</span>
     <span class="drag-h">⠿</span>
     ${iconHtml}
-    <input type="checkbox" ${item.on ? 'checked' : ''} onclick="event.stopPropagation(); toggleItemActive(this)">
+    <input type="checkbox" ${item.on ? 'checked' : ''} data-onclick="event.stopPropagation(); toggleItemActive(this)">
     <span class="svc-name">${item.label}</span>
     ${item.badge ? `<span class="svc-badge">${item.badge}</span>` : ''}
   `;
   return d;
+}
+
+function buildServiceSortItem(item, index) {
+  const d = document.createElement('div');
+  d.className = `sort-item service-sort-item ${item.on ? '' : 'inactive'}`;
+  d.dataset.value = item.id;
+  if (item.title) d.title = `Provided by ${item.title}`;
+  const iconHtml = item.iconFile
+    ? `<span class="svc-icon ${item.iconClass} icon-image"><img src="assets/icons/${item.iconFile}" alt="" data-onerror="this.onerror=null; this.src='assets/icons/${item.id}.png';"></span>`
+    : item.icon ? `<span class="svc-icon ${item.iconClass}">${escHtml(item.icon)}</span>` : '';
+  d.innerHTML = `
+    <span class="priority-num">${index + 1}</span>
+    <span class="drag-h" aria-hidden="true">⠿</span>
+    ${iconHtml}
+    <span class="svc-name">${escHtml(item.label)}</span>
+    <span class="service-order-status"></span>
+    ${item.badge ? `<span class="svc-badge">${escHtml(item.badge)}</span>` : ''}
+    <div class="service-row-actions">
+      <button type="button" class="service-move" data-onclick="moveService(this, -1)" aria-label="Move ${escHtml(item.label)} up" title="Move up">↑</button>
+      <button type="button" class="service-move" data-onclick="moveService(this, 1)" aria-label="Move ${escHtml(item.label)} down" title="Move down">↓</button>
+      <label class="service-enable" title="${item.on ? 'Enabled download source' : 'Enable download source'}">
+        <input type="checkbox" ${item.on ? 'checked' : ''} data-onchange="onServiceEnabledChange(this)" aria-label="Enable ${escHtml(item.label)} as a download source">
+        <span>${item.on ? 'On' : 'Off'}</span>
+      </label>
+    </div>`;
+  return d;
+}
+
+function markSettingsDirty() {
+  isDirty = true;
+  updateSaveButtonVisual();
+}
+
+function refreshServicePriorityIndicators() {
+  const el = $('services-list');
+  if (!el) return;
+  let activeRank = 0;
+  el.querySelectorAll('.service-sort-item').forEach((item, index) => {
+    const enabled = item.querySelector('input[type="checkbox"]')?.checked;
+    item.querySelector('.priority-num').textContent = String(index + 1).padStart(2, '0');
+    const status = item.querySelector('.service-order-status');
+    if (enabled) {
+      activeRank += 1;
+      status.textContent = activeRank === 1 ? 'Primary' : `Fallback ${activeRank - 1}`;
+      item.classList.toggle('service-primary', activeRank === 1);
+    } else {
+      status.textContent = 'Disabled';
+      item.classList.remove('service-primary');
+    }
+    item.querySelectorAll('.service-move').forEach((button, moveIndex) => {
+      button.disabled = moveIndex === 0 ? index === 0 : index === el.children.length - 1;
+    });
+    const enableLabel = item.querySelector('.service-enable span');
+    if (enableLabel) enableLabel.textContent = enabled ? 'On' : 'Off';
+  });
+  const count = el.querySelectorAll('input[type="checkbox"]:checked').length;
+  const summary = $('services-summary');
+  if (summary) summary.textContent = `${count} enabled · first enabled source is tried first`;
+}
+
+function moveService(button, direction) {
+  const item = button.closest('.service-sort-item');
+  const list = $('services-list');
+  const target = direction < 0 ? item?.previousElementSibling : item?.nextElementSibling;
+  if (!item || !target || !list) return;
+  if (direction < 0) list.insertBefore(item, target);
+  else list.insertBefore(target, item);
+  refreshServicePriorityIndicators();
+  markSettingsDirty();
+}
+
+function onServiceEnabledChange(input) {
+  const item = input.closest('.service-sort-item');
+  if (item) item.classList.toggle('inactive', !input.checked);
+  refreshServicePriorityIndicators();
+  markSettingsDirty();
 }
 
 function toggleItemActive(cb) {
@@ -909,8 +1141,11 @@ function toggleItemActive(cb) {
 
 function populateList(id, items) {
   const el = $(id); el.innerHTML = '';
-  items.forEach((i, idx) => el.appendChild(buildSortItem(i, idx)));
+  items.forEach((i, idx) => el.appendChild(
+    id === 'services-list' ? buildServiceSortItem(i, idx) : buildSortItem(i, idx)
+  ));
   makeSortable(el);
+  if (id === 'services-list') refreshServicePriorityIndicators();
 }
 function getChecked(id) {
   return [...$(id).querySelectorAll('.sort-item')]
@@ -926,14 +1161,14 @@ function showServicesPlaceholder(message, withLink = false) {
   const el = $('services-list');
   if (!el) return;
   const link = withLink
-    ? ` <a href="#" onclick="openExtensionsSettings(); return false;">Settings → Extensions</a>.`
+    ? ` <a href="#" data-onclick="openExtensionsSettings(); return false;">Settings → Extensions</a>.`
     : '';
   el.innerHTML = `<div class="s-label u-fs-11_5 u-p-6-2">${escHtml(message)}${link}</div>`;
 }
 
 function openExtensionsSettings() {
   switchView('settings');
-  const tab = document.querySelector('.stab[onclick*="extensions"]');
+  const tab = document.querySelector('.stab[data-onclick*="extensions"]');
   if (tab) switchTab('extensions', tab);
 }
 
@@ -1088,9 +1323,9 @@ function renderExtensionQualityRows() {
       svc.quality_options.map(o =>
         `<option value="${regEscapeHtml(o.id)}" ${o.id === current ? 'selected' : ''} title="${regEscapeHtml(o.description || '')}">${regEscapeHtml(o.label || o.id)}</option>`)
     ).join('');
-    return `<div class="s-row u-pl-16 u-bl-2-solid-border2 u-ml-4">
+    return `<div class="extension-quality-row">
       <span class="s-label">${regEscapeHtml(svc.label || svc.id)}<small>${regEscapeHtml(svc.primary || '')}</small></span>
-      <select data-service="${regEscapeHtml(svc.id)}" onchange="onExtensionQualityChange(this)">${opts}</select>
+      <select aria-label="Quality for ${regEscapeHtml(svc.label || svc.id)}" data-service="${regEscapeHtml(svc.id)}" data-onchange="onExtensionQualityChange(this)">${opts}</select>
     </div>`;
   }).join('');
 }
@@ -1100,8 +1335,7 @@ function onExtensionQualityChange(select) {
   if (!service) return;
   if (select.value) extensionQualityChoices[service] = select.value;
   else delete extensionQualityChoices[service];
-  isDirty = true;
-  updateSaveButtonVisual();
+  markSettingsDirty();
 }
 
 function collectExtensionQuality() {
@@ -1200,7 +1434,7 @@ function renderPlatformIcon(type) {
     const glyph = known?.icon || (type || '?').slice(0, 2).toUpperCase();
     return `<span class="svc-icon icon-glyph ${type}">${escHtml(glyph)}</span>`;
   }
-  return `<span class="svc-icon icon-image ${type}"><img src="assets/icons/${iconFile}" alt="${type}" onerror="this.onerror=null; this.src='assets/icons/${type}.png';"></span>`;
+  return `<span class="svc-icon icon-image ${type}"><img src="assets/icons/${iconFile}" alt="${type}" data-onerror="this.onerror=null; this.src='assets/icons/${type}.png';"></span>`;
 }
 
 function buildStatusCard(source) {
@@ -1307,11 +1541,6 @@ async function checkExtensions() {
  * Updates the health-check summary label.
  * @param {string} text - The summary text to display.
  */
-function updateStatusSummary(text) {
-  const label = $('hc-summary');
-  if (label) label.textContent = text;
-}
-
 /** The overall pill from what the cards show: extensions and lyrics. */
 function updateOverallStatusFromCards() {
   const lyricsDone = API_SOURCES.filter((s) => ['online', 'offline'].includes(apiStatusState.statuses[s.id]));
@@ -1342,7 +1571,6 @@ function checkAll() {
     apiStatusState.statuses[sourceId] = 'checking';
   });
   renderStatusGrids();
-  updateStatusSummary('Checking all providers...');
   // The extensions' own checks run alongside; they answer directly rather
   // than through the pushed updateHealthResults().
   checkExtensions().then(() => updateOverallStatusFromCards());
@@ -1354,7 +1582,6 @@ function checkAll() {
         apiStatusState.checkingSources[sourceId] = false;
       });
       renderStatusGrids();
-      updateStatusSummary('Health check failed.');
       updateOverallStatus(0, sources.length);
     });
   } else {
@@ -1364,7 +1591,6 @@ function checkAll() {
         apiStatusState.checkingSources[sourceId] = false;
       });
       renderStatusGrids();
-      updateStatusSummary('Demo: all providers offline.');
       updateOverallStatus(0, sources.length);
     }, 800);
   }
@@ -1381,12 +1607,10 @@ function checkOne(sourceId) {
   apiStatusState.checkingSources[sourceId] = true;
   apiStatusState.statuses[sourceId] = 'checking';
   renderStatusGrids();
-  updateStatusSummary(`Checking ${sourceId}...`);
   if (window.pywebview?.api?.run_health_check) {
     window.pywebview.api.run_health_check([sourceId]).catch(() => {
       apiStatusState.statuses[sourceId] = 'offline';
       renderStatusGrids();
-      updateStatusSummary(`Check failed for ${sourceId}.`);
     }).finally(() => {
       apiStatusState.checkingSources[sourceId] = false;
       renderStatusGrids();
@@ -1396,7 +1620,6 @@ function checkOne(sourceId) {
       apiStatusState.statuses[sourceId] = 'offline';
       apiStatusState.checkingSources[sourceId] = false;
       renderStatusGrids();
-      updateStatusSummary(`Demo: ${sourceId} is offline.`);
     }, 800);
   }
 }
@@ -1626,6 +1849,7 @@ window.updateFolderLabel = (path) => {
             }
           }
         }
+        if (Array.isArray(data.queue)) updateAlbumQualityFromStats(data.queue);
         if (Array.isArray(data.queue) && data.queue.length) {
           // The queue is indexed once per push instead of being scanned once
           // per stat entry: those scans were quadratic in the queue length,
@@ -1781,7 +2005,7 @@ let g_albumReleaseDate = '';
 let g_albumTrackCount = 0;
 
 // Samples the cover's average colour into --album-glow on #album-card (see
-// styles.css #album-card::before) for a soft artwork-derived tint instead of
+// css/views/home.css #album-card::before) for a soft artwork-derived tint instead of
 // a flat surface. Best-effort: a cover served without CORS headers taints
 // the canvas and getImageData() throws — caught silently, the card just
 // keeps its plain background. Never touches the <img> itself.
@@ -1959,7 +2183,61 @@ function collapseCopyright(value) {
   return [...seen.values()].join(' · ');
 }
 
+// ── Album quality readout (§2, signature 1) ─────────────────────────────────
+// Before anything is downloaded the card shows the tier asked for in
+// Settings ("REQ · HI-RES LOSSLESS"); once a track of the card finishes,
+// the first such file is read (probe_audio_quality) and the readout becomes
+// what it really is: "24 / 96 · FLAC", or "320 KBPS · MP3" for a lossy file.
+const REQUESTED_QUALITY_LABELS = {
+  HI_RES_LOSSLESS: 'HI-RES LOSSLESS', LOSSLESS: 'LOSSLESS', DOLBY_ATMOS: 'DOLBY ATMOS',
+};
+let albumQualityProbed = false;   // a real value is shown (or being read) for this card
+
+function formatAudioQuality(info) {
+  if (!info) return '';
+  const fmt = String(info.format || '').toUpperCase();
+  if (info.bit_depth && info.sample_rate) {
+    const khz = Math.round(info.sample_rate / 100) / 10;
+    return `${info.bit_depth} / ${khz} · ${fmt}`.trim();
+  }
+  if (info.bitrate) return `${Math.round(info.bitrate / 1000)} KBPS · ${fmt}`;
+  return fmt;
+}
+
+function showRequestedAlbumQuality() {
+  const el = $('album-quality');
+  if (!el) return;
+  albumQualityProbed = false;
+  const q = $('config-quality')?.value || '';
+  const label = REQUESTED_QUALITY_LABELS[q] || q.replace(/_/g, ' ');
+  el.textContent = label ? `REQ · ${label}` : '';
+  el.dataset.state = 'requested';
+  el.title = 'The quality asked for in Settings; replaced by the real one once a track has downloaded';
+  el.classList.toggle('hidden', !label);
+}
+
+function updateAlbumQualityFromStats(items) {
+  const el = $('album-quality');
+  if (!el || albumQualityProbed || !el.textContent) return;
+  if ($('album-card')?.classList.contains('hidden')) return;
+  const ids = new Set(currentTracks.map(t => t && t.id).filter(Boolean));
+  if (!ids.size) return;
+  const done = (items || []).find(i => i && i.status === 'completed' && i.file_path && ids.has(i.spotify_id));
+  const api = window.pywebview?.api;
+  if (!done || typeof api?.probe_audio_quality !== 'function') return;
+  albumQualityProbed = true;
+  Promise.resolve(api.probe_audio_quality(done.file_path)).then(res => {
+    const label = res && res.status === 'ok' ? formatAudioQuality(res.info) : '';
+    if (!label) { albumQualityProbed = false; return; }
+    el.textContent = label;
+    el.dataset.state = 'actual';
+    el.title = `Read from ${res.info.file || 'the first downloaded track'}`;
+    el.classList.remove('hidden');
+  }).catch(() => { albumQualityProbed = false; });
+}
+
 function setAlbumCard(title, artist, coverUrl, quality, description, followers, owner, ownerAvatar, source, artistListeners, artistRank, artistVerified, artistBiography, releaseDate, trackCount, artistUrl, artistsData) {
+  showRequestedAlbumQuality();
   g_albumReleaseDate = releaseDate || '';
   g_albumTrackCount = trackCount || 0;
   g_albumArtistUrl = artistUrl || '';
@@ -1982,21 +2260,21 @@ function setAlbumCard(title, artist, coverUrl, quality, description, followers, 
   // separate, not-strictly-ordered backend callbacks).
 
   $('album-actions').innerHTML = `
-    <button class="act-btn primary" onclick="downloadAll()">
+    <button class="act-btn primary" data-onclick="downloadAll()">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       Download All
     </button>
-    <button class="act-btn secondary" onclick="downloadSelected()" id="dl-selected-btn" style="display:none;">
+    <button class="act-btn secondary" data-onclick="downloadSelected()" id="dl-selected-btn" style="display:none;">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="9 12 11 14 15 10"/></svg>
       Download Selected
     </button>
-    <button class="act-btn secondary" id="save-all-covers-btn" data-tip="Save all covers as .jpg" onclick="downloadAllCovers(this)">
+    <button class="act-btn secondary" id="save-all-covers-btn" data-tip="Save all covers as .jpg" data-onclick="downloadAllCovers(this)">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
     </button>
-    <button class="act-btn secondary" id="save-all-lyrics-btn" data-tip="Save all lyrics as .lrc" onclick="downloadAllLyrics(this)">
+    <button class="act-btn secondary" id="save-all-lyrics-btn" data-tip="Save all lyrics as .lrc" data-onclick="downloadAllLyrics(this)">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
     </button>
-    
+    ${CLI_BUTTON_HTML}
   `;
   $('album-title').innerHTML = escHtml(title || '—') + (artistVerified
     ? ` <span class="artist-verified-badge" title="Verified Artist"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="12" fill="#1d9bf0"/><path d="M8 12.5l2.5 2.5 5.5-5.5" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`
@@ -2131,7 +2409,7 @@ function setAlbumCard(title, artist, coverUrl, quality, description, followers, 
 
     const img = document.createElement('img');
     img.alt = 'cover';
-    img.className = 'cover-loading'; // blur-up: styles.css clears it once decode() resolves
+    img.className = 'cover-loading'; // blur-up: css/views/home.css clears it once decode() resolves
     img.src = safeCover;
     img.addEventListener('error', () => {
       coverEl.textContent = '🎵';
@@ -2323,23 +2601,24 @@ function showSingleTrackCard(t) {
   const extUrl     = t.external_url || t.externalUrl || t.link || '';
   const trackId    = t.id || '';
   $('album-actions').innerHTML = `
-  <button class="act-btn primary" data-tip="Download" onclick="downloadSingle(0)">
+  <button class="act-btn primary" data-tip="Download" data-onclick="downloadSingle(0)">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     Download
   </button>
-  <button class="act-btn secondary ta-preview" data-tip="Play Preview" data-preview-index="0" data-track-id="${trackId}" onclick="playPreview(0)">
+  <button class="act-btn secondary ta-preview" data-tip="Play Preview" data-preview-index="0" data-track-id="${trackId}" data-onclick="playPreview(0)">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
   </button>
-  <button class="act-btn secondary ta-lyrics" data-tip="Save Lyrics (.lrc)" data-track-index="0" onclick="downloadLyrics(0)">
+  <button class="act-btn secondary ta-lyrics" data-tip="Save Lyrics (.lrc)" data-track-index="0" data-onclick="downloadLyrics(0)">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
   </button>
-  <button class="act-btn secondary ta-cover" data-tip="Save Cover (.jpg)" data-track-index="0" onclick="downloadCover(0)">
+  <button class="act-btn secondary ta-cover" data-tip="Save Cover (.jpg)" data-track-index="0" data-onclick="downloadCover(0)">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
   </button>
   ${extUrl ? `
-  <button class="act-btn secondary" data-tip="Open in Spotify" onclick="openExternal(0)">
+  <button class="act-btn secondary" data-tip="Open in Spotify" data-onclick="openExternal(0)">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
   </button>` : ''}
+  ${CLI_BUTTON_HTML}
 `;
 
   // The left column (cover + title + artist + actions) is almost always
@@ -2489,7 +2768,9 @@ function renderAlbumTech(rows) {
         `title="Click to copy ${escHtml(val)}" aria-label="UPC ${escHtml(val)}, click to copy">` +
         `${barcode}<span class="tech-barcode-num">${escHtml(val)}</span></button></div>`;
     }
-    return `<div class="tech-row"><div class="tech-k">${escHtml(k)}</div>` +
+    // The ℗/© line is the one long value: it gets the sheet's full width.
+    const wide = /copyright|℗|©/i.test(k) ? ' wide' : '';
+    return `<div class="tech-row${wide}"><div class="tech-k">${escHtml(k)}</div>` +
       `<div class="tech-v" title="${escHtml(val)}">${escHtml(val)}</div></div>`;
   }).join('');
   el.classList.toggle('hidden', clean.length === 0);
@@ -2592,8 +2873,9 @@ function injectArtistTabs(tracks) {
   albumMap.forEach(album => {
     const card = document.createElement('div');
     card.className = 'artist-album-card';
+    makeActivatable(card);
     const coverHtml = album.cover
-      ? `<img src="${escHtml(album.cover)}" alt="cover" loading="lazy" onerror="this.parentElement.innerHTML='🎵'">`
+      ? `<img src="${escHtml(album.cover)}" alt="cover" loading="lazy" data-onerror="this.parentElement.innerHTML='🎵'">`
       : '🎵';
     card.innerHTML = `
       <div class="aac-cover">${coverHtml}
@@ -2652,7 +2934,7 @@ async function loadArtistGallery(panel) {
       const images = await window.pywebview.api.get_artist_images(currentUrl);
       if (images?.length) {
         panel.innerHTML = images.map(url =>
-          `<img class="artist-gallery-img" src="${escHtml(url)}" alt="Artist photo" loading="lazy" onerror="this.remove()">`
+          `<img class="artist-gallery-img" src="${escHtml(url)}" alt="Artist photo" loading="lazy" data-onerror="this.remove()">`
         ).join('');
         return;
       }
@@ -2663,7 +2945,7 @@ async function loadArtistGallery(panel) {
   const covers = [...new Set(currentTracks.map(t => t.cover_url || t.cover || t.image).filter(Boolean))];
   if (covers.length) {
     panel.innerHTML = covers.map(url =>
-      `<img class="artist-gallery-img" src="${escHtml(url)}" alt="Cover" loading="lazy" onerror="this.remove()">`
+      `<img class="artist-gallery-img" src="${escHtml(url)}" alt="Cover" loading="lazy" data-onerror="this.remove()">`
     ).join('');
   } else {
     panel.innerHTML = `<div class="artist-gallery-empty">🖼 No gallery images available.</div>`;
@@ -2748,7 +3030,7 @@ function renderTracks(tracks, page = 1) {
       if (coverUrl) {
         // AGGIUNTO data-url QUI SOTTO
         thumb = `<div class="tr-thumb" data-url="${escHtml(coverUrl)}" style="background-image:url('${encodeURI(coverUrl)}')">
-                   <img src="${escHtml(coverUrl)}" alt="cover" loading="lazy" decoding="async" onerror="this.parentElement.innerHTML='🎵';console.warn('cover load failed', this.src)">
+                   <img src="${escHtml(coverUrl)}" alt="cover" loading="lazy" decoding="async" data-onerror="this.parentElement.innerHTML='🎵';console.warn('cover load failed', this.src)">
                  </div>`;
       } else {
         thumb = `<div class="tr-thumb">🎵</div>`;
@@ -2766,13 +3048,13 @@ function renderTracks(tracks, page = 1) {
       if (!previewUrl && t.previewUrl) previewUrl = t.previewUrl;
       
       // Lazy Loading: the button is always enabled, but it will fetch the preview on click if necessary
-      const previewBtn = `<button class="ta-btn ta-preview" data-preview-index="${globalIndex}" data-track-id="${t.id || ''}" data-tip="Play Preview" onclick="playPreview(${globalIndex})">
+      const previewBtn = `<button class="ta-btn ta-preview" data-preview-index="${globalIndex}" data-track-id="${t.id || ''}" data-tip="Play Preview" data-onclick="playPreview(${globalIndex})">
              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
            </button>`;
 
       const extUrl  = t.external_url || t.externalUrl || t.link || t.url || '';
       const linkBtn = extUrl
-        ? `<button class="ta-btn ta-link" data-tip="Open in Spotify" onclick="openExternal(${globalIndex})">
+        ? `<button class="ta-btn ta-link" data-tip="Open in Spotify" data-onclick="openExternal(${globalIndex})">
              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
            </button>`
         : `<button class="ta-btn" data-tip="No link" disabled style="opacity:.3;">
@@ -2780,7 +3062,7 @@ function renderTracks(tracks, page = 1) {
            </button>`;
 
       row.innerHTML = `
-        <div class="tr-check"><input type="checkbox" class="track-cb" value="${globalIndex}" checked onchange="onCheckChange()"></div>
+        <div class="tr-check"><input type="checkbox" class="track-cb" value="${globalIndex}" checked data-onchange="onCheckChange()"></div>
         <div class="tr-num">${globalIndex + 1}</div>
         <div class="tr-title-cell">
           ${thumb}
@@ -2792,14 +3074,14 @@ function renderTracks(tracks, page = 1) {
         <div class="tr-playcount">${playcountCell}</div>
         <div class="tr-dur">${dur}</div>
         <div class="tr-actions">
-          <button class="ta-btn dl" data-tip="Download" onclick="downloadSingle(${globalIndex})">
+          <button class="ta-btn dl" data-tip="Download" data-onclick="downloadSingle(${globalIndex})">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
-          <button class="ta-btn ta-lyrics" data-tip="Save Lyrics (.lrc)" onclick="downloadLyrics(${globalIndex})">
+          <button class="ta-btn ta-lyrics" data-tip="Save Lyrics (.lrc)" data-onclick="downloadLyrics(${globalIndex})">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
           </button>
           ${previewBtn}
-          <button class="ta-btn ta-cover" data-tip="Save Cover (.jpg)" onclick="downloadCover(${globalIndex})">
+          <button class="ta-btn ta-cover" data-tip="Save Cover (.jpg)" data-onclick="downloadCover(${globalIndex})">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
           </button>
           ${linkBtn}
@@ -3351,7 +3633,7 @@ function renderRecentSearches() {
     // Chips that wrap, not one full-width row per search: a past query is
     // two or three words, and giving each of them a row of its own pushed
     // everything below the fold to list five words. See #recent-grid.searches
-    // in styles.css — the same grid is a track-artwork grid for fetches.
+    // in css/views/home.css — the same grid is a track-artwork grid for fetches.
     grid.classList.add('searches');
     const label = $('recent-wrap').querySelector('.recent-label');
     if (label) label.textContent = 'RECENT SEARCHES';
@@ -3534,16 +3816,14 @@ window.app_handle_provider_search_results = function(results) {
   // source switched, its box cleared — must not paint over the newer one.
   if (!isCurrentSearchRequest(results)) return;
   const isSearchMode = $('searchMode')?.value === 'search';
-  if (!isSearchMode) { 
-    return; 
-  }
   if (!isSearchMode) {
-    setFetchingState('success');
-  } else {
-    isFetchingData = false;
-    const fetchBtn = $('fetchBtn');
-    if (fetchBtn) fetchBtn.disabled = false;
+    return;
   }
+  // The results are the answer: take down the "fetching metadata…" notice
+  // onFetch() raised and unlock the bar and the recents. This branch used
+  // to clear only isFetchingData and the Fetch button, so the notice stayed
+  // in the corner over the results until the next fetch replaced it.
+  setFetchingState('hide');
 
   // ── Build data ────────────────────────────────────────────────────────────
   const allItems = [
@@ -3604,9 +3884,9 @@ window.app_handle_provider_search_results = function(results) {
       console.log('[Artist] Name:', name, 'cover_url:', item.cover_url, 'images:', item.images, 'cover:', item.cover, 'image:', item.image, 'full item:', item);
     }
     return `
-      <div class="search-result-item" data-url="${escHtml(url)}" data-name="${name}|${meta}">
+      <div class="search-result-item" role="button" tabindex="0" data-activate data-url="${escHtml(url)}" data-name="${name}|${meta}">
         <div class="${thumbClass}">
-          ${img ? `<img src="${escHtml(img)}" onerror="this.parentElement.innerHTML='${defaultIcon(item._kind)}'">` : defaultIcon(item._kind)}
+          ${img ? `<img src="${escHtml(img)}" alt="" data-onerror="this.parentElement.innerHTML='${defaultIcon(item._kind)}'">` : defaultIcon(item._kind)}
         </div>
         <div class="search-result-info">
           <div class="search-result-title">${name}</div>
@@ -3757,8 +4037,8 @@ function errorStateHTML(info, retry) {
       ? '<path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/><line x1="2" y1="2" x2="22" y2="22"/>'
       : '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>';
   const buttons = [
-    info.action ? `<button type="button" class="act-btn primary" onclick="${info.action.onclick}">${escHtml(info.action.label)}</button>` : '',
-    retry ? `<button type="button" class="act-btn secondary" onclick="${retry}">Try again</button>` : '',
+    info.action ? `<button type="button" class="act-btn primary" data-onclick="${info.action.onclick}">${escHtml(info.action.label)}</button>` : '',
+    retry ? `<button type="button" class="act-btn secondary" data-onclick="${retry}">Try again</button>` : '',
   ].join('');
   return `<div class="error-state ${info.kind}" role="alert">
     <div class="es-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${icon}</svg></div>
@@ -3788,7 +4068,9 @@ window.app_handle_provider_search_error = function(message) {
   $('track-rows').innerHTML = errorStateHTML(info, info.kind === 'setup' ? '' : 'onFetch()');
   $('track-controls').classList.add('hidden');
   $('track-table-wrap').classList.remove('hidden');
-  setStatus(info.title + '.', false);
+  // One error, one place (redesign §8): the card says it, the status line
+  // under the search bar no longer repeats its title.
+  setStatus('', false);
   // Quiet: into the Logs panel, without a second toast for the same failure.
   logMessage(`Provider search error: ${message}`, 'error-quiet');
   $('urlInput').disabled = false;
@@ -3905,6 +4187,7 @@ function renderRecent(hist) {
   hist.slice(0, 16).forEach(item => {
     const card = document.createElement('div');
     card.className = 'recent-card';
+    makeActivatable(card);
   const rawUrl = item.url || '';
   const link = normalizeHistoryUrl(rawUrl);
   card.onclick = () => {
@@ -3938,7 +4221,7 @@ function renderRecent(hist) {
     card.innerHTML = `
       <div class="rc-cover" style="${coverBg}">${coverUrl ? '' : '🎵'}
         <button class="rc-remove" title="Remove from history"
-          onclick="event.stopPropagation();removeRecent(this.closest('.recent-card').dataset.url)">✕</button>
+          data-onclick="event.stopPropagation();removeRecent(this.closest('.recent-card').dataset.url)">✕</button>
       </div>
       <div class="rc-info">
         <div class="rc-title">${escHtml(item.label || item.title || item.url || '—')}</div>
@@ -4008,6 +4291,9 @@ function addToQueue(indices) {
         id: itemId,
         spotify_id: spotifyId,
         source: currentUrl || '',
+        // The tracklist `index` points into (Python numbers each one it
+        // shows): the queue can hold several lists by the time it starts.
+        list: t.list_id ?? null,
         index: realIndex,
         title: t.title,
         artist: t.artist || t.artists || '',
@@ -4202,7 +4488,15 @@ function paintQueueItem(el, item, qi) {
   } else {
     p.meta.style.display = 'none';
     p.bottom.style.display = '';
-    p.bottom.textContent = statusText;
+    if (item.status === 'active') {
+      // A segmented meter in whole steps (css/views/queue.css), then the words.
+      const lit = Math.round((Math.max(0, Math.min(100, Number(item.progress) || 0)) / 100) * 20);
+      const steps = Array.from({ length: 20 }, (_, i) => (i < lit ? '<i class="on"></i>' : '<i></i>')).join('');
+      p.bottom.innerHTML = `<span class="qi-meter" aria-hidden="true">${steps}</span><span></span>`;
+      p.bottom.lastChild.textContent = statusText;
+    } else {
+      p.bottom.textContent = statusText;
+    }
   }
 }
 
@@ -4261,7 +4555,7 @@ function renderQueueNow() {
     if (downloaded) downloaded.textContent = queueStats.downloaded;
     if (speed) speed.textContent = 'Idle';
     const bar = $('qd-bar-fill');
-    if (bar) bar.style.width = '0%';
+    if (bar) bar.style.width = '0px';
     dock?.classList.remove('done');
     resetQueueDuration();
     // Queue just went empty (cleared, or its last item removed) — nothing
@@ -4276,7 +4570,7 @@ function renderQueueNow() {
 
   empty.style.display = 'none';
   if (dock) dock.classList.add('visible');
-  // Drives the bottom padding of #content (styles.css) under the bar.
+  // Drives the bottom padding of #content (css/layout.css) under the bar.
   document.body.classList.add('has-dock');
 
   // Filtering happens here, not over the rendered nodes: the counts above
@@ -4363,7 +4657,9 @@ function renderQueueNow() {
         : `${done} of ${queue.length} done`;
   }
   const bar = $('qd-bar-fill');
-  if (bar) bar.style.width = `${queue.length ? Math.round((done / queue.length) * 100) : 0}%`;
+  // The dock's meter has 24 LED steps of 8px (css/layout.css): whole steps
+  // only, so a step is either lit or not.
+  if (bar) bar.style.width = `${queue.length ? Math.round((done / queue.length) * 24) * 8 : 0}px`;
   dock?.classList.toggle('done', queue.length > 0 && done === queue.length);
 
   updateQueueDuration();
@@ -4488,9 +4784,9 @@ function renderStaged() {
     const meta = [kind.label, `${item.track_count} track${item.track_count === 1 ? '' : 's'}`, `added ${timeAgo(item.added_at)}`]
       .filter(Boolean).join(' · ');
     const actions = [
-      item.status === 'pending' ? `<button type="button" class="row-btn accent" title="Start" onclick="startStagedOne('${item.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg></button>` : '',
-      (item.status === 'failed' || item.status === 'done') ? `<button type="button" class="row-btn" title="Queue again" onclick="retryStaged('${item.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>` : '',
-      item.status !== 'running' ? `<button type="button" class="row-btn" title="Remove" onclick="removeStaged('${item.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>` : '',
+      item.status === 'pending' ? `<button type="button" class="row-btn accent" title="Start" data-onclick="startStagedOne('${item.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 4 20 12 6 20 6 4"/></svg></button>` : '',
+      (item.status === 'failed' || item.status === 'done') ? `<button type="button" class="row-btn" title="Queue again" data-onclick="retryStaged('${item.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button>` : '',
+      item.status !== 'running' ? `<button type="button" class="row-btn" title="Remove" data-onclick="removeStaged('${item.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>` : '',
     ].join('');
     return `<div class="page-row status-${item.status}">
       <div class="pr-cover">${cover}</div>
@@ -4503,6 +4799,61 @@ function renderStaged() {
       <div class="pr-actions">${actions}</div>
     </div>`;
   }).join('');
+}
+
+// N2: the album/track card's "CLI" action (copyCliCommand below).
+const CLI_BUTTON_HTML = `
+    <button class="act-btn secondary" type="button" id="copy-cli-btn" data-onclick="copyCliCommand()" data-tip="Copy as CLI command" aria-label="Copy as CLI command">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      CLI
+    </button>`;
+
+// ── Copy as CLI command (N2) ────────────────────────────────────────────────
+// The TUI has a Command panel; here the album card copies the same thing:
+// the `mornye …` line that downloads this link with the current settings
+// (core/cli_preview.py gui_command, the same rendering the TUI uses).
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // No async clipboard (an insecure origin, an old web view): the
+    // selection route, which every engine still supports.
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none;';
+    document.body.appendChild(area);
+    area.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    area.remove();
+    return ok;
+  }
+}
+
+async function copyCliCommand() {
+  const api = window.pywebview?.api;
+  const url = String(currentUrl || '').trim();
+  if (!/^(https?:|spotify:)/i.test(url)) {
+    toastMgr.error('Open a link first: a search has no command line.', { title: 'Nothing to copy' });
+    return;
+  }
+  if (typeof api?.get_cli_command !== 'function') {
+    toastMgr.error('This build cannot build the command.', { title: 'Copy as CLI command' });
+    return;
+  }
+  const res = await api.get_cli_command(url, buildConfig());
+  if (!res || res.status !== 'ok') {
+    toastMgr.error(res?.error || 'Could not build the command.', { title: 'Copy as CLI command' });
+    return;
+  }
+  if (await copyText(res.command)) {
+    toastMgr.success('Paste it in a terminal to run the same download.', { title: 'Command copied', duration: 3000 });
+  } else {
+    logMessage(res.command, 'info');
+    toastMgr.info('The clipboard is not available; the command is in Logs.', { title: 'Copy as CLI command' });
+  }
 }
 
 async function addToStagedQueue() {
@@ -4523,7 +4874,9 @@ async function addToStagedQueue() {
     const res = await window.pywebview.api.add_to_staged_queue(indices, info);
     if (res?.ok) {
       showToast(`Added "${res.item.title}" to the queue (${res.item.track_count} track${res.item.track_count === 1 ? '' : 's'}).`);
-      logMessage(`Queued for later: ${res.item.title}`, 'ok');
+      // Into the Logs panel only: the toast above already says it, and an
+      // 'ok' line would raise a second one with the same news.
+      logMessage(`Queued for later: ${res.item.title}`);
     } else {
       showToast(res?.error || 'Could not add to the queue.', 'error');
     }
@@ -4536,14 +4889,37 @@ async function startStaged(onlyShown) {
   if (!window.pywebview?.api?.start_staged_items) return;
   const ids = onlyShown ? visibleStaged().filter(i => i.status === 'pending').map(i => i.id) : [];
   if (onlyShown && !ids.length) { showToast('Nothing waiting among the items shown.', 'info'); return; }
-  const res = await window.pywebview.api.start_staged_items(ids, buildConfig());
+  const config = await chooseProviderForBatch(buildConfig());
+  if (!config) return;
+  const res = await window.pywebview.api.start_staged_items(ids, config);
   if (res?.ok) showToast(`Starting ${res.started} item${res.started === 1 ? '' : 's'}.`);
   else showToast(res?.error || 'Nothing to start.', 'info');
   loadStaged();
 }
 
+async function stopAllDownloads() {
+  const stop = window.pywebview?.api?.stop_all_downloads;
+  if (typeof stop !== 'function') {
+    showToast('Stop all is unavailable in this client.', 'error');
+    return;
+  }
+  try {
+    const result = await stop();
+    if (!result?.ok) throw new Error(result?.error || 'The stop request failed.');
+    showToast(
+      `Stopping ${result.stopped} active download(s); cancelled ${result.cancelled_pending} queued download(s).`,
+      'info',
+    );
+    logMessage('Stop-all requested.', 'warning');
+  } catch (error) {
+    showToast(`Could not stop downloads: ${error}`, 'error');
+  }
+}
+
 async function startStagedOne(id) {
-  const res = await window.pywebview?.api?.start_staged_items?.([id], buildConfig());
+  const config = await chooseProviderForBatch(buildConfig());
+  if (!config) return;
+  const res = await window.pywebview?.api?.start_staged_items?.([id], config);
   if (res && !res.ok) showToast(res.error || 'Could not start it.', 'error');
   loadStaged();
 }
@@ -4559,7 +4935,7 @@ async function retryStaged(id) {
 }
 
 async function clearStaged(scope) {
-  if (scope === 'all' && !confirm('Remove everything waiting in the queue? Downloads in progress keep going.')) return;
+  if (scope === 'all' && !(await askConfirm('Remove everything waiting in the queue? Downloads in progress keep going.', { title: 'Clear the queue', ok: 'Remove all', danger: true }))) return;
   await window.pywebview?.api?.clear_staged_queue?.(scope);
   loadStaged();
 }
@@ -4626,7 +5002,7 @@ function renderDownloadHistory(items, totals, q) {
       </div>
       ${r.success ? '' : '<span class="status-pill failed">Failed</span>'}
       <div class="pr-actions">
-        <button type="button" class="row-btn" title="Remove from history" onclick="removeDownloadHistory(${Number(r.id)})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        <button type="button" class="row-btn" title="Remove from history" data-onclick="removeDownloadHistory(${Number(r.id)})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
     </div>`;
   }).join('');
@@ -4649,7 +5025,7 @@ function renderFetchHistory(items, q) {
       ? `<img src="${escHtml(h.cover)}" alt="" loading="lazy">`
       : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${km.icon}</svg>`;
     const meta = [km.label, h.track_count ? `${h.track_count} tracks` : '', timeAgo(h.at)].filter(Boolean).join(' · ');
-    return `<div class="page-row clickable" data-idx="${idx}" title="Open this link again">
+    return `<div class="page-row clickable" role="button" tabindex="0" data-activate data-idx="${idx}" title="Open this link again">
       <div class="pr-cover">${cover}</div>
       <div class="pr-main">
         <div class="pr-title">${escHtml(h.label || h.url || '—')}</div>
@@ -4684,7 +5060,7 @@ async function removeDownloadHistory(id) {
 
 async function clearHistory() {
   const what = historyTab === 'downloads' ? 'the download history (your files stay where they are)' : 'the list of fetched links';
-  if (!confirm(`Clear ${what}?`)) return;
+  if (!(await askConfirm(`Clear ${what}?`, { title: 'Clear history', ok: 'Clear', danger: true }))) return;
   if (historyTab === 'downloads') await window.pywebview?.api?.clear_download_history?.();
   else {
     await window.pywebview?.api?.clear_fetch_history?.();
@@ -4737,7 +5113,7 @@ function renderFailedTracks() {
         </div>
         <span class="fp-attempts">${tries}</span>
         <button type="button" class="act-btn secondary" data-key="${regEscapeHtml(t.key)}"
-          onclick="retryFailedTracks([this.dataset.key])">Retry</button>
+          data-onclick="retryFailedTracks([this.dataset.key])">Retry</button>
       </li>`;
   }).join('');
 }
@@ -4756,7 +5132,9 @@ function toggleFailedList() {
 async function retryFailedTracks(keys = null) {
   if (!window.pywebview?.api?.retry_failed_tracks) return;
   try {
-    const res = await window.pywebview.api.retry_failed_tracks(buildConfig(), keys);
+    const config = await chooseProviderForBatch(buildConfig());
+    if (!config) return;
+    const res = await window.pywebview.api.retry_failed_tracks(config, keys);
     if (!res?.queued) showToast('Nothing left to retry.', 'info');
   } catch (e) {
     logMessage('Could not retry the missing tracks: ' + e, 'error');
@@ -4875,17 +5253,138 @@ function downloadSelected() {
   $('queue-drawer').classList.add('open');
 }
 
+let providerPickerResolve = null;
+
+function chooseProviderForBatch(config) {
+  const activeServices = (config.services || []).filter(Boolean);
+  if (!config.ask_provider_before_download) return Promise.resolve(config);
+  if (providerPickerResolve) return Promise.resolve(null);
+  if (!activeServices.length) {
+    toastMgr.error('Enable at least one download source in Settings.');
+    return Promise.resolve(null);
+  }
+  const modal = $('provider-picker-modal');
+  const select = $('provider-picker-service');
+  const fallback = $('provider-picker-fallback');
+  const qualitySelect = $('provider-picker-quality');
+  if (!modal || !select || !fallback || !qualitySelect) {
+    toastMgr.error('The download source picker is unavailable.');
+    return Promise.resolve(null);
+  }
+  const rows = [...$('services-list').querySelectorAll('.service-sort-item')];
+  select.innerHTML = activeServices.map(service => {
+    const row = rows.find(item => item.dataset.value === service);
+    const label = row?.querySelector('.svc-name')?.textContent || service;
+    return `<option value="${escHtml(service)}">${escHtml(label)}</option>`;
+  }).join('');
+  const preferred = config.preferred_service || activeServices[0];
+  select.value = activeServices.includes(preferred) ? preferred : activeServices[0];
+  select.onchange = () => updateProviderPickerQuality(select.value);
+  updateProviderPickerQuality(select.value, config);
+  fallback.checked = config.fallback_services !== false;
+  modal.classList.remove('hidden');
+  select.focus();
+  return new Promise(resolve => { providerPickerResolve = resolve; });
+}
+
+function updateProviderPickerQuality(service, config = buildConfig()) {
+  const select = $('provider-picker-quality');
+  if (!select) return;
+
+  const provider = installedServiceRows.find(row => row.id === service);
+  const options = provider?.quality_options || [];
+  const savedChoice = config.extension_quality?.[service] || '';
+
+  if (options.length) {
+    select.innerHTML = [
+      '<option value="">Use global quality</option>',
+      ...options.map(option =>
+        `<option value="${escHtml(option.id)}" title="${escHtml(option.description || '')}">${escHtml(option.label || option.id)}</option>`
+      ),
+    ].join('');
+    select.value = options.some(option => option.id === savedChoice) ? savedChoice : '';
+    select.disabled = false;
+    return;
+  }
+
+  const globalQuality = $('config-quality');
+  select.innerHTML = [...(globalQuality?.options || [])].map(option =>
+    `<option value="${escHtml(option.value)}">${escHtml(option.textContent)}</option>`
+  ).join('');
+  select.value = config.quality || globalQuality?.value || '';
+  select.disabled = !select.options.length;
+}
+
+function finishProviderPicker(confirmed) {
+  const modal = $('provider-picker-modal');
+  const resolve = providerPickerResolve;
+  providerPickerResolve = null;
+  modal?.classList.add('hidden');
+  if (!resolve) return;
+  if (!confirmed) {
+    resolve(null);
+    return;
+  }
+  const config = buildConfig();
+  const selected = $('provider-picker-service')?.value;
+  const fallback = $('provider-picker-fallback')?.checked === true;
+  const ordered = getChecked('services-list');
+  if (!selected || !ordered.includes(selected)) {
+    toastMgr.error('Choose an enabled download source.');
+    resolve(null);
+    return;
+  }
+  config.preferred_service = selected;
+  config.fallback_services = fallback;
+  config.services = fallback
+    ? [selected, ...ordered.filter(service => service !== selected)]
+    : [selected];
+  const provider = installedServiceRows.find(row => row.id === selected);
+  const pickedQuality = $('provider-picker-quality')?.value || '';
+  if ((provider?.quality_options || []).length) {
+    config.extension_quality = { ...(config.extension_quality || {}) };
+    if (pickedQuality) config.extension_quality[selected] = pickedQuality;
+    else delete config.extension_quality[selected];
+  } else if (pickedQuality) {
+    config.quality = pickedQuality;
+  }
+  resolve(config);
+}
+
+function closeProviderPicker() {
+  finishProviderPicker(false);
+}
+
+function confirmProviderPicker() {
+  finishProviderPicker(true);
+}
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !$('provider-picker-modal')?.classList.contains('hidden')) {
+    closeProviderPicker();
+  }
+});
+
 // Execute downloads immediately without waiting for previous batches
 async function startDownloadQueue() {
   console.log('[startDownloadQueue] Starting... Queue status:', queue.map(q => q.status));
   
-  const waiting = queue.filter(q => q.status === 'waiting');
+  // One tracklist per batch: its positions only mean something against the
+  // list they came from (issue #277). The oldest waiting item's list goes
+  // now; the others stay waiting and start when this batch ends (see
+  // app_download_finished), which also keeps the batches in order.
+  const pending = queue.filter(q => q.status === 'waiting');
+  const list = pending.length ? (pending[0].list ?? null) : null;
+  const waiting = pending.filter(q => (q.list ?? null) === list);
   console.log('[startDownloadQueue] Waiting items:', waiting.length);
   
   if (!waiting.length) {
     console.warn('[startDownloadQueue] No waiting items, returning');
     return false;
   }
+
+  let config = await chooseProviderForBatch(buildConfig());
+  if (!config) return false;
 
   console.log('[startDownloadQueue] Proceeding with download for:', waiting.length, 'items');
 
@@ -4901,14 +5400,14 @@ async function startDownloadQueue() {
     queueDurationInterval = setInterval(updateQueueDuration, 1000);
   }
 
-  // Mark all currently waiting items as active
+  // Mark this batch's items as active
+  const inBatch = new Set(waiting.map(w => w.id));
   for (let qi = 0; qi < queue.length; qi++) {
-    if (queue[qi].status === 'waiting') updateQueueItem(qi, 'active', 0);
+    if (queue[qi].status === 'waiting' && inBatch.has(queue[qi].id)) updateQueueItem(qi, 'active', 0);
   }
   
   setStatus(`Downloading track(s)…`, true);
 
-  const config = buildConfig();
   const indices = waiting.map(w => w.index);
   // The ids, not the indices, are what identifies these rows later: `index`
   // is a position in the fetched tracklist, and a second fetch puts a
@@ -4926,7 +5425,7 @@ async function startDownloadQueue() {
     try {
       console.log('[startDownloadQueue] Calling download_tracks with indices:', indices);
       // Send the tracks directly to the Python backend
-      const op = window.pywebview.api.download_tracks(indices, config);
+      const op = window.pywebview.api.download_tracks(indices, config, list);
       console.log('[startDownloadQueue] download_tracks returned:', op);
       if (op && typeof op.catch === 'function') {
         op.catch(e => {
@@ -5120,10 +5619,23 @@ async function onFetch() {
 }
 
 // ── Build config ──────────────────────────────────────────────────────────────
+// One request delay range (issue #279) from its two fields. A maximum below
+// the minimum ("min 2", max left at 0) is a fixed delay of the minimum: the
+// backend refuses max < min, and every download would fail.
+function delayRange(kind) {
+  const read = (edge) => Math.max(0, parseFloat($(`config-${kind}-delay-${edge}`)?.value) || 0);
+  const min = read('min');
+  return { [`${kind}_delay_min_s`]: min, [`${kind}_delay_max_s`]: Math.max(min, read('max')) };
+}
+
 function buildConfig() {
   const soundEnabled = $('config-sound-enabled')?.checked ?? true;
+  const services = getChecked('services-list');
   return {
-    services:               getChecked('services-list').length ? getChecked('services-list') : ['tidal'],
+    services,
+    preferred_service:      services[0] || null,
+    fallback_services:      $('config-provider-fallback')?.checked !== false,
+    ask_provider_before_download: $('config-ask-provider')?.checked === true,
     quality:                $('config-quality').value,
     allow_fallback:         $('config-fallback').checked,
     sound_enabled:          soundEnabled,
@@ -5157,6 +5669,9 @@ function buildConfig() {
     loop:                   parseInt($('config-loop').value) || null,
     log_level:              $('config-loglevel').value,
     max_concurrent_downloads: parseInt($('config-concurrent')?.value) || 2,
+    ...delayRange('metadata'),
+    ...delayRange('provider'),
+    auto_rate_limit_cooldown: $('config-auto-rate-limit-cooldown')?.checked !== false,
     network_destination_id: $('config-network-destination')?.value || '',
   };
 }
@@ -5521,7 +6036,7 @@ async function deleteProfile() {
     logMessage('Select a profile to delete.', 'error');
     return;
   }
-  if (!confirm(`Delete profile '${name}'? This cannot be undone.`)) return;
+  if (!(await askConfirm(`Delete profile '${name}'? This cannot be undone.`, { title: 'Delete profile', ok: 'Delete', danger: true }))) return;
   if (window.pywebview?.api) {
     const result = await window.pywebview.api.delete_profile_data(name);
     if (result) {
@@ -5577,7 +6092,6 @@ function renderHealthResults(data) {
   const totalProviders = Object.keys(provMap).length;
   const okProviders = Object.values(provMap).filter(rows => rows.some(r => r.ok)).length;
 
-  updateStatusSummary(`${okProviders}/${totalProviders} providers OK`);
   // Counts the extension cards too, whichever of the two checks ends last.
   updateOverallStatusFromCards();
 
@@ -5621,6 +6135,12 @@ function pyWin(method, arg) {
   if (arg !== undefined) window.pywebview?.api?.[method]?.(arg);
   else window.pywebview?.api?.[method]?.();
 }
+
+// Double-clicking the titlebar zooms / restores the window, as a native
+// title bar does — the frameless window has none of its own.
+document.addEventListener('dblclick', (e) => {
+  if (e.target.closest?.('#titlebar .pywebview-drag-region')) pyWin('WindowToggleMaximise');
+});
 
 // ── Extension Registries ───────────────────────────────────────────────────
 const REGISTRY_SOURCE_LABELS = {
@@ -5677,7 +6197,7 @@ function renderRegistries(registries) {
           <span class="reg-url" title="${regEscapeHtml(r.url)}">${regEscapeHtml(r.url)}</span>
           <div class="reg-badges">${badges}${r.enabled ? '' : '<span class="reg-badge reg-badge-off">Removed</span>'}</div>
         </div>
-        <button class="act-btn secondary reg-remove-btn" type="button" onclick="removeRegistryLink('${encodeURIComponent(r.url)}')" title="Remove this registry link">
+        <button class="act-btn secondary reg-remove-btn" type="button" data-onclick="removeRegistryLink('${encodeURIComponent(r.url)}')" title="Remove this registry link">
           Remove
         </button>
       </div>`;
@@ -5767,7 +6287,7 @@ function renderDirectories(directories) {
           <span class="reg-url" title="${regEscapeHtml(d.url)}">${regEscapeHtml(d.url)}</span>
           <div class="reg-badges">${badges}${d.enabled ? '' : '<span class="reg-badge reg-badge-off">Removed</span>'}</div>
         </div>
-        <button class="act-btn secondary reg-remove-btn" type="button" onclick="removeDirectoryLink('${encodeURIComponent(d.url)}')" title="Remove this directory link">
+        <button class="act-btn secondary reg-remove-btn" type="button" data-onclick="removeDirectoryLink('${encodeURIComponent(d.url)}')" title="Remove this directory link">
           Remove
         </button>
       </div>`;
@@ -5861,7 +6381,7 @@ function renderDiscoveryResults(byDirectory) {
             <span class="reg-url" title="${regEscapeHtml(r.url)}">${regEscapeHtml(r.name)} — ${regEscapeHtml(r.url)}</span>
             <div class="reg-badges">${badge}</div>
           </div>
-          <button class="act-btn secondary reg-remove-btn" type="button" onclick="addDiscoveredAsRegistry('${encodeURIComponent(r.url)}')">
+          <button class="act-btn secondary reg-remove-btn" type="button" data-onclick="addDiscoveredAsRegistry('${encodeURIComponent(r.url)}')">
             Add as Registry
           </button>
         </div>`;
@@ -5924,7 +6444,7 @@ function renderTrustedKeys(keys) {
         <span class="reg-url">${regEscapeHtml(k.name)}</span>
         <div class="reg-badges"><span class="reg-badge">${regEscapeHtml((k.public_key_b64 || '').slice(0, 16))}…</span></div>
       </div>
-      <button class="act-btn secondary reg-remove-btn" type="button" onclick="removeTrustedKeyLink('${encodeURIComponent(k.name)}')">
+      <button class="act-btn secondary reg-remove-btn" type="button" data-onclick="removeTrustedKeyLink('${encodeURIComponent(k.name)}')">
         Remove
       </button>
     </div>`).join('');
@@ -6199,10 +6719,10 @@ function renderLibraryDedup(report) {
         return `
         <div class="u-items-center u-gap-8" style="display:flex;">
           <input type="radio" name="libdedup-keep-${i}" ${isKeeper ? 'checked' : ''}
-                 onchange="setLibDedupKeeper(${i}, ${j})" title="Keep this copy">
+                 data-onchange="setLibDedupKeeper(${i}, ${j})" title="Keep this copy">
           <input type="checkbox" ${group.selected.has(file.path) ? 'checked' : ''}
                  ${isKeeper ? 'disabled' : ''}
-                 onchange="toggleLibDedupFile(${i}, ${j}, this.checked)"
+                 data-onchange="toggleLibDedupFile(${i}, ${j}, this.checked)"
                  title="${isKeeper ? 'The kept copy is never removed' : 'Remove this copy'}">
           <span class="reg-url u-flex-1 u-minw-0" title="${regEscapeHtml(file.path)}">${regEscapeHtml(file.path)}</span>
           <span class="s-label u-fs-10_5 u-ws-nowrap">${regEscapeHtml(file.quality || '')}</span>
@@ -6297,7 +6817,7 @@ async function resolveLibraryDuplicates(action) {
   const question = action === 'delete'
     ? `Delete ${paths.length} file(s) permanently? This cannot be undone.`
     : `Move ${paths.length} file(s) into the quarantine folder? You can undo this afterwards.`;
-  if (!confirm(question)) return;
+  if (!(await askConfirm(question, { title: action === 'delete' ? 'Delete duplicates' : 'Quarantine duplicates', ok: action === 'delete' ? 'Delete' : 'Move', danger: action === 'delete' }))) return;
 
   const btn = $(action === 'delete' ? 'btn-libdedup-delete' : 'btn-libdedup-trash');
   setTaBtnState(btn, 'loading');
@@ -6504,12 +7024,18 @@ function renderHomeSections(sections) {
     section.items.forEach(item => {
       const card = document.createElement('div');
       card.className = 'explore-card';
+      makeActivatable(card);
       
-      const imgUrl = item.cover_url || 'assets/icons/spotify.svg';
+      // No cover, or one that fails to load: a neutral square (css/views/
+      // explore.css), not another service's logo — the feed may be Apple's
+      // or a Jellyfin server's.
+      const blank = '<div class="explore-cover-blank" aria-hidden="true">♪</div>';
       const subText = item.description || item.artists || item.type;
 
       card.innerHTML = `
-        <img src="${escHtml(imgUrl)}" loading="lazy" onerror="this.src='assets/icons/spotify.svg'">
+        ${item.cover_url
+          ? `<img src="${escHtml(item.cover_url)}" alt="" loading="lazy" data-onerror="this.outerHTML='${blank.replace(/"/g, '&quot;')}'">`
+          : blank}
         <div class="explore-card-title" title="${escHtml(item.name)}">${escHtml(item.name)}</div>
         <div class="explore-card-subtitle" title="${escHtml(subText)}">${escHtml(subText)}</div>
       `;
@@ -6616,6 +7142,9 @@ $('urlInput').addEventListener('input', function() {
     clearSearchUI();
     _lastSearchQuery = '';
     nextSearchRequest(); // whatever is still out answers a box that is now empty
+    // ...and is dropped as stale, so nothing else would take down a
+    // "fetching" notice a Fetch press left up for it.
+    if (isFetchingData) setFetchingState('hide');
     clearTimeout(_searchDebounceTimer);
     const container = $('text-search-results');
     if (container) container.innerHTML = '';
@@ -6686,11 +7215,11 @@ window.showFfmpegWarning = function(result) {
       <strong>ffmpeg not found</strong>
       <span>Tidal FLAC muxing and Amazon decryption will be unavailable. MP3 transcoding will try to install ffmpeg automatically the first time you use it.</span>
       <a href="#" class="ffmpeg-banner-link"
-        onclick="event.preventDefault(); pyWin('open_url', 'https://ffmpeg.org/download.html')">
+        data-onclick="event.preventDefault(); pyWin('open_url', 'https://ffmpeg.org/download.html')">
         Download ffmpeg
       </a>
     </div>
-    <button class="ffmpeg-banner-close" onclick="this.closest('.ffmpeg-banner').remove()" title="Dismiss">✕</button>
+    <button class="ffmpeg-banner-close" data-onclick="this.closest('.ffmpeg-banner').remove()" title="Dismiss">✕</button>
   `;
 
   // Insert right after the search bar
@@ -6717,11 +7246,11 @@ window.showNodeWarning = function(result) {
       <strong>Node.js not found</strong>
       <span>JavaScript extensions won't work until it's installed — Mornye will try to install it automatically the first time you use one.</span>
       <a href="#" class="ffmpeg-banner-link"
-        onclick="event.preventDefault(); pyWin('open_url', 'https://nodejs.org/en/download')">
+        data-onclick="event.preventDefault(); pyWin('open_url', 'https://nodejs.org/en/download')">
         Download Node.js
       </a>
     </div>
-    <button class="ffmpeg-banner-close" onclick="this.closest('.ffmpeg-banner').remove()" title="Dismiss">✕</button>
+    <button class="ffmpeg-banner-close" data-onclick="this.closest('.ffmpeg-banner').remove()" title="Dismiss">✕</button>
   `;
 
   const searchBar = $('search-bar');
@@ -6945,6 +7474,7 @@ async function navigateFolderBrowser(path) {
             items.forEach(item => {
                 const div = document.createElement('div');
                 div.className = 'fb-entry';
+                makeActivatable(div);
                 const icon = item.type === 'dir'
                     ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>'
                     : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg>';
@@ -7078,7 +7608,7 @@ function renderLocalTracks() {
 
         if (hasMatch) {
             const newCover = best.metadata.cover_url || best.metadata.cover || '';
-            const newCoverHtml = newCover ? `<img src="${newCover}">` : `🎵`;
+            const newCoverHtml = newCover ? `<img src="${escHtml(newCover)}" alt="">` : `🎵`;
             const newTitle = best.metadata.title || '';
             const newArtist = best.metadata.first_artist || '';
 
@@ -7116,7 +7646,7 @@ function renderLocalTracks() {
                 }
                 scoreCol = `<span class="local-badge ${isSafe ? 'ok' : 'warn'}" title="${escHtml(why)}">${best.confidence}%</span>`;
             }
-            checkbox = `<input type="checkbox" class="local-cb" value="${i}" data-file-path="${escHtml(item.file_path)}" ${isSafe ? 'checked' : ''} onchange="updateLocalSelection()">`;
+            checkbox = `<input type="checkbox" class="local-cb" value="${i}" data-file-path="${escHtml(item.file_path)}" ${isSafe ? 'checked' : ''} data-onchange="updateLocalSelection()">`;
         } else if (item.error) {
             scoreCol = `<span class="local-badge err">Error</span>`;
             newCol = `<div class="u-c-red u-fs-11">${escHtml(item.error)}</div>`;
@@ -7134,10 +7664,10 @@ function renderLocalTracks() {
                     <div class="local-artist">${escHtml(oldArtist)}</div>
                     <div class="u-ff-jetbrains-mono-monospace u-fs-9_5 u-c-muted u-o-hidden u-text-overflow-ellipsis u-ws-nowrap u-mt-3" title="${escHtml(item.file_path)}">${escHtml(fileName)}</div>
                     <div class="local-actions">
-                      <button type="button" class="local-convert-btn" title="Play this file as it is stored" onclick="playLocal(${i})">Play</button>
-                      <button type="button" class="local-convert-btn" title="Edit the tags, cover and lyrics of this file" onclick="openTagEditor(${i})">Edit</button>
-                      <button type="button" class="local-convert-btn" title="Convert this file to another format" onclick="openConvertDialog([${i}])">Convert</button>
-                      <button type="button" class="local-convert-btn" title="Show technical details and a spectrogram" onclick="openAnalyze(${i})">Analyze</button>
+                      <button type="button" class="local-convert-btn" title="Play this file as it is stored" data-onclick="playLocal(${i})">Play</button>
+                      <button type="button" class="local-convert-btn" title="Edit the tags, cover and lyrics of this file" data-onclick="openTagEditor(${i})">Edit</button>
+                      <button type="button" class="local-convert-btn" title="Convert this file to another format" data-onclick="openConvertDialog([${i}])">Convert</button>
+                      <button type="button" class="local-convert-btn" title="Show technical details and a spectrogram" data-onclick="openAnalyze(${i})">Analyze</button>
                     </div>
                 </div>
             </div>
@@ -7566,8 +8096,8 @@ function openConcerts(artistName) {
         <div class="weekly-title">${escHtml(concertWhen(c))}</div>
         <div class="weekly-artist">${escHtml([c.venue, c.location].filter(Boolean).join(' · '))}</div>
       </div>
-      <button type="button" class="act-btn secondary u-p-5-12 u-fs-12" onclick="downloadConcertIcs(${i})" title="Download a calendar event">Add to calendar</button>
-      ${c.url ? `<button type="button" class="act-btn secondary u-p-5-12 u-fs-12" onclick="openExternalUrl(${escHtml(JSON.stringify(c.url))})">Details</button>` : ''}
+      <button type="button" class="act-btn secondary u-p-5-12 u-fs-12" data-onclick="downloadConcertIcs(${i})" title="Download a calendar event">Add to calendar</button>
+      ${c.url ? `<button type="button" class="act-btn secondary u-p-5-12 u-fs-12" data-onclick="openExternalUrl(${escHtml(JSON.stringify(c.url))})">Details</button>` : ''}
     </div>`).join('');
   $('concerts-modal').classList.remove('hidden');
 }
@@ -7755,6 +8285,7 @@ async function loadPlayerTrack(index) {
   const audio = $('player-audio');
   $('player-bar').classList.remove('hidden');
   document.body.classList.add('has-player');
+  setPlayerArtwork('');
   $('pl-title').textContent = item.artist ? `${item.title} — ${item.artist}` : item.title;
   $('pl-quality').textContent = 'Preparing…';
   markPlayingRow();
@@ -7869,11 +8400,45 @@ let npLines = [];       // [{t: seconds|null, text}]
 let npSynced = false;
 let npWordSynced = false;
 let npActive = -1;
+const NP_SYNC = { offset: 0, speed: 1 };
+
+function npLyricsTime(audioTime) {
+  return Math.max(0, audioTime * NP_SYNC.speed + NP_SYNC.offset);
+}
+
+function npAudioTimeForLyrics(lyricsTime) {
+  return Math.max(0, (lyricsTime - NP_SYNC.offset) / NP_SYNC.speed);
+}
+
+function npSetSync(kind, rawValue) {
+  const value = Number(rawValue);
+  if (!Number.isFinite(value)) return;
+  if (kind === 'offset') {
+    NP_SYNC.offset = Math.max(-5, Math.min(5, value));
+    $('np-sync-offset-value').textContent = `${NP_SYNC.offset > 0 ? '+' : ''}${NP_SYNC.offset.toFixed(1)} s`;
+  } else if (kind === 'speed') {
+    NP_SYNC.speed = Math.max(0.9, Math.min(1.1, value));
+    $('np-sync-speed-value').textContent = `${NP_SYNC.speed.toFixed(2)}×`;
+  } else {
+    return;
+  }
+  NP.focus = -2;
+  npUpdate(npLyricsTime($('player-audio').currentTime), true);
+}
+
+function npResetSync() {
+  NP_SYNC.offset = 0;
+  NP_SYNC.speed = 1;
+  $('np-sync-offset').value = '0';
+  $('np-sync-offset-value').textContent = '0.0 s';
+  $('np-sync-speed').value = '1';
+  $('np-sync-speed-value').textContent = '1.00×';
+}
 
 function openNowPlaying() {
   $('np-view').classList.remove('hidden');
   npStartTick();
-  if (npLines.length) { npLayoutLyrics(); NP.focus = -2; NP.first = true; npUpdate($('player-audio').currentTime, true); }
+  if (npLines.length) { npLayoutLyrics(); NP.focus = -2; NP.first = true; npUpdate(npLyricsTime($('player-audio').currentTime), true); }
 }
 function closeNowPlaying() { $('np-view').classList.add('hidden'); }
 
@@ -8031,6 +8596,8 @@ function npApplyColors(src) {
 }
 
 function fillNowPlaying(item, res) {
+  setPlayerArtwork(res.cover || '');
+  npResetSync();
   $('np-title').textContent = res.title || item.title;
   $('np-artist').textContent = [res.artist || item.artist, res.album].filter(Boolean).join(' · ');
   $('np-explicit').classList.toggle('hidden', !res.explicit);
@@ -8100,12 +8667,23 @@ function fillNowPlaying(item, res) {
     }).join('');
     box.querySelectorAll('.np-line').forEach(el => el.addEventListener('click', () => {
       const l = npLines[parseInt(el.dataset.i)];
-      if (npSynced && l && l.t != null) { $('player-audio').currentTime = l.t; $('player-audio').play(); }
+      if (npSynced && l && l.t != null) { $('player-audio').currentTime = npAudioTimeForLyrics(l.t); $('player-audio').play(); }
     }));
     npLayoutLyrics();
   }
   if (!$('np-queue').classList.contains('hidden')) npRenderQueue();
-  if (npSynced) npUpdate($('player-audio').currentTime, true);
+  if (npSynced) npUpdate(npLyricsTime($('player-audio').currentTime), true);
+}
+
+function setPlayerArtwork(src) {
+  const wrap = $('pl-artwork');
+  const image = $('pl-cover');
+  if (!wrap || !image) return;
+  wrap.classList.remove('has-artwork');
+  image.onload = () => wrap.classList.add('has-artwork');
+  image.onerror = () => wrap.classList.remove('has-artwork');
+  image.removeAttribute('src');
+  if (src) image.src = src;
 }
 
 // ── Lyrics engine ───────────────────────────────────────────────────────────
@@ -8308,7 +8886,7 @@ function npUpdate(time, force) {
     NP.userTimer = setTimeout(() => {
       NP.userScrolling = false;
       NP.focus = -2;                       // follow again, with the spring
-      npUpdate($('player-audio').currentTime, true);
+      npUpdate(npLyricsTime($('player-audio').currentTime), true);
     }, 4000);
   };
   box.addEventListener('wheel', hold, { passive: true });
@@ -8321,18 +8899,18 @@ function npTick() {
   npRaf = 0;
   const audio = $('player-audio');
   if (!audio || audio.paused || $('np-view').classList.contains('hidden')) return;
-  npUpdate(audio.currentTime);
+  npUpdate(npLyricsTime(audio.currentTime));
   npRaf = requestAnimationFrame(npTick);
 }
 function npStartTick() { if (!npRaf) npRaf = requestAnimationFrame(npTick); }
-function npSyncLyrics(time) { npUpdate(time); }
+function npSyncLyrics(time) { npUpdate(npLyricsTime(time)); }
 
 function npRenderQueue() {
   const rows = [];
   for (let n = Math.max(0, playerPos); n < Math.min(playerOrder.length, Math.max(0, playerPos) + 200); n++) {
     const i = playerOrder[n], q = playerQueue[i];
     if (!q) continue;
-    rows.push(`<div class="np-queue-row${n === playerPos ? ' active' : ''}" onclick="loadPlayerTrack(${i})">
+    rows.push(`<div class="np-queue-row${n === playerPos ? ' active' : ''}" role="button" tabindex="0" data-activate data-onclick="loadPlayerTrack(${i})">
        <span class="t">${escHtml(q.title)}</span><span class="a">${escHtml(q.artist || '')}</span></div>`);
   }
   $('np-queue').innerHTML = rows.join('');
@@ -8385,12 +8963,14 @@ async function scanPlayerLibrary() {
   $('player-list').innerHTML = '';
   $('player-toolbar').classList.add('hidden');
   $('player-status').textContent = 'Scanning…';
+  renderPlayerEmptyState();
   $('player-scan-btn').disabled = true;
   const res = await window.pywebview?.api?.scan_music_library?.(path);
   if (!res || res.status !== 'started') {
     lib.loading = false;
     $('player-scan-btn').disabled = false;
     $('player-status').textContent = res?.error || 'Could not open that folder.';
+    renderPlayerEmptyState();
     return;
   }
   lib.lastScan = Math.max(lib.lastScan, res.scan);
@@ -8414,7 +8994,7 @@ window.app_library_scan_finished = function(p) {
   lib.loading = false;
   $('player-scan-btn').disabled = false;
   filterPlayerLibrary(true);
-  if (!lib.items.length) $('player-status').textContent = 'No audio files found in this folder.';
+  if (!lib.items.length) $('player-status').textContent = '';
   else { $('player-status').textContent = ''; libRemember(p.folder); }
 };
 
@@ -8423,6 +9003,7 @@ window.app_library_scan_error = function(p) {
   lib.loading = false;
   $('player-scan-btn').disabled = false;
   $('player-status').textContent = 'Scan failed: ' + (p?.error || 'unknown error');
+  renderPlayerEmptyState();
 };
 
 function libSortKey(key) {
@@ -8462,7 +9043,7 @@ function filterPlayerLibrary(keepScroll) {
 
 function libRowHtml(t, i) {
   const art = [t.artist, t.album].filter(Boolean).join(' — ');
-  return `<div class="pl-row" role="listitem" data-i="${i}" data-p="${escHtml(t.path)}">
+  return `<div class="pl-row" role="listitem" tabindex="0" data-activate data-i="${i}" data-p="${escHtml(t.path)}">
     <div class="pl-num"><span class="n">${i + 1}</span><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span></div>
     <div class="pl-thumb"><img alt="" draggable="false"></div>
     <div class="pl-main"><div class="pl-t">${escHtml(t.title)}</div><div class="pl-a">${escHtml(art)}</div></div>
@@ -8477,6 +9058,29 @@ function renderPlayerRows() {
     + (lib.shown < lib.view.length ? '<div id="player-sentinel" class="pl-more">Loading more…</div>' : '');
   libObserve(list);
   markPlayingRow();
+  renderPlayerEmptyState();
+}
+
+function renderPlayerEmptyState() {
+  const empty = $('player-empty');
+  if (!empty) return;
+  const show = !lib.loading && lib.view.length === 0;
+  empty.classList.toggle('hidden', !show);
+  if (!show) return;
+
+  const title = empty.querySelector('.player-empty-title');
+  const copy = empty.querySelector('.player-empty-copy');
+  const query = ($('player-search')?.value || '').trim();
+  if (query && lib.items.length) {
+    title.textContent = 'No matching tracks';
+    copy.textContent = 'Try a different title, artist, or album search.';
+  } else if (lib.scan !== null && !lib.items.length) {
+    title.textContent = 'No audio files found';
+    copy.textContent = 'Choose a folder that contains music, then scan it again.';
+  } else {
+    title.textContent = 'Choose a music folder';
+    copy.textContent = 'Your tracks will appear here after the library is scanned.';
+  }
 }
 
 function libAppendRows() {
@@ -8766,21 +9370,21 @@ function renderSubscriptions(subs) {
         </div>
         <select class="u-maxw-140 u-p-5-8 u-fs-fs-75 u-shrink-0"
                 title="Check this ${target} automatically and download what is new"
-                onchange="setSubscriptionInterval('${regEscapeHtml(s.id)}', this.value)">
+                data-onchange="setSubscriptionInterval('${regEscapeHtml(s.id)}', this.value)">
           ${subIntervalOptions(s.interval_minutes)}
         </select>
         <button class="act-btn secondary reg-remove-btn" type="button"
-                onclick="toggleSubscription('${regEscapeHtml(s.id)}', ${s.enabled ? 'false' : 'true'})"
+                data-onclick="toggleSubscription('${regEscapeHtml(s.id)}', ${s.enabled ? 'false' : 'true'})"
                 title="${s.enabled ? `Stop checking this ${target} without forgetting what has been seen` : `Resume checking this ${target}`}">
           ${s.enabled ? 'Pause' : 'Resume'}
         </button>
         <button class="act-btn secondary reg-remove-btn" type="button"
-                onclick="resetSubscription('${regEscapeHtml(s.id)}')"
+                data-onclick="resetSubscription('${regEscapeHtml(s.id)}')"
                 title="Forget what this subscription has seen, so the whole back catalogue counts as new again">
           Reset
         </button>
         <button class="act-btn secondary reg-remove-btn" type="button"
-                onclick="removeSubscription('${regEscapeHtml(s.id)}')">
+                data-onclick="removeSubscription('${regEscapeHtml(s.id)}')">
           Unfollow
         </button>
       </div>`;
@@ -8808,7 +9412,7 @@ async function addSubscriptionsBulk() {
     showToast('Only Spotify artist URLs are accepted in bulk mode. Check the pasted list.', 'error');
     return;
   }
-  if (!confirm(`Follow ${urls.length} artist(s)?${$('subscription-bulk-backfill')?.checked ? '\nTheir seen history will be reset so existing releases count as new.' : ''}`)) return;
+  if (!(await askConfirm(`Follow ${urls.length} artist(s)?${$('subscription-bulk-backfill')?.checked ? '\nTheir seen history will be reset so existing releases count as new.' : ''}`, { title: 'Follow artists', ok: 'Follow' }))) return;
 
   const interval = Number($('subscription-interval')?.value || 0);
   const groups = $('subscription-groups')?.value || 'album,single';
@@ -8915,7 +9519,7 @@ async function toggleSubscription(id, enabled) {
 }
 
 async function resetSubscription(id) {
-  if (!confirm('Forget what this subscription has seen? The next check with downloading on will treat the whole back catalogue as new.')) return;
+  if (!(await askConfirm('Forget what this subscription has seen? The next check with downloading on will treat the whole back catalogue as new.', { title: 'Reset subscription', ok: 'Reset', danger: true }))) return;
   try {
     await window.pywebview.api.reset_subscription(id);
     showToast('Reset. The next check with downloading on will treat the whole back catalogue as new.');
@@ -8999,7 +9603,7 @@ function healthRate(rate) {
   return rate === null || rate === undefined ? '—' : Math.round(rate * 100) + '%';
 }
 
-/** The tone (see [data-tone] in styles.css) of an extension's success rate. */
+/** The tone (see [data-tone] in css/utilities.css) of an extension's success rate. */
 function healthTone(row) {
   if (!row.attempts) return 'muted';
   if (row.success_rate >= 0.9) return 'ok';
@@ -9056,7 +9660,7 @@ function renderExtensionHealth(data) {
 }
 
 async function resetExtensionHealth() {
-  if (!confirm('Clear the recorded provider statistics?')) return;
+  if (!(await askConfirm('Clear the recorded provider statistics?', { title: 'Clear statistics', ok: 'Clear', danger: true }))) return;
   try {
     await window.pywebview.api.reset_extension_health();
     showToast('Extension statistics cleared.');
@@ -9197,7 +9801,7 @@ function extSettingFieldHtml(ext, entry, cardIdx) {
   if (entry.type === 'button') {
     return `<div class="s-row">${label}
       <button class="act-btn secondary u-p-6-14 u-fs-12" type="button"
-        onclick="runExtensionSettingAction('${regEscapeHtml(ext.name)}','${regEscapeHtml(entry.key)}')">${regEscapeHtml(entry.label)}</button>
+        data-onclick="runExtensionSettingAction('${regEscapeHtml(ext.name)}','${regEscapeHtml(entry.key)}')">${regEscapeHtml(entry.label)}</button>
     </div>`;
   }
   if (entry.type === 'boolean') {
@@ -9244,7 +9848,7 @@ function extLocalNetworkRowHtml(ext) {
   return `<div class="s-row">
     <span class="s-label">Allow local network access<small>${what}</small></span>
     <label class="toggle"><input type="checkbox" ${ext.local_network ? 'checked' : ''}
-      onchange="setExtensionLocalNetwork('${regEscapeHtml(ext.name)}', this)"><span class="toggle-sl"></span></label>
+      data-onchange="setExtensionLocalNetwork('${regEscapeHtml(ext.name)}', this)"><span class="toggle-sl"></span></label>
   </div>`;
 }
 
@@ -9287,9 +9891,9 @@ function renderExtensionSettings(data) {
         ${extLocalNetworkRowHtml(ext)}
         <div class="s-row u-justify-flex-end u-gap-8">
           <button class="act-btn secondary u-p-6-14 u-fs-12" type="button"
-            onclick="resetExtensionSettings('${regEscapeHtml(ext.name)}')">Reset to defaults</button>
+            data-onclick="resetExtensionSettings('${regEscapeHtml(ext.name)}')">Reset to defaults</button>
           <button class="act-btn primary u-p-6-14 u-fs-12" type="button"
-            onclick="saveExtensionSettings('${regEscapeHtml(ext.name)}', this)">Save</button>
+            data-onclick="saveExtensionSettings('${regEscapeHtml(ext.name)}', this)">Save</button>
         </div>
       </div>
     </details>`).join('');
@@ -9324,7 +9928,7 @@ async function saveExtensionSettings(name, btn) {
 }
 
 async function resetExtensionSettings(name) {
-  if (!confirm(`Reset every setting of ${name} to its default?`)) return;
+  if (!(await askConfirm(`Reset every setting of ${name} to its default?`, { title: 'Reset settings', ok: 'Reset', danger: true }))) return;
   try {
     const res = await window.pywebview.api.reset_extension_settings(name);
     if (res?.error) {
@@ -9472,7 +10076,7 @@ function renderSignedSessions(data) {
 }
 
 async function clearSignedSession(key) {
-  if (!confirm('Clear this signed session? The next request that needs it will verify again.')) return;
+  if (!(await askConfirm('Clear this signed session? The next request that needs it will verify again.', { title: 'Clear session', ok: 'Clear' }))) return;
   try {
     const res = await window.pywebview.api.clear_signed_session(key);
     if (res?.ok) showToast('Signed session cleared.');
@@ -9484,7 +10088,7 @@ async function clearSignedSession(key) {
 }
 
 async function pruneSignedSessions() {
-  if (!confirm('Delete the session files no installed extension uses?')) return;
+  if (!(await askConfirm('Delete the session files no installed extension uses?', { title: 'Delete unused sessions', ok: 'Delete', danger: true }))) return;
   try {
     const res = await window.pywebview.api.prune_signed_sessions();
     if (res?.ok) {
@@ -9551,7 +10155,7 @@ function statsBars(rows, formatValue) {
   return rows.map((row) => `
     <div class="stat-bar-row">
       <div class="stat-bar-label" title="${regEscapeHtml(row.label)}">${regEscapeHtml(row.label)}</div>
-      <div class="stat-bar-track"><div class="stat-bar-fill" style="width:${Math.max(2, (row.value / peak) * 100)}%"></div></div>
+      <div class="stat-bar-track" style="--v:${Math.max(1, Math.round((row.value / peak) * 20)) / 20}"></div>
       <div class="stat-bar-value">${regEscapeHtml((formatValue || String)(row.value))}</div>
     </div>`).join('');
 }
@@ -9669,7 +10273,7 @@ async function loadStats() {
   body.innerHTML = '<div class="s-label u-fs-11_5">Loading…</div>';
   try {
     const [year, days] = statsPeriodArgs();
-    renderStats(await window.pywebview.api.get_stats(year, days, 10));
+    renderStats(await window.pywebview.api.get_stats(year, days, 10, true));
   } catch (e) {
     body.innerHTML = '<div class="s-label u-fs-11_5 u-c-red">Could not read the download log.</div>';
   }

@@ -27,6 +27,7 @@ class StatsMixin:
         year: int | None = None,
         days: int | None = None,
         top: int = 10,
+        existing_files: bool = False,
     ) -> dict:
         """Totals, rankings and activity for one period.
 
@@ -46,6 +47,7 @@ class StatsMixin:
                 owner=self.stats_owner,
                 window=window,
                 top=max(1, min(100, int(top or stats.DEFAULT_TOP))),
+                existing_files=bool(existing_files),
             )
         except Exception as e:
             return {"error": str(e)}
