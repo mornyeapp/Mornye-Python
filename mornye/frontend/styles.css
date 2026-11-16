@@ -956,36 +956,6 @@
       cursor: pointer;
       font-size: 16px;
     }
-    .api-config-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--sp-3);
-      padding: 6px 10px;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      font-size: var(--fs-100);
-      line-height: 1.3;
-      color: var(--text2);
-      background: var(--surface2);
-      white-space: nowrap;
-    }
-    .api-config-pill::before {
-      content: '';
-      display: inline-block;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--muted);
-    }
-    .api-config-pill.configured {
-      border-color: var(--status-done-fg);
-      color: var(--status-done-fg);
-      background: var(--status-done-bg);
-    }
-    .api-config-pill.configured::before {
-      background: var(--status-done-fg);
-      box-shadow: 0 0 0 1px var(--status-done-fg);
-    }
     .api-config-help {
       font-size: var(--fs-100);
       color: var(--yellow);
@@ -1702,86 +1672,14 @@
       display: flex; justify-content: space-between; align-items: center; gap: var(--sp-4);
     }
     @keyframes fadein { from { opacity:0; transform: translateY(2px); } to { opacity:1; transform: none; } }
-
-    /* ══════════ SETTINGS VIEW ══════════ */
-    #view-settings { padding: 0; overflow: hidden; }
     .s-header { padding: var(--sp-6) var(--sp-5) var(--sp-4); flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: var(--sp-5); flex-wrap: wrap; }
     .s-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-    /* The settings header buttons follow the same 36px control height as the
-       rest now; they were 44, which made that one row noticeably chunkier
-       than every other button in the app. */
-    
-    .folder-pill { display: inline-flex; align-items: center; gap: var(--sp-3); background: var(--surface); border: 1px solid var(--border); color: var(--text2); padding: 9px 14px; border-radius: 999px; font-size: var(--fs-100); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .folder-pill::before { content: '📁'; display: inline-block; }
-    .tab-bar {
-      display: flex; padding: 0 18px;
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0; gap: var(--sp-2); margin-top: 0; overflow-x: auto;
-    }
-    .tab-bar::-webkit-scrollbar { display: none; }
-    .stab {
-      display: inline-flex; align-items: center; gap: var(--sp-3);
-      padding: 7px var(--sp-5); background: transparent; border: 1px solid transparent;
-      color: var(--text2);
-      cursor: pointer; white-space: nowrap;
-      transition: background var(--t), color var(--t), border-color var(--t); margin-bottom: 10px;
-    }
-    .stab svg { width: 18px; height: 18px; stroke-width: 2.2; }
-    .stab:hover {
-      background: var(--surface2);
-      color: var(--text);
-    }
-    .stab.active {
-      box-shadow: none;
-    }
     .s-body { flex: 1; overflow-y: auto; padding: var(--sp-4) var(--sp-5) var(--sp-5); min-height: 0; }
-
-    /* ── Settings: category list + page (System Settings style) ──
-       The tab bar becomes a column of categories with a search on top; the
-       page sits to its right and scrolls on its own. */
-    #view-settings.active {
-      display: grid;
-      grid-template-columns: 236px minmax(0, 1fr);
-      grid-template-rows: auto minmax(0, 1fr);
-    }
-    #view-settings > .s-header { grid-column: 1 / -1; }
-    #view-settings > .tab-bar {
-      grid-row: 2; grid-column: 1;
-      flex-direction: column; align-items: stretch; gap: 2px;
-      padding: var(--sp-2) var(--sp-4) var(--sp-5);
-      border-bottom: none; border-right: 1px solid var(--border);
-      overflow-y: auto; overflow-x: hidden;
-    }
-    #view-settings > .tab-bar .stab {
-      width: 100%; justify-content: flex-start;
-      border-radius: var(--radius-sm); margin-bottom: 0;
-      padding: 8px 12px; font-weight: var(--fw-medium);
-    }
-    #view-settings > .tab-bar .stab.active { border-color: transparent; color: var(--text); font-weight: var(--fw-semibold); }
-    #view-settings > .tab-bar .stab.active svg { color: var(--accent-text); }
-    #view-settings > .s-body {
-      grid-row: 2; grid-column: 2;
-      padding: var(--sp-2) var(--sp-7) var(--sp-8);
-    }
-    .s-search {
-      display: flex; align-items: center; gap: 8px;
-      height: 34px; padding: 0 10px; margin: 0 0 var(--sp-3);
-      background: var(--input-bg); border: 1px solid var(--input-border);
-      border-radius: var(--radius-sm); color: var(--muted);
-      transition: border-color var(--t), box-shadow var(--t);
-    }
-    .s-search:focus-within { border-color: var(--accent-border); box-shadow: 0 0 0 3px var(--accent-ring); }
-    .s-search svg { width: 15px; height: 15px; flex-shrink: 0; }
     .s-search input {
       flex: 1; min-width: 0; border: none; outline: none; background: transparent;
       color: var(--input-text); font-family: var(--app-font); font-size: var(--fs-100);
     }
     .s-search input::-webkit-search-cancel-button { filter: grayscale(1); }
-    /* Searching shows every page that has a hit, each under its own name. */
-    .s-body.searching .tc { display: none; }
-    .s-body.searching .tc.search-hit { display: block; columns: auto; }
-    .s-body.searching .s-filtered { display: none !important; }
-    .s-no-match { padding: var(--sp-8) 0; color: var(--muted); text-align: center; }
 
     /* ── Error state ──
        One shape for "this did not work": what happened, what to do, a way to
@@ -2038,51 +1936,9 @@
       .live-metrics { gap: var(--sp-5); }
       .live-search { margin-left: 0; width: 100%; }
     }
-    .s-body.searching .tc.search-hit::before {
-      content: attr(data-title); display: block;
-      margin: var(--sp-5) 0 var(--sp-3);
-      font-family: var(--font-display); font-size: var(--fs-400); font-weight: var(--fw-semibold);
-      color: var(--text);
-    }
-    .s-body.searching .tc.search-hit:first-of-type::before { margin-top: 0; }
-    /* While searching no single category is "the" page. */
-    .tab-bar:has(#settings-search:not(:placeholder-shown)) .stab.active { background: transparent; font-weight: var(--fw-medium); }
-
-    /* Settings rows are label-left / control-right, so on a wide window the
-       two ends of one setting ended up 1200px apart with nothing between
-       them. Capped rather than centred: the heading, the tabs and the cards
-       all keep the same left edge, and only the empty middle stops growing. */
-    #view-settings > .s-header,
-    #view-settings > .s-body {
-      width: 100%;
-      max-width: 1180px;
-    }
     .s-body::-webkit-scrollbar { width: 3px; }
     .s-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
     .s-footer { position: sticky; bottom: 0; display: flex; justify-content: flex-start; padding: 10px 0 0; background: transparent; }
-    /* Volume slider + its readout as one control. The native range input is
-       themed rather than replaced: accent-color is enough to make it follow
-       the app's accent, and a hand-built slider would be a lot of markup to
-       reproduce keyboard and drag behaviour that already works. */
-    .volume-control { display: inline-flex; align-items: center; gap: var(--sp-3); }
-    .volume-control input[type="range"] {
-      width: 140px; accent-color: var(--accent); cursor: pointer;
-    }
-    .volume-value {
-      min-width: 38px; text-align: right;
-    }
-
-    /* Accent picker: swatch + select as one control. */
-    .accent-picker { display: inline-flex; align-items: center; gap: var(--sp-3); }
-    .accent-dot {
-      width: 14px; height: 14px; border-radius: 50%;
-      background: var(--accent);
-      border: 1px solid var(--accent-border);
-      flex-shrink: 0;
-    }
-
-    .tc { display: none; }
-    .tc.active { display: block; }
     /* Two columns of setting cards once there is room for them. A settings
        row is label-left / control-right and rarely more than ~500px of
        actual content, so one column down the middle of a wide window meant
@@ -2093,22 +1949,6 @@
        fill by flowing, so the two sides stay roughly level instead of
        leaving a grid row as tall as its tallest cell. break-inside stops a
        card being split down the middle across the column boundary. */
-    @media (min-width: 1900px) {
-      .tc.active { columns: 2; column-gap: var(--sp-4); }
-      #tc-download.active,
-      #tc-status.active { columns: 1; }
-      .tc.active .s-section {
-        break-inside: avoid;
-        -webkit-column-break-inside: avoid;
-        /* A column box has no margin collapsing to rely on, and the last
-           card in a column still needs its gap to the next one below. */
-        margin-bottom: var(--sp-4);
-      }
-      .tc.active .s-section:last-child { margin-bottom: var(--sp-4); }
-      /* Sections that are a wide table or a grid of their own read badly at
-           half width — they keep the full row. */
-      .tc.active .s-section.s-wide { column-span: all; }
-    }
     .s-section {
       position: relative;
       overflow: hidden;
@@ -2117,91 +1957,11 @@
     /* Group heading in sentence case, like a System Settings group — the
        old tracked-out uppercase label read as a form, not as a place. */
     .s-row { display: flex; align-items: center; justify-content: space-between; min-height: 30px; margin-bottom: 8px; gap: 10px; }
-    .s-row:last-child { margin-bottom: 0; }
     /* Rows of one group read as a list: hairline between neighbours. */
     .s-section > .s-row { margin-bottom: 0; }
-    .s-section > .s-row + .s-row { border-top: 1px solid var(--border); }
     .s-row label { display: flex; align-items: center; gap: var(--sp-3); cursor: pointer; }
-    .network-destination-layout {
-      display: grid;
-      grid-template-columns: minmax(0, 1.35fr) minmax(320px, .9fr);
-      gap: clamp(20px, 3vw, 36px);
-      align-items: start;
-    }
-    .network-destination-group { min-width: 0; }
-    .network-destination-heading {
-      margin-bottom: 14px; padding-bottom: 9px;
-      border-bottom: 1px solid var(--border);
-      color: var(--text); font-size: var(--fs-100); font-weight: 600;
-    }
-    .network-destination-fields {
-      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 15px 16px; align-items: start;
-    }
-    .network-destination-connection-fields {
-      grid-template-columns: minmax(0, 1fr) minmax(130px, .62fr);
-    }
-    .network-destination-field {
-      display: flex; flex-direction: column; align-items: stretch; gap: 6px;
-      min-width: 0; color: var(--text2); font-size: 12px; font-weight: 500;
-    }
-    .network-destination-field > span { display: block; line-height: 1.4; }
-    .network-destination-field small,
-    .network-destination-encryption small {
-      display: block; max-width: 58ch; margin-top: 3px;
-      color: var(--muted); font-family: var(--font-mono);
-      font-size: var(--fs-50); font-weight: 400; line-height: 1.45;
-    }
-    .network-destination-field select, .network-destination-retry-controls input {
-      box-sizing: border-box; width: 100%; min-width: 0; min-height: 38px;
-    }
     .network-destination-field input {
       box-sizing: border-box; width: 100%; min-width: 0; min-height: 38px;
-    }
-    .network-destination-field-wide { grid-column: 1 / -1; }
-    .network-destination-inline {
-      display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 8px;
-    }
-    .network-destination-timeout-control { display: flex; align-items: center; gap: 9px; }
-    .network-destination-timeout-control input { max-width: 110px; }
-    .network-destination-timeout-control > span { color: var(--muted); font-size: var(--fs-75); }
-    .network-destination-encryption {
-      display: flex; align-items: center; justify-content: space-between; gap: 12px;
-      min-height: 62px; padding: 10px 12px;
-      border: 1px solid var(--border); border-radius: var(--radius-sm);
-      color: var(--text2); font-size: 12px; font-weight: 500;
-    }
-    .network-destination-encryption > span { min-width: 0; }
-    .network-destination-encryption .toggle { flex: 0 0 42px; }
-    .network-destination-actions {
-      display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 16px;
-    }
-    .network-destination-actions .act-btn { min-height: 38px; padding: 0 14px; }
-    #network-destination-status {
-      flex: 1 1 100%; min-height: 18px; color: var(--muted); font-size: 12px;
-    }
-    .network-destination-retry {
-      display: grid; grid-template-columns: minmax(240px, .85fr) minmax(320px, 1.15fr);
-      align-items: end; gap: 20px; margin-top: 22px; padding-top: 18px;
-      border-top: 1px solid var(--border);
-    }
-    .network-destination-retry-controls { display: flex; gap: 9px; min-width: 0; }
-    .network-destination-retry-controls input { flex: 1 1 auto; }
-    .network-destination-retry-controls .act-btn { flex: 0 0 auto; min-height: 38px; }
-    @media (max-width: 900px) {
-      .network-destination-layout,
-      .network-destination-retry { grid-template-columns: minmax(0, 1fr); }
-      .network-destination-layout { gap: 24px; }
-    }
-    @media (max-width: 600px) {
-      .network-destination-fields,
-      .network-destination-connection-fields,
-      .network-destination-inline { grid-template-columns: minmax(0, 1fr); }
-      .network-destination-field-wide { grid-column: auto; }
-      .network-destination-retry-controls { flex-wrap: wrap; }
-      .network-destination-retry-controls input { flex-basis: 100%; }
-      .network-destination-retry-controls .act-btn,
-      .network-destination-actions .act-btn { flex: 1 1 auto; min-height: 44px; }
     }
     /* Shrinkable, with min-width:0 so the <small> help text can wrap. It was
        flex-shrink:0, which is fine for a two-word label but not for the ones
@@ -2210,8 +1970,6 @@
        and the whole section scrolled sideways. Short labels don't wrap
        anyway — there is nothing in them to break. */
     .s-label { min-width: 0; }
-    .s-label small { display: block; font-weight: var(--fw-regular); margin-top: 2px; }
-    .s-sep { height: 1px; background: var(--border); margin: 8px 0; }
 
     select, input[type="text"], input[type="password"], input[type="number"] {
       /* background-color, not the `background` shorthand: the select below
@@ -2247,155 +2005,15 @@
     }
     input[type="number"] { width: 70px; text-align: center; }
     input[type="text"].full { width: 100%; }
-    input[type="password"].full { width: 100%; }
 
     input[type="checkbox"], input[type="radio"], progress {
       accent-color: var(--yellow);
     }
 
-    /* Toggle */
-    .toggle { position: relative; flex-shrink: 0; }
-    .toggle input { opacity: 0; width: 0; height: 0; }
-    .toggle-sl {
-      position: absolute; inset: 0; cursor: pointer;
-    }
-    .toggle-sl::before {
-      content: ''; position: absolute; top: 50%;
-      transform: translateY(-50%);
-    }
-    /* The checkbox itself is 0x0 and invisible, so the global focus-visible
-       ring had nothing to draw around: tabbing through Settings skipped
-       every switch as far as the eye could tell. */
-    .toggle input:focus-visible + .toggle-sl {
-      box-shadow: 0 0 0 3px var(--ring);
-      border-color: var(--yellow);
-    }
-    /* A switch is a physical thing; give it something to push against. */
-    .toggle-sl:active::before { width: 20px; }
-
     /* Sortable lists */
     .sort-list { display: flex; flex-direction: column; gap: var(--sp-2); }
-    #services-list {
-      display: flex;
-      flex-direction: column; /* Changed from row to column */
-      flex-wrap: nowrap;      /* No longer wraps */
-      gap: 6px;               /* Slightly more compact */
-      width: 100%;            /* Takes full width */
-    }
-
-    #services-list .sort-item {
-      width: 100%;            /* Takes up the full width */
-      flex: none;             /* Rimuovi il flex-grow */
-      transition: all var(--t);
-    }
-    .priority-num {
-      width: 20px;
-      text-align: center;
-    }
-    .svc-icon {
-      display: inline-flex; align-items: center; justify-content: center;
-      border: none;
-      flex-shrink: 0; overflow: hidden;
-    }
-    .svc-icon.icon-image {
-      border: none;
-    }
-    .svc-icon img {
-      width: auto; max-width: 80%; object-fit: contain;
-      display: block;
-    }
-    /* Fix visual size discrepancies for specific icons with extra whitespace */
-    .svc-icon.kuwo img,
-    .svc-icon.netease img {
-      height: 24px; max-width: 90%; transform: scale(1.05); transform-origin: center;
-    }
-    .svc-icon.tidal,
-    .svc-icon.qobuz,
-    .svc-icon.deezer,
-    .svc-icon.amazon,
-    .svc-icon.soundcloud,
-    .svc-icon.youtube,
-    .svc-icon.apple,
-    .svc-icon.pandora {
-      background: var(--surface);
-      color: var(--text);
-    }
-    .sort-item {
-      display: flex; align-items: center; gap: var(--sp-3);
-      padding: 7px 10px;
-      cursor: grab; transition: border-color var(--t), background var(--t);
-    }
-    .sort-item.dragging  { opacity: .3; }
-    .sort-item.drag-over { border-color: var(--accent); background: var(--accent-subtle); }
-    .drag-h { font-size: var(--fs-100); cursor: grab; }
-    .svc-name  { flex: 1; color: var(--text2); }
     .reg-url { font-family: var(--font-mono); font-size: 11.5px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .reg-badges { display: flex; flex-wrap: wrap; gap: 5px; }
-    .reg-badge { font-size: 9.5px; padding: 1.5px 6px; border-radius: 999px; background: var(--surface3); color: var(--muted); border: 1px solid var(--border); white-space: nowrap; }
-    .reg-badge-environment { color: var(--status-warn-fg); background: var(--status-warn-bg); border-color: var(--status-warn-fg); }
-    .reg-badge-env_file { color: var(--util-lyrics); background: var(--status-queued-bg); border-color: var(--util-lyrics-bd); }
-    .reg-badge-custom { color: var(--status-done-fg); background: var(--status-done-bg); border-color: var(--status-done-fg); }
-    .reg-badge-off { color: var(--red); border-color: var(--status-failed-fg); }
-    .reg-badge-reachable { color: var(--status-done-fg); background: var(--status-done-bg); border-color: var(--status-done-fg); }
-    .reg-badge-unreachable { color: var(--status-failed-fg); background: var(--status-failed-bg); border-color: var(--status-failed-fg); }
-    .reg-badge-signed { color: var(--status-done-fg); background: var(--status-done-bg); border-color: var(--status-done-fg); }
-    .reg-badge-checksum-only { color: var(--status-warn-fg); background: var(--status-warn-bg); border-color: var(--status-warn-fg); }
-    .reg-badge-unverified { color: var(--muted); }
     .reg-remove-btn { padding: 5px var(--sp-4); font-size: var(--fs-75); color: var(--red); border-color: var(--status-failed-fg); flex-shrink: 0; }
-
-    .status-panel-header {
-      display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-5);
-      margin-bottom: 14px;
-    }
-    .status-toolbar {
-      display: flex; align-items: center; gap: var(--sp-4); flex-wrap: wrap; justify-content: flex-end;
-    }
-    .status-check-all {
-      display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-3);
-      cursor: pointer; transition: background var(--t), transform var(--t);
-    }
-    .status-check-all:hover { background: var(--accent-hover); }
-    .status-overall {
-      display: inline-flex; align-items: center; gap: 10px;
-    }
-    .status-overall.online { background: var(--status-done-bg); }
-    .status-overall.offline { background: var(--status-failed-bg); }
-    .status-overall-icon {
-      width: 20px; height: 20px;
-      display: inline-flex; align-items: center; justify-content: center;
-      font-size: var(--fs-100);
-    }
-    .status-grid {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px;
-      margin-bottom: 6px;
-    }
-    .status-section-title {
-      display: flex; align-items: baseline; gap: var(--sp-3); flex-wrap: wrap;
-      margin: 18px 0 12px; padding-top: 14px; border-top: 1px solid var(--border);
-      font-size: var(--fs-200); font-weight: 700; color: var(--text);
-    }
-    .status-section-hint { font-size: var(--fs-75); font-weight: 400; color: var(--muted); }
-    .svc-icon.icon-glyph {
-      font-size: 17px; background: var(--surface);
-    }
-    .svc-icon.extensions {
-      background: var(--accent-subtle); color: var(--accent-text);
-    }
-    /* Status card reduced and made more compact */
-    .status-card {
-      padding: var(--sp-5) 18px;
-    }
-    .status-card-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-    .status-card-left { display: flex; align-items: center; gap: 14px; min-width: 0; flex: 1; }
-    .status-card-name { font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .status-icon-dot { flex-shrink: 0; font-weight: 600; }
-    
-    /* HC */
-    .hc-prov-group { margin-bottom: 8px; }
-    .hc-prov-name { font-size: var(--fs-100); font-weight: 700; color: var(--text2); display: flex; align-items: center; gap: 5px; margin-bottom: 4px; }
-    .hc-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--muted); }
-    .hc-dot.ok { background: var(--green); }
-    .hc-dot.err { background: var(--red); }
 
     .hidden { display: none !important; }
 
@@ -2420,10 +2038,6 @@
         border: 1px solid ButtonText;
       }
       .fb-select, #fb-back {
-        forced-color-adjust: none;
-        border: 1px solid ButtonText;
-      }
-      .toggle-sl {
         forced-color-adjust: none;
         border: 1px solid ButtonText;
       }
@@ -2884,9 +2498,6 @@
   .mode-btn, .ta-btn, .recent-card, .artist-album-card {
     touch-action: manipulation;
   }
-  .stab, .toggle {
-    touch-action: manipulation;
-  }
   /* The grey flash Android paints on tap lands on top of our own :active
      styling and outlasts it. */
   button, a, label, .track-row, [onclick] {
@@ -2921,9 +2532,6 @@
      single most disorienting thing the app does on a phone, because nothing
      zooms it back out. 16px is the threshold, not a preference. */
   input[type="text"], input[type="password"], input[type="number"], input[type="search"], input[type="email"], select, textarea {
-    font-size: 16px;
-  }
-  input[type="url"] {
     font-size: 16px;
   }
   #urlInput {
@@ -2963,8 +2571,6 @@
   .s-actions { width: 100%; }
   .s-actions .act-btn { flex: 1 1 auto; }
   .s-body { padding: var(--sp-4) var(--sp-4) var(--sp-5); }
-  .tab-bar { padding: 0 var(--sp-4); -webkit-overflow-scrolling: touch; }
-  .stab { min-height: 44px; padding: var(--sp-3) var(--sp-4); }
 
   /* A settings row is `label` then `control`. A <select> or a text field
      next to a label that wraps to three lines has nowhere to go, so it
@@ -2986,17 +2592,6 @@
     max-width: none;
     min-height: 44px;
   }
-  .s-row > input[type="password"], .s-row > input[type="number"], .s-row > .accent-picker, .s-row > .volume-control {
-    flex: 1 1 100%;
-    min-width: 0;
-    max-width: none;
-    min-height: 44px;
-  }
-  .s-row > .accent-picker select { flex: 1; min-width: 0; }
-  .s-row > .volume-control input[type="range"] { flex: 1; width: auto; }
-  /* Anything that does still wrap to its own line keeps the right edge the
-     unwrapped version put it at. */
-  .s-row > .toggle { margin-left: auto; }
 
   /* ── Modals as bottom sheets ──
      A centred 520px card on a 360px screen is a full-screen dialog with a
@@ -3198,17 +2793,6 @@
   body.web-mode .sb-collapse { display: none; }
   body.web-mode .nav-btn { justify-content: center; padding: 0; }
   body.web-mode .nav-btn.active svg { color: var(--accent-text); }
-  /* Settings fold back to one column: categories scroll sideways on top. */
-  body.web-mode #view-settings.active { grid-template-columns: minmax(0, 1fr); }
-  body.web-mode #view-settings > .tab-bar {
-    grid-column: 1; grid-row: 2;
-    flex-direction: row; overflow-x: auto; border-right: none;
-    border-bottom: 1px solid var(--border); padding: 0 var(--sp-3) var(--sp-2);
-  }
-  body.web-mode #view-settings > .tab-bar .stab { width: auto; }
-  body.web-mode .s-search { min-width: 160px; margin: 0; }
-  body.web-mode #view-settings.active { grid-template-rows: auto auto minmax(0, 1fr); }
-  body.web-mode #view-settings > .s-body { grid-column: 1; grid-row: 3; padding: var(--sp-3); }
   /* A rail hover lifts the button by scaling it; in a row of touching
      buttons that reads as the neighbours being shoved aside. */
   body.web-mode .nav-btn:hover { transform: none; }
@@ -3344,23 +2928,6 @@ body {
   box-shadow: none;
 }
 
-.stab {
-  border-radius: 10px;
-  font-family: var(--app-font);
-  font-size: var(--fs-100);
-  font-weight: 600;
-}
-
-.stab:hover {
-  transform: none;
-}
-
-.stab.active {
-  color: var(--accent-text);
-  background: var(--accent-subtle);
-  border-color: transparent;
-}
-
 select,
 input[type="text"],
 input[type="password"],
@@ -3399,11 +2966,6 @@ textarea {
     transform: none;
   }
 }
-
-/* Result line under a self-hosted endpoint's Test button (Settings → Extensions). */
-.ce-result { font-size: 12px; line-height: 1.5; color: var(--muted); padding: 0 0 10px; }
-.ce-result.good { color: var(--accent); }
-.ce-result.bad { color: var(--red); }
 
 /* ── Player bar ── */
 #player-bar {
