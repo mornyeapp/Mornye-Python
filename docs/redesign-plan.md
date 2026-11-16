@@ -287,6 +287,10 @@ regola (una parola = un elemento).
         - `views/home.css`: 213 blocchi. 0 differenze.
         - `feedback.css`: 82 blocchi. 0 differenze.
         - `legacy.css`: 113 blocchi. 0 differenze.
+        - `layout.css`: 113 blocchi (reset, `:root` v1, bridge, `@font-face`,
+          shell, barra telefono). Gli `url()` dei font, relativi, diventano
+          `../assets/fonts/…`: il primo confronto lo ha trovato (larghezze in
+          `ch` diverse di 0,01px con il font di riserva). 0 differenze.
    **Prossimo:** Fase 4 (TUI, voci 23–26) — fatta, vedi sotto.
 0. **Fasi 4, 5 e 6 fatte** (2026-11-12), su `redesign`, commit locali non
    pushati. Prima, fuori dal redesign, la **issue #277** (playlist):

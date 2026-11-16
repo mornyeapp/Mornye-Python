@@ -7,6 +7,821 @@
    ids and onclick handlers app.js relies on are untouched
    (tests/test_frontend_dom_contract.py). */
 
+/* ── Fonts ── shipped with the app (SIL OFL, see assets/fonts/README.md):
+   the desktop window works offline, and a font CDN would also be one more
+   third-party request from a --web install. Variable weights, Latin set;
+   anything outside it falls back to the system stacks in the tokens. */
+@font-face { font-family: 'Inter'; src: url('../assets/fonts/Inter-Variable.woff2') format('woff2');
+  font-weight: 100 900; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Fraunces'; src: url('../assets/fonts/Fraunces-Variable.woff2') format('woff2');
+  font-weight: 100 900; font-style: normal; font-display: swap; }
+@font-face { font-family: 'JetBrains Mono'; src: url('../assets/fonts/JetBrainsMono-Variable.woff2') format('woff2');
+  font-weight: 100 800; font-style: normal; font-display: swap; }
+
+/* ── Design tokens ── */
+/* :root carries the DARK values canonically — dark is the app's default
+   look. html.light-theme / body.light-theme below only overrides the
+   deltas. Declared for <html> as well as <body> because `html { background:
+   var(--bg) }` resolves tokens on the <html> element: with the theme class
+   only on <body> the page's outermost background showed the wrong theme
+   around the content. Both elements carry the theme class (see
+   setThemeClass() in app.js). */
+:root {
+  color-scheme: dark;
+
+  /* Neutrals — warm near-blacks, no blue cast ("warm dark music app").
+     The base values mirror mornye/branding_tokens.py (DARK);
+     tests/test_brand_tokens.py fails if the two drift apart. */
+  --scrim:      rgba(10,8,7,.62);
+  --overlay:    rgba(10,8,7,.72);   /* chip sopra artwork */
+  /* A <select> is the one control the browser still draws itself, in the
+     OS's own chrome and font. Owning the chevron lets it be styled like
+     every other surface in the window. */
+  --chevron:    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239a8f85' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+
+  /* Brand — the logo's petrol and mint, plus one warm highlight kept for
+     the few things that should glow (Hi-Res, "new"). */
+  --brand-deep:   #1f4f4f;
+  --brand-mint:   #a8ecec;
+
+  /* Stato / utility — tuned to sit on warm surfaces */
+  --util-link:       var(--accent-text);  --util-link-bd: var(--accent-border);
+  --log-info:  var(--blue);  --log-ok: var(--green);  --log-warn: var(--status-warn-fg);
+  --log-error: var(--red);   --log-debug: var(--muted);
+  --diff-fg: var(--status-warn-fg);
+  --dot-close: #ff5f57;  --dot-min: #febc2e;  --dot-max: #28c840;
+  --dot-close-win: #e81828;  --dot-min-win: #f0ad4e;  --dot-max-win: #28a745;
+
+  /* Spacing — griglia 4px */
+  --sp-1: 2px;  --sp-2: 4px;  --sp-3: 8px;  --sp-4: 12px;
+  --sp-5: 16px; --sp-6: 20px; --sp-7: 24px; --sp-8: 32px;
+  --sp-9: 40px; --sp-10: 48px; --sp-12: 64px; --sp-16: 96px;
+
+  /* Type: Inter for the interface, Fraunces (a soft display serif) for
+     view and album titles, JetBrains Mono for data. All three ship in
+     assets/fonts/ — the window works offline, so no font CDN. */
+  --lh-50:  1.4;
+  --lh-75:  1.45;
+  --lh-100: 1.45;
+  --lh-200: 1.4;
+  --lh-300: 1.4;   /* titoli riga, enfasi — text-base */
+  --lh-400: 1.3;   /* titoli card, H2 sezione — text-lg */
+  --lh-500: 1.2;   /* H1 vista — display */
+  --lh-600: 1.1;   /* titolo album — display */
+  --fs-700: 40px; --lh-700: 1.05;  /* wordmark hero — display */
+  --fw-regular:  400; --fw-medium: 500; --fw-semibold: 600; --fw-bold: 700;
+  --tracking-tight: -0.02em; --tracking-label: 0.12em; --tracking-wide: 0.04em;
+
+  /* Softer, roomier shapes than the old compact grouped surfaces. */
+  --radius:    var(--radius-md);
+
+  /* Elevazione — warm-tinted shadows, never pure black on warm ground */
+  --elev-0: none;
+  --shadow-soft:   var(--elev-2);  --shadow-strong: var(--elev-3);
+
+  /* Width of the left nav rail. Shared so anything anchored to the
+     viewport (the download dock) can sit beside it instead of guessing
+     the number and ending up underneath it. */
+  --rail-w: var(--sidebar-w);  /* what is actually on screen right now */
+
+  /* Z-index — preserva l'ordine attuale */
+  --z-content: 1;    --z-tooltip: 100;  --z-sidebar: 150;
+  --z-titlebar: 200; --z-nav-tooltip: 250;
+  --z-dock: 300; --z-drawer-backdrop: 390; --z-drawer: 400;
+  --z-save-toast: 800; --z-modal: 1000; --z-toast: 1100;
+
+  /* Motion */
+  --t:      var(--dur-2) var(--ease-out);
+  --t-slow: var(--dur-4) var(--ease-out);
+
+  /* Breakpoint (documentati — le var non funzionano dentro @media):
+     --bp-sm:600  --bp-md:900  --bp-lg:1200  --bp-xl:1440 */
+
+  /* Alias back-compat verso i nuovi token — così index.html/app.js che
+     risolvono ancora --yellow/--yellow-d/--yellow-bg/--ring ottengono
+     l'accento senza bisogno di toccare JS/HTML. */
+  --yellow:    var(--accent);
+  --yellow-d:  var(--accent-press);
+  --yellow-bg: var(--accent-subtle);
+  --ring:      var(--accent-ring);
+
+  /* Theme-independent (branding_tokens.FIXED, FIXED_CHANNELS). */
+  --media-ink: #ffffff;
+  --media-ink-inverse: #222222;
+  --media-bg: #2a1a1a;
+  --media-tint-from: #6b3b3b;
+  --media-tint-to: #3a2323;
+  --paper: #ffffff;
+  --ink: #000000;
+  --on-signal: #ffffff;
+  --player-main-ink: #0a0a0a;
+  --media-ink-rgb: 255, 255, 255;
+  --shade-rgb: 0, 0, 0;
+  --knob-shadow-rgb: 15, 23, 42;
+}
+
+/* ── Light theme (solo delta) — warm paper, mirrors branding_tokens.LIGHT ── */
+html.light-theme,
+body.light-theme {
+  color-scheme: light;
+  --scrim:      rgba(40,30,22,.36);
+  --overlay:    rgba(20,14,10,.62);
+  --chevron:    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236f655c' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+
+}
+
+/* ── Token v2 bridge (redesign Fase 3, voce 10) ──
+   css/tokens.css loads first and holds the console look. Every name the
+   old stylesheet uses now points at a v2 semantic token, so the whole
+   GUI takes graphite, the amber signal and JetBrains Mono at once while
+   the views are rebuilt one by one. --text, --surface and --ease are v2
+   names already and were dropped from the blocks above. The selector
+   list matches the light block so this wins in both themes; the
+   accents set the --signal tokens in css/accents.css (voce 28).
+   Goes away with styles.css (voce 22). */
+:root,
+html.light-theme,
+body.light-theme {
+  --bg: var(--ground);
+  --surface2: var(--raised);
+  --surface3: var(--selected);
+  --border: var(--rule);
+  --border2: var(--rule-strong);
+  --text2: var(--text-2);
+  --muted: var(--text-muted);
+  --text-dim: var(--text-muted);
+  --input-bg: var(--raised);
+  --input-text: var(--text);
+  --input-border: var(--control-border);
+  --button-bg: var(--raised);
+  --button-text: var(--text);
+  --button-border: var(--control-border);
+  --scrollbar: var(--rule-strong);
+
+  --highlight: var(--signal-text);
+  --highlight-bg: transparent;
+  --highlight-bd: var(--signal-strong);
+  --warning: var(--signal-text);
+  --chrome: var(--surface);
+  --chrome-blur: none;
+  --ambient: none;
+
+  --green-500: var(--signal);
+  --accent: var(--signal);
+  --accent-hover: var(--signal);
+  --accent-press: var(--signal-strong);
+  --accent-fg: var(--signal-ink);
+  --accent-text: var(--signal-text);
+  --accent-subtle: var(--selected);
+  --accent-border: var(--signal-strong);
+  --accent-ring: var(--signal-strong);
+
+  --green: var(--ok);
+  --red: var(--error);
+  --blue: var(--text-2);
+  --status-queued-fg: var(--text-muted);   --status-queued-bg: transparent;
+  --status-active-fg: var(--signal-text);  --status-active-bg: transparent;
+  --status-done-fg: var(--ok);             --status-done-bg: transparent;
+  --status-skipped-fg: var(--text-muted);  --status-skipped-bg: transparent;
+  --status-failed-fg: var(--error);        --status-failed-bg: transparent;
+  --status-warn-fg: var(--signal-text);    --status-warn-bg: transparent;
+  --util-lyrics: var(--text-2);   --util-lyrics-bd: var(--rule-strong);   --util-lyrics-bg: transparent;
+  --util-preview: var(--text-2);  --util-preview-bd: var(--rule-strong);  --util-preview-bg: transparent;
+  --util-cover: var(--text-2);    --util-cover-bd: var(--rule-strong);    --util-cover-bg: transparent;
+
+  --fs-50: var(--text-xs);
+  --fs-75: var(--text-sm);
+  --fs-100: var(--text-md);
+  --fs-200: var(--text-lg);
+  --fs-300: var(--text-lg);
+  --fs-400: var(--text-xl);
+  --fs-500: var(--text-2xl);
+  --fs-600: var(--text-2xl);
+  --font-mono: var(--font);
+  --font-display: var(--font);
+  --app-font: var(--font);
+
+  --radius-xs: var(--radius-1);
+  --radius-sm: var(--radius-1);
+  --radius-md: var(--radius-2);
+  --radius-lg: var(--radius-2);
+  --radius-xl: var(--radius-2);
+  --radius-pill: var(--radius-2);
+
+  --elev-1: none;
+  --elev-2: none;
+  --elev-3: var(--elevation-overlay);
+  --elev-pop: var(--elevation-overlay);
+
+  --dur-1: var(--motion-fast);
+  --dur-2: var(--motion);
+  --dur-3: var(--motion);
+  --dur-4: var(--motion);
+  --ease-out: var(--ease);
+  --ease-spring: var(--ease);
+}
+
+html, body { height: 100%; overflow: hidden; background: var(--bg); }
+body {
+  color: var(--text);
+  display: flex; flex-direction: column;
+  -webkit-app-region: no-drag;
+  user-select: none;
+  font-size: var(--fs-200);
+  min-height: 0;
+  background: var(--ambient), var(--bg);
+  background-attachment: fixed;
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Titlebar ── */
+#titlebar {
+  -webkit-backdrop-filter: var(--chrome-blur);
+  display: flex; align-items: center;
+  gap: 10px;
+  -webkit-app-region: drag;
+  flex-shrink: 0;
+  z-index: var(--z-titlebar);
+}
+
+/* Disable drag ONLY on the colored buttons container so they remain clickable */
+#titlebar .dots {
+  -webkit-app-region: no-drag;
+}
+/* In a browser tab (webapp.py adds .web-mode to <body>) the titlebar has
+   no job: the traffic-light buttons call pyWin() methods that only exist
+   on the pywebview bridge, and the drag region drags nothing. It was a
+   46px empty strip above every view. The version and the update badge it
+   also held are already shown in the home hero. The desktop build is
+   frameless and keeps it as the real window chrome. */
+body.web-mode #titlebar { display: none; }
+.dots { display: flex; gap: 6px; }
+.dot {
+  width: 12px; height: 12px; border-radius: 50%; cursor: pointer;
+  transition: filter .15s, transform .15s; flex-shrink: 0;
+}
+.dot:hover { filter: brightness(1.15); transform: scale(1.05); }
+
+/* ── macOS style (default) ── */
+.dot.c { background: var(--dot-close); }
+.dot.m { background: var(--dot-min); }
+.dot.x { background: var(--dot-max); }
+
+/* ── Windows style ── */
+body.windows-style .dot {
+  width: 14px; height: 14px; border-radius: 2px;
+}
+body.windows-style .dot.c { background: var(--dot-close-win); }
+body.windows-style .dot.m { background: var(--dot-min-win); }
+body.windows-style .dot.x { background: var(--dot-max-win); }
+
+#tb-logo {
+  display: none;
+}
+#tb-version {
+  font-family: var(--font-mono);
+  font-size: var(--fs-50); font-weight: 500;
+  background: var(--accent-subtle); color: var(--accent-text);
+  border: 1px solid var(--accent-border);
+  padding: 1px 6px; border-radius: 4px;
+}
+.update-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: var(--fs-50);
+  font-weight: 700;
+  color: var(--accent-fg);
+  background: var(--accent);
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  padding: 0 7px;
+  margin-left: 8px;
+  cursor: pointer;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+.update-badge.hidden {
+  display: none;
+}
+.update-badge:hover {
+  transform: translateY(-1px);
+}
+
+/* ── Layout ── */
+#app-body { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+
+/* ── Sidebar ── */
+/* ── Sidebar ──
+   A labelled sidebar in the music-app mould: brand on top, grouped
+   destinations with icon + name, collapse control at the foot. Folded
+   (body.sidebar-collapsed, or a narrow desktop window) it is the old icon
+   rail again and the data-label tooltips come back. */
+#sidebar {
+  width: var(--rail-w);
+  -webkit-backdrop-filter: var(--chrome-blur); backdrop-filter: var(--chrome-blur);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  align-items: stretch; padding: 14px 12px 12px; gap: 2px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: var(--z-sidebar);
+  transition: width var(--dur-3) var(--ease-out);
+}
+#sidebar::-webkit-scrollbar { width: 0; }
+.sb-brand {
+  display: flex; align-items: center; gap: 10px;
+  padding: 4px 8px 14px;
+  min-height: 46px;
+}
+.sb-logo {
+  width: 30px; height: 30px; flex-shrink: 0;
+  border-radius: 9px; background: var(--brand-deep);
+  padding: 3px; object-fit: contain;
+}
+.sb-name {
+  font-family: var(--font-display); font-size: 21px; font-weight: 600;
+  letter-spacing: -0.01em; color: var(--text); white-space: nowrap;
+}
+.sb-version {
+  margin-left: auto;
+  font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+  color: var(--accent-text); background: var(--accent-subtle);
+  padding: 2px 7px; border-radius: var(--radius-pill);
+  white-space: nowrap; cursor: pointer;
+}
+body.sidebar-collapsed .sb-version { display: none; }
+.sb-group {
+  padding: 14px 12px 6px;
+  font-size: var(--fs-75); font-weight: var(--fw-semibold);
+  color: var(--text-dim); white-space: nowrap;
+}
+.nav-btn {
+  width: 100%; height: 38px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: flex-start; gap: 12px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  font-family: var(--app-font); font-size: 14px; font-weight: var(--fw-medium);
+  cursor: pointer; text-align: left;
+  transition: background var(--t), color var(--t), border-color var(--t), transform var(--dur-1) var(--ease-out);
+  position: relative;
+}
+.nav-btn svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--muted); transition: color var(--t); }
+.nav-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nav-btn:hover { color: var(--text); }
+.nav-btn:hover svg { color: var(--text); }
+.nav-btn:active { transform: scale(0.98); }
+.nav-btn:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 1px; }
+/* Active is a tinted row with an accent glyph, not a solid slab: the
+   artwork and the one primary button per view stay the loudest things. */
+.nav-btn.active {
+  font-weight: var(--fw-semibold);
+}
+.nav-btn.active svg { color: var(--accent-text); }
+.nav-btn.active::before {
+  content: '';
+  position: absolute;
+  top: 50%;  /* the sidebar's own left edge */
+  transform: translateY(-50%);
+  border-radius: 0 3px 3px 0;
+  background: var(--accent);
+}
+.nav-spacer { flex: 1; min-height: var(--sp-4); }
+.sb-collapse { color: var(--muted); }
+
+/* Folded: icons only, centred; brand keeps just the logo. */
+body.sidebar-collapsed { --rail-w: var(--rail-collapsed-w); }
+body.sidebar-collapsed #sidebar { padding: 14px 12px 12px; }
+body.sidebar-collapsed .nav-label,
+body.sidebar-collapsed .sb-name,
+body.sidebar-collapsed .sb-group { display: none; }
+body.sidebar-collapsed .sb-brand { justify-content: center; padding: 4px 0 14px; }
+body.sidebar-collapsed .nav-btn { justify-content: center; padding: 0; height: 42px; }
+body.sidebar-collapsed .sb-group + .nav-btn,
+body.sidebar-collapsed .nav-btn + .sb-group { margin-top: 0; }
+
+/* A narrow desktop window folds the sidebar on its own (the phone layout
+   in --web mode has its own bottom bar further down). */
+@media (max-width: 900px) {
+  body:not(.web-mode) { --rail-w: var(--rail-collapsed-w); }
+  body:not(.web-mode) .nav-label,
+  body:not(.web-mode) .sb-name,
+  body:not(.web-mode) .sb-group,
+  body:not(.web-mode) .sb-collapse { display: none; }
+  body:not(.web-mode) .sb-brand { justify-content: center; padding: 4px 0 14px; }
+  body:not(.web-mode) .nav-btn { justify-content: center; padding: 0; height: 42px; }
+}
+
+/* ── Content ── */
+#content {
+  flex: 1;
+  /* Kept below #sidebar (--z-sidebar) so nav tooltips overhang it. */
+  position: relative;
+  z-index: var(--z-content);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  min-height: 0;
+  scroll-behavior: smooth;
+}
+#content::-webkit-scrollbar { width: 8px; }
+#content::-webkit-scrollbar-thumb {
+  background: var(--scrollbar);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+/* Queue drawer */
+/* ── Download bar ──
+   A player-style bar fixed along the bottom, beside the sidebar: what is
+   downloading, how far along, how fast — always in view whatever page is
+   open. The whole bar opens the queue drawer. */
+#queue-dock {
+  position: fixed; left: var(--rail-w); right: 0; bottom: 0;
+  z-index: var(--z-dock);
+  display: none;
+  align-items: center;
+  -webkit-backdrop-filter: var(--chrome-blur);
+  cursor: pointer;
+  color: var(--text);
+}
+#queue-dock.visible { display: grid; }
+/* Nothing scrolls underneath the bar: the page ends where it begins.
+   body.has-dock is set by renderQueueNow() alongside #queue-dock.visible. */
+body.has-dock #content { padding-bottom: var(--dock-h); }
+/* Toasts and the save notice float above the bar, not behind it. */
+#queue-dock .qd-body { display: flex; min-width: 0; }
+#queue-dock .qd-downloaded {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#queue-dock .qd-speed {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#queue-dock .qd-chevron {
+  display: inline-flex; align-items: center; gap: 6px;
+  line-height: 1;
+}
+#queue-dock .qd-chevron::before { content: 'Queue'; }
+
+/* Two components already honoured this preference on their own (the
+   status spinner, the CSV button's pulse) while every hover lift, panel
+   slide and toast still moved. One rule, at the end of the cascade for
+   the whole window: motion is reduced to a state change, and nothing
+   that conveys progress is removed — a spinner that has stopped says
+   something untrue, so those keep turning, slowly. */
+@media (prefers-reduced-motion: reduce) {
+  /* A hover that moves the thing under the pointer is the part that
+     causes trouble; the colour change alone still answers "am I on it". */
+  .nav-btn:hover, .nav-btn:active {
+    transform: none;
+  }
+}
+@keyframes fadeup { from { opacity:0; transform: translateY(4px); } to { opacity:1; transform:none; } }
+
+.nav-badge {
+  margin-left: auto; min-width: 20px; padding: 1px 6px;
+  border-radius: var(--radius-pill); background: var(--accent); color: var(--accent-fg);
+  font-size: 11px; font-weight: var(--fw-bold); text-align: center; font-variant-numeric: tabular-nums;
+}
+body.sidebar-collapsed .nav-badge { position: absolute; top: 4px; right: 4px; margin: 0; min-width: 16px; padding: 0 4px; font-size: 10px; }
+
+@media (max-width: 700px) {
+  body.web-mode .nav-badge { display: none; }
+}
+
+/* Windows High Contrast Mode / forced-colors: the app's borders and
+   status tints are mostly low-alpha rgba() fills that forced-colors
+   flattens to the system palette anyway, but flat surfaces with no
+   border (act-btn.primary, .nav-btn.active, #fetchBtn — accent fill,
+   no border) lose their edge entirely once the fill is forced to
+   Canvas. A visible border in that mode is enough to keep every
+   button legible as a button without touching normal-mode styling. */
+@media (forced-colors: active) {
+  .nav-btn {
+    forced-color-adjust: none;
+    border: 1px solid ButtonText;
+  }
+  .nav-btn.active {
+    background: Highlight; color: HighlightText; border-color: HighlightText;
+  }
+}
+
+/* ── Sidebar nav tooltips ── */
+#sidebar { overflow: visible; }
+.nav-btn[data-label] { position: relative; }
+.nav-btn[data-label]::after {
+  content: attr(data-label);
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%; transform: translateY(-50%);
+  background: var(--surface3);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  font-family: var(--app-font); font-size: 11.5px; font-weight: 600;
+  padding: 5px 11px; border-radius: var(--radius-sm);
+  white-space: nowrap; pointer-events: none;
+  opacity: 0; transition: opacity .12s ease;
+  z-index: var(--z-nav-tooltip);
+  box-shadow: var(--elev-pop);
+}
+.nav-btn[data-label]:hover::after { opacity: 1; }
+
+/* With the labels on screen a tooltip would only repeat them. */
+@media (min-width: 901px) {
+  body:not(.sidebar-collapsed) .nav-btn[data-label]::after { display: none; }
+}
+
+/* =========================================
+   RESPONSIVITY ADJUSTMENTS
+   ========================================= */
+
+@keyframes skeleton-pulse {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Animations */
+@keyframes slideInRight { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes slideInLeft { from { transform: translateX(-120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes slideOutRight { from { transform: translateX(0); opacity: 1; } to { transform: translateX(120%); opacity: 0; } }
+@keyframes slideOutLeft { from { transform: translateX(0); opacity: 1; } to { transform: translateX(-120%); opacity: 0; } }
+
+/* =========================================
+   PHONE LAYOUT
+   =========================================
+   The window this app was drawn for is a desktop one: a 58px vertical nav
+   rail on the left, hover to reveal a row's secondary actions, controls
+   sized for a mouse. Served over --web (webapp.py, which marks <body> with
+   .web-mode) that same document is what a phone gets, and several of those
+   choices stop working there rather than merely looking tight:
+
+     - the rail costs 16% of a 360px viewport and puts navigation in the
+       thumb's worst corner;
+     - a 14px <input> makes iOS Safari zoom the page in on focus, and it
+       does not zoom back out;
+     - the track row's action column is 130px wide but holds five 30px
+       buttons — 162px of content — because @media (hover:none) correctly
+       stops hiding four of them on a device that cannot hover;
+     - 30px and 36px hit targets are below the 44px both platforms' guidance
+       asks for;
+     - every viewport-anchored element (queue dock, toasts, modals) is
+       positioned in raw px from an edge that, on a notched phone, is under
+       the status bar or the home indicator.
+
+   What follows fixes those, in two deliberately different scopes:
+
+     - `@media (max-width: 700px)` alone — sizing, wrapping and overflow
+       fixes that are simply correct at that width whoever is looking. A
+       narrow desktop window gets them too, and wants them.
+     - `body.web-mode` as well — the structural change (the rail becomes a
+       bottom bar) and the safe-area insets. The desktop build is a frameless
+       pywebview window with real chrome and no notch, and never carries that
+       class, so nothing in those blocks can reach it.
+
+   700px rather than the 600px used elsewhere in this file: the rail-to-
+   bottom-bar switch is about thumb reach, which a 7" tablet in portrait
+   shares with a phone, while the 600px rules above are about a layout that
+   has genuinely run out of horizontal room. */
+
+/* ── Touch ergonomics, at any width ───────────────────────────────────────
+   Pointer-type questions, not width questions: an iPad in landscape is
+   1024px wide and still has no hover. */
+@media (hover: none) and (pointer: coarse) {
+  .nav-btn {
+    touch-action: manipulation;
+  }
+  /* Rubber-banding the page behind a scrolled panel is how a modal ends up
+     scrolling the list underneath it. */
+  #content {
+    overscroll-behavior: contain;
+  }
+}
+
+@media (max-width: 700px) {
+  /* 100% of the initial containing block on a mobile browser is measured
+     with the URL bar collapsed, so a bottom-anchored bar sits under it
+     until you scroll. dvh is the viewport as it is right now. Guarded by
+     @supports so a browser without it keeps the height:100% it had. */
+  @supports (height: 100dvh) {
+    html, body { height: 100dvh; }
+  }
+}
+
+/* =========================================
+   PHONE NAV BAR — --web mode only
+   =========================================
+   The rail becomes a bottom bar. #app-body is already `display:flex` with
+   #sidebar first and #content second, so column-reverse alone moves the nav
+   to the bottom edge without touching index.html's DOM order — which
+   matters, because that order is also the tab order, and navigation should
+   stay reachable first by keyboard.
+
+   Scoped to .web-mode: webapp.py adds that class, and only on the
+   browser-served route, so the desktop build keeps its rail at every window
+   size. */
+@media (max-width: 700px) {
+  body.web-mode {
+    /* #queue-dock positions itself at `calc(var(--rail-w) + 20px)` to clear
+       the rail. There is no rail here, so the variable it reads says so —
+       cheaper and less brittle than restating the dock's left edge. */
+    --rail-w: 0px;
+    /* Bar height, for everything that has to sit above it. */
+    --nav-h: 56px;
+    --nav-total-h: calc(var(--nav-h) + env(safe-area-inset-bottom));
+  }
+
+  body.web-mode #app-body {
+    flex-direction: column-reverse;
+    /* The titlebar is display:none in web mode, so nothing else holds the
+       content out from under a notch or a translucent status bar. Left and
+       right matter in landscape, where the notch is on one side. */
+    padding-top: env(safe-area-inset-top);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  body.web-mode #sidebar {
+    width: 100%;
+    height: var(--nav-total-h);
+    flex-direction: row;
+    align-items: center;
+    gap: var(--sp-2);
+    /* The inset is padding, not margin, so the bar's own background reaches
+       the bottom of the screen and the home indicator sits on it rather
+       than on whatever is behind the page. */
+    padding: 0 var(--sp-3) env(safe-area-inset-bottom);
+    border-right: none;
+    border-top: 1px solid var(--border);
+    /* The rail needed overflow:visible to let its tooltips escape; those
+       are suppressed below, and hiding overflow keeps the active marker or
+       a stray badge from drawing over the content above the bar. */
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  /* flex:1 with min-width:0 rather than a fixed 40px: the eight buttons
+     divide whatever the screen gives them (45px each at 360px, more on a
+     larger handset) instead of overflowing a narrow one. */
+  body.web-mode .nav-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    width: auto;
+    height: 44px;
+    border-radius: var(--radius-sm);
+  }
+  /* A flex:1 button has no gap beside it to sit a marker in, and the accent
+     fill already says which view is open. The rail's edge tab would draw as
+     a 3px bar 9px to the button's left — i.e. on top of its neighbour. */
+  body.web-mode .nav-btn.active::before { display: none; }
+  /* `left: calc(100% + 10px)` puts this off the right edge of the screen
+     for the last button, and no touch device can trigger it anyway. */
+  body.web-mode .nav-btn[data-label]::after { display: none; }
+  body.web-mode .nav-spacer { display: none; }
+  body.web-mode .nav-label,
+  body.web-mode .sb-brand,
+  body.web-mode .sb-group,
+  body.web-mode .sb-collapse { display: none; }
+  body.web-mode .nav-btn { justify-content: center; padding: 0; }
+  body.web-mode .nav-btn.active svg { color: var(--accent-text); }
+  /* A rail hover lifts the button by scaling it; in a row of touching
+     buttons that reads as the neighbours being shoved aside. */
+  body.web-mode .nav-btn:hover { transform: none; }
+
+  /* The dock is fixed to the viewport, so it knows nothing about the bar
+     now occupying the bottom of it. Full width as well: a 240px pill
+     carrying a title, a speed and a progress bar is legible at 360px only
+     if it gets the whole row. */
+  body.web-mode #queue-dock {
+    left: 0;
+    right: 0;
+    bottom: var(--nav-total-h);
+    --dock-h: 60px;
+    padding: 0 var(--sp-4);
+    gap: 10px;
+  }
+  body.web-mode.has-dock #content { padding-bottom: 60px; }
+  body.web-mode #queue-dock .qd-chevron::before { content: none; }
+}
+
+/* ── Short viewports ──────────────────────────────────────────────────────
+   Eight 40px rail buttons plus their gaps need ~330px of height. #sidebar
+   is overflow:visible (for the tooltips), so on anything shorter they did
+   not scroll — they drew past the bottom of the window, the last one or two
+   unreachable. That is a landscape handset mostly, but a short desktop
+   window reaches it too, so this one is not scoped to web-mode or to touch.
+   Shrinking rather than scrolling: 8x34 + gaps fits in ~310px, and a
+   scrollable rail would have to give up overflow:visible and its tooltips
+   with it. */
+@media (max-height: 560px) {
+  #sidebar { gap: var(--sp-2); padding: var(--sp-3) 0; }
+  .nav-btn { height: 34px; flex-shrink: 0; }
+}
+
+/* A 360x780 handset turned sideways is not a narrow viewport but a short
+   one, so most of the phone block above does not fire while the space it
+   was written for is scarcer still. Trimmed by hand: the bar loses 10px,
+   the hero gives its padding back, and the sheets may use nearly the whole
+   screen. pointer:coarse keeps a short laptop window out of it. */
+@media (max-height: 480px) and (orientation: landscape) and (pointer: coarse) {
+  body.web-mode { --nav-h: 46px; }
+  body.web-mode .nav-btn { height: 38px; }
+}
+
+/* Mornye surfaces: grouped iOS neutrals, compact controls, and system-like
+   typography. Theme and accent choices continue to resolve through tokens. */
+body {
+  font-family: var(--app-font);
+  text-rendering: optimizeLegibility;
+}
+
+#sidebar {
+  background: var(--bg);
+  border-right-color: var(--border);
+}
+
+.nav-btn {
+  background: transparent;
+  border-color: transparent;
+  border-radius: 12px;
+  color: var(--muted);
+  box-shadow: none;
+}
+
+.nav-btn:hover {
+  background: var(--surface);
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.nav-btn.active,
+.nav-btn.active:hover {
+  color: var(--accent-text);
+  background: var(--accent-subtle);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.nav-btn.active::before {
+  width: 3px;
+  height: 20px;
+  left: -9px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-btn:hover {
+    transform: none;
+  }
+}
+
+/* ── Player bar ── */
+#player-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 900;
+  display: flex; align-items: center;
+}
+#player-bar .pl-info { width: 230px; min-width: 120px; flex-shrink: 0; }
+.pl-quality { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-controls { display: flex; align-items: center; gap: 6px; }
+.pl-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px;
+  border: 0; border-radius: 50%; background: transparent; color: var(--text2); cursor: pointer; font: inherit;
+}
+.pl-btn:hover { color: var(--text); background: var(--surface3); }
+.pl-btn.pl-main { background: var(--accent); color: var(--player-main-ink); width: 38px; height: 38px; }
+.pl-seek { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.pl-seek input[type=range] { flex: 1; accent-color: var(--accent); }
+.pl-vol { width: 90px; accent-color: var(--accent); }
+
+@media (max-width: 760px) {
+  #player-bar .pl-info { width: 110px; }
+  .pl-vol { display: none; }
+}
+
+/* ── Now playing (full-screen player) ── */
+#np-view {
+  position: fixed; inset: 0; z-index: 1000; display: grid; overflow: hidden;
+  grid-template-columns: minmax(300px, 420px) 1fr; column-gap: clamp(32px, 7vw, 110px);
+  align-items: center; padding: 64px clamp(28px, 6vw, 90px) 40px; color: var(--media-ink);
+  background: var(--media-bg); font-family: inherit;
+}
+#np-view.hidden { display: none; }
+#np-bg {
+  position: absolute; inset: 0; z-index: 0; transition: background 0.8s ease;
+  background: var(--np-bg, linear-gradient(135deg, var(--media-tint-from), var(--media-tint-to)));
+}
+#np-view > * { position: relative; z-index: 1; }
+#np-view > #np-bg { position: absolute; }
+#np-view > #np-bg { inset: 0; z-index: 0; }
+
+@media (max-width: 860px) {
+  #np-view { grid-template-columns: 1fr; align-items: start; overflow-y: auto; padding-top: 70px; }
+}
+.pl-main { min-width: 0; }
+.pl-btn.pl-mode { position: relative; }
+
 /* One focus treatment for the whole app (voce 30), the same as base.css in
    the component library: a 1px signal ring outside the box. styles.css's
    2px ring drew in the old --accent and reshaped every focused control to
