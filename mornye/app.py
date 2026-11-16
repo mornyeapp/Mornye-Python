@@ -15,6 +15,7 @@ import sys
 import threading
 import time
 import uuid
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, cast
@@ -271,6 +272,11 @@ class MornyeAPI(
         # The fetched collection's name when it is a playlist, else "": what
         # a failed track records so its retry goes back to that folder.
         self.current_playlist_name = ""
+        # The last tracklists shown on Home, by the id each pushed track
+        # carries (list_id): the Queue holds tracks from several of them, and
+        # its indices only mean something against the list they came from.
+        self._tracklists: OrderedDict[int, tuple[list, str, str]] = OrderedDict()
+        self._tracklist_seq = 0
         self.app_version = "unknown"
         # determine application version at construction time so JS can query it early
         try:
@@ -1335,6 +1341,7 @@ class MornyeAPI(
 
             self.current_tracks = tracks
             self.current_playlist_name = collection_name if is_playlist else ""
+            list_id = self._remember_tracklist(tracks, url, self.current_playlist_name)
             track_data = []
 
             # Retrieve playcount from Spotify if applicable (non-blocking)
@@ -1421,6 +1428,7 @@ class MornyeAPI(
                 track_data.append(
                     {
                         "index": i,
+                        "list_id": list_id,
                         "id": track_id,
                         "title": title,
                         "artist": artist,
@@ -1552,12 +1560,51 @@ class MornyeAPI(
 
     # ── Phase 2: Download ─────────────────────────────────────────────────────
 
-    def download_tracks(self, selected_indices, config) -> None:
-        if self._download_queue is not None:
-            payload = self._download_job_payload(selected_indices, config)
-            if payload is not None:
-                self._submit_download_job(payload)
+    def _remember_tracklist(self, tracks: list, url: str, playlist_name: str) -> int:
+        """Keeps a tracklist shown on Home; its id rides on every pushed track."""
+        self._tracklist_seq += 1
+        self._tracklists[self._tracklist_seq] = (list(tracks), url or "", playlist_name)
+        while len(self._tracklists) > 16:
+            self._tracklists.popitem(last=False)
+        return self._tracklist_seq
+
+    def download_tracks(self, selected_indices, config, list_id=None) -> None:
+        """Downloads tracks picked out of a tracklist shown on Home.
+
+        `list_id` names that tracklist (every track the page got carries it).
+        The Queue can hold tracks from several lists by the time it starts,
+        and positions read against whatever was fetched last downloaded the
+        wrong tracks into the wrong playlist (issue #277). Without it the
+        current list is meant, as before.
+        """
+        context = None
+        if list_id is not None:
+            try:
+                context = self._tracklists.get(int(list_id))
+            except (TypeError, ValueError):
+                context = None
+            if context is None:
+                self.log(
+                    "That list is no longer loaded: open it again and re-queue "
+                    "its tracks.",
+                    "error",
+                )
+                self._push_safe("app_download_finished", False)
                 return
+        payload = self._download_job_payload(selected_indices, config, context)
+        if payload is not None:
+            if self._download_queue is not None:
+                self._submit_download_job(payload)
+            else:
+                # Self-contained in the desktop window too: the batch may wait
+                # for the one before it, and by then Home can show another list.
+                payload["_stop_generation"] = self._current_stop_generation()
+                self._start_download_job(payload)
+            return
+        if context is not None and context[0] is not self.current_tracks:
+            self.log("Could not queue these tracks.", "error")
+            self._push_safe("app_download_finished", False)
+            return
         threading.Thread(
             target=self._download_task,
             args=(selected_indices, config),
@@ -1565,7 +1612,9 @@ class MornyeAPI(
             daemon=True,
         ).start()
 
-    def _download_job_payload(self, selected_indices, config) -> dict | None:
+    def _download_job_payload(
+        self, selected_indices, config, context: tuple | None = None
+    ) -> dict | None:
         """One download request, in a form that outlives the process.
 
         The tracks themselves rather than their positions: `current_tracks`
@@ -1574,24 +1623,32 @@ class MornyeAPI(
         indices ride along only so the page that asked can close the right
         rows when the batch ends. None when a selected track cannot be written
         down; the batch then runs the old, unpersisted way rather than not at
-        all.
+        all. `context` is ``(tracks, url, playlist_name)`` of the tracklist the
+        indices point into; the current one when not given.
         """
+        if context is None:
+            context = (
+                self.current_tracks,
+                self.current_url or "",
+                getattr(self, "current_playlist_name", ""),
+            )
+        listed, url, playlist_name = context
         try:
             indices = [int(i) for i in selected_indices]
-            tracks = [self.current_tracks[i].model_dump(mode="json") for i in indices]
+            tracks = [listed[i].model_dump(mode="json") for i in indices]
         except (AttributeError, IndexError, TypeError, ValueError):
             return None
         return {
             "indices": indices,
             "tracks": tracks,
-            "source_url": self.current_url or "",
+            "source_url": url,
             # Decided now, against the tracklist the user was looking at:
             # after a restart there is no tracklist left to compare with.
-            "whole": sorted(indices) == list(range(len(self.current_tracks))),
+            "whole": sorted(indices) == list(range(len(listed))),
             # Only recorded with a failure (core/failed_tracks.py), never a
             # folder for this job: a whole playlist gets its folder from the
             # downloader, and "playlist_name" would nest it twice.
-            "collection_name": getattr(self, "current_playlist_name", ""),
+            "collection_name": playlist_name,
             "config": dict(config or {}),
             "session": self._session_id,
         }
@@ -1942,11 +1999,14 @@ class MornyeAPI(
                 library_dir = download_output_dir
                 # Tracks picked out of a playlist (a followed playlist's
                 # new ones) download as loose tracks; put them in the
-                # folder the whole playlist would have gone into. Same
-                # sanitising as download_engine._resolve_output_dir_async.
+                # folder the whole playlist would have gone into: the same
+                # safe_dir_name() download_engine names that folder with, or
+                # a name ending in "." or past the length cap would split
+                # one playlist into two folders (issue #277).
+                from .core.models import safe_dir_name
+
                 download_output_dir = os.path.join(
-                    download_output_dir,
-                    re.sub(r'[<>:"/\\|?*]', "_", playlist_name.strip()),
+                    download_output_dir, safe_dir_name(playlist_name)
                 )
                 os.makedirs(download_output_dir, exist_ok=True)
             first_artist_only = config.get("first_artist_only", False)
@@ -2180,6 +2240,18 @@ class MornyeAPI(
             else:
                 download_hooks = cast(Any, post_delivery_hooks)
 
+            # Request spacing (issue #279) as (min, max) seconds. A maximum
+            # below the minimum, as "min 2" with max left at 0, means a fixed
+            # delay of the minimum; DownloadConfig would refuse the pair and
+            # every download of the batch would fail.
+            def _delay_range(kind: str) -> tuple[float, float]:
+                low = max(0.0, float(config.get(f"{kind}_delay_min_s") or 0.0))
+                high = max(0.0, float(config.get(f"{kind}_delay_max_s") or 0.0))
+                return low, max(low, high)
+
+            metadata_delay = _delay_range("metadata")
+            provider_delay = _delay_range("provider")
+
             legacy_opts = DownloadOptions(
                 output_dir=download_output_dir,
                 services=services,
@@ -2229,10 +2301,10 @@ class MornyeAPI(
                 redownload_fake_hires=redownload_fake_hires,
                 timeout_s=timeout_s,
                 stop_event=stop_event,
-                metadata_delay_min_s=float(config.get("metadata_delay_min_s", 0.0)),
-                metadata_delay_max_s=float(config.get("metadata_delay_max_s", 0.0)),
-                provider_delay_min_s=float(config.get("provider_delay_min_s", 0.0)),
-                provider_delay_max_s=float(config.get("provider_delay_max_s", 0.0)),
+                metadata_delay_min_s=metadata_delay[0],
+                metadata_delay_max_s=metadata_delay[1],
+                provider_delay_min_s=provider_delay[0],
+                provider_delay_max_s=provider_delay[1],
                 auto_rate_limit_cooldown=config.get("auto_rate_limit_cooldown", True)
                 is True,
             )

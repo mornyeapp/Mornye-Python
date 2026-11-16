@@ -552,7 +552,9 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
                 return owner_api.run_download_job(payload)
             if "selected_indices" in payload:
                 owner_api.download_tracks(
-                    payload["selected_indices"], payload.get("config", {})
+                    payload["selected_indices"],
+                    payload.get("config", {}),
+                    payload.get("list_id"),
                 )
             else:
                 from .core.config import DownloadRequest, MornyeConfig
@@ -801,6 +803,7 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
                         "owner": request.state.username,
                         "selected_indices": payload.get("selected_indices", []),
                         "config": payload.get("config", {}),
+                        "list_id": payload.get("list_id"),
                     },
                 )
             except QueueFullError as exc:

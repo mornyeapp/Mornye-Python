@@ -4016,6 +4016,9 @@ function addToQueue(indices) {
         id: itemId,
         spotify_id: spotifyId,
         source: currentUrl || '',
+        // The tracklist `index` points into (Python numbers each one it
+        // shows): the queue can hold several lists by the time it starts.
+        list: t.list_id ?? null,
         index: realIndex,
         title: t.title,
         artist: t.artist || t.artists || '',
@@ -4918,7 +4921,13 @@ function downloadSelected() {
 async function startDownloadQueue() {
   console.log('[startDownloadQueue] Starting... Queue status:', queue.map(q => q.status));
   
-  const waiting = queue.filter(q => q.status === 'waiting');
+  // One tracklist per batch: its positions only mean something against the
+  // list they came from (issue #277). The oldest waiting item's list goes
+  // now; the others stay waiting and start when this batch ends (see
+  // app_download_finished), which also keeps the batches in order.
+  const pending = queue.filter(q => q.status === 'waiting');
+  const list = pending.length ? (pending[0].list ?? null) : null;
+  const waiting = pending.filter(q => (q.list ?? null) === list);
   console.log('[startDownloadQueue] Waiting items:', waiting.length);
   
   if (!waiting.length) {
@@ -4940,9 +4949,10 @@ async function startDownloadQueue() {
     queueDurationInterval = setInterval(updateQueueDuration, 1000);
   }
 
-  // Mark all currently waiting items as active
+  // Mark this batch's items as active
+  const inBatch = new Set(waiting.map(w => w.id));
   for (let qi = 0; qi < queue.length; qi++) {
-    if (queue[qi].status === 'waiting') updateQueueItem(qi, 'active', 0);
+    if (queue[qi].status === 'waiting' && inBatch.has(queue[qi].id)) updateQueueItem(qi, 'active', 0);
   }
   
   setStatus(`Downloading track(s)…`, true);
@@ -4965,7 +4975,7 @@ async function startDownloadQueue() {
     try {
       console.log('[startDownloadQueue] Calling download_tracks with indices:', indices);
       // Send the tracks directly to the Python backend
-      const op = window.pywebview.api.download_tracks(indices, config);
+      const op = window.pywebview.api.download_tracks(indices, config, list);
       console.log('[startDownloadQueue] download_tracks returned:', op);
       if (op && typeof op.catch === 'function') {
         op.catch(e => {
@@ -5159,6 +5169,15 @@ async function onFetch() {
 }
 
 // ── Build config ──────────────────────────────────────────────────────────────
+// One request delay range (issue #279) from its two fields. A maximum below
+// the minimum ("min 2", max left at 0) is a fixed delay of the minimum: the
+// backend refuses max < min, and every download would fail.
+function delayRange(kind) {
+  const read = (edge) => Math.max(0, parseFloat($(`config-${kind}-delay-${edge}`)?.value) || 0);
+  const min = read('min');
+  return { [`${kind}_delay_min_s`]: min, [`${kind}_delay_max_s`]: Math.max(min, read('max')) };
+}
+
 function buildConfig() {
   const soundEnabled = $('config-sound-enabled')?.checked ?? true;
   return {
@@ -5196,10 +5215,8 @@ function buildConfig() {
     loop:                   parseInt($('config-loop').value) || null,
     log_level:              $('config-loglevel').value,
     max_concurrent_downloads: parseInt($('config-concurrent')?.value) || 2,
-    metadata_delay_min_s: Math.max(0, parseFloat($('config-metadata-delay-min')?.value) || 0),
-    metadata_delay_max_s: Math.max(0, parseFloat($('config-metadata-delay-max')?.value) || 0),
-    provider_delay_min_s: Math.max(0, parseFloat($('config-provider-delay-min')?.value) || 0),
-    provider_delay_max_s: Math.max(0, parseFloat($('config-provider-delay-max')?.value) || 0),
+    ...delayRange('metadata'),
+    ...delayRange('provider'),
     auto_rate_limit_cooldown: $('config-auto-rate-limit-cooldown')?.checked !== false,
     network_destination_id: $('config-network-destination')?.value || '',
   };
