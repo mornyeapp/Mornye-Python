@@ -2361,7 +2361,13 @@ class MornyeDownloader:
 
         pending = await self._resolve_isrc_bulk_async(tracks)
         existing_paths = await self._library_matches_async(pending)
-        current_playlist = self._opts.m3u_playlist_tracks
+        # The full current listing rewrites the M3U only inside a library:
+        # without library_dir (playlist subfolders off) the tracks already
+        # downloaded are never looked up, and the rewrite would leave the
+        # playlist's M3U holding just this run's new tracks.
+        current_playlist = (
+            self._opts.m3u_playlist_tracks if self._opts.library_dir else None
+        )
         playlist_existing_paths = (
             await self._library_matches_async(current_playlist)
             if current_playlist is not None
@@ -3394,9 +3400,19 @@ class MornyeDownloader:
         base_out = worker.output_dir
         if fmt not in M3U_FORMATS or opts.output_path or not base_out:
             return
-        completed = {
-            track_id: str(path) for track_id, path in (existing_paths or {}).items()
-        }
+        from .download_worker import _inside, bring_into_library
+
+        completed: dict[str, str] = {}
+        for track_id, path in (existing_paths or {}).items():
+            # A listed track found in one of the user's other music folders
+            # is placed beside the playlist first, as the worker does for
+            # this run's tracks: a ../../elsewhere path is one a media server
+            # scanning only the library cannot follow (issue #277).
+            if opts.library_dir and not await asyncio.to_thread(
+                _inside, Path(path), Path(opts.library_dir)
+            ):
+                path = await asyncio.to_thread(bring_into_library, Path(path), base_out)
+            completed[track_id] = str(path)
         completed.update(worker.completed_paths)
         entries = [
             entry_for(track, Path(completed[track.id]))

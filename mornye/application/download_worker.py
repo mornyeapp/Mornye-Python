@@ -27,6 +27,30 @@ def _inside(path: Path, root: Path) -> bool:
         return False
 
 
+def _same_file(a: Path, b: Path) -> bool:
+    """The same audio: one inode, or a copy made earlier (same size and
+    modification time, which shutil.copy2 keeps)."""
+    try:
+        if a.samefile(b):
+            return True
+        sa, sb = a.stat(), b.stat()
+        return sa.st_size == sb.st_size and int(sa.st_mtime) == int(sb.st_mtime)
+    except OSError:
+        return False
+
+
+def _free_target(existing: Path, folder: Path) -> Path:
+    """Where `existing` goes in `folder`: its own name, unless a different
+    track already holds it ("Intro.flac" by two artists); then "Name (2)",
+    "Name (3)"… An earlier placement of the same file is found again."""
+    candidate = folder / existing.name
+    n = 2
+    while candidate.exists() and not _same_file(existing, candidate):
+        candidate = folder / f"{existing.stem} ({n}){existing.suffix}"
+        n += 1
+    return candidate
+
+
 def bring_into_library(existing: Path, output_dir: str) -> Path:
     """`existing` placed in `output_dir`: a hard link, else a copy.
 
@@ -37,8 +61,8 @@ def bring_into_library(existing: Path, output_dir: str) -> Path:
     second download, and the link costs no space on the same disk. Falls
     back to `existing` itself if neither works.
     """
-    target = Path(output_dir) / existing.name
     try:
+        target = _free_target(existing, Path(output_dir))
         if target.exists():
             return target
         target.parent.mkdir(parents=True, exist_ok=True)
