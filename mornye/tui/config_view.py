@@ -65,6 +65,12 @@ QUALITY_LABELS: dict[str, str] = {
     "LOSSLESS": "LOSSLESS — CD quality FLAC/ALAC",
     "DOLBY_ATMOS": "DOLBY_ATMOS — services whose extension serves Atmos",
 }
+_FLOAT_FIELDS = {
+    "metadata_delay_min_s": 0.0,
+    "metadata_delay_max_s": 0.0,
+    "provider_delay_min_s": 0.0,
+    "provider_delay_max_s": 0.0,
+}
 
 
 #: Ids of the per-service quality menus. Not `cfg-`: one menu writes one key
@@ -113,6 +119,11 @@ _INT_FIELDS = {
     "track_max_retries": 0,
     "max_concurrent_downloads": 2,
     "timeout_s": 180,
+    "metadata_delay_min_s": 0.0,
+    "metadata_delay_max_s": 0.0,
+    "provider_delay_min_s": 0.0,
+    "provider_delay_max_s": 0.0,
+    "auto_rate_limit_cooldown": True,
 }
 _OPTIONAL_INT_FIELDS = ("loop", "watch")
 
@@ -562,6 +573,46 @@ class ConfigPanel(VerticalScroll):
                 hint="1 = sequential",
             )
             yield Row(
+                "Metadata delay min/max (s)",
+                Horizontal(
+                    Input(
+                        value=str(state.metadata_delay_min_s),
+                        type="number",
+                        id=_field_id("metadata_delay_min_s"),
+                    ),
+                    Input(
+                        value=str(state.metadata_delay_max_s),
+                        type="number",
+                        id=_field_id("metadata_delay_max_s"),
+                    ),
+                ),
+                hint="Random spacing between metadata requests",
+            )
+            yield Row(
+                "Provider delay min/max (s)",
+                Horizontal(
+                    Input(
+                        value=str(state.provider_delay_min_s),
+                        type="number",
+                        id=_field_id("provider_delay_min_s"),
+                    ),
+                    Input(
+                        value=str(state.provider_delay_max_s),
+                        type="number",
+                        id=_field_id("provider_delay_max_s"),
+                    ),
+                ),
+                hint="Random spacing between provider attempts",
+            )
+            yield Row(
+                "Automatic cooldown after HTTP 429",
+                Switch(
+                    value=state.auto_rate_limit_cooldown,
+                    id=_field_id("auto_rate_limit_cooldown"),
+                ),
+                hint="Pauses all requests for Retry-After (or 60s)",
+            )
+            yield Row(
                 "Timeout per attempt (s)",
                 Input(
                     value=str(state.timeout_s),
@@ -761,6 +812,11 @@ class ConfigPanel(VerticalScroll):
             # A half-typed number is not an error worth reporting; the field
             # simply keeps its default until there is something to read.
             self._assign(name, int(raw) if raw.strip().isdigit() else _INT_FIELDS[name])
+        elif name in _FLOAT_FIELDS:
+            try:
+                self._assign(name, max(0.0, float(raw)))
+            except ValueError:
+                self._assign(name, _FLOAT_FIELDS[name])
         elif name in {
             "output_path",
             "artist_separator",

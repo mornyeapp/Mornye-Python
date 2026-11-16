@@ -492,6 +492,13 @@ function applySettings(settings = {}) {
   if ($('config-loop')) $('config-loop').value = cfg.loop;
   if ($('config-loglevel')) $('config-loglevel').value = cfg.log_level;
   if ($('config-concurrent')) $('config-concurrent').value = cfg.max_concurrent_downloads || 2;
+  if ($('config-metadata-delay-min')) $('config-metadata-delay-min').value = cfg.metadata_delay_min_s ?? 0;
+  if ($('config-metadata-delay-max')) $('config-metadata-delay-max').value = cfg.metadata_delay_max_s ?? 0;
+  if ($('config-provider-delay-min')) $('config-provider-delay-min').value = cfg.provider_delay_min_s ?? 0;
+  if ($('config-provider-delay-max')) $('config-provider-delay-max').value = cfg.provider_delay_max_s ?? 0;
+  if ($('config-auto-rate-limit-cooldown')) {
+    $('config-auto-rate-limit-cooldown').checked = cfg.auto_rate_limit_cooldown !== false;
+  }
   if ($('config-network-destination')) {
     $('config-network-destination').value = cfg.network_destination_id || '';
   }
@@ -764,6 +771,11 @@ const DEFAULT_SETTINGS = {
   loop: 0,
   log_level: 'INFO',
   max_concurrent_downloads: 2,
+  metadata_delay_min_s: 0,
+  metadata_delay_max_s: 0,
+  provider_delay_min_s: 0,
+  provider_delay_max_s: 0,
+  auto_rate_limit_cooldown: true,
   services: ['tidal','qobuz','deezer','amazon','joox','netease','migu','kuwo','apple','soundcloud','youtube','pandora'],
   lyrics_providers: ['apple', 'binilyrics', 'lrclib'],
   apple_lyrics_word_by_word: true,
@@ -4550,6 +4562,25 @@ async function startStaged(onlyShown) {
   loadStaged();
 }
 
+async function stopAllDownloads() {
+  const stop = window.pywebview?.api?.stop_all_downloads;
+  if (typeof stop !== 'function') {
+    showToast('Stop all is unavailable in this client.', 'error');
+    return;
+  }
+  try {
+    const result = await stop();
+    if (!result?.ok) throw new Error(result?.error || 'The stop request failed.');
+    showToast(
+      `Stopping ${result.stopped} active download(s); cancelled ${result.cancelled_pending} queued download(s).`,
+      'info',
+    );
+    logMessage('Stop-all requested.', 'warning');
+  } catch (error) {
+    showToast(`Could not stop downloads: ${error}`, 'error');
+  }
+}
+
 async function startStagedOne(id) {
   const res = await window.pywebview?.api?.start_staged_items?.([id], buildConfig());
   if (res && !res.ok) showToast(res.error || 'Could not start it.', 'error');
@@ -5165,6 +5196,11 @@ function buildConfig() {
     loop:                   parseInt($('config-loop').value) || null,
     log_level:              $('config-loglevel').value,
     max_concurrent_downloads: parseInt($('config-concurrent')?.value) || 2,
+    metadata_delay_min_s: Math.max(0, parseFloat($('config-metadata-delay-min')?.value) || 0),
+    metadata_delay_max_s: Math.max(0, parseFloat($('config-metadata-delay-max')?.value) || 0),
+    provider_delay_min_s: Math.max(0, parseFloat($('config-provider-delay-min')?.value) || 0),
+    provider_delay_max_s: Math.max(0, parseFloat($('config-provider-delay-max')?.value) || 0),
+    auto_rate_limit_cooldown: $('config-auto-rate-limit-cooldown')?.checked !== false,
     network_destination_id: $('config-network-destination')?.value || '',
   };
 }

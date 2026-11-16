@@ -13,11 +13,13 @@ import asyncio
 import contextlib
 import inspect
 import logging
+import math
 import os
 import re
 import shlex
 import shutil
 import sys
+import threading
 import time
 import uuid
 from collections.abc import Callable, Sequence
@@ -75,6 +77,11 @@ from ..core.progress import (
     install_console_interception,
     safe_tqdm_write,
     uninstall_console_interception,
+)
+from ..core.rate_limiting import (
+    DownloadStopRequested,
+    await_or_stop,
+    download_rate_limiter,
 )
 from ..core.quality import (
     normalize_quality,
@@ -267,6 +274,12 @@ class DownloadOptions:
     transcode_max_bit_depth: int = 0
 
     track_max_retries: int = 0
+    metadata_delay_min_s: float = 0.0
+    metadata_delay_max_s: float = 0.0
+    provider_delay_min_s: float = 0.0
+    provider_delay_max_s: float = 0.0
+    auto_rate_limit_cooldown: bool = True
+    stop_event: threading.Event | None = None
     post_download_action: str = "none"
     post_download_command: str = ""
     tidal_custom_api: str | None = None
@@ -359,6 +372,20 @@ class DownloadOptions:
         # caller can enable one without the other by omission.
         if self.redownload_fake_hires:
             self.verify_hires = True
+        for field_name in (
+            "metadata_delay_min_s",
+            "metadata_delay_max_s",
+            "provider_delay_min_s",
+            "provider_delay_max_s",
+        ):
+            value = float(getattr(self, field_name) or 0.0)
+            if not math.isfinite(value) or value < 0:
+                raise ValueError(f"{field_name} must be a finite number >= 0")
+            setattr(self, field_name, value)
+        if self.metadata_delay_max_s < self.metadata_delay_min_s:
+            raise ValueError("metadata_delay_max_s must be >= metadata_delay_min_s")
+        if self.provider_delay_max_s < self.provider_delay_min_s:
+            raise ValueError("provider_delay_max_s must be >= provider_delay_min_s")
 
 
 def _build_providers_for_name(name: str, opts: DownloadOptions) -> list[BaseProvider]:
@@ -1145,6 +1172,19 @@ async def _download_one_pass_async(
     DownloadManager()
     errors: dict[str, str] = {}
     started_at = time.monotonic()
+
+    def pause_after_429(error: object, provider_name: str) -> None:
+        if opts.auto_rate_limit_cooldown and download_rate_limiter.is_rate_limited(
+            error
+        ):
+            seconds = download_rate_limiter.cooldown_after_429(error)
+            logger.warning(
+                "[rate-limit] Pausing all download requests for %.0f seconds "
+                "after %s returned HTTP 429",
+                seconds,
+                provider_name,
+            )
+
     # A provider that answered "503 … try again in about N minutes" is kept
     # out of the rotation until then (see core/provider_cooldown.py).
     provider_cooldown.watch_extension_logs()
@@ -1234,6 +1274,12 @@ async def _download_one_pass_async(
 
             stop_after_atmos_error = False
             try:
+                await download_rate_limiter.wait(
+                    "provider",
+                    opts.provider_delay_min_s,
+                    opts.provider_delay_max_s,
+                    stop_event=opts.stop_event,
+                )
                 # The timeout applies to each provider attempt. A JS provider
                 # may spend time obtaining a ticket before the audio transfer
                 # starts, and that startup time must not consume another
@@ -1288,14 +1334,20 @@ async def _download_one_pass_async(
                     **download_kwargs,
                 )
 
-                if opts.timeout_s:
-                    result = await _await_with_stall_timeout(
+                operation = (
+                    _await_with_stall_timeout(
                         download_task,
                         opts.timeout_s,
                         transfer_activity,
                     )
-                else:
-                    result = await download_task
+                    if opts.timeout_s
+                    else download_task
+                )
+                result = await await_or_stop(
+                    operation,
+                    opts.stop_event,
+                    on_stop=stop_event.set,
+                )
 
                 if (
                     normalize_quality(opts.quality) == "DOLBY_ATMOS"
@@ -1348,13 +1400,24 @@ async def _download_one_pass_async(
                                 )
                                 if opts.timeout_s:
                                     transfer_activity.last_activity = None
-                                    result = await _await_with_stall_timeout(
-                                        fallback_task,
-                                        opts.timeout_s,
-                                        transfer_activity,
+                                    result = await await_or_stop(
+                                        _await_with_stall_timeout(
+                                            fallback_task,
+                                            opts.timeout_s,
+                                            transfer_activity,
+                                        ),
+                                        opts.stop_event,
+                                        on_stop=stop_event.set,
                                     )
                                 else:
-                                    result = await fallback_task
+                                    result = await await_or_stop(
+                                        fallback_task,
+                                        opts.stop_event,
+                                        on_stop=stop_event.set,
+                                    )
+                            except DownloadStopRequested:
+                                stop_event.set()
+                                raise
                             except asyncio.CancelledError:
                                 raise
                             except asyncio.TimeoutError:
@@ -1377,6 +1440,7 @@ async def _download_one_pass_async(
                                     f"Provider timed out after {opts.timeout_s}s",
                                 )
                             except Exception as exc:
+                                pause_after_429(exc, provider.name)
                                 logger.warning(
                                     "[%s] fallback quality %s raised: %s",
                                     provider.name,
@@ -1391,6 +1455,9 @@ async def _download_one_pass_async(
                                 break
                             current_tier = fallback_tier
 
+            except DownloadStopRequested:
+                stop_event.set()
+                raise
             except asyncio.CancelledError:
                 # The only thing that ever raises this event. It is handed to
                 # every provider above ("cooperative shutdown propagation"),
@@ -1431,9 +1498,13 @@ async def _download_one_pass_async(
                 logger.warning(
                     "[%s] raised instead of failing cleanly: %s", provider.name, exc
                 )
+                pause_after_429(exc, provider.name)
                 result = DownloadResult.fail(
                     provider.name, str(exc) or type(exc).__name__
                 )
+
+            if not result.success:
+                pause_after_429(result.error or "", provider.name)
 
             if result.success and not result.skipped:
                 result = await _reject_wrong_recording_async(
@@ -2771,6 +2842,34 @@ class MornyeDownloader:
         self,
         url: str,
     ) -> tuple[str, list[TrackMetadata], dict]:
+        await download_rate_limiter.wait(
+            "metadata",
+            self._opts.metadata_delay_min_s,
+            self._opts.metadata_delay_max_s,
+            stop_event=self._opts.stop_event,
+        )
+        try:
+            return await await_or_stop(
+                self._resolve_metadata_impl_async(url),
+                self._opts.stop_event,
+            )
+        except Exception as exc:
+            if (
+                self._opts.auto_rate_limit_cooldown
+                and download_rate_limiter.is_rate_limited(exc)
+            ):
+                seconds = download_rate_limiter.cooldown_after_429(exc)
+                logger.warning(
+                    "[rate-limit] Pausing all download requests for %.0f seconds "
+                    "after a metadata 429",
+                    seconds,
+                )
+            raise
+
+    async def _resolve_metadata_impl_async(
+        self,
+        url: str,
+    ) -> tuple[str, list[TrackMetadata], dict]:
         from ..core.apple_music_metadata import (
             is_apple_music_url,
             parse_apple_music_url,
@@ -3295,7 +3394,9 @@ class MornyeDownloader:
         base_out = worker.output_dir
         if fmt not in M3U_FORMATS or opts.output_path or not base_out:
             return
-        completed = {track_id: str(path) for track_id, path in (existing_paths or {}).items()}
+        completed = {
+            track_id: str(path) for track_id, path in (existing_paths or {}).items()
+        }
         completed.update(worker.completed_paths)
         entries = [
             entry_for(track, Path(completed[track.id]))

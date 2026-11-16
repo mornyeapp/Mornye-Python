@@ -62,6 +62,8 @@ class ProviderExecutor:
         policy: RetryPolicy,
         timeout_s: int | None = None,
         resume_event: asyncio.Event | None = None,
+        before_attempt: Callable[[], Awaitable[None]] | None = None,
+        on_rate_limited: Callable[[BaseException], Awaitable[None]] | None = None,
     ) -> Exception | None:
         """Run the provider with retries, returning the final error or None.
 
@@ -73,6 +75,8 @@ class ProviderExecutor:
         for _attempt in range(policy.attempts):
             await wait_until_resumed(resume_event)
             try:
+                if before_attempt is not None:
+                    await before_attempt()
                 operation = self.execute(provider, source)
                 if timeout_s and timeout_s > 0:
                     await asyncio.wait_for(operation, timeout=timeout_s)
@@ -80,9 +84,16 @@ class ProviderExecutor:
                     await operation
                 await wait_until_resumed(resume_event)
                 if self._last_result is not None and not self._last_result.success:
-                    return ProviderResultError(self._last_result)
+                    result_error = ProviderResultError(self._last_result)
+                    if on_rate_limited is not None and self.is_rate_limited(
+                        result_error
+                    ):
+                        await on_rate_limited(result_error)
+                    return result_error
                 return None
             except Exception as exc:
+                if on_rate_limited is not None and self.is_rate_limited(exc):
+                    await on_rate_limited(exc)
                 if not self.is_retryable(exc, policy):
                     return exc
                 last_error = exc
@@ -91,6 +102,12 @@ class ProviderExecutor:
     @staticmethod
     def is_retryable(error: BaseException, policy: RetryPolicy | None = None) -> bool:
         return (policy or RetryPolicy()).is_retryable(error)
+
+    @staticmethod
+    def is_rate_limited(error: object) -> bool:
+        from mornye.core.rate_limiting import download_rate_limiter
+
+        return download_rate_limiter.is_rate_limited(error)
 
     async def __call__(self, provider: str, source: str) -> None:
         await self.execute(provider, source)

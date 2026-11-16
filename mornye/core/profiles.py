@@ -90,6 +90,11 @@ class ProfileConfig(BaseModel):
     smb_destination: str | None = None
     include_featuring: bool = True
     max_concurrent_downloads: int = 2
+    metadata_delay_min_s: float = 0.0
+    metadata_delay_max_s: float = 0.0
+    provider_delay_min_s: float = 0.0
+    provider_delay_max_s: float = 0.0
+    auto_rate_limit_cooldown: bool = True
     # `extra: ignore` below means a field missing here is silently dropped
     # when a profile is saved, so anything the CLI can set has to be listed.
     resume: bool = True

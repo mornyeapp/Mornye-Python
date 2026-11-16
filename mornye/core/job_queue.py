@@ -367,16 +367,30 @@ class JobQueue:
     def list_for(self, owner: str) -> list[Job]:
         return [j for j in self.list_all() if j.owner == owner]
 
+    def cancel_pending(self, owner: str = "") -> int:
+        """Mark queued jobs for `owner` terminal so workers will skip them."""
+        now = time.time()
+        with self._lock:
+            cancelled = []
+            for job in self._jobs.values():
+                if job.owner == owner and job.status is JobStatus.QUEUED:
+                    job.status = JobStatus.FAILED
+                    job.error = "Cancelled before starting."
+                    job.finished_at = now
+                    cancelled.append(job)
+        with self._persist_lock:
+            for job in cancelled:
+                self._write(job)
+        return len(cancelled)
+
     def _worker_loop(self) -> None:
         while True:
             job_id = self._queue.get()
             try:
                 with self._lock:
                     job = self._jobs.get(job_id)
-                if job is None:
-                    continue
-
-                with self._lock:
+                    if job is None or job.status is not JobStatus.QUEUED:
+                        continue
                     job.status = JobStatus.RUNNING
                     job.started_at = time.time()
                 self._write(job)

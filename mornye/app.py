@@ -239,6 +239,9 @@ class MornyeAPI(
         # Held for the whole of a download batch, so two of them never share
         # a process — see _await_download_slot().
         self._download_lock = threading.Lock()
+        self._active_download_events: set[threading.Event] = set()
+        self._active_download_events_lock = threading.Lock()
+        self._stop_generation = 0
         # Set by webapp.py in --web mode: a persisted JobQueue that
         # download_tracks() writes each batch into instead of starting a bare
         # thread, so a restart resumes it (see run_download_job). None
@@ -1558,6 +1561,7 @@ class MornyeAPI(
         threading.Thread(
             target=self._download_task,
             args=(selected_indices, config),
+            kwargs={"expected_generation": self._current_stop_generation()},
             daemon=True,
         ).start()
 
@@ -1608,7 +1612,10 @@ class MornyeAPI(
             queue = self._download_queue
             if queue is None:
                 return
-            queue.submit(self.owner, payload)
+            payload = dict(payload)
+            with self._active_download_events_lock:
+                payload.setdefault("_stop_generation", self._stop_generation)
+                queue.submit(self.owner, payload)
         except QueueFullError as exc:
             self.log(
                 f"{exc.pending} downloads are already waiting (limit {exc.limit}); "
@@ -1633,6 +1640,11 @@ class MornyeAPI(
         if len(raw_tracks) != len(indices):
             msg = "Malformed download job: tracks and indices do not match"
             raise ValueError(msg)
+        expected_generation = payload.get(
+            "_stop_generation", self._current_stop_generation()
+        )
+        if expected_generation != self._current_stop_generation():
+            raise RuntimeError("Cancelled before starting.")
         tracks = {
             i: TrackMetadata.model_validate(t)
             for i, t in zip(indices, raw_tracks, strict=True)
@@ -1651,6 +1663,7 @@ class MornyeAPI(
             playlist_tracks=playlist_tracks,
             collection_name=str(payload.get("collection_name") or ""),
             announce=payload.get("session") == self._session_id,
+            expected_generation=expected_generation,
         )
         return {"tracks": len(indices)}
 
@@ -1680,7 +1693,18 @@ class MornyeAPI(
         )
         self._download_lock.acquire()
 
-    def _download_task(self, selected_indices, config, **batch) -> None:
+    def _current_stop_generation(self) -> int:
+        with self._active_download_events_lock:
+            return self._stop_generation
+
+    def _download_task(
+        self,
+        selected_indices,
+        config,
+        *,
+        expected_generation: int | None = None,
+        **batch,
+    ) -> None:
         """Runs one batch start to finish, never overlapping another one.
 
         The lock is taken and released here rather than around the body
@@ -1689,8 +1713,22 @@ class MornyeAPI(
         that would not build — would otherwise leave it held, and every
         later download in the process would wait on it forever.
         """
-        self._await_download_slot(selected_indices)
+        with self._active_download_events_lock:
+            if (
+                expected_generation is not None
+                and expected_generation != self._stop_generation
+            ):
+                self.log("Download stopped before it started.", "warning")
+                return
+            stop_event = threading.Event()
+            self._active_download_events.add(stop_event)
+        lock_acquired = False
         try:
+            self._await_download_slot(selected_indices)
+            lock_acquired = True
+            if stop_event.is_set():
+                self.log("Download stopped before it started.", "warning")
+                return
             # Settings the page does not send (timeout_s, save_lrc, …) come
             # from MORNYE_<SETTING> when the container sets them; whatever
             # the page did send wins (core/env_settings.py).
@@ -1698,9 +1736,41 @@ class MornyeAPI(
                 from .core.env_settings import gui_env_defaults
 
                 config = {**gui_env_defaults(), **config}
-            self._run_download_batch(selected_indices, config, **batch)
+            self._run_download_batch(
+                selected_indices,
+                config,
+                stop_event=stop_event,
+                **batch,
+            )
         finally:
-            self._download_lock.release()
+            if lock_acquired:
+                self._download_lock.release()
+            with self._active_download_events_lock:
+                self._active_download_events.discard(stop_event)
+
+    def stop_all_downloads(self) -> dict[str, int | bool]:
+        """Stop current batches and cancel this account's queued downloads."""
+        with self._active_download_events_lock:
+            self._stop_generation += 1
+            active = tuple(self._active_download_events)
+            for event in active:
+                event.set()
+            queue = self._download_queue
+            cancelled_pending = (
+                queue.cancel_pending(getattr(self, "owner", "") or "")
+                if callable(getattr(queue, "cancel_pending", None))
+                else 0
+            )
+        self.log(
+            f"Stopping {len(active)} active download(s); cancelled "
+            f"{cancelled_pending} queued download(s).",
+            "warning",
+        )
+        return {
+            "ok": True,
+            "stopped": len(active),
+            "cancelled_pending": cancelled_pending,
+        }
 
     def _log_hires_verification(self, quality: str, redownload: bool) -> None:
         """Says what Hi-Res verification will actually do for this run.
@@ -1757,6 +1827,7 @@ class MornyeAPI(
         playlist_tracks: list | None = None,
         collection_name: str | None = None,
         announce: bool = True,
+        stop_event: threading.Event | None = None,
     ) -> None:
         """One batch, start to finish.
 
@@ -2157,6 +2228,13 @@ class MornyeAPI(
                 verify_hires=verify_hires,
                 redownload_fake_hires=redownload_fake_hires,
                 timeout_s=timeout_s,
+                stop_event=stop_event,
+                metadata_delay_min_s=float(config.get("metadata_delay_min_s", 0.0)),
+                metadata_delay_max_s=float(config.get("metadata_delay_max_s", 0.0)),
+                provider_delay_min_s=float(config.get("provider_delay_min_s", 0.0)),
+                provider_delay_max_s=float(config.get("provider_delay_max_s", 0.0)),
+                auto_rate_limit_cooldown=config.get("auto_rate_limit_cooldown", True)
+                is True,
             )
             from .application.metadata_service import MetadataService
 
@@ -2165,6 +2243,7 @@ class MornyeAPI(
                     legacy_opts,
                     prefetched=prefetched or None,
                 ),
+                stop_event=stop_event,
                 # The real resolver. Left to its default, MetadataService
                 # answers a spotify:track: link with its compatibility stub
                 # ("Example Artist — Example Track"), and every provider was

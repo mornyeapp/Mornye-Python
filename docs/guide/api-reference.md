@@ -27,6 +27,9 @@
 | `artist_separator` | `str` | `None` | Custom separator (e.g. `", "` or `" / "`) to join multiple artists into a single string in tags, instead of using standard multi-value fields. Useful for players like Rekordbox. |
 | `include_featuring` | `bool` | `False` | When downloading an artist discography, also includes tracks where the artist appears as a featured artist. |
 | `max_concurrent_downloads` | `int` | `2` | How many tracks to download in parallel. |
+| `metadata_delay_min_s` / `metadata_delay_max_s` | `float` | `0` / `0` | Random minimum/maximum seconds between metadata requests. |
+| `provider_delay_min_s` / `provider_delay_max_s` | `float` | `0` / `0` | Random minimum/maximum seconds between provider attempts. |
+| `auto_rate_limit_cooldown` | `bool` | `true` | Pause all new requests after HTTP 429, honoring `Retry-After` or using 60 seconds. |
 | `tidal_custom_api` | `str` | `None` | Sets `tidal-web`'s `customEndpoint` (a hifi-api compatible server) for this run — see [Passing Settings to an Extension](configuration.md#passing-settings-to-an-extension-eg-a-self-hosted-api-instance). |
 | `timeout_s` | `int` | `None` | Per-track download timeout in seconds. If a single track download does not complete within this time, the process is terminated and the track is marked as failed. Mornye then moves on to the next extension or retry. Set to `None` (default) to disable the timeout. |
 | `loop` | `int` | `None` | Duration in minutes to keep retrying permanently failed tracks after a full session completes. |
