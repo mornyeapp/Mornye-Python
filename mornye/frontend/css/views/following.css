@@ -5,6 +5,44 @@
    Over styles.css until voce 22. Semantic tokens only; ids and handlers
    untouched. */
 
+/* ── Form field: label, hint, textarea ── */
+.bulk-follow { margin-top: var(--sp-6); }
+.field-label {
+  display: block;
+  text-transform: none; letter-spacing: -0.005em;
+}
+.field-hint { margin: 2px 0 var(--sp-3); }
+.field-textarea {
+  display: block; width: 100%; min-height: 108px; resize: vertical;
+  padding: 12px 14px;
+  background: var(--input-bg); color: var(--input-text);
+  border: 1px solid var(--input-border); border-radius: var(--radius-md);
+  font-family: var(--app-font); font-size: var(--fs-200); line-height: 1.55;
+  transition: border-color var(--t), box-shadow var(--t);
+}
+.field-textarea::placeholder { color: var(--text-dim); font-family: var(--font-mono); font-size: var(--fs-100); }
+.field-textarea:hover { border-color: var(--border2); }
+.field-textarea:focus { outline: none; border-color: var(--accent-border); box-shadow: 0 0 0 3px var(--accent-ring); }
+
+/* Extension registry list */
+.reg-item { cursor: default; align-items: center; justify-content: space-between; gap: var(--sp-4); }
+.reg-item-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+.reg-item-disabled { opacity: .55; }
+
+.weekly-row {
+  display: flex; align-items: center; gap: 12px;
+}
+.weekly-day { min-width: 78px; }
+.weekly-info { flex: 1; min-width: 0; }
+.weekly-title { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The focus ring (layout.css) loads before this sheet now: restated at its
+   specificity for the controls above that draw their own radius or
+   outline, so focused they keep the ring's shape, as before. */
+:where(button, a, input, select, textarea, [tabindex]):where(.field-textarea):focus-visible {
+  border-radius: var(--radius-1);
+}
+
 #view-following input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"])),
 #view-following select,
 #view-following textarea {
