@@ -1158,7 +1158,7 @@ async def enrich_metadata_async(
         # first call also starts their runtime.
         try:
             return await asyncio.wait_for(coro, timeout=limit)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("[meta/enrich] %s timed out after %.1fs", label, limit)
             return None
 
@@ -1182,7 +1182,7 @@ async def enrich_metadata_async(
         for outcome in outcomes[: len(providers)]
         if isinstance(outcome, tuple)
     }
-    ext_results = dict(zip(ext_keys, outcomes[len(providers) :]))
+    ext_results = dict(zip(ext_keys, outcomes[len(providers) :], strict=False))
 
     # Every provider has already answered — gather() above waits for all of
     # them — so this loop spends nothing but the merge. It used to stop at

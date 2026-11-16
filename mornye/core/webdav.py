@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import io
 import logging
@@ -10,7 +11,8 @@ import threading
 import uuid
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 from urllib.parse import quote, unquote, urljoin, urlsplit
 
 import httpx
@@ -337,9 +339,7 @@ class WebDAVBackend:
                     remote_dir,
                     cancel_event=cancel_event,
                     progress=(
-                        (lambda sent, total: progress(relative, sent, total))
-                        if progress
-                        else None
+                        functools.partial(progress, relative) if progress else None
                     ),
                 )
             )

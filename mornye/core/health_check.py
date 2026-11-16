@@ -251,7 +251,7 @@ async def run_extension_health_check(
                 for method, url in keys
             )
         )
-    responses = dict(zip(keys, fetched))
+    responses = dict(zip(keys, fetched, strict=False))
 
     rows = []
     for ext, checks in targets:

@@ -7,7 +7,7 @@ import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from typing_extensions import Self
+from typing import Self
 
 from .application import DownloadService, LegacyDownloadAdapter, MetadataService
 from .core.animated_artwork import (

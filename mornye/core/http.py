@@ -12,7 +12,7 @@ from .env import env_value
 import asyncio
 import atexit as _atexit
 import contextlib
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from email.utils import parsedate_to_datetime
 import ipaddress
 import logging
@@ -182,10 +182,8 @@ def _retry_after_seconds(value: str | None) -> int:
     try:
         retry_at = parsedate_to_datetime(value)
         if retry_at.tzinfo is None:
-            retry_at = retry_at.replace(tzinfo=timezone.utc)
-        return max(
-            0, math.ceil((retry_at - datetime.now(timezone.utc)).total_seconds())
-        )
+            retry_at = retry_at.replace(tzinfo=UTC)
+        return max(0, math.ceil((retry_at - datetime.now(UTC)).total_seconds()))
     except (TypeError, ValueError, OverflowError):
         return 5
 
@@ -389,8 +387,8 @@ class AsyncHttpClient:
         resp = await self.get(url, **kwargs)
         try:
             return resp.json()
-        except ValueError:
-            raise ParseError(self._provider, "Invalid JSON")
+        except ValueError as exc:
+            raise ParseError(self._provider, "Invalid JSON") from exc
 
     async def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         headers = {**self._headers, **kwargs.pop("headers", {})}

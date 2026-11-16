@@ -123,7 +123,7 @@ class LegacyDownloadAdapter(ProviderExecutor):
         options: object,
         prefetched: dict[str, TrackMetadata] | None = None,
         forward_metadata: bool = True,
-    ) -> "LegacyDownloadAdapter":
+    ) -> LegacyDownloadAdapter:
         from mornye.downloader import MornyeDownloader
         from mornye.extensions.provider import apply_legacy_endpoint_options
 

@@ -49,7 +49,8 @@ import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any
+from collections.abc import Callable, Iterable, Sequence
 
 from .errors import ErrorKind, MornyeError
 from .isrc_utils import normalize_isrc

@@ -668,7 +668,7 @@ async def _await_with_stall_timeout(
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError, Exception):
                     await task
-                raise asyncio.TimeoutError
+                raise TimeoutError
     except asyncio.CancelledError:
         task.cancel()
         raise
@@ -1420,7 +1420,7 @@ async def _download_one_pass_async(
                                 raise
                             except asyncio.CancelledError:
                                 raise
-                            except asyncio.TimeoutError:
+                            except TimeoutError:
                                 wait_for_idle = getattr(
                                     provider,
                                     "wait_for_idle_async",
@@ -1468,7 +1468,7 @@ async def _download_one_pass_async(
                 # already torn its output sink down.
                 stop_event.set()
                 raise
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 wait_for_idle = getattr(provider, "wait_for_idle_async", None)
                 if callable(wait_for_idle):
                     await wait_for_idle(5.0)
@@ -2775,7 +2775,7 @@ class MornyeDownloader:
         completed = worker.completed_paths
         return {
             planned.key: Path(completed[track.id])
-            for planned, track in zip(pending, tracks)
+            for planned, track in zip(pending, tracks, strict=False)
             if track.id in completed
         }
 
@@ -3005,7 +3005,7 @@ class MornyeDownloader:
         except Exception as exc:
             raise MornyeError(
                 ErrorKind.NETWORK_ERROR, f"Metadata fetch failed: {exc}", cause=exc
-            )
+            ) from exc
 
         if not tracks:
             return collection_name, [], {}
@@ -3226,7 +3226,7 @@ class MornyeDownloader:
                 for _, t in without_album
             )
         )
-        by_track = {i: d for (i, _), d in zip(without_album, track_dates)}
+        by_track = {i: d for (i, _), d in zip(without_album, track_dates, strict=False)}
 
         found = []
         for i, track in missing:
@@ -3264,7 +3264,7 @@ class MornyeDownloader:
             return metadata if isinstance(metadata, dict) else {}
 
         for album_id, metadata in zip(
-            wanted, await asyncio.gather(*(_one(a) for a in wanted))
+            wanted, await asyncio.gather(*(_one(a) for a in wanted)), strict=False
         ):
             albums[album_id] = metadata
 

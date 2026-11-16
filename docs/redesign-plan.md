@@ -625,6 +625,35 @@ regola (una parola = un elemento).
      `amain` il percorso di download (lettura degli argomenti e
      `_run_once`), da spezzare a parte. Nessun cambio di comportamento;
      test web/API/CLI/TUI verdi.
+   - **M3 · `ruff` allargato, primo lotto** (commit sotto). `select`
+     aggiunge `RUF006`, `B`, `ASYNC`, `UP`; ignorati con motivo scritto in
+     `pyproject.toml`: `ASYNC109` (il parametro `timeout` è la convenzione
+     del codice), `ASYNC240` (il resto di F3: un solo `exists()`/`stat()`
+     su disco locale; lasciato apposta), `UP042` (`StrEnum` cambia `str()`
+     dei membri, che finiscono in config e API), `B009`/`B010`
+     (`getattr`/`setattr` con nome fisso dove l'attributo non è dichiarato:
+     la forma che scrive l'auto-fix la rifiuta mypy). `B008` accetta i
+     marcatori di FastAPI (`Body`, `Depends`, …). Correzioni: `UP`
+     automatiche (`datetime.UTC`, annotazioni senza virgolette, import da
+     `collections.abc`, `TimeoutError`); 12 `zip()` con `strict=False`
+     esplicito (comportamento invariato); 6 `raise … from`; i 7 `B023` con
+     il valore del giro legato (`functools.partial` nelle chiamate SMB e
+     WebDAV, argomento predefinito nei due helper del provider); i due
+     `ASYNC110` del codice sono attese su un lock/evento di *thread*, non
+     sostituibili con un `asyncio.Event`: commentati e marcati; la lettura
+     dei 12 byte di intestazione della WebP animata va in `to_thread`.
+     **Un bug vero (B025):** in `download_service.py` il ramo che aggiunge
+     "Retry identifier: …" a un errore di consegna su destinazione di rete
+     stava dietro un `except Exception` precedente e non girava mai; ora i
+     due rami sono uno solo e l'utente vede l'identificativo per
+     riprovare (test nuovo in `test_architecture_foundation.py`, verificato
+     che fallisce con un'attesa sbagliata). Nei test: `B017` con
+     `WebSocketDisconnect`, due eccezioni per file dove l'attesa bloccante
+     è voluta. `mypy` resta ai 3 errori preesistenti
+     (`core/env_settings.py:109`, `application/download_service.py`
+     ~246–247), uguali sul checkout di base. Prossimi lotti: `SIM`, `PERF`,
+     `BLE`/`S110` (i ~50 `except Exception: pass` fuori da `app.py`), poi
+     `RUF` intero.
    - **Fermato qui per limite d'uso** (2026-11-16). **Ancora aperti:**
      riorganizzazione di Settings e display di qualità dell'album (domanda
      inviata alla sessione madre con una proposta, nessuna risposta

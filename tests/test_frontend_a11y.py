@@ -26,7 +26,9 @@ _EXEMPT = ("api-modal-backdrop", 'id="queue-backdrop"', "event.stopPropagation()
 
 def _code_lines(text: str) -> str:
     return "\n".join(
-        line for line in text.splitlines() if not line.lstrip().startswith(("//", "*", "/*"))
+        line
+        for line in text.splitlines()
+        if not line.lstrip().startswith(("//", "*", "/*"))
     )
 
 

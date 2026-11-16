@@ -8,6 +8,7 @@ running desktop-equivalent environment to be meaningful.
 from __future__ import annotations
 
 import pytest
+from starlette.websockets import WebSocketDisconnect
 
 fastapi_testclient = pytest.importorskip("fastapi.testclient")
 webapp = pytest.importorskip("mornye.webapp")
@@ -57,10 +58,13 @@ def test_websocket_rejects_missing_or_wrong_token() -> None:
     app = webapp.create_app(token="s3cret")
     client = TestClient(app)
 
-    with pytest.raises(Exception), client.websocket_connect("/ws"):
+    with pytest.raises(WebSocketDisconnect), client.websocket_connect("/ws"):
         pass
 
-    with pytest.raises(Exception), client.websocket_connect("/ws?token=wrong"):
+    with (
+        pytest.raises(WebSocketDisconnect),
+        client.websocket_connect("/ws?token=wrong"),
+    ):
         pass
 
 

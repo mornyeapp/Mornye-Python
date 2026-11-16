@@ -17,7 +17,7 @@ import urllib.parse
 import weakref
 from typing import Any
 
-from typing_extensions import Self
+from typing import Self
 
 from mornye.core.errors import AuthError, ErrorKind, InvalidUrlError, MornyeError
 from mornye.core.http import AsyncHttpClient
@@ -455,7 +455,7 @@ class AppleMusicMetadataClient:
             raise MornyeError(
                 ErrorKind.NETWORK_ERROR,
                 f"Unable to retrieve Apple Music token: {e}",
-            )
+            ) from e
 
     async def _get(
         self,

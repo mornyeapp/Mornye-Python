@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 from email.utils import format_datetime
 
 import httpx
@@ -51,7 +51,7 @@ def test_429_cooldown_honors_retry_after_and_caps_it() -> None:
 
 
 def test_http_date_retry_after_is_supported() -> None:
-    retry_at = datetime.now(timezone.utc) + timedelta(seconds=30)
+    retry_at = datetime.now(UTC) + timedelta(seconds=30)
     response = httpx.Response(
         429,
         headers={"Retry-After": format_datetime(retry_at, usegmt=True)},

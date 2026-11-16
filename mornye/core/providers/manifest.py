@@ -18,7 +18,7 @@ class ExtensionManifest:
     healthy: bool = True
 
     @classmethod
-    def from_dict(cls, data: dict) -> "ExtensionManifest":
+    def from_dict(cls, data: dict) -> ExtensionManifest:
         extension_id = str(data.get("id") or data.get("name") or "").strip()
         version = str(data.get("version") or "").strip()
         if not extension_id:

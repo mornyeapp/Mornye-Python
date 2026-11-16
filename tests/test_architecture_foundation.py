@@ -4,7 +4,7 @@ import ast
 import logging
 import sqlite3
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -198,7 +198,7 @@ def test_download_request_and_report_contract():
         album="Album",
         album_artist="Artist A",
     )
-    started_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    started_at = datetime(2024, 1, 1, tzinfo=UTC)
     finished_at = started_at + timedelta(minutes=2)
 
     report = DownloadReport(
@@ -315,8 +315,8 @@ def test_v1_download_route_uses_application_service_boundary():
                 succeeded=[DownloadResult.ok("tidal", "/tmp/example.flac")],
                 failed=[],
                 skipped=[],
-                started_at=datetime.now(timezone.utc),
-                finished_at=datetime.now(timezone.utc),
+                started_at=datetime.now(UTC),
+                finished_at=datetime.now(UTC),
             )
 
     app = FastAPI()
@@ -419,8 +419,8 @@ def test_async_client_exposes_application_download_entrypoint(monkeypatch):
             return DownloadReport(
                 succeeded=[DownloadResult.ok("tidal", "/tmp/track.flac")],
                 failed=[],
-                started_at=datetime.now(timezone.utc),
-                finished_at=datetime.now(timezone.utc),
+                started_at=datetime.now(UTC),
+                finished_at=datetime.now(UTC),
             )
 
     client = AsyncMornye(output_dir="./downloads", sync_extensions=False)
@@ -521,8 +521,8 @@ def test_async_client_batch_and_track_entrypoints_use_application_service(monkey
             succeeded=[],
             failed=[],
             skipped=[],
-            started_at=datetime.now(timezone.utc),
-            finished_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
+            finished_at=datetime.now(UTC),
         )
 
     async def boom(*args, **kwargs):
@@ -596,8 +596,8 @@ def test_run_download_from_cfg_uses_application_service_for_guided_downloads(
                 succeeded=[DownloadResult.ok("tidal", "/tmp/example.flac")],
                 failed=[],
                 skipped=[],
-                started_at=datetime.now(timezone.utc),
-                finished_at=datetime.now(timezone.utc),
+                started_at=datetime.now(UTC),
+                finished_at=datetime.now(UTC),
             )
 
     monkeypatch.setattr("mornye.launcher.DownloadService", FakeDownloadService)
@@ -2410,3 +2410,64 @@ def test_legacy_adapter_keeps_collection_links_on_collection_runner():
     asyncio.run(adapter.execute("legacy", playlist))
 
     assert calls == [playlist]
+
+
+def test_failed_smb_delivery_names_its_retry_identifier(tmp_path, monkeypatch):
+    """A DestinationError from the upload carries the staging folder's id, so
+    the user can retry the delivery. The branch that adds it sat behind an
+    earlier bare `except Exception` and never ran (M3, ruff B025)."""
+    from mornye.core import network_destinations
+
+    stage_dir = tmp_path / "delivery-abc123"
+    original_output_dir = tmp_path / "original"
+    monkeypatch.setattr(
+        network_destinations.DESTINATIONS,
+        "get",
+        lambda _id: SimpleNamespace(username="u"),
+    )
+    monkeypatch.setattr(
+        network_destinations.DESTINATIONS, "credentials", lambda _profile: "secret"
+    )
+
+    def create_stage(_owner=""):
+        stage_dir.mkdir()
+        return stage_dir
+
+    monkeypatch.setattr(network_destinations, "create_staging_directory", create_stage)
+
+    class FailingSMBBackend:
+        def __init__(self, *_args):
+            pass
+
+        def test_connection(self):
+            pass
+
+        def upload_tree(self, local_root, **_kwargs):
+            raise network_destinations.DestinationError("The share refused the write.")
+
+    monkeypatch.setattr(network_destinations, "SMBBackend", FailingSMBBackend)
+
+    class FakeDownloader:
+        def __init__(self):
+            self._opts = SimpleNamespace(output_dir=str(original_output_dir))
+
+        async def run_async(self, source):
+            output = Path(self._opts.output_dir) / "track.bin"
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(b"audio")
+            return DownloadResult.ok("legacy", str(output), source=source)
+
+    config = MornyeConfig()
+    config.output.directory = original_output_dir
+    config.output.network_destination_id = "destination1234"
+    request = DownloadRequest(
+        sources=["spotify:track:smb-fail"], config=config, prefetched={}
+    )
+    service = DownloadService(
+        event_bus=EventBus(),
+        provider_resolver=ProviderResolver([ProviderProfile("legacy")]),
+        provider_executor=LegacyDownloadAdapter(FakeDownloader()),
+    )
+    with pytest.raises(network_destinations.DestinationError) as err:
+        asyncio.run(service.download(request))
+    assert "Retry identifier: abc123" in str(err.value)

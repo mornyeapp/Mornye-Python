@@ -40,7 +40,8 @@ import time
 from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Any, Iterable, Sequence
+from typing import Any
+from collections.abc import Iterable, Sequence
 
 from . import db
 
@@ -389,7 +390,7 @@ def _streaks(per_day: Iterable[date]) -> tuple[int, int]:
         return 0, 0
 
     longest = run = 1
-    for previous, current in zip(days, days[1:]):
+    for previous, current in zip(days, days[1:], strict=False):
         run = run + 1 if current - previous == timedelta(days=1) else 1
         longest = max(longest, run)
 
@@ -398,7 +399,9 @@ def _streaks(per_day: Iterable[date]) -> tuple[int, int]:
         return longest, 0
 
     current_streak = 1
-    for previous, following in zip(reversed(days[:-1]), reversed(days[1:])):
+    for previous, following in zip(
+        reversed(days[:-1]), reversed(days[1:]), strict=False
+    ):
         if following - previous != timedelta(days=1):
             break
         current_streak += 1

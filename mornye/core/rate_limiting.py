@@ -7,7 +7,8 @@ import re
 import threading
 import time
 from collections.abc import Awaitable
-from typing import Any, Callable, Literal
+from typing import Any, Literal
+from collections.abc import Callable
 
 from .errors import ErrorKind, RateLimitedError
 
@@ -110,7 +111,9 @@ async def await_or_stop(
     operation = asyncio.ensure_future(awaitable)
 
     async def watch_stop() -> None:
-        while not stop_event.is_set():
+        # stop_event is a threading.Event set from another thread (the GUI's
+        # Stop): it cannot be awaited, so it is polled.
+        while not stop_event.is_set():  # noqa: ASYNC110
             await asyncio.sleep(0.1)
 
     watcher = asyncio.create_task(watch_stop())

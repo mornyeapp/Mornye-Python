@@ -22,7 +22,7 @@ class ProviderProfile:
     @classmethod
     def from_manifest(
         cls, manifest: dict, *, name: str | None = None
-    ) -> "ProviderProfile":
+    ) -> ProviderProfile:
         compatible = dict(manifest)
         if name and not compatible.get("id") and not compatible.get("name"):
             compatible["id"] = name
@@ -73,7 +73,7 @@ class ProviderResolver:
         self._profiles = {profile.name: profile for profile in profiles or []}
 
     @classmethod
-    def from_extensions(cls, extensions: list[object]) -> "ProviderResolver":
+    def from_extensions(cls, extensions: list[object]) -> ProviderResolver:
         profiles = []
         for extension in extensions:
             manifest = getattr(extension, "manifest", None)

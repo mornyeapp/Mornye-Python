@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import copy
 import inspect
 import logging
 import shutil
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from collections.abc import Awaitable, Callable
+from typing import Any
 from pathlib import Path
 
 from mornye.application.event_bus import EventBus
@@ -107,7 +109,7 @@ class DownloadService:
         event_bus: EventBus | None = None,
         prefetched: dict[str, TrackMetadata] | None = None,
         downloader: object | None = None,
-    ) -> "DownloadService":
+    ) -> DownloadService:
         if downloader is not None:
             legacy_downloader = LegacyDownloadAdapter(
                 downloader,
@@ -183,7 +185,7 @@ class DownloadService:
         """
         request = copy.copy(request)
         request.config = copy.deepcopy(request.config)
-        started_at = datetime.now(timezone.utc)
+        started_at = datetime.now(UTC)
         succeeded: list[DownloadResult] = []
         failed: list[DownloadFailure] = []
         skipped: list[DownloadSkip] = []
@@ -368,7 +370,11 @@ class DownloadService:
                 )
                 last_error = None
 
-                async def wait_for_provider_slot() -> None:
+                # The executor is bound as a default: the retry helper calls
+                # these within this iteration, and the binding keeps it so.
+                async def wait_for_provider_slot(
+                    provider_executor: Any = provider_executor,
+                ) -> None:
                     if isinstance(provider_executor, LegacyDownloadAdapter):
                         return
                     await download_rate_limiter.wait(
@@ -378,7 +384,9 @@ class DownloadService:
                         stop_event=self._stop_event,
                     )
 
-                async def pause_after_provider_429(error: BaseException) -> None:
+                async def pause_after_provider_429(
+                    error: BaseException, provider_executor: Any = provider_executor
+                ) -> None:
                     if (
                         isinstance(provider_executor, LegacyDownloadAdapter)
                         or not request.config.download.auto_rate_limit_cooldown
@@ -535,18 +543,17 @@ class DownloadService:
                     self._stop_event,
                     on_stop=cancelled.set,
                 )
-            except Exception:
-                cancelled.set()
-                await asyncio.gather(upload_task, return_exceptions=True)
-                raise
             except asyncio.CancelledError:
                 cancelled.set()
-                try:
+                with contextlib.suppress(Exception):
                     await asyncio.shield(upload_task)
-                except Exception:
-                    pass
                 raise
             except Exception as exc:
+                cancelled.set()
+                await asyncio.gather(upload_task, return_exceptions=True)
+                # A failed delivery names the staging folder it left behind,
+                # so the user can retry it. This branch used to sit behind
+                # an earlier bare `except Exception` and never ran (B025).
                 staging_id = smb_staging_dir.name.removeprefix("delivery-")
                 from mornye.core.network_destinations import DestinationError
 
@@ -574,7 +581,7 @@ class DownloadService:
                 )
             shutil.rmtree(smb_staging_dir)
 
-        finished_at = datetime.now(timezone.utc)
+        finished_at = datetime.now(UTC)
         return DownloadReport(
             succeeded=succeeded,
             failed=failed,

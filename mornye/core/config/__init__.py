@@ -109,7 +109,7 @@ class MornyeConfig:
     security: SecurityConfig = field(default_factory=SecurityConfig)
 
     @classmethod
-    def from_legacy_options(cls, options: Any) -> "MornyeConfig":
+    def from_legacy_options(cls, options: Any) -> MornyeConfig:
         """Build the new config model from the current downloader options."""
         config = cls()
         config.output.directory = Path(getattr(options, "output_dir", "./Downloads"))

@@ -44,7 +44,9 @@ class CrossLoopLock:
         # single tick, so the poll interval should be the exception.
         if not self._lock.acquire(blocking=False):
             await asyncio.sleep(0)
-            while not self._lock.acquire(blocking=False):
+            # A threading lock shared across event loops: there is no
+            # asyncio.Event another loop could set for us, so this polls.
+            while not self._lock.acquire(blocking=False):  # noqa: ASYNC110
                 await asyncio.sleep(self._poll_interval)
         return self
 

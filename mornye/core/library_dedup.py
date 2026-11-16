@@ -44,7 +44,7 @@ import time
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
+from collections.abc import Callable
 
 from .isrc_utils import normalize_isrc
 from .paths import cache_path

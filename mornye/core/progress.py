@@ -15,7 +15,7 @@ from enum import Enum
 from typing import Any, IO, cast
 
 from tqdm import tqdm
-from typing_extensions import Self
+from typing import Self
 
 from .console import print_track_progress
 from .cross_loop_lock import CrossLoopLock
@@ -799,7 +799,7 @@ class ProgressManager:
                 await cls._event_queue.put(None)
             try:
                 await asyncio.wait_for(cls._worker_task, timeout=5)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 cls._worker_task.cancel()
             except RuntimeError:
                 # Consumer already died with a stale loop; nothing to drain.

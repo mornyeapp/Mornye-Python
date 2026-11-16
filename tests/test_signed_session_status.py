@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 from pathlib import Path
 
 import pytest
@@ -17,7 +17,7 @@ import pytest
 from mornye.core import signed_session_status as sss
 from mornye.core.signed_session_mobile import SignedSessionClient
 
-NOW = datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 9, 15, 12, 0, tzinfo=UTC)
 
 
 def _iso(delta: timedelta) -> str:
