@@ -1706,46 +1706,7 @@
       font-family: var(--font-mono);
       display: flex; justify-content: space-between; align-items: center; gap: var(--sp-4);
     }
-
-    /* ══════════ LOGS VIEW ══════════ */
-    #view-logs { padding: 18px; }
-    #log-panel {
-      flex: 1; min-height: 0;
-      overflow: hidden;
-      display: flex; flex-direction: column;
-      position: relative;
-    }
-    #log-header {
-      padding: var(--sp-4) var(--sp-5); 
-      background: var(--surface2);
-      display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
-    }
-    #log-header span { 
-      display: flex; align-items: center; gap: var(--sp-3);
-    }
-    /* Pallino di stato in stile terminale/UI accanto al titolo */
-    #log-header span::before {
-      content: ''; display: inline-block; width: 8px; height: 8px;
-    }
-    .log-actions { display: flex; gap: var(--sp-3); }
-    .log-btn { 
-      cursor: pointer; display: flex; align-items: center; justify-content: center;
-      transition: all var(--t);
-    }
-    #logArea {
-      flex: 1; min-height: 0; overflow-y: auto;
-      padding: 14px var(--sp-5);
-      line-height: 1.7; background: var(--surface); user-select: text;
-    }
-    #logArea::-webkit-scrollbar { width: 5px; }
-    #logArea::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
-    .log-line { display: flex; gap: var(--sp-4); margin-bottom: 4px; }
     @keyframes fadein { from { opacity:0; transform: translateY(2px); } to { opacity:1; transform: none; } }
-    .log-ts { flex-shrink: 0; user-select: none; }
-    .log-msg { color: var(--text2); word-break: break-word; }
-    .log-msg.ok    { color: var(--green); }
-    /* Startup diagnostics: visible here, but deliberately never toasted. */
-    .log-msg.debug { color: var(--muted); }
 
     /* ══════════ SETTINGS VIEW ══════════ */
     #view-settings { padding: 0; overflow: hidden; }
