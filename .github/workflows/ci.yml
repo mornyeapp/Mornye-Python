@@ -54,7 +54,10 @@ jobs:
         run: mypy mornye
 
       - name: Pytest (with coverage)
-        run: pytest -v --cov=mornye --cov-report=term-missing --cov-fail-under=30
+        # Floor raised in steps (M5, docs/redesign-plan.md): 67% measured
+        # locally on 2026-11-16, so 60 leaves room for the tests a runner
+        # skips (no node, no ffmpeg). Next step: 65.
+        run: pytest -v --cov=mornye --cov-report=term-missing --cov-fail-under=60
 
       - name: Architecture guards
         run: >-

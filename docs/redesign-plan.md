@@ -689,6 +689,12 @@ regola (una parola = un elemento).
      `tests/test_cli_command_from_gui.py`. Nota: il suggerimento `data-tip`
      dei pulsanti sul bordo sinistro esce dallo schermo sul telefono (vale
      per tutti i pulsanti con `data-tip`, preesistente).
+   - **M5 · soglia di copertura** (commit sotto). Misurata sulla suite
+     completa (`5a7275b`, macOS, Python 3.14): **67%** (31.409 istruzioni,
+     10.282 non coperte; 2348 passati). In CI `--cov-fail-under` passa da
+     30 a 60: margine per i test che un runner salta (senza node, ffmpeg,
+     estensioni vere). Da verificare al primo push: Linux 3.11–3.14 e
+     macOS. Prossimo scatto: 65.
    - **Fermato qui per limite d'uso** (2026-11-16). **Ancora aperti:**
      riorganizzazione di Settings e display di qualità dell'album (domanda
      inviata alla sessione madre con una proposta, nessuna risposta
