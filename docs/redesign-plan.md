@@ -252,7 +252,32 @@ regola (una parola = un elemento).
         così ogni override resta nello stesso file della regola base, dopo
         di essa. Non divise le liste con `:has()`, `:is()`, `:where()` o
         pseudo con prefisso, dove un motore che non le capisce scarta
-        l'intera regola. Confronto: 0 differenze.
+        l'intera regola. Confronto: 0 differenze. (Due liste rimaste
+        intere al primo giro sono divise in `baa50c8`.)
+     5. **Spostamento, foglio per foglio, dall'ultimo al primo** (così un
+        passo intermedio non inverte mai una coppia che il risultato finale
+        non inverta già). Ogni regola va al foglio della vista dove i suoi
+        selettori trovano elementi (sonda a runtime su tutti gli stati di
+        prova), alla shell (`layout.css`), ai dialoghi/toast
+        (`feedback.css`) o, se tocca più viste, a `legacy.css`; i selettori
+        mai trovati seguono le classi già piazzate o i vicini. Le regole
+        spostate vanno in cima al foglio, nell'ordine originale, coi loro
+        commenti; un `@media` è diviso per foglio con lo stesso prelude.
+        Il controllo statico sull'ordine finale lascia 45 coppie, tutte
+        riviste a mano: elementi diversi (`svg` in pulsanti diversi), o
+        risolte mettendo in cima a `legacy.css` le regole che devono restare
+        prima dei campi generici o di `.act-btn` (`.api-modal-body input`,
+        `.s-search input`, `.reg-remove-btn`, la ricerca della coda,
+        `[data-dirty]` di Save), o l'anello di focus: `layout.css` lo dà a
+        specificità (0,1,0) e prima vinceva sui controlli vecchi che
+        disegnano un raggio proprio; dove questi ora caricano dopo, una
+        regola alla stessa specificità ne ripete raggio/contorno.
+        Strumenti in `side-session-notes/…/voce22-tools` (la cartella
+        temporanea è stata svuotata a metà lavoro).
+        - `views/logs.css` (`8ab9132`): 15 blocchi. 0 differenze.
+        - `views/player.css`: 104 blocchi (Player, Now Playing, testi). 0
+          differenze; gli stati di prova non aprono Now Playing, qui vale
+          soprattutto il controllo statico.
    **Prossimo:** Fase 4 (TUI, voci 23–26) — fatta, vedi sotto.
 0. **Fasi 4, 5 e 6 fatte** (2026-11-12), su `redesign`, commit locali non
    pushati. Prima, fuori dal redesign, la **issue #277** (playlist):
