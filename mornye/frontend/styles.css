@@ -1442,10 +1442,6 @@
     /* Nothing scrolls underneath the bar: the page ends where it begins.
        body.has-dock is set by renderQueueNow() alongside #queue-dock.visible. */
     body.has-dock #content { padding-bottom: var(--dock-h); }
-    /* Pages that scroll with #content (Queue, History) must not shrink to
-       the viewport: a shrunk .view lets its rows overflow past that padding,
-       straight under the bar. */
-    .view:has(> .page-body) { flex: 1 0 auto; }
     /* Toasts and the save notice float above the bar, not behind it. */
     @media (min-width: 701px) {
       body:has(#queue-dock.visible) .toast-container.bottom-right,
@@ -1514,39 +1510,6 @@
         transform: none;
       }
     }
-
-    #queue-drawer {
-      position: fixed; inset: 0;
-      display: none; align-items: center; justify-content: center;
-      z-index: var(--z-drawer); padding: var(--sp-6);
-      pointer-events: none;
-    }
-    #queue-drawer.open { display: flex; pointer-events: auto; }
-    #queue-backdrop {
-      position: absolute; inset: 0;
-      background: var(--scrim);
-      opacity: 0; transition: opacity var(--t);
-      pointer-events: none;
-      z-index: var(--z-drawer-backdrop);
-    }
-    #queue-drawer.open #queue-backdrop {
-      opacity: 1; pointer-events: auto;
-    }
-    .queue-panel {
-      position: relative;
-      width: min(700px, calc(100vw - 40px));
-      max-height: min(78vh, 760px);
-      overflow: hidden;
-      display: flex; flex-direction: column;
-      z-index: var(--z-drawer);
-    }
-
-    .queue-panel header {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 22px var(--sp-7) var(--sp-5);
-      gap: 14px;
-    }
-    .queue-panel h3 { margin: 0; font-size: 20px; font-weight: var(--fw-bold); color: var(--text); }
     .close-btn {
       width: 38px; height: 38px; border-radius: 14px;
       display: grid; place-items: center;
@@ -1554,28 +1517,6 @@
       color: var(--text2); cursor: pointer;
     }
     .close-btn:hover { background: var(--surface2); color: var(--text); }
-    .queue-summary {
-      padding: 0 24px 16px;
-      display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: var(--sp-4);
-    }
-    .queue-summary .qs-item {
-      display: flex; align-items: center; gap: var(--sp-4);
-      padding: 14px var(--sp-4); background: var(--surface2);
-      border-radius: 16px; border: 1px solid var(--border);
-      color: var(--text2); font-size: var(--fs-200);
-    }
-    .queue-summary .qs-item strong { color: var(--text); font-weight: 700; }
-    /* They are buttons now (each one filters the list below), so they need to
-       look pressable and to show which one is holding the list down. */
-    .queue-summary .qs-item {
-      cursor: pointer; font-family: var(--app-font); text-align: left;
-      transition: border-color var(--t), background var(--t);
-    }
-    .queue-summary .qs-item:hover { background: var(--surface3); border-color: var(--border2); }
-    .queue-summary .qs-item.is-filtering {
-      border-color: var(--accent);
-      background: var(--accent-subtle);
-    }
 
     #queue-search {
       flex: 1; min-width: 0;
@@ -1592,85 +1533,7 @@
       padding: var(--sp-8) var(--sp-5);
       text-align: center; color: var(--muted); font-size: var(--fs-100);
     }
-    /* Tracks still missing (see the #failed-panel comment in index.html).
-       Same surface and radius as the counters above it, so it reads as part
-       of the queue rather than as a warning banner dropped on top. */
-    .failed-panel {
-      margin: 0 24px var(--sp-4);
-      font-size: var(--fs-200); color: var(--text2);
-    }
-    .failed-panel .fp-head { display: flex; align-items: center; gap: var(--sp-4); flex-wrap: wrap; }
-    .failed-panel .fp-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 160px; }
-    .failed-panel .fp-text strong { color: var(--status-failed-fg); font-weight: 700; }
-    .failed-panel .fp-sub { font-size: var(--fs-75); color: var(--muted); }
-    .failed-panel .fp-actions { display: flex; gap: var(--sp-3); flex-wrap: wrap; }
-    .failed-panel .act-btn { padding: 7px 12px; font-size: var(--fs-75); }
-    .fp-list {
-      list-style: none; margin: 10px 0 0; padding: 0;
-      max-height: 220px; overflow-y: auto;
-      display: flex; flex-direction: column; gap: 6px;
-    }
-    .fp-item {
-      display: flex; align-items: center; gap: var(--sp-3);
-    }
-    .fp-item .fp-main { flex: 1; min-width: 0; }
-    .fp-item .fp-name, .fp-item .fp-error { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .fp-item .fp-name { color: var(--text); }
-    .fp-item .fp-error { font-size: var(--fs-75); color: var(--muted); }
-    .fp-item .fp-attempts { font-size: var(--fs-75); color: var(--muted); font-family: var(--font-mono); white-space: nowrap; }
-    .queue-content {
-      padding: 0 24px 20px;
-      display: flex;
-      flex-direction: column;
-      gap: var(--sp-5);
-      min-height: 240px;
-      max-height: min(500px, 78vh); 
-      overflow-y: auto;
-    }
-
-    .queue-content::-webkit-scrollbar {
-      width: 4px;
-    }
-    .queue-content::-webkit-scrollbar-thumb {
-      background: var(--border2);
-      border-radius: 99px;
-    }
-
-    .queue-empty {
-      flex: 1; display: flex; align-items: center; justify-content: center;
-      color: var(--muted); font-size: 16px; text-align: center;
-      padding: 36px var(--sp-4);
-    }
-    .queue-empty .q-icon { font-size: 36px; margin-bottom: 10px; opacity: .32; }
-    .queue-list { display: flex; flex-direction: column; gap: 14px; }
-    .queue-item {
-      display: flex; flex-direction: column; gap: var(--sp-4);
-    }
-    .queue-item .qi-title { font-size: 14px; font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .queue-item .qi-artist { font-size: var(--fs-100); color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    /* The row the title and the status pill share. It had no rule at all, so
-       it was a plain block: the pill (also a div, also block) stretched the
-       full width of the item and rendered as a coloured bar under the title
-       instead of a pill beside it. */
-    .queue-item .qi-top {
-      display: flex; align-items: flex-start; justify-content: space-between;
-      gap: var(--sp-4);
-    }
-    .queue-item .qi-meta { min-width: 0; }
-    .queue-item .qi-pill {
-      display: inline-block; flex-shrink: 0;
-      white-space: nowrap;
-    }
-    .queue-item .qi-bottom { font-family: var(--font-mono); font-size: var(--fs-100); color: var(--muted); }
-    .queue-item .qi-bottom-meta { display: flex; flex-direction: column; gap: 3px; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
-    .queue-item .qi-bottom-meta .qi-bm-path { color: var(--text-dim); font-size: var(--fs-75); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
     @keyframes fadeup { from { opacity:0; transform: translateY(4px); } to { opacity:1; transform:none; } }
-
-    #queue-counter {
-      padding: 0 24px 22px;
-      font-family: var(--font-mono);
-      display: flex; justify-content: space-between; align-items: center; gap: var(--sp-4);
-    }
     @keyframes fadein { from { opacity:0; transform: translateY(2px); } to { opacity:1; transform: none; } }
     .s-header { padding: var(--sp-6) var(--sp-5) var(--sp-4); flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: var(--sp-5); flex-wrap: wrap; }
     .s-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -1718,80 +1581,15 @@
     }
     .share-chip svg { width: 13px; height: 13px; color: var(--accent-text); }
     .share-chip:hover { background: var(--accent-subtle); border-color: var(--accent-border); color: var(--text); }
-
-    /* ── Queue & History pages ──────────────────────────────────────────
-       Shared page grammar: segmented type tabs with counts, one toolbar row
-       (search, filter, actions — destructive in red, primary last), then a
-       list of rows: artwork, title, two lines of context, status, actions. */
-    .page-body { padding: 0 var(--sp-5) var(--sp-8); max-width: 1180px; width: 100%; }
     .act-btn svg { flex-shrink: 0; }
     .act-btn:disabled { cursor: not-allowed; transform: none !important; box-shadow: none; }
-
-    .seg-tabs {
-      display: flex; gap: var(--sp-2); flex-wrap: wrap;
-      padding-bottom: var(--sp-4); margin-bottom: var(--sp-4);
-      border-bottom: 1px solid var(--border);
-    }
-    .seg-tab {
-      display: inline-flex; align-items: center; gap: 8px;
-      font-weight: var(--fw-medium);
-      cursor: pointer; transition: background var(--t), color var(--t), border-color var(--t);
-    }
-    .seg-tab svg { width: 16px; height: 16px; color: var(--muted); }
-    .seg-tab.active { font-weight: var(--fw-semibold); }
-    .seg-tab.active svg { color: var(--accent-text); }
-    .seg-count {
-      min-width: 22px; font-weight: var(--fw-semibold); text-align: center;
-    }
-
-    .page-toolbar { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; margin-bottom: var(--sp-4); }
-    .tb-spacer { flex: 1; }
-    .tb-field {
-      display: inline-flex; align-items: center; gap: 8px;
-      color: var(--muted);
-      transition: border-color var(--t), box-shadow var(--t);
-    }
-    .tb-field svg { width: 15px; height: 15px; flex-shrink: 0; }
-    /* Doubled up so it outranks the global input/select theming: the field
-       box is the label, the control inside it draws nothing of its own. */
-    .tb-field.tb-field input, .tb-field.tb-field select {
-      border: none; outline: none; background-color: transparent; box-shadow: none;
-      border-radius: 0; min-height: 0;
-      color: var(--input-text); font-family: var(--app-font); font-size: var(--fs-100);
-      height: 100%; min-width: 0; padding: 0;
-    }
     .tb-search { width: 260px; }
     .tb-search input { flex: 1; }
     .tb-grow { flex: 1; width: auto; min-width: 200px; }
-    /* .tb-field.tb-select, not .tb-select: the reset above (padding: 0)
-       outranked the plain selector, so the label ran into the chevron. */
-    .tb-field.tb-select select {
-      padding-right: 22px; background-position: right center; background-size: 13px 13px;
-      cursor: pointer;
-    }
-
-    .page-list { display: flex; flex-direction: column; gap: var(--sp-2); }
-    .page-list > .empty-state {
-      padding: var(--sp-10) var(--sp-6);
-      border-radius: var(--radius-lg);
-    }
     .page-list > .error-state {
       padding: var(--sp-10) var(--sp-6);
       border-radius: var(--radius-lg);
     }
-    /* Empty staged queue while something is downloading: one quiet line
-       instead of the big placeholder, so "Downloading now" sits near the
-       top and the active row is in view without scrolling. */
-    #view-queue.has-live #sq-list.is-empty > .empty-state {
-      flex-direction: row; justify-content: flex-start; text-align: left;
-      gap: var(--sp-3); padding: var(--sp-3) var(--sp-4);
-    }
-    #view-queue.has-live #sq-list.is-empty > .empty-state .es-icon {
-      width: 28px; height: 28px; margin: 0; border-radius: 9px; flex-shrink: 0;
-    }
-    #view-queue.has-live #sq-list.is-empty > .empty-state .es-icon svg { width: 15px; height: 15px; }
-    #view-queue.has-live #sq-list.is-empty > .empty-state .es-hint { max-width: none; }
-    #view-queue.has-live #sq-list.is-empty + .page-section-title { margin-top: var(--sp-5); }
     .page-row {
       display: grid; grid-template-columns: 52px minmax(0, 1fr) auto auto;
       align-items: center; gap: var(--sp-4);
@@ -1816,7 +1614,6 @@
     }
     .row-btn svg { width: 15px; height: 15px; }
     .row-btn:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 1px; }
-    .seg-tab:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 1px; }
 
     .status-pill {
       display: inline-flex; align-items: center; gap: 6px;
@@ -1834,20 +1631,6 @@
     @keyframes pill-spin { to { transform: rotate(360deg); } }
     @media (prefers-reduced-motion: reduce) { .pill-spinner { animation: none; } }
 
-    .page-section-title {
-      margin: var(--sp-8) 0 var(--sp-3);
-    }
-    /* The live download list, at home in the page instead of a modal. */
-    #view-queue #queue-drawer { position: static; display: block; padding: 0; pointer-events: auto; z-index: auto; }
-    #view-queue #queue-backdrop,
-    #view-queue .queue-panel .close-btn,
-    #view-queue .queue-panel header h3 { display: none; }
-    #view-queue .queue-panel {
-      width: 100%; max-height: none; z-index: auto;
-      border-radius: var(--radius-lg);
-    }
-    #view-queue .queue-panel header { padding: var(--sp-4) var(--sp-5) 0; justify-content: flex-end; }
-
     .nav-badge {
       margin-left: auto; min-width: 20px; padding: 1px 6px;
       border-radius: var(--radius-pill); background: var(--accent); color: var(--accent-fg);
@@ -1861,79 +1644,9 @@
       .tb-search { width: 100%; }
       body.web-mode .nav-badge { display: none; }
     }
-
-    /* ── Downloading now (live list on the Queue page) ──
-       One card: live numbers and list actions on the first row, the status
-       counters as a row of filter pills with the search beside them, then
-       the rows. Replaces the drawer's four big emoji tiles. */
-    .act-btn.ghost {
-      box-shadow: none;
-      font-weight: var(--fw-medium);
-    }
-    .act-btn.ghost:hover { background: var(--surface2); transform: none; }
-    #view-queue .live-panel { padding: 0; overflow: hidden; }
-    .live-head {
-      display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4);
-      flex-wrap: wrap;
-    }
-    .live-metrics { display: flex; gap: var(--sp-8); flex-wrap: wrap; }
-    .metric { display: flex; flex-direction: column; min-width: 88px; }
-    .live-actions { display: flex; gap: var(--sp-1); }
-    .live-filters {
-      display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap;
-      padding: var(--sp-3) var(--sp-5);
-      border-bottom: 1px solid var(--border);
-    }
-    #view-queue .queue-summary {
-      display: flex; gap: var(--sp-2); flex-wrap: wrap; margin: 0; padding: 0;
-      grid-template-columns: none;
-    }
-    #view-queue .queue-summary .qs-item {
-      display: inline-flex; align-items: center; gap: 8px;
-      height: 32px; padding: 0 12px; min-width: 0;
-      border-radius: var(--radius-pill);
-      background: var(--surface2); border: 1px solid transparent;
-      color: var(--text2); font-family: var(--app-font); font-size: var(--fs-100); font-weight: var(--fw-medium);
-      box-shadow: none;
-    }
-    #view-queue .queue-summary .qs-item strong {
-      font-family: var(--font-mono); font-size: var(--fs-100); color: var(--text);
-      font-variant-numeric: tabular-nums;
-    }
-    #view-queue .queue-summary .qs-item:hover { background: var(--surface3); }
-    #view-queue .queue-summary .qs-item.is-filtering {
-      background: var(--accent-subtle); border-color: var(--accent-border); color: var(--text);
-    }
-    .qs-dot { background: currentColor; flex-shrink: 0; }
-    .qs-item.queued .qs-dot    { color: var(--status-queued-fg); }
-    .qs-item.completed .qs-dot { color: var(--status-done-fg); }
-    .qs-item.skipped .qs-dot   { color: var(--status-skipped-fg); }
-    .qs-item.failed .qs-dot    { color: var(--status-failed-fg); }
     .live-search { margin-left: auto; width: 240px; height: 34px; }
     .live-search #queue-search { border: none; background: transparent; padding: 0; height: 100%; width: 100%; box-shadow: none; }
-    #view-queue .failed-panel { margin: var(--sp-3) var(--sp-5) 0; }
-    #view-queue .queue-content { max-height: none; min-height: 200px; padding: var(--sp-2) var(--sp-3); }
-    #view-queue .queue-empty {
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 6px; padding: var(--sp-10) var(--sp-5); text-align: center; color: var(--muted);
-    }
-    #view-queue .queue-empty .q-icon {
-      width: 44px; height: 44px; margin: 0 0 6px; opacity: 1;
-      display: grid; place-items: center; border-radius: var(--radius-md);
-      background: var(--surface2); color: var(--muted); font-size: 0;
-    }
-    #view-queue .queue-empty .q-icon svg { width: 20px; height: 20px; }
-    #view-queue .queue-empty .q-title { font-size: var(--fs-200); font-weight: var(--fw-semibold); color: var(--text); }
-    #view-queue .queue-empty .q-hint { font-size: var(--fs-100); max-width: 46ch; }
-    #view-queue #queue-counter {
-      display: flex; justify-content: space-between;
-      padding: var(--sp-3) var(--sp-5); border-top: 1px solid var(--border);
-      font-size: var(--fs-75); color: var(--muted); font-variant-numeric: tabular-nums;
-    }
-    /* "0 tracks" under an empty list says nothing the empty state does not. */
-    #view-queue .live-panel:has(#queue-empty:not([style*="none"])) #queue-counter { display: none; }
     @media (max-width: 700px) {
-      .live-metrics { gap: var(--sp-5); }
       .live-search { margin-left: 0; width: 100%; }
     }
     .s-body::-webkit-scrollbar { width: 3px; }
@@ -2618,12 +2331,6 @@
   .api-modal-actions > div:empty { display: none; }
   .api-modal-actions .act-btn { flex: 1 1 auto; min-height: 44px; }
 
-  #queue-drawer { padding: 0; align-items: flex-end; }
-  .queue-panel {
-    width: 100%;
-    max-height: 88dvh;
-  }
-
   #folder-browser-modal { align-items: flex-end; }
   .fb-card {
     width: 100%;
@@ -2851,7 +2558,6 @@
   body.web-mode { --nav-h: 46px; }
   body.web-mode .nav-btn { height: 38px; }
   .api-modal-card, .fb-card { max-height: 96dvh; }
-  .queue-panel { max-height: 96dvh; }
 }
 
 /* Mornye surfaces: grouped iOS neutrals, compact controls, and system-like
@@ -2941,16 +2647,9 @@ textarea {
   border-radius: 16px;
   box-shadow: var(--elev-2);
 }
-.queue-panel {
-  border-radius: 16px;
-  box-shadow: var(--elev-2);
-}
 
 @media (max-width: 700px) {
   .api-modal-card, .fb-card {
-    border-radius: 32px 32px 0 0;
-  }
-  .queue-panel {
     border-radius: 32px 32px 0 0;
   }
 }
