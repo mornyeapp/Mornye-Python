@@ -74,7 +74,10 @@ mornye --check-subscriptions --download
 ```
 
 Unlike `--watch`, which re-syncs the whole playlist every pass, this fetches
-only what was added, and a track you deleted from disk is not fetched again.
+only what was added. When new tracks are found, the playlist's M3U is rebuilt
+from the current Spotify listing, so removed tracks disappear from the M3U and
+the remaining tracks follow the playlist's current order. A track you deleted
+from disk is not fetched again.
 
 ### Running it on a schedule
 

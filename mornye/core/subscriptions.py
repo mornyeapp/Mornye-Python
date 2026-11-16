@@ -715,7 +715,8 @@ class CheckResult:
     """What one check found. `new` is empty on a first (watermarking) check.
 
     For a playlist, `artist_name` is the playlist's name, `new` lists the
-    added tracks and `new_tracks` carries their full TrackMetadata.
+    added tracks, `new_tracks` carries their full TrackMetadata, and
+    `playlist_tracks` carries the complete current listing.
     """
 
     subscription: Subscription
@@ -725,6 +726,7 @@ class CheckResult:
     watermarked: bool = False
     error: str = ""
     new_tracks: list = field(default_factory=list)
+    playlist_tracks: list = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -791,6 +793,7 @@ async def check_async(
             total=len(releases),
             new=[],
             watermarked=True,
+            playlist_tracks=tracks if sub.kind == "playlist" else [],
         )
 
     fresh_ids = {r.id for r in fresh}
@@ -806,6 +809,7 @@ async def check_async(
         total=len(releases),
         new=fresh,
         new_tracks=new_tracks,
+        playlist_tracks=tracks if sub.kind == "playlist" else [],
     )
 
 

@@ -122,6 +122,42 @@ def test_followed_playlist_appends_to_m3u(tmp_path: Path) -> None:
     assert lines[-1] == "../Playlist1/New - Artist.flac"
 
 
+def test_followed_playlist_refresh_rewrites_m3u_to_current_tracks(
+    tmp_path: Path,
+) -> None:
+    folder = tmp_path / "Top Global"
+    folder.mkdir()
+    (folder / "Top Global.m3u8").write_text(
+        "#EXTM3U\n#EXTINF:1,Artist - Removed\nRemoved.flac\n"
+        "#EXTINF:1,Artist - Kept\nKept.flac\n",
+        encoding="utf-8",
+    )
+    kept = folder / "Kept.flac"
+    added = tmp_path / "Playlist1" / "Added.flac"
+    current_tracks = [_track("t2", "Kept"), _track("t3", "Added")]
+    worker = _FakeWorker(folder, {"t3": str(added)})
+
+    asyncio.run(
+        MornyeDownloader._write_run_playlist_file_async(
+            DownloadOptions(output_dir=str(folder), library_dir=str(tmp_path)),
+            "rewrite",
+            "",
+            [_track("t3", "Added")],
+            worker,  # type: ignore[arg-type]
+            playlist_tracks=current_tracks,
+            existing_paths={"t2": kept},
+        )
+    )
+
+    assert (folder / "Top Global.m3u8").read_text(encoding="utf-8").splitlines() == [
+        "#EXTM3U",
+        "#EXTINF:180,Artist - Kept",
+        "Kept.flac",
+        "#EXTINF:180,Artist - Added",
+        "../Playlist1/Added.flac",
+    ]
+
+
 def test_m3u_none_writes_nothing(tmp_path: Path) -> None:
     worker = _FakeWorker(tmp_path, {"t1": str(tmp_path / "a.flac")})
 

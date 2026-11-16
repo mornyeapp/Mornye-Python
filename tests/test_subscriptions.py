@@ -317,6 +317,7 @@ def test_playlist_first_check_watermarks():
     assert result.watermarked
     assert result.new == [] and result.new_tracks == []
     assert result.total == 2
+    assert [track.id for track in result.playlist_tracks] == ["t1", "t2"]
     assert subs.get(sub.id).name == "My Playlist"
 
 
@@ -331,6 +332,7 @@ def test_playlist_check_returns_only_the_added_tracks_with_metadata():
 
     assert [r.id for r in result.new] == ["t2"]
     assert [t.id for t in result.new_tracks] == ["t2"]
+    assert [t.id for t in result.playlist_tracks] == ["t1", "t2"]
     assert result.new[0].url == "https://open.spotify.com/track/t2"
     assert result.new[0].title == "New one — Artist"
     assert result.to_dict()["kind"] == "playlist"

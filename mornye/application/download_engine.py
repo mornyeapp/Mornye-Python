@@ -315,9 +315,10 @@ class DownloadOptions:
 
     # Playlist file written next to a playlist download ("m3u8", "m3u", or
     # "none"). A whole-playlist run rewrites it in playlist order; a run of
-    # loose tracks that belong to a playlist folder (a followed playlist's
-    # new tracks, see `library_dir`) appends to it. Issue #267.
+    # loose tracks that belong to a playlist folder appends unless the full
+    # current listing is supplied for a followed-playlist refresh.
     m3u_format: str = "m3u8"
+    m3u_playlist_tracks: list[TrackMetadata] | None = None
 
     # The library root when `output_dir` is one playlist's subfolder inside
     # it. Loose tracks are then looked up across the whole library first: a
@@ -2289,7 +2290,17 @@ class MornyeDownloader:
 
         pending = await self._resolve_isrc_bulk_async(tracks)
         existing_paths = await self._library_matches_async(pending)
-        playlist_file = "append" if self._opts.library_dir else None
+        current_playlist = self._opts.m3u_playlist_tracks
+        playlist_existing_paths = (
+            await self._library_matches_async(current_playlist)
+            if current_playlist is not None
+            else None
+        )
+        playlist_file = (
+            "rewrite"
+            if current_playlist is not None
+            else "append" if self._opts.library_dir else None
+        )
         try:
             while True:
                 failed = await self._run_worker_async(
@@ -2300,6 +2311,8 @@ class MornyeDownloader:
                     False,
                     existing_paths=existing_paths,
                     playlist_file=playlist_file,
+                    playlist_tracks=current_playlist,
+                    playlist_existing_paths=playlist_existing_paths,
                 )
                 if not loop_minutes or loop_minutes <= 0 or not failed:
                     break
@@ -2314,9 +2327,9 @@ class MornyeDownloader:
         """Tracks already in `opts.library_dir` or a scanned library, by id.
 
         `library_dir` is only set when `output_dir` is one playlist's folder
-        inside a bigger library: a followed playlist's new tracks are looked
-        up across every playlist folder, so one that another playlist already
-        has is linked from the M3U instead of downloaded twice (issue #267).
+        inside a bigger library: followed playlist tracks are looked up across
+        every playlist folder, so one that another playlist already has is
+        linked from the M3U instead of downloaded twice (issue #267).
         `library_scan_dirs` are the user's other music folders (issue #272).
         """
         dirs = [self._opts.library_dir] if self._opts.library_dir else []
@@ -3225,12 +3238,14 @@ class MornyeDownloader:
         opts: DownloadOptions | None = None,
         existing_paths: dict[str, Path] | None = None,
         playlist_file: str | None = None,
+        playlist_tracks: list[TrackMetadata] | None = None,
+        playlist_existing_paths: dict[str, Path] | None = None,
     ) -> list[TrackMetadata]:
         """Runs one worker over `tracks`.
 
-        `playlist_file` is "rewrite" for a whole playlist (its M3U is written
-        afresh in playlist order) or "append" for loose tracks that belong to
-        a playlist folder (they are added to the M3U already there).
+        `playlist_file` is "rewrite" for a whole playlist or a followed
+        playlist refresh (using its full current listing), and "append" for
+        loose tracks that belong to a playlist folder.
         """
         effective = opts if opts is not None else self._opts
         updated_tracks = await self._register_queue_async(tracks)
@@ -3253,6 +3268,8 @@ class MornyeDownloader:
                 collection_name,
                 updated_tracks,
                 worker,
+                playlist_tracks=playlist_tracks,
+                existing_paths=playlist_existing_paths,
             )
         failed_ids = {f[0] for f in failed_tuples}
         return [t for t in updated_tracks if t.id in failed_ids]
@@ -3264,6 +3281,9 @@ class MornyeDownloader:
         collection_name: str,
         tracks: list[TrackMetadata],
         worker: LegacyDownloadWorker,
+        *,
+        playlist_tracks: list[TrackMetadata] | None = None,
+        existing_paths: dict[str, Path] | None = None,
     ) -> None:
         """Writes the M3U for a playlist run. Never fails the download.
 
@@ -3275,10 +3295,11 @@ class MornyeDownloader:
         base_out = worker.output_dir
         if fmt not in M3U_FORMATS or opts.output_path or not base_out:
             return
-        completed = worker.completed_paths
+        completed = {track_id: str(path) for track_id, path in (existing_paths or {}).items()}
+        completed.update(worker.completed_paths)
         entries = [
             entry_for(track, Path(completed[track.id]))
-            for track in tracks
+            for track in (playlist_tracks if playlist_tracks is not None else tracks)
             if completed.get(track.id)
         ]
         if not entries and mode != "rewrite":

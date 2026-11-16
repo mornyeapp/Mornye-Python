@@ -1637,6 +1637,10 @@ class MornyeAPI(
             i: TrackMetadata.model_validate(t)
             for i, t in zip(indices, raw_tracks, strict=True)
         }
+        playlist_tracks = [
+            TrackMetadata.model_validate(track)
+            for track in payload.get("playlist_tracks") or []
+        ]
         self._download_task(
             indices,
             dict(payload.get("config") or {}),
@@ -1644,6 +1648,7 @@ class MornyeAPI(
             source_url=str(payload.get("source_url") or ""),
             whole=bool(payload.get("whole")),
             playlist_name=str(payload.get("playlist_name") or ""),
+            playlist_tracks=playlist_tracks,
             collection_name=str(payload.get("collection_name") or ""),
             announce=payload.get("session") == self._session_id,
         )
@@ -1749,6 +1754,7 @@ class MornyeAPI(
         source_url: str | None = None,
         whole: bool | None = None,
         playlist_name: str = "",
+        playlist_tracks: list | None = None,
         collection_name: str | None = None,
         announce: bool = True,
     ) -> None:
@@ -2115,6 +2121,7 @@ class MornyeAPI(
                 use_album_subfolders=use_album_subfolders,
                 create_playlist_subfolders=create_playlist_subfolders,
                 m3u_format=str(config.get("m3u_format") or "m3u8"),
+                m3u_playlist_tracks=playlist_tracks or None,
                 library_dir=library_dir,
                 library_scan_dirs=library_scan_dirs_from(
                     config.get("library_scan_dirs")

@@ -450,9 +450,9 @@ def append_m3u(
 ) -> str:
     """Adds `entries` to an existing M3U, skipping paths it already lists.
 
-    Used when only part of a playlist was downloaded (a followed playlist's
-    new tracks): the tracks already listed keep their place, the new ones go
-    at the end. An empty or missing file starts a fresh one.
+    Used when loose tracks are added to a playlist folder without the full
+    current playlist listing: existing entries keep their place and new ones
+    go at the end. An empty or missing file starts a fresh one.
     """
     base = Path(playlist_path).parent
     lines = [line for line in existing.splitlines() if line.strip()]
