@@ -569,3 +569,60 @@
     animation-iteration-count: 1 !important;
   }
 }
+
+/* ── Command palette (N1, palette.js) ─────────────────────────────────
+   A dialog near the top, like a launcher: one field, a list of commands
+   on rules, the active one marked by the signal bar on its left. */
+.palette {
+  position: fixed; inset: 0; z-index: var(--z-modal);
+  display: flex; justify-content: center; align-items: flex-start;
+  padding: 12vh var(--space-4) var(--space-4);
+}
+.palette.hidden { display: none; }
+.palette-backdrop { position: absolute; inset: 0; background: var(--ground); opacity: .72; }
+.palette-card {
+  position: relative; z-index: 1;
+  width: min(560px, 100%); max-height: 70vh;
+  display: flex; flex-direction: column;
+  border: 1px solid var(--rule-strong); border-radius: var(--radius-1);
+  background: var(--surface); box-shadow: var(--elevation-overlay);
+}
+.palette-input {
+  height: 44px; padding: 0 var(--space-4);
+  border: 0; border-bottom: 1px solid var(--rule); border-radius: 0;
+  background: transparent; color: var(--text);
+  font-family: var(--font); font-size: var(--text-md);
+  outline: none; /* focus shows on the rule under it (below) */
+}
+/* Doubled class: outranks the generic input rules of legacy.css (the
+   `input:focus` ring, the phone radius). */
+.palette-input.palette-input { border-radius: 0; }
+.palette-input.palette-input:focus { border-color: var(--signal-strong); border-width: 0 0 1px; box-shadow: none; outline: none; }
+.palette-input::placeholder { color: var(--text-muted); }
+.palette-list { list-style: none; margin: 0; padding: var(--space-1) 0; overflow-y: auto; }
+.palette-item {
+  display: flex; align-items: center; gap: var(--space-3);
+  min-height: var(--row); padding: 0 var(--space-4);
+  border-left: 2px solid transparent;
+  color: var(--text-2); font-size: var(--text-sm); cursor: pointer;
+}
+.palette-item[aria-selected="true"] { border-left-color: var(--signal-strong); background: var(--selected); color: var(--text); }
+.palette-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.palette-group {
+  color: var(--text-muted); font-size: var(--text-xs);
+  letter-spacing: var(--tracking-label); text-transform: uppercase; white-space: nowrap;
+}
+.palette-key {
+  padding: 0 6px; border: 1px solid var(--rule-strong); border-radius: var(--radius-1);
+  color: var(--text-2); font-family: var(--font); font-size: var(--text-xs); line-height: 18px;
+}
+.palette-empty { padding: var(--space-4); color: var(--text-muted); font-size: var(--text-sm); }
+.palette-foot {
+  padding: var(--space-2) var(--space-4); border-top: 1px solid var(--rule);
+  color: var(--text-muted); font-size: var(--text-xs);
+}
+@media (max-width: 700px) {
+  .palette { padding-top: var(--space-4); }
+  .palette-input { font-size: 16px; } /* no iOS focus zoom */
+  .palette-group { display: none; }
+}

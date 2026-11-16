@@ -8,6 +8,8 @@
   document.write('<script src="inline-handlers.js?_=' + t + '"><\/script>');
   document.write('<script src="toast-system.js?_=' + t + '"><\/script>');
   document.write('<script src="app.js?_=' + t + '"><\/script>');
+  // The command palette and shortcuts (N1): after app.js, whose functions it calls.
+  document.write('<script src="palette.js?_=' + t + '"><\/script>');
 })();
 
 // --web mode only (see sw.js's own comment for what the service worker

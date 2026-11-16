@@ -695,6 +695,24 @@ regola (una parola = un elemento).
      30 a 60: margine per i test che un runner salta (senza node, ffmpeg,
      estensioni vere). Da verificare al primo push: Linux 3.11–3.14 e
      macOS. Prossimo scatto: 65.
+   - **N1 · palette comandi e scorciatoie** (commit sotto).
+     `frontend/palette.js` (caricato dopo `app.js` da `boot-tail.js`, in
+     `sw.js`, `CACHE_NAME` v23): Ctrl+K / ⌘K apre un dialogo in alto con
+     33 comandi — le dieci viste, le sette schede di Settings, salva
+     impostazioni, barra link/ricerca, fetch, cambio link/ricerca, copia
+     comando CLI e scarica tutto (solo con una scheda aperta), drawer della
+     coda, avvia/ferma, riprova i falliti, controllo provider, play/pausa,
+     Now Playing, tema scuro/chiaro/sistema, rail. Filtro per parole in
+     qualsiasi ordine; ↑/↓, Invio, Esc; il focus torna dove era. Fuori da
+     un campo di testo `/` porta alla barra link/ricerca (come `/` nella
+     TUI) e `?` apre la palette. Ogni comando chiama una funzione che
+     `app.js` ha già: nessun comportamento nuovo. Aspetto in
+     `feedback.css` (famiglia dei dialoghi: filetti, voce attiva con la
+     barra segnale, scorciatoie come `kbd`). Verificato con Playwright a
+     1280 scuro e 375 chiaro (apre, filtra "set fil" → Settings → Files,
+     Invio, Esc, `/`), nessun errore. Test: `tests/test_command_palette.py`
+     (ogni funzione chiamata esiste, ogni scheda esiste, le scorciatoie non
+     scattano nei campi).
    - **Fermato qui per limite d'uso** (2026-11-16). **Ancora aperti:**
      riorganizzazione di Settings e display di qualità dell'album (domanda
      inviata alla sessione madre con una proposta, nessuna risposta
