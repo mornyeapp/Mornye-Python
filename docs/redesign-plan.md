@@ -15,7 +15,7 @@ in cui costa meno farlo.
 
 ---
 
-## 0. Stato e ripartenza (aggiornato 2026-11-12)
+## 0. Stato e ripartenza (aggiornato 2026-11-16)
 
 **Chi riprende legga questa sezione, poi la §2 (direzione scelta) e la §4
 (fasi).** Tutto il lavoro è sul branch `2.0.6`, in commit locali **non
@@ -373,9 +373,8 @@ regola (una parola = un elemento).
      accanto alla scheda album e la coda mostra una riga vuota sotto i
      brani in attesa/errore: estetico, nessuna funzione persa;
      `text-wrap: pretty` viene ignorato dove manca.
-   **Aperte:** F7
-   (`confirm()` nativi), riorganizzazione di Settings, quality display
-   dell'album, toast "fetching metadata…" che resta durante la ricerca,
+   **Aperte allora:** F7, riorganizzazione di Settings, quality display
+   dell'album, toast "fetching metadata…" — chiuse nel punto 7; resta la
    verifica con dati veri (Jellyfin, scansione Local, seguiti, download).
 0. **Fase 2 completa** — sul branch **`redesign`** (creato da `2.0.6` dopo
    i mock, come da §5: dalla Fase 2 in poi un branch dedicato e un rilascio
@@ -441,7 +440,7 @@ regola (una parola = un elemento).
 2. **§2 tutta decisa** (2026-11-12): direzione A, JetBrains Mono come unico
    font, segnale ambra, logo invariato fino alla Fase 5, tema chiaro
    derivato. Nessuna scelta aperta prima della Fase 2.
-3. **F1, F6, F7, M1–M6, N1–N5** — non iniziati (F9 fatta nella voce 26).
+3. **F1, F6, F7, M1–M6, N1–N5** — vedi il punto 7 (F9 fatta nella voce 26).
 4. **F3, resto**: restano ~30 avvisi `ASYNC240`, quasi tutti un singolo
    `exists()`/`getsize()` su disco locale. Lasciati di proposito.
 5. **Jellyfin con un server vero** — vedi sopra.
@@ -746,20 +745,35 @@ regola (una parola = un elemento).
      terminale andrebbe ripensato come elenco di sezioni). Da fare ognuno
      con la sua sessione. Nota: `tests/visual/capture_tui.py` ora cattura
      13 pannelli; la baseline ne ha 12.
-   - **Fermato qui per limite d'uso** (2026-11-16). **Ancora aperti:**
-     riorganizzazione di Settings e display di qualità dell'album (domanda
-     inviata alla sessione madre con una proposta, nessuna risposta
-     ancora); F1 (analisi fatta: 167 `onclick`, 26 `onchange`, 8
-     `oninput`, 3 `onkeydown`, drag&drop in `index.html` e 47+7+8 handler
-     nel markup di `app.js`, quasi tutti chiamate semplici `f('x', this)`;
-     servono: handler → `data-on*` con un piccolo interprete senza `eval`
-     legato per elemento (MutationObserver per il markup generato, così
-     l'ordine con gli altri listener resta quello attuale), gli script
-     inline di `<head>`/`<body>` e i `document.write` in file esterni, la
-     flag `__MORNYE_WEB_MODE__` di `webapp.py` come attributo, poi CSP
-     senza `unsafe-inline` + `nosniff` + `frame-ancestors`; attenzione:
-     lo strumento di confronto cerca le schede di Settings per
-     `onclick`); F6 negli altri moduli; F3 resto; M1–M6, N1–N5.
+   - **M6 e N5 — rinviate insieme, con le misure.** Inventario
+     (2026-11-16): `index.html` ha ~560 stringhe uniche (439 nodi di
+     testo, 124 attributi `placeholder`/`title`/`aria-label`/`data-tip`/
+     `alt`; ~2.300 parole); `app.js` almeno 340 letterali visibili (toast,
+     stati, titoli, `textContent`), quasi tutti in template con
+     interpolazioni e plurali. Un italiano che copre solo il markup
+     statico darebbe un'interfaccia metà italiana e metà inglese (righe,
+     toast, errori generati da JS) — la stessa ragione per cui la §5 vuole
+     un rilascio unico. Piano proposto: (1) `frontend/i18n.js` con
+     `t(chiave, variabili)` e plurali (`Intl.PluralRules`), dizionari in
+     `frontend/locales/en.json`/`it.json`, attributi `data-i18n` /
+     `data-i18n-attr` sul markup applicati da `boot-tail.js` prima di
+     `app.js`; (2) estrazione automatica del markup statico (uno script
+     che assegna chiavi stabili dall'`id`/contesto) con un test che rifiuta
+     testo nuovo fuori dizionario; (3) `app.js` vista per vista, insieme a
+     M1 (i moduli sono il momento naturale per passare ogni stringa da
+     `t()`); (4) N5: `it.json` completo e selettore lingua in General,
+     solo quando (1)–(3) coprono tutto. Testi del backend mostrati nella
+     GUI (`self.log(...)`, errori delle API) restano in inglese: da
+     decidere se tradurli o mostrarli come dettaglio.
+   **Stato di chiusura (2026-11-16):** fatte F7, toast di ricerca,
+   orfano `hc-summary`, F6 (`app.py`), riorganizzazione di Settings,
+   display di qualità, F1, M2, M3, M4, M5, N1, N2, N4; N3 in parte
+   (Following). **Ancora aperte:** M1 (piano sopra), M6 + N5 (piano
+   sopra), N3 Local ed Explore, F6 negli altri moduli (~50 casi, lotto
+   `BLE`/`S110` di M3), F3 resto (deliberato), Jellyfin con un server
+   vero, voce 31 (pywebview su macOS/Windows/Linux, Docker, PWA), mypy:
+   3 errori preesistenti (`core/env_settings.py:109`,
+   `application/download_service.py` ~246–247).
 
 ### Da sapere prima di toccare qualcosa
 
