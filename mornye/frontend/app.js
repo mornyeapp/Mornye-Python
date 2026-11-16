@@ -80,7 +80,7 @@ function updateSaveButtonVisual() {
     if (isDirty) {
         btn.style.opacity = "1";
         btn.textContent = "Save Changes (Unsaved)";
-        btn.dataset.dirty = "true"; // red border: styles.css
+        btn.dataset.dirty = "true"; // red border: css/legacy.css
     } else {
         btn.textContent = "Save Changes";
         btn.dataset.dirty = "false";
@@ -1787,7 +1787,7 @@ let g_albumReleaseDate = '';
 let g_albumTrackCount = 0;
 
 // Samples the cover's average colour into --album-glow on #album-card (see
-// styles.css #album-card::before) for a soft artwork-derived tint instead of
+// css/views/home.css #album-card::before) for a soft artwork-derived tint instead of
 // a flat surface. Best-effort: a cover served without CORS headers taints
 // the canvas and getImageData() throws — caught silently, the card just
 // keeps its plain background. Never touches the <img> itself.
@@ -2137,7 +2137,7 @@ function setAlbumCard(title, artist, coverUrl, quality, description, followers, 
 
     const img = document.createElement('img');
     img.alt = 'cover';
-    img.className = 'cover-loading'; // blur-up: styles.css clears it once decode() resolves
+    img.className = 'cover-loading'; // blur-up: css/views/home.css clears it once decode() resolves
     img.src = safeCover;
     img.addEventListener('error', () => {
       coverEl.textContent = '🎵';
@@ -3357,7 +3357,7 @@ function renderRecentSearches() {
     // Chips that wrap, not one full-width row per search: a past query is
     // two or three words, and giving each of them a row of its own pushed
     // everything below the fold to list five words. See #recent-grid.searches
-    // in styles.css — the same grid is a track-artwork grid for fetches.
+    // in css/views/home.css — the same grid is a track-artwork grid for fetches.
     grid.classList.add('searches');
     const label = $('recent-wrap').querySelector('.recent-label');
     if (label) label.textContent = 'RECENT SEARCHES';
@@ -4295,7 +4295,7 @@ function renderQueueNow() {
 
   empty.style.display = 'none';
   if (dock) dock.classList.add('visible');
-  // Drives the bottom padding of #content (styles.css) under the bar.
+  // Drives the bottom padding of #content (css/layout.css) under the bar.
   document.body.classList.add('has-dock');
 
   // Filtering happens here, not over the rendered nodes: the counts above
@@ -9065,7 +9065,7 @@ function healthRate(rate) {
   return rate === null || rate === undefined ? '—' : Math.round(rate * 100) + '%';
 }
 
-/** The tone (see [data-tone] in styles.css) of an extension's success rate. */
+/** The tone (see [data-tone] in css/utilities.css) of an extension's success rate. */
 function healthTone(row) {
   if (!row.attempts) return 'muted';
   if (row.success_rate >= 0.9) return 'ok';

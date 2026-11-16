@@ -111,7 +111,7 @@ def test_the_download_dock_lives_outside_the_views(client) -> None:
     assert html.index('id="queue-dock"') > last_view
     assert html.index('id="queue-drawer"') > last_view
 
-    css = client.get("/styles.css").text
+    css = client.get("/css/layout.css").text
     # And it is a bar along the bottom that starts beside the sidebar
     # rather than under it.
     assert "position: fixed; left: var(--rail-w); right: 0; bottom: 0;" in css

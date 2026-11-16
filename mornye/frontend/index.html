@@ -5,7 +5,7 @@
   <!-- viewport-fit=cover lets the layout paint into the notch/home-indicator
        areas instead of being letterboxed by them; every edge-anchored element
        (the phone nav bar, the queue dock, toasts, bottom sheets) pads itself
-       back out with env(safe-area-inset-*) in styles.css. No maximum-scale or
+       back out with env(safe-area-inset-*) in css/layout.css. No maximum-scale or
        user-scalable=no: pinch-zoom stays available, and the iOS focus-zoom it
        is usually abused to suppress is handled properly instead, by giving
        form controls a 16px font below the phone breakpoint. -->
@@ -35,18 +35,17 @@
        gets a 404 in the server log for a file that was never going to
        be there. The artwork already ships. -->
   <link rel="icon" type="image/png" sizes="192x192" href="assets/icons/logo-192.png">
-  <!-- Fonts ship in assets/fonts/ (see the @font-face block in styles.css). -->
-  <!-- No hand-kept ?v= suffix: the three files below are written out with a
-       fresh timestamp on every load, so a changed styles.css/app.js is never
+  <!-- Fonts ship in assets/fonts/ (see the @font-face block in css/layout.css). -->
+  <!-- No hand-kept ?v= suffix: the files below are written out with a
+       fresh timestamp on every load, so a changed stylesheet or app.js is never
        served from the web view's cache. They are local files; nothing is lost. -->
   <!-- css/tokens.css (token v2, generated from branding_tokens.py) comes
-       first: styles.css's old variable names are aliases of it now. -->
+       first: every other sheet is built on its tokens. -->
   <script>document.write('<link rel="stylesheet" href="css/tokens.css?_=' + Date.now() + '">');</script>
   <!-- css/accents.css: the Appearance accents, each a set of --signal values. -->
   <script>document.write('<link rel="stylesheet" href="css/accents.css?_=' + Date.now() + '">');</script>
-  <script>document.write('<link rel="stylesheet" href="styles.css?_=' + Date.now() + '">');</script>
-  <!-- css/layout.css: the shell (titlebar, rail, dock, player bar) in the
-       console look, over styles.css until that file goes (redesign voce 22). -->
+  <!-- css/layout.css: reset, fonts and the shell (titlebar, rail, dock, player
+       bar, the phone bottom bar). -->
   <script>document.write('<link rel="stylesheet" href="css/layout.css?_=' + Date.now() + '">');</script>
   <!-- Old shared controls, then one stylesheet per rebuilt view. -->
   <script>document.write('<link rel="stylesheet" href="css/legacy.css?_=' + Date.now() + '">');</script>
@@ -120,7 +119,7 @@
   document.body.classList.add(
     document.documentElement.classList.contains('dark-theme') ? 'dark-theme' : 'light-theme'
   );
-  // Same mirroring for the accent — styles.css keys its --accent-* blocks
+  // Same mirroring for the accent — css/accents.css keys its --signal blocks
   // off html *and* body (see setThemeClass/applyAccent in app.js).
   var _accent = document.documentElement.getAttribute('data-accent');
   if (_accent) document.body.setAttribute('data-accent', _accent);
@@ -238,7 +237,7 @@
           <div class="mode-wrap">
             <!-- Both icons ship in the markup and CSS shows the one matching
                  the current mode, keyed off the .active class the toggle
-                 already carries (see .mode-btn.active in styles.css). That
+                 already carries (see .mode-btn.active in css/views/home.css). That
                  keeps the swap in one place: this used to be an emoji that
                  two separate JS functions reassigned, which is why they could
                  drift, and an emoji renders in the system's own colour and

@@ -305,11 +305,7 @@
   }
 }
 
-/* A 360x780 handset turned sideways is not a narrow viewport but a short
-   one, so most of the phone block above does not fire while the space it
-   was written for is scarcer still. Trimmed by hand: the bar loses 10px,
-   the hero gives its padding back, and the sheets may use nearly the whole
-   screen. pointer:coarse keeps a short laptop window out of it. */
+/* Short landscape screens: see the note in layout.css. */
 @media (max-height: 480px) and (orientation: landscape) and (pointer: coarse) {
   .queue-panel { max-height: 96dvh; }
 }

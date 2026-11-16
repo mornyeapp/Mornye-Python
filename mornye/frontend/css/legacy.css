@@ -110,12 +110,7 @@
   line-height: 1.6; max-width: 46ch;
 }
 
-/* Two components already honoured this preference on their own (the
-   status spinner, the CSV button's pulse) while every hover lift, panel
-   slide and toast still moved. One rule, at the end of the cascade for
-   the whole window: motion is reduced to a state change, and nothing
-   that conveys progress is removed — a spinner that has stopped says
-   something untrue, so those keep turning, slowly. */
+/* Reduced motion: see the note in layout.css. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     scroll-behavior: auto !important;
@@ -225,16 +220,7 @@
 .s-body::-webkit-scrollbar { width: 3px; }
 .s-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
 .s-footer { position: sticky; bottom: 0; display: flex; justify-content: flex-start; padding: 10px 0 0; background: transparent; }
-/* Two columns of setting cards once there is room for them. A settings
-   row is label-left / control-right and rarely more than ~500px of
-   actual content, so one column down the middle of a wide window meant
-   scrolling past a lot of air to reach things that could have been on
-   screen together.
-   CSS columns rather than a grid: the cards have very different heights
-   (a section with two toggles next to one with a dozen), and columns
-   fill by flowing, so the two sides stay roughly level instead of
-   leaving a grid row as tall as its tallest cell. break-inside stops a
-   card being split down the middle across the column boundary. */
+/* Two columns of setting cards: see the note in views/settings.css. */
 .s-section {
   position: relative;
   overflow: hidden;
@@ -303,13 +289,7 @@ input[type="checkbox"], input[type="radio"], progress {
 
 .hidden { display: none !important; }
 
-/* Windows High Contrast Mode / forced-colors: the app's borders and
-   status tints are mostly low-alpha rgba() fills that forced-colors
-   flattens to the system palette anyway, but flat surfaces with no
-   border (act-btn.primary, .nav-btn.active, #fetchBtn — accent fill,
-   no border) lose their edge entirely once the fill is forced to
-   Canvas. A visible border in that mode is enough to keep every
-   button legible as a button without touching normal-mode styling. */
+/* Forced colours: see the note in layout.css. */
 @media (forced-colors: active) {
   .act-btn, .page-btn, input, select, textarea {
     forced-color-adjust: none;
@@ -346,18 +326,8 @@ input[type="checkbox"], input[type="radio"], progress {
    RESPONSIVITY ADJUSTMENTS
    ========================================= */
 
-/* Track table column collapse — was @media, now keyed off #track-table-wrap's
-   own inline size (container-type set where #track-table-wrap is defined).
-   Same two breakpoints, same nth-child hides, same !important grid override
-   — only what they measure changed, not what they do. */
-/* Thresholds are 900/600 minus 102px, not 900/600 — a container query
-   measures #track-table-wrap's own box, which sits inside the 58px sidebar
-   + the surrounding containers' padding chain, so it's consistently 102px
-   narrower than the viewport at the widths that matter here (measured live:
-   innerWidth 900/700/600 -> wrap 798/598/498, offset exactly 102px each
-   time, no dependency on #track-table-wrap's own 950px cap since that
-   never engages this low). Using literal 900/600 here would collapse the
-   table ~102px too early compared to the old @media behaviour. */
+/* Track table column collapse: see the note in views/home.css. */
+/* Container query thresholds: see the note in views/home.css. */
 @container tracktable (max-width: 798px) {
   /* Nascondi Playcount e Duration in modo forzato sia nell'header che nelle righe */
   .track-table-header > div:nth-child(4), .track-row > div:nth-child(4) {
@@ -378,46 +348,9 @@ input[type="checkbox"], input[type="radio"], progress {
   }
 }
 
-/* =========================================
-   PHONE LAYOUT
-   =========================================
-   The window this app was drawn for is a desktop one: a 58px vertical nav
-   rail on the left, hover to reveal a row's secondary actions, controls
-   sized for a mouse. Served over --web (webapp.py, which marks <body> with
-   .web-mode) that same document is what a phone gets, and several of those
-   choices stop working there rather than merely looking tight:
+/* Phone layout: see the note in layout.css. */
 
-     - the rail costs 16% of a 360px viewport and puts navigation in the
-       thumb's worst corner;
-     - a 14px <input> makes iOS Safari zoom the page in on focus, and it
-       does not zoom back out;
-     - the track row's action column is 130px wide but holds five 30px
-       buttons — 162px of content — because @media (hover:none) correctly
-       stops hiding four of them on a device that cannot hover;
-     - 30px and 36px hit targets are below the 44px both platforms' guidance
-       asks for;
-     - every viewport-anchored element (queue dock, toasts, modals) is
-       positioned in raw px from an edge that, on a notched phone, is under
-       the status bar or the home indicator.
-
-   What follows fixes those, in two deliberately different scopes:
-
-     - `@media (max-width: 700px)` alone — sizing, wrapping and overflow
-       fixes that are simply correct at that width whoever is looking. A
-       narrow desktop window gets them too, and wants them.
-     - `body.web-mode` as well — the structural change (the rail becomes a
-       bottom bar) and the safe-area insets. The desktop build is a frameless
-       pywebview window with real chrome and no notch, and never carries that
-       class, so nothing in those blocks can reach it.
-
-   700px rather than the 600px used elsewhere in this file: the rail-to-
-   bottom-bar switch is about thumb reach, which a 7" tablet in portrait
-   shares with a phone, while the 600px rules above are about a layout that
-   has genuinely run out of horizontal room. */
-
-/* ── Touch ergonomics, at any width ───────────────────────────────────────
-   Pointer-type questions, not width questions: an iPad in landscape is
-   1024px wide and still has no hover. */
+/* Touch ergonomics: see the note in layout.css. */
 @media (hover: none) and (pointer: coarse) {
   /* Chromium and Safari wait ~300ms after a tap on an element that might be
      the first half of a double-tap-to-zoom before they fire click.
@@ -476,22 +409,7 @@ input[type="checkbox"], input[type="radio"], progress {
   .page-btn { min-height: 40px; }
 }
 
-/* ── Track row action column ──────────────────────────────────────────────
-   A container query, not a media query, because that is what the two column
-   collapses above already use — #track-table-wrap's own box, not the
-   viewport (see their comment for the 102px offset).
-
-   At 498px the grid gives the actions column 130px. A row renders five
-   .ta-btn at 30px with a 3px gap: 162px. On a desktop that overflow is
-   invisible because four of the five are opacity:0 — but they still occupy
-   their width, and @media (hover:none) makes them opaque again on exactly
-   the devices where the column is narrowest.
-
-   The fix is to stop asking one line to hold both. Checkbox and title keep
-   the first line, the action cluster drops to a second, right-aligned,
-   where there is room to give each button a 38px target instead of shaving
-   pixels off five of them. The header's "Actions" label has nothing left to
-   sit over and goes. */
+/* Track row action column: see the note in views/home.css. */
 @container tracktable (max-width: 498px) {
   .track-table-header, .track-row {
     grid-template-columns: 24px 1fr !important;

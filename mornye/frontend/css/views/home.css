@@ -803,12 +803,7 @@
 .rc-badge.artist   { color: var(--util-preview); background: var(--util-preview-bg); }
 .rc-badge.playlist { color: var(--util-cover);   background: var(--util-cover-bg); }
 
-/* Two components already honoured this preference on their own (the
-   status spinner, the CSV button's pulse) while every hover lift, panel
-   slide and toast still moved. One rule, at the end of the cascade for
-   the whole window: motion is reduced to a state change, and nothing
-   that conveys progress is removed — a spinner that has stopped says
-   something untrue, so those keep turning, slowly. */
+/* Reduced motion: see the note in layout.css. */
 @media (prefers-reduced-motion: reduce) {
   .status-spinner,
   .cover-download-btn.loading svg {
@@ -820,13 +815,7 @@
   }
 }
 
-/* Windows High Contrast Mode / forced-colors: the app's borders and
-   status tints are mostly low-alpha rgba() fills that forced-colors
-   flattens to the system palette anyway, but flat surfaces with no
-   border (act-btn.primary, .nav-btn.active, #fetchBtn — accent fill,
-   no border) lose their edge entirely once the fill is forced to
-   Canvas. A visible border in that mode is enough to keep every
-   button legible as a button without touching normal-mode styling. */
+/* Forced colours: see the note in layout.css. */
 @media (forced-colors: active) {
   #fetchBtn, .mode-btn, .ta-btn {
     forced-color-adjust: none;
@@ -1013,46 +1002,9 @@
   }
 }
 
-/* =========================================
-   PHONE LAYOUT
-   =========================================
-   The window this app was drawn for is a desktop one: a 58px vertical nav
-   rail on the left, hover to reveal a row's secondary actions, controls
-   sized for a mouse. Served over --web (webapp.py, which marks <body> with
-   .web-mode) that same document is what a phone gets, and several of those
-   choices stop working there rather than merely looking tight:
+/* Phone layout: see the note in layout.css. */
 
-     - the rail costs 16% of a 360px viewport and puts navigation in the
-       thumb's worst corner;
-     - a 14px <input> makes iOS Safari zoom the page in on focus, and it
-       does not zoom back out;
-     - the track row's action column is 130px wide but holds five 30px
-       buttons — 162px of content — because @media (hover:none) correctly
-       stops hiding four of them on a device that cannot hover;
-     - 30px and 36px hit targets are below the 44px both platforms' guidance
-       asks for;
-     - every viewport-anchored element (queue dock, toasts, modals) is
-       positioned in raw px from an edge that, on a notched phone, is under
-       the status bar or the home indicator.
-
-   What follows fixes those, in two deliberately different scopes:
-
-     - `@media (max-width: 700px)` alone — sizing, wrapping and overflow
-       fixes that are simply correct at that width whoever is looking. A
-       narrow desktop window gets them too, and wants them.
-     - `body.web-mode` as well — the structural change (the rail becomes a
-       bottom bar) and the safe-area insets. The desktop build is a frameless
-       pywebview window with real chrome and no notch, and never carries that
-       class, so nothing in those blocks can reach it.
-
-   700px rather than the 600px used elsewhere in this file: the rail-to-
-   bottom-bar switch is about thumb reach, which a 7" tablet in portrait
-   shares with a phone, while the 600px rules above are about a layout that
-   has genuinely run out of horizontal room. */
-
-/* ── Touch ergonomics, at any width ───────────────────────────────────────
-   Pointer-type questions, not width questions: an iPad in landscape is
-   1024px wide and still has no hover. */
+/* Touch ergonomics: see the note in layout.css. */
 @media (hover: none) and (pointer: coarse) {
   .mode-btn, .ta-btn, .recent-card, .artist-album-card {
     touch-action: manipulation;

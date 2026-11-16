@@ -173,13 +173,7 @@
   border-radius: var(--radius-lg);
 }
 
-/* Windows High Contrast Mode / forced-colors: the app's borders and
-   status tints are mostly low-alpha rgba() fills that forced-colors
-   flattens to the system palette anyway, but flat surfaces with no
-   border (act-btn.primary, .nav-btn.active, #fetchBtn — accent fill,
-   no border) lose their edge entirely once the fill is forced to
-   Canvas. A visible border in that mode is enough to keep every
-   button legible as a button without touching normal-mode styling. */
+/* Forced colours: see the note in layout.css. */
 @media (forced-colors: active) {
   .fb-select, #fb-back {
     forced-color-adjust: none;
@@ -326,46 +320,9 @@
 
 .toast-spin { animation: toastSpin 1s linear infinite; }
 
-/* =========================================
-   PHONE LAYOUT
-   =========================================
-   The window this app was drawn for is a desktop one: a 58px vertical nav
-   rail on the left, hover to reveal a row's secondary actions, controls
-   sized for a mouse. Served over --web (webapp.py, which marks <body> with
-   .web-mode) that same document is what a phone gets, and several of those
-   choices stop working there rather than merely looking tight:
+/* Phone layout: see the note in layout.css. */
 
-     - the rail costs 16% of a 360px viewport and puts navigation in the
-       thumb's worst corner;
-     - a 14px <input> makes iOS Safari zoom the page in on focus, and it
-       does not zoom back out;
-     - the track row's action column is 130px wide but holds five 30px
-       buttons — 162px of content — because @media (hover:none) correctly
-       stops hiding four of them on a device that cannot hover;
-     - 30px and 36px hit targets are below the 44px both platforms' guidance
-       asks for;
-     - every viewport-anchored element (queue dock, toasts, modals) is
-       positioned in raw px from an edge that, on a notched phone, is under
-       the status bar or the home indicator.
-
-   What follows fixes those, in two deliberately different scopes:
-
-     - `@media (max-width: 700px)` alone — sizing, wrapping and overflow
-       fixes that are simply correct at that width whoever is looking. A
-       narrow desktop window gets them too, and wants them.
-     - `body.web-mode` as well — the structural change (the rail becomes a
-       bottom bar) and the safe-area insets. The desktop build is a frameless
-       pywebview window with real chrome and no notch, and never carries that
-       class, so nothing in those blocks can reach it.
-
-   700px rather than the 600px used elsewhere in this file: the rail-to-
-   bottom-bar switch is about thumb reach, which a 7" tablet in portrait
-   shares with a phone, while the 600px rules above are about a layout that
-   has genuinely run out of horizontal room. */
-
-/* ── Touch ergonomics, at any width ───────────────────────────────────────
-   Pointer-type questions, not width questions: an iPad in landscape is
-   1024px wide and still has no hover. */
+/* Touch ergonomics: see the note in layout.css. */
 @media (hover: none) and (pointer: coarse) {
   .api-modal-card, #fb-entries {
     overscroll-behavior: contain;
@@ -432,18 +389,7 @@
   .toast { width: auto; max-width: none; }
 }
 
-/* =========================================
-   PHONE NAV BAR — --web mode only
-   =========================================
-   The rail becomes a bottom bar. #app-body is already `display:flex` with
-   #sidebar first and #content second, so column-reverse alone moves the nav
-   to the bottom edge without touching index.html's DOM order — which
-   matters, because that order is also the tab order, and navigation should
-   stay reachable first by keyboard.
-
-   Scoped to .web-mode: webapp.py adds that class, and only on the
-   browser-served route, so the desktop build keeps its rail at every window
-   size. */
+/* Phone nav bar (--web only): see the note in layout.css. */
 @media (max-width: 700px) {
   /* Toasts sit above the dock too, not on top of it. */
   body.web-mode:has(#queue-dock.visible) .toast-container.bottom-right,
@@ -462,11 +408,7 @@
   }
 }
 
-/* A 360x780 handset turned sideways is not a narrow viewport but a short
-   one, so most of the phone block above does not fire while the space it
-   was written for is scarcer still. Trimmed by hand: the bar loses 10px,
-   the hero gives its padding back, and the sheets may use nearly the whole
-   screen. pointer:coarse keeps a short laptop window out of it. */
+/* Short landscape screens: see the note in layout.css. */
 @media (max-height: 480px) and (orientation: landscape) and (pointer: coarse) {
   .api-modal-card, .fb-card { max-height: 96dvh; }
 }

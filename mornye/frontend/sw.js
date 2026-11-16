@@ -19,13 +19,12 @@
 // WebSocket upgrade, which fetch/caches can't represent anyway) would be
 // actively wrong, not just unhelpful.
 
-const CACHE_NAME = "mornye-shell-v20";
+const CACHE_NAME = "mornye-shell-v21";
 const SHELL_FILES = [
   "./",
   "index.html",
   "css/tokens.css",
   "css/accents.css",
-  "styles.css",
   "css/layout.css",
   "css/legacy.css",
   "css/feedback.css",
