@@ -101,15 +101,15 @@ def _parse(kind: str, raw: str) -> Any:
             return False
         raise ValueError("expected true or false")
     if kind == "int":
-        numeric_value = int(text)
-        if numeric_value < 0:
+        integer_value = int(text)
+        if integer_value < 0:
             raise ValueError("expected a number of 0 or more")
-        return numeric_value
+        return integer_value
     if kind == "float":
-        numeric_value = float(text)
-        if numeric_value < 0:
+        float_value = float(text)
+        if float_value < 0:
             raise ValueError("expected a number of 0 or more")
-        return numeric_value
+        return float_value
     if kind == "list":
         return [part.strip() for part in text.split(",") if part.strip()]
     if kind == "map":

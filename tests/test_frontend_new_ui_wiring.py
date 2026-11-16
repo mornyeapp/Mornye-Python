@@ -249,19 +249,17 @@ def test_current_file_dashboard_refreshes_after_a_track_is_deleted(
         file_path=str(path),
     )
 
-    current = client.post(
-        "/api/get_stats", json=[None, None, 10, True]
-    ).json()["result"]
+    current = client.post("/api/get_stats", json=[None, None, 10, True]).json()[
+        "result"
+    ]
     assert current["totals"]["tracks"] == 1
 
     path.unlink()
 
-    refreshed = client.post(
-        "/api/get_stats", json=[None, None, 10, True]
-    ).json()["result"]
-    history = client.post(
-        "/api/get_stats", json=[None, None, 10]
-    ).json()["result"]
+    refreshed = client.post("/api/get_stats", json=[None, None, 10, True]).json()[
+        "result"
+    ]
+    history = client.post("/api/get_stats", json=[None, None, 10]).json()["result"]
     assert refreshed["totals"]["tracks"] == 0
     assert history["totals"]["tracks"] == 1
 

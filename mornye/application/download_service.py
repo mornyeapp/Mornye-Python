@@ -239,7 +239,7 @@ class DownloadService:
                     for parameter in parameters
                 )
                 parameter_names = {parameter.name for parameter in parameters}
-                resolve_kwargs = {}
+                resolve_kwargs: dict[str, Any] = {}
                 if accepts_keywords or "before_resolve" in parameter_names:
                     resolve_kwargs["before_resolve"] = wait_for_metadata_slot
                 if accepts_keywords or "stop_event" in parameter_names:

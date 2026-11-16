@@ -312,7 +312,7 @@ input[type="password"].full { width: 100%; }
   font-variant-numeric: tabular-nums;
   font-size: var(--text-xs);
 }
-.service-primary .priority-num { color: var(--signal-text); font-weight: var(--weight-semibold); }
+.service-primary .priority-num { color: var(--signal-text); font-weight: var(--weight-bold); }
 .service-sort-item .drag-h { justify-self: center; }
 .service-sort-item .svc-icon { justify-self: center; }
 .service-order-status {

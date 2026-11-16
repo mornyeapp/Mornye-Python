@@ -59,14 +59,14 @@
 .np-sync-controls[open] > summary::after { content: '⌃'; }
 .np-sync-panel {
   position: relative; width: min(280px, calc(100vw - 56px)); margin-top: 6px;
-  padding: 13px 15px; background: rgba(24, 24, 24, .9); color: #fff;
-  border: 1px solid rgba(255, 255, 255, .18); backdrop-filter: blur(14px);
+  padding: 13px 15px; background: var(--media-bg); color: var(--media-ink);
+  border: 1px solid var(--rule); backdrop-filter: blur(14px);
 }
 .np-sync-panel label { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
 .np-sync-panel output { font-variant-numeric: tabular-nums; }
-.np-sync-panel input { display: block; width: 100%; margin: 7px 0 14px; accent-color: #fff; }
+.np-sync-panel input { display: block; width: 100%; margin: 7px 0 14px; accent-color: var(--media-ink); }
 .np-sync-panel input:last-of-type { margin-bottom: 10px; }
-.np-sync-panel small { display: block; color: rgba(255, 255, 255, .68); font-size: 11px; line-height: 1.4; }
+.np-sync-panel small { display: block; color: var(--media-ink); opacity: .68; font-size: 11px; line-height: 1.4; }
 /* The pane scrolls, so it clips: side padding (cancelled by a negative margin)
    keeps the blurred edge of a line from being cut off, and the mask fades the
    rows out at the top and bottom instead of slicing through them. */

@@ -191,11 +191,7 @@ def wrapped(
     window = window or Window()
     rows = _fetch(window, owner)
     if existing_files:
-        rows = [
-            row
-            for row in rows
-            if _value(row, "success", 0) and _file_exists(row)
-        ]
+        rows = [row for row in rows if _value(row, "success", 0) and _file_exists(row)]
     successful = [row for row in rows if _value(row, "success", 0)]
 
     document: dict[str, Any] = {
