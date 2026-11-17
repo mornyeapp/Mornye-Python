@@ -385,18 +385,24 @@
             <span id="plb-stats" class="plb-stats"></span>
           </div>
           <div class="plb-actions">
-            <button class="act-btn secondary" type="button" data-onclick="togglePlayerSource()">Change folder</button>
+            <button class="act-btn secondary" type="button" data-onclick="togglePlayerSource()">Folders</button>
             <button class="act-btn secondary" type="button" id="plb-rescan" data-onclick="scanPlayerLibrary()">Rescan</button>
           </div>
         </div>
         <div class="s-section player-source" id="player-source">
-          <label class="player-folder-label" for="player-path-input">Music folder</label>
+          <div class="psrc-head">
+            <label class="player-folder-label" for="player-path-input">Music folders</label>
+            <span class="psrc-hint">Every folder is scanned into one library. A network share works too once it is mounted — type <code>smb://nas/Music</code> or pick it below.</span>
+          </div>
+          <ul id="player-folder-list" class="psrc-list" aria-label="Folders in the library"></ul>
           <div class="s-row u-items-center u-gap-8">
-            <input type="text" id="player-path-input" class="full" placeholder="Enter a folder path"
-                   data-onkeydown="if(event.key==='Enter') scanPlayerLibrary()">
+            <input type="text" id="player-path-input" class="full" placeholder="Add a folder: /Users/you/Music or smb://nas/Music"
+                   data-onkeydown="if(event.key==='Enter') addPlayerFolderFromInput()">
             <button class="act-btn secondary" type="button" data-onclick="openPlayerFolderBrowser()">Choose folder</button>
+            <button class="act-btn secondary" type="button" data-onclick="addPlayerFolderFromInput()">Add</button>
             <button class="act-btn primary" type="button" data-onclick="scanPlayerLibrary()" id="player-scan-btn">Scan library</button>
           </div>
+          <div id="player-network" class="share-chips hidden" aria-label="Mounted network shares"></div>
           <div id="player-recent" class="share-chips hidden" aria-label="Recent folders"></div>
         </div>
         <div class="player-empty" id="player-empty" role="status" aria-live="polite">

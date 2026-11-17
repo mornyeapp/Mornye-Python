@@ -391,7 +391,38 @@
   gap: 8px;
 }
 #view-player #player-path-input { min-width: 0; width: 100%; }
-#view-player #player-recent { margin-top: 12px; }
+#view-player #player-recent, #view-player #player-network { margin-top: 12px; }
+#view-player .player-source > .s-row { grid-template-columns: minmax(0, 1fr) auto auto auto; }
+
+/* The library's folders: one row each, removable. */
+.psrc-head { display: grid; gap: 4px; margin-bottom: var(--space-3); }
+.psrc-head .player-folder-label { margin-bottom: 0; }
+.psrc-hint { color: var(--text-muted); font-size: var(--text-xs); line-height: 1.5; }
+.psrc-hint code { font-family: var(--font); color: var(--text-2); }
+.psrc-list {
+  list-style: none; margin: 0 0 var(--space-3); padding: 0;
+  display: grid; gap: 6px;
+}
+.psrc-item {
+  display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: var(--space-3);
+  padding: 8px 10px; border: 1px solid var(--rule); border-radius: var(--radius-2);
+  background: var(--surface);
+}
+.psrc-icon {
+  width: 32px; height: 32px; display: grid; place-items: center;
+  border: 1px solid var(--rule); border-radius: var(--radius-1); color: var(--signal-text); background: var(--ground);
+}
+.psrc-icon svg { width: 16px; height: 16px; }
+.psrc-item.is-network .psrc-icon { color: var(--text-2); }
+.psrc-text { display: grid; gap: 1px; min-width: 0; }
+.psrc-text strong { color: var(--text); font-size: var(--text-md); font-weight: var(--weight-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.psrc-text span { color: var(--text-muted); font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.psrc-remove {
+  width: 28px; height: 28px; border: 1px solid transparent; border-radius: var(--radius-1);
+  background: transparent; color: var(--text-muted); cursor: pointer; font-size: 12px;
+}
+.psrc-remove:hover { color: var(--error); border-color: var(--error); }
+.psrc-empty { color: var(--text-muted); font-size: var(--text-sm); padding: var(--space-2) 0; }
 #view-player .player-source .act-btn { padding-inline: 14px; }
 .player-empty {
   display: grid;
@@ -516,6 +547,9 @@
 .player-heading { transition: gap .2s ease; }
 .player-heading p { max-height: 2.6em; overflow: hidden; transition: max-height .2s ease, opacity .2s ease; }
 #view-player .player-libbar {
+  /* Never squeezed by the folder panel opening under it (it used to shrink
+     until its text was cut). */
+  flex: 0 0 auto;
   max-height: 140px; overflow: hidden;
   transition: max-height .2s ease, padding .2s ease, margin .2s ease, opacity .15s ease;
 }

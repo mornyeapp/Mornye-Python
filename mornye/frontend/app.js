@@ -9045,45 +9045,127 @@ const lib = { items: [], view: [], scan: null, lastScan: 0, shown: 0, loading: f
   tab: 'songs', album: null, artist: null, folder: '', cards: 0 };
 const LIB_PAGE = 150;
 const LIB_FOLDERS_KEY = 'mornye-player-folders';
+//: The folders the library is made of, scanned together into one library.
+const LIB_LIBRARY_KEY = 'mornye-player-library';
 
-function libRecent() {
-  try { return JSON.parse(localStorage.getItem(LIB_FOLDERS_KEY) || '[]').filter(x => typeof x === 'string'); }
+function libReadList(key) {
+  try { return JSON.parse(localStorage.getItem(key) || '[]').filter(x => typeof x === 'string' && x.trim()); }
   catch (e) { return []; }
 }
+function libWriteList(key, list) {
+  try { localStorage.setItem(key, JSON.stringify(list)); } catch (e) {}
+}
+function libRecent() { return libReadList(LIB_FOLDERS_KEY); }
+function libFolders() { return libReadList(LIB_LIBRARY_KEY); }
+function libFolderName(f) {
+  const m = /^(?:smb|cifs|afp|nfs):\/\/([^/]+)\/?(.*)$/i.exec(f);
+  if (m) return (m[2].split('/').filter(Boolean).pop() || m[1]);
+  return f.split(/[\\/]/).filter(Boolean).pop() || f;
+}
+function libIsNetwork(f) { return /^(?:smb|cifs|afp|nfs):\/\//i.test(f) || /^\\\\|^\/\//.test(f) || /^\/Volumes\//.test(f); }
+
 function libRemember(folder) {
   const list = [folder, ...libRecent().filter(f => f !== folder)].slice(0, 6);
-  try { localStorage.setItem(LIB_FOLDERS_KEY, JSON.stringify(list)); } catch (e) {}
+  libWriteList(LIB_FOLDERS_KEY, list);
   renderRecentFolders();
 }
+function setPlayerFolders(list) {
+  libWriteList(LIB_LIBRARY_KEY, [...new Set(list)]);
+  renderPlayerFolders();
+}
+
+// The folders in the library, each removable. An empty list says what to do.
+function renderPlayerFolders() {
+  const box = $('player-folder-list');
+  if (!box) return;
+  const list = libFolders();
+  box.innerHTML = list.length ? list.map(f => {
+    const net = libIsNetwork(f);
+    const icon = net
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><line x1="6" y1="7" x2="6.01" y2="7"/><line x1="6" y1="17" x2="6.01" y2="17"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h6l2 2h10v10H3z"/></svg>';
+    return `<li class="psrc-item ${net ? 'is-network' : ''}" data-path="${escHtml(f)}">
+      <span class="psrc-icon">${icon}</span>
+      <span class="psrc-text"><strong>${escHtml(libFolderName(f))}</strong><span>${escHtml(f)}</span></span>
+      <button type="button" class="psrc-remove" title="Remove from the library" aria-label="Remove ${escHtml(libFolderName(f))} from the library">✕</button>
+    </li>`;
+  }).join('') : '<li class="psrc-empty">No folders yet — add one below.</li>';
+  box.querySelectorAll('.psrc-remove').forEach(btn => btn.addEventListener('click', () => {
+    const path = btn.closest('.psrc-item').dataset.path;
+    setPlayerFolders(libFolders().filter(f => f !== path));
+  }));
+}
+
 function renderRecentFolders() {
   const box = $('player-recent');
-  const list = libRecent();
+  const inLibrary = new Set(libFolders());
+  const list = libRecent().filter(f => !inLibrary.has(f));
   box.classList.toggle('hidden', list.length === 0);
   box.innerHTML = list.length ? '<span class="share-chips-label">Recent:</span>' + list.map(f =>
-    `<button type="button" class="share-chip" data-path="${escHtml(f)}" title="${escHtml(f)}">${escHtml(f.split(/[\\/]/).filter(Boolean).pop() || f)}</button>`).join('') : '';
+    `<button type="button" class="share-chip" data-path="${escHtml(f)}" title="Add ${escHtml(f)}">${escHtml(libFolderName(f))}</button>`).join('') : '';
   box.querySelectorAll('.share-chip').forEach(b => b.addEventListener('click', () => {
-    $('player-path-input').value = b.dataset.path;
-    scanPlayerLibrary();
+    addPlayerFolder(b.dataset.path);
   }));
+}
+
+// Mounted network shares, one click to add to the library.
+async function renderPlayerNetworkShares() {
+  const box = $('player-network');
+  if (!box || !window.pywebview?.api?.get_network_shares) return;
+  try {
+    const res = await window.pywebview.api.get_network_shares();
+    const shares = res?.shares || [];
+    box.classList.toggle('hidden', shares.length === 0);
+    box.innerHTML = shares.length
+      ? '<span class="share-chips-label">Network:</span>' + shares.map(s =>
+          `<button type="button" class="share-chip" title="${escHtml(s.path)}" data-path="${escHtml(s.path)}">`
+          + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><line x1="6" y1="7" x2="6.01" y2="7"/><line x1="6" y1="17" x2="6.01" y2="17"/></svg>'
+          + `${escHtml(s.label)}</button>`).join('')
+      : '';
+    box.querySelectorAll('.share-chip').forEach(btn => btn.addEventListener('click', () => addPlayerFolder(btn.dataset.path)));
+  } catch (e) { /* a share can still be typed */ }
+}
+
+function addPlayerFolder(path) {
+  path = String(path || '').trim();
+  if (!path) return false;
+  if (!libFolders().includes(path)) setPlayerFolders([...libFolders(), path]);
+  renderRecentFolders();
+  return true;
+}
+function addPlayerFolderFromInput() {
+  const input = $('player-path-input');
+  if (!addPlayerFolder(input.value)) { toastMgr.error('Type a folder path or pick one first.'); return; }
+  input.value = '';
+  scanPlayerLibrary();
 }
 
 async function initPlayerView() {
   if (lib.started) { markPlayingRow(); return; }
   lib.started = true;
-  renderRecentFolders();
-  const input = $('player-path-input');
-  let folder = libRecent()[0];
-  if (!folder) {
-    try { folder = (await window.pywebview?.api?.get_library_default_folder?.())?.path; } catch (e) {}
+  // A library saved before several folders were possible is its last folder.
+  if (!libFolders().length) {
+    let folder = libRecent()[0];
+    if (!folder) {
+      try { folder = (await window.pywebview?.api?.get_library_default_folder?.())?.path; } catch (e) {}
+    }
+    if (folder) libWriteList(LIB_LIBRARY_KEY, [folder]);
   }
-  if (folder) { input.value = folder; scanPlayerLibrary(); }
+  renderPlayerFolders();
+  renderRecentFolders();
+  renderPlayerNetworkShares();
+  if (libFolders().length) scanPlayerLibrary();
 }
 
 function openPlayerFolderBrowser() { openFolderBrowser('player'); }
 
+// Scans every folder of the library into one list. A path left in the field
+// (typed, or chosen with the picker) joins the library first.
 async function scanPlayerLibrary() {
-  const path = $('player-path-input').value.trim();
-  if (!path) { toastMgr.error('Enter or pick a folder first.'); return; }
+  const typed = $('player-path-input').value.trim();
+  if (typed) { addPlayerFolder(typed); $('player-path-input').value = ''; }
+  const folders = libFolders();
+  if (!folders.length) { toastMgr.error('Add a music folder first.'); showPlayerSource(true); return; }
   lib.items = []; lib.view = []; lib.shown = 0; lib.scan = null; lib.loading = true;
   lib.album = null; lib.artist = null;
   $('player-list').innerHTML = '';
@@ -9092,7 +9174,7 @@ async function scanPlayerLibrary() {
   setPlayerStatus('Scanning…');
   renderPlayerEmptyState();
   setPlayerScanBusy(true);
-  const res = await window.pywebview?.api?.scan_music_library?.(path);
+  const res = await window.pywebview?.api?.scan_music_library?.(folders);
   if (!res || res.status !== 'started') {
     lib.loading = false;
     setPlayerScanBusy(false);
@@ -9126,7 +9208,12 @@ function togglePlayerSource() {
   if (!src) return;
   const opening = src.classList.contains('hidden');
   showPlayerSource(opening);
-  if (opening) $('player-path-input')?.focus();
+  if (opening) {
+    renderPlayerFolders();
+    renderRecentFolders();
+    renderPlayerNetworkShares();  // a share mounted since the page opened
+    $('player-path-input')?.focus();
+  }
 }
 
 function libAccept(p) {
@@ -9147,8 +9234,9 @@ window.app_library_scan_finished = function(p) {
   setPlayerScanBusy(false);
   setPlayerStatus('');
   if (lib.items.length) {
-    libRemember(p.folder);
-    lib.folder = p.folder || $('player-path-input').value.trim();
+    libFolders().forEach(libRemember);
+    lib.folder = p.folder || libFolders()[0] || '';
+    lib.folders = libFolders();
     showPlayerSource(false);
   } else {
     showPlayerSource(true);
@@ -9304,9 +9392,13 @@ function filterPlayerLibrary(keepScroll) {
 
   // Library bar and tab counts describe the whole library, not the search.
   const total = lib.items.reduce((s, t) => s + (t.duration_s || 0), 0);
-  const folder = lib.folder || $('player-path-input').value.trim();
-  $('plb-name').textContent = folder.split(/[\\/]/).filter(Boolean).pop() || folder || 'Library';
-  $('plb-name').title = folder;
+  // One folder by its name; several as "Music, NAS +1".
+  const folders = (lib.folders && lib.folders.length) ? lib.folders : [lib.folder].filter(Boolean);
+  const names = folders.map(libFolderName);
+  $('plb-name').textContent = !names.length ? 'Library'
+    : names.length <= 2 ? names.join(', ')
+    : `${names.slice(0, 2).join(', ')} +${names.length - 2}`;
+  $('plb-name').title = folders.join('\n');
   $('plb-stats').textContent = [plural(lib.items.length, 'track'), plural(allAlbums.length, 'album'),
     plural(allArtists.length, 'artist'), libDuration(total)].filter(Boolean).join(' · ');
   $('player-libbar').classList.toggle('hidden', lib.items.length === 0 || lib.loading);

@@ -1052,6 +1052,11 @@ def _register_file_routes(
         ]
         if not multiuser:
             roots.append(os.path.realpath(Path.home()))
+            # A mounted network share the Player was pointed at, as the
+            # desktop window's media server allows (api_mixins/library_tools).
+            from .core.network_paths import network_roots
+
+            roots.extend(os.path.realpath(root) for root in network_roots())
         try:
             full = os.path.realpath(os.path.expanduser(path))
         except (OSError, ValueError):
