@@ -2796,8 +2796,68 @@ def _purge_webview_http_cache() -> None:
         )
 
 
+def _enable_macos_first_click() -> None:
+    """Make the first click on an inactive window act as a click (macOS).
+
+    WKWebView answers NO to ``acceptsFirstMouse:``, so while Mornye is not
+    the active app a click on the window only activates it and the button
+    under the cursor never sees it: it took a second click. That happened
+    whenever the window was not frontmost — after switching to another app,
+    and at launch too, since macOS 14 treats ``activateIgnoringOtherApps``
+    (what pywebview calls) as a request it may turn down, leaving the
+    terminal in front. Answering YES lets one click both activate the
+    window and reach the page. pywebview's WebKitHost is a PyObjC subclass
+    of WKWebView, so the method is added to it before any window exists.
+    """
+    if sys.platform != "darwin":
+        return
+    try:
+        import objc
+        from webview.platforms.cocoa import BrowserView
+
+        def acceptsFirstMouse_(self, event):  # noqa: N802 - Cocoa selector
+            return True
+
+        objc.classAddMethods(
+            BrowserView.WebKitHost,
+            [
+                objc.selector(
+                    acceptsFirstMouse_,
+                    selector=b"acceptsFirstMouse:",
+                    signature=b"Z@:@",
+                )
+            ],
+        )
+    except Exception:
+        _quiet_log.debug("could not enable first-click on macOS", exc_info=True)
+
+
+def _activate_macos_app() -> None:
+    """Bring Mornye in front once its window is shown (macOS).
+
+    pywebview's ``activateIgnoringOtherApps`` is ignored on macOS 14+, so
+    the window could open behind the terminal without keyboard focus.
+    ``NSApp.activate()`` is the call macOS 14+ honours.
+    """
+    if sys.platform != "darwin":
+        return
+    with contextlib.suppress(Exception):
+        import AppKit
+        from PyObjCTools import AppHelper
+
+        def _activate():
+            app = AppKit.NSApplication.sharedApplication()
+            if hasattr(app, "activate"):
+                app.activate()
+            else:
+                app.activateIgnoringOtherApps_(True)
+
+        AppHelper.callAfter(_activate)
+
+
 def run_gui() -> None:
     configure_console_logging(saved_log_level())
+    _enable_macos_first_click()
     # Before pywebview creates the native app: from source the process is the
     # Python interpreter, so without this every OS shows Python's icon (and
     # on macOS its name) for the window. See desktop_branding.
@@ -2876,6 +2936,7 @@ def run_gui() -> None:
     api.set_window(window)
     if window is not None:
         window.events.loaded += api._on_loaded
+        window.events.shown += _activate_macos_app
 
     # Two defaults conspired to make the theme picker look broken in the
     # desktop window, both of them about *where* the page's localStorage
