@@ -31,9 +31,11 @@ than fail.
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger("mornye.audio_fingerprint")
 
@@ -45,23 +47,94 @@ except Exception as exc:  # pragma: no cover - depends on optional install
     acoustid = None  # type: ignore[assignment]
     _ACOUSTID_IMPORT_ERROR = exc
 
+#: Where package managers put Chromaprint outside the default search paths:
+#: Homebrew on Apple Silicon, Homebrew on Intel, MacPorts, Linuxbrew.
+_PREFIXES = ("/opt/homebrew", "/usr/local", "/opt/local", "/home/linuxbrew/.linuxbrew")
+_LIB_NAMES = (
+    "libchromaprint.1.dylib",
+    "libchromaprint.0.dylib",
+    "libchromaprint.so.1",
+    "libchromaprint.so.0",
+)
+
+
+def _find_fpcalc() -> str | None:
+    """`fpcalc` on PATH, else in a package manager's bin directory.
+
+    An app started from the Finder or the Dock gets launchd's PATH
+    (/usr/bin:/bin:/usr/sbin:/sbin), which has no Homebrew in it, so a
+    Chromaprint the user had installed was reported missing.
+    """
+    found = shutil.which("fpcalc")
+    if found:
+        return found
+    for prefix in _PREFIXES:
+        candidate = Path(prefix) / "bin" / "fpcalc"
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
+
+
+def _import_chromaprint() -> tuple[Any, Exception | None]:
+    """pyacoustid's `chromaprint` module, or None and why not.
+
+    The module loads the library by its bare name ("libchromaprint.1.dylib"),
+    which on macOS only searches /usr/local/lib and /usr/lib — not
+    /opt/homebrew/lib, where Homebrew on Apple Silicon installs it. When the
+    plain import fails, it is retried with that name pointed at a copy found
+    under a package manager's prefix.
+    """
+    import ctypes
+    import sys
+
+    try:
+        import chromaprint as module
+
+        return module, None
+    except Exception as exc:
+        first_error: Exception = exc
+    found = {
+        leaf: str(Path(prefix) / "lib" / leaf)
+        for prefix in _PREFIXES
+        for leaf in _LIB_NAMES
+        if (Path(prefix) / "lib" / leaf).is_file()
+    }
+    if not found:
+        return None, first_error
+    real_cdll = ctypes.CDLL
+
+    def _cdll(name, *args, **kwargs):
+        if isinstance(name, str) and name in found:
+            name = found[name]
+        return real_cdll(name, *args, **kwargs)
+
+    sys.modules.pop("chromaprint", None)
+    ctypes.CDLL = _cdll  # type: ignore[misc,assignment]
+    try:
+        import chromaprint as module
+
+        return module, None
+    except Exception as exc:
+        return None, exc
+    finally:
+        ctypes.CDLL = real_cdll  # type: ignore[misc]
+
+
+_FPCALC = _find_fpcalc()
+if _FPCALC and not os.environ.get("FPCALC") and shutil.which("fpcalc") is None:
+    # pyacoustid runs $FPCALC, or "fpcalc" from PATH when it is unset.
+    os.environ["FPCALC"] = _FPCALC
+
 # Decoding a fingerprint into comparable integers is a *separate* capability
 # from producing one. `fpcalc` alone yields the compressed base64 form, which
 # is all AcoustID's lookup needs; turning that into 32-bit ints needs
-# libchromaprint through the `chromaprint` module, which Homebrew's
-# chromaprint formula does not install (it ships the fpcalc binary only).
+# libchromaprint through the `chromaprint` module (see _import_chromaprint).
 #
 # This used to be reached as `acoustid.chromaprint`, an attribute that does
 # not exist on any pyacoustid release — so compute_fingerprint() raised
 # AttributeError for everyone who had fpcalc. Nobody noticed because without
 # fpcalc the function returned earlier, and the feature is opt-in.
-try:
-    import chromaprint
-
-    _CHROMAPRINT_IMPORT_ERROR: Exception | None = None
-except Exception as exc:  # pragma: no cover - depends on libchromaprint
-    chromaprint = None  # type: ignore[assignment]
-    _CHROMAPRINT_IMPORT_ERROR = exc
+chromaprint, _CHROMAPRINT_IMPORT_ERROR = _import_chromaprint()
 
 # Duplicate recordings of the same song are, in practice, always within a
 # couple of seconds of each other in duration. Comparing durations first is
@@ -107,7 +180,7 @@ def is_available() -> bool:
     """
     if acoustid is None:
         return False
-    return shutil.which("fpcalc") is not None
+    return _find_fpcalc() is not None
 
 
 def can_compare() -> bool:

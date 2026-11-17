@@ -103,9 +103,11 @@ def test_find_duplicate_groups_returns_nothing_for_all_unique_files():
     assert af.find_duplicate_groups(fingerprints) == []
 
 
-def test_is_available_false_without_fpcalc_on_path(monkeypatch):
+def test_is_available_false_without_fpcalc_on_path(monkeypatch, tmp_path):
     monkeypatch.setattr(af, "acoustid", object())  # pretend it's importable
     monkeypatch.setattr(af.shutil, "which", lambda _name: None)
+    # Nor in a package manager's prefix (see _find_fpcalc).
+    monkeypatch.setattr(af, "_PREFIXES", (str(tmp_path),))
     assert af.is_available() is False
 
 
