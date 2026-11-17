@@ -14,7 +14,6 @@
 .u-bg-none.u-bg-none { background: none; }
 .u-bg-surface2.u-bg-surface2 { background: var(--raised); }
 .u-bg-surface3.u-bg-surface3 { background: var(--selected); }
-.u-bl-2-solid-border2.u-bl-2-solid-border2 { border-left: 2px solid var(--rule-strong); }
 .u-border-bottom-1-solid-border.u-border-bottom-1-solid-border { border-bottom: 1px solid var(--rule); }
 .u-border-none.u-border-none { border: none; }
 .u-border-top-1-solid-border.u-border-top-1-solid-border { border-top: 1px solid var(--rule); }
@@ -103,7 +102,6 @@
 .u-minh-0.u-minh-0 { min-height: 0; }
 .u-minh-16.u-minh-16 { min-height: 16px; }
 .u-minw-0.u-minw-0 { min-width: 0; }
-.u-ml-4.u-ml-4 { margin-left: 4px; }
 .u-ml-auto.u-ml-auto { margin-left: auto; }
 .u-mt-10.u-mt-10 { margin-top: 10px; }
 .u-mt-12.u-mt-12 { margin-top: 12px; }

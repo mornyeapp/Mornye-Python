@@ -636,6 +636,14 @@ input[type="password"].full { width: 100%; }
 /* Rows: a rule between each, the control on the right. */
 .s-section > .s-row { padding: var(--space-2) 0; min-height: 40px; border-top: 1px solid var(--rule); }
 .s-section > .s-title + .s-row { border-top: 0; padding-top: var(--space-1); }
+/* A row that only matters when the one above it is on (Replace fake
+   Hi-Res, Artist Separator, the transcode options…): indented under its
+   parent with a guide line, and the text kept clear of that line. */
+.s-section > .s-row.s-sub {
+  margin-left: var(--space-2);
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--rule-strong);
+}
 .s-label { color: var(--text); font-family: var(--font); font-size: var(--text-sm); font-weight: var(--weight-regular); }
 .s-label small { color: var(--text-muted); font-family: var(--font); font-size: var(--text-xs); line-height: var(--leading); }
 
