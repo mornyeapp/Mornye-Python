@@ -1156,6 +1156,25 @@ async def _record_provider_outcome(
         )
 
 
+#: What a provider says when the track simply is not there. Asking it again
+#: a few seconds later gets the same answer: unlike a 503, a timeout or a
+#: dropped connection, these are not worth a retry.
+_DEFINITIVE_FAILURE = re.compile(
+    r"not available|not found|no verified|no match|unavailable in|"
+    r"\bHTTP 404\b|\b404 Not Found\b|TRACK_NOT_FOUND",
+    re.IGNORECASE,
+)
+
+
+def _definitive_failure(error: str | None) -> bool:
+    """Whether a provider's failure is an answer ("not there") rather than
+    a hiccup. A 503 or a timeout is never definitive."""
+    text = str(error or "")
+    if re.search(r"\b(5\d\d|429)\b|timed? ?out|timeout|connection", text, re.I):
+        return False
+    return bool(_DEFINITIVE_FAILURE.search(text))
+
+
 async def _download_one_pass_async(
     metadata: TrackMetadata,
     output_dir: str,
@@ -1176,6 +1195,8 @@ async def _download_one_pass_async(
     stop_event = asyncio.Event()
     DownloadManager()
     errors: dict[str, str] = {}
+    #: Providers that answered "not there" (see _definitive_failure).
+    settled: set[str] = set()
     started_at = time.monotonic()
 
     def pause_after_429(error: object, provider_name: str) -> None:
@@ -1230,6 +1251,7 @@ async def _download_one_pass_async(
         await _write_animated_artwork_sidecar_async(skipped, metadata, opts)
         return skipped
 
+    attempts_made = 0
     for attempt in range(opts.track_max_retries + 1):
         if stop_event.is_set():
             return DownloadResult.fail(
@@ -1237,17 +1259,29 @@ async def _download_one_pass_async(
                 f"Download timed out after {opts.timeout_s}s",
             )
 
+        usable = provider_cooldown.usable_providers(providers)
         if attempt > 0:
+            # A provider that answered "not there" is not asked again: the
+            # log of a track no service carries showed every provider asked
+            # three times for the same "Track not available". When that is
+            # every provider, the retries stop here.
+            retrying = [p for p in usable if p.name not in settled]
+            if not retrying:
+                break
             wait = min(2**attempt, 30)
             safe_tqdm_write(
                 f"\n  ↺  [#{position}] Retry {attempt}/{opts.track_max_retries} in {wait}s…",
             )
             await asyncio.sleep(wait)
-            errors.clear()
+            for name in list(errors):
+                if name not in settled:
+                    del errors[name]
+            usable = retrying
 
+        attempts_made = attempt + 1
         # Per attempt, not per track: a pause that starts on the first
         # attempt already applies to the retries.
-        for idx, provider in enumerate(provider_cooldown.usable_providers(providers)):
+        for idx, provider in enumerate(usable):
             if idx > 0:
                 is_ext = provider.name.startswith("ext:")
                 target_type = "extension" if is_ext else "provider"
@@ -1589,6 +1623,8 @@ async def _download_one_pass_async(
             _restore_identity(metadata, requested)
 
             errors[provider.name] = result.error or "unknown error"
+            if _definitive_failure(result.error):
+                settled.add(provider.name)
             await _record_provider_outcome(
                 provider.name,
                 False,
@@ -1603,7 +1639,7 @@ async def _download_one_pass_async(
             if stop_after_atmos_error:
                 return result
 
-    attempts_str = f"{opts.track_max_retries + 1} attempt(s)"
+    attempts_str = f"{attempts_made} attempt(s)"
     summary = "; ".join(f"{k}: {v}" for k, v in errors.items())
     return DownloadResult.fail(
         "none",
