@@ -1482,6 +1482,35 @@ body:has(#album-card:not(.hidden)) #fetchBtn {
 @media (max-width: 900px) {
   #album-tech { width: 100%; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 }
+/* A playlist or artist has only a couple of short facts (tracks, total
+   time). The 300px+ column above is sized for an album's six; given to
+   two figures it squeezed the text column until the description, the
+   owner row and the action buttons all wrapped. Instead the column is only
+   as wide as its figures, set as figures and centred beside the text —
+   and when the card is too narrow for that next to the cover and a full
+   row of buttons, it moves to a row of its own under the card. That is
+   measured on the card (a container query), not the window, so the
+   sidebar being open or collapsed is accounted for. */
+#album-card { container: albumcard / inline-size; flex-wrap: wrap; }
+#album-tech:not(:has(.tech-barcode)):not(:has(.tech-row:nth-child(4))) {
+  width: auto;
+  align-self: center;
+  grid-template-columns: repeat(3, max-content);
+  column-gap: var(--space-6);
+}
+#album-tech:not(:has(.tech-barcode)):not(:has(.tech-row:nth-child(4))) .tech-v {
+  font-size: var(--text-2xl); font-weight: var(--weight-bold); line-height: 1.1;
+}
+@container albumcard (max-width: 1039px) {
+  #album-tech:not(:has(.tech-barcode)):not(:has(.tech-row:nth-child(4))) {
+    flex-basis: 100%;
+    align-self: auto;
+    margin-top: 4px;
+    padding: 14px 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--rule);
+  }
+}
 
 /* A download per row would be a column of signal: neutral until pointed at. */
 .ta-btn.dl { background: transparent; border-color: var(--rule-strong); color: var(--text-2); }
