@@ -51,6 +51,8 @@ _CACHE_NAMESPACE = "metadata-enrichment-v2"
 #: returns whatever the digits look like — so taking results[0] on faith
 #: tagged tracks with a stranger's genre and cover art.
 _APPLE_MATCH_MIN = 0.55
+#: Tidal's search is just as eager to answer, so it gets the same bar.
+_TIDAL_MATCH_MIN = _APPLE_MATCH_MIN
 _TIDAL_MAX_APIS = 10
 _TIDAL_MAX_WORKERS = 5
 
@@ -386,6 +388,34 @@ def _other_recording(expected: str, found: str) -> bool:
     return not titles_match(expected, found) and ratio(expected, found) < 0.5
 
 
+#: How far apart two running times may be and still be the same recording,
+#: and what counts as a preview clip: Mornye's own re-enrich rules.
+_LENGTH_SLACK_S = 10
+_PREVIEW_MAX_S = 35
+_FULL_TRACK_MIN_S = 45
+
+
+def _other_length(
+    expected_ms: int, found_ms: int, expected_title: str, found_title: str
+) -> bool:
+    """Whether an ISRC answer's running time shows it is another take.
+
+    An ISRC match is not proof on its own: catalogs file previews, and now
+    and then a different recording, under the code. So, as in Mornye, a
+    length more than 10s off is accepted only when the title is the same
+    word for word, and a clip of 35s or less never stands in for a full
+    track. Unknown lengths prove nothing.
+    """
+    expected_s, found_s = expected_ms // 1000, found_ms // 1000
+    if expected_s <= 0 or found_s <= 0 or abs(expected_s - found_s) <= _LENGTH_SLACK_S:
+        return False
+    if found_s <= _PREVIEW_MAX_S and expected_s > _FULL_TRACK_MIN_S:
+        return True
+    if not expected_title or not found_title:
+        return False
+    return fold(expected_title) != fold(found_title)
+
+
 def _other_isrc(wanted: Any, found: Any) -> bool:
     """Whether a lookup by ISRC answered with a different one. Qobuz's is a
     search whose term is the ISRC, and a search returns its nearest hit when
@@ -412,7 +442,11 @@ class _DeezerMeta:
         return _run_async_sync(self.fetch_async(isrc, album_name))
 
     async def fetch_async(
-        self, isrc: str, album_name: str = "", track_name: str = ""
+        self,
+        isrc: str,
+        album_name: str = "",
+        track_name: str = "",
+        duration_ms: int = 0,
     ) -> EnrichedMetadata:
         """Deezer's view of one recording, looked up by ISRC.
 
@@ -453,6 +487,19 @@ class _DeezerMeta:
                     "[meta/deezer] asked for ISRC %s, answered with %s — ignored",
                     isrc,
                     d.get("isrc"),
+                )
+                return out
+            if _other_length(
+                duration_ms,
+                _as_int(d.get("duration")) * 1000,
+                track_name,
+                str(d.get("title") or ""),
+            ):
+                logger.debug(
+                    "[meta/deezer] ISRC %s runs %ss, not ~%ss — ignored",
+                    isrc,
+                    d.get("duration"),
+                    duration_ms // 1000,
                 )
                 return out
 
@@ -540,6 +587,36 @@ class _ItunesCandidate:
             first_artist=name,
             album=str(item.get("collectionName") or ""),
             duration_ms=int(item.get("trackTimeMillis") or 0),
+        )
+
+
+@dataclass
+class _TidalCandidate:
+    """One Tidal search hit, in the shape score_track_match() reads."""
+
+    title: str
+    artists: str
+    first_artist: str
+    album: str
+    duration_ms: int
+
+    @classmethod
+    def of(cls, item: dict[str, Any]) -> _TidalCandidate:
+        names = [
+            str(a.get("name") or "").strip()
+            for a in item.get("artists") or []
+            if isinstance(a, dict)
+        ]
+        names = [n for n in names if n]
+        main = item.get("artist") if isinstance(item.get("artist"), dict) else {}
+        first = str(main.get("name") or "") or (names[0] if names else "")
+        album = item.get("album") if isinstance(item.get("album"), dict) else {}
+        return cls(
+            title=str(item.get("title") or ""),
+            artists=", ".join(names) or first,
+            first_artist=first,
+            album=str(album.get("title") or ""),
+            duration_ms=_as_int(item.get("duration")) * 1000,
         )
 
 
@@ -702,8 +779,23 @@ class _AppleMusicMeta:
         out.explicit = item.get("trackExplicitness") == "explicit"
         raw_art = item.get("artworkUrl100", "")
         found_album = str(item.get("collectionName") or "")
+        # The cover is not the only field that belongs to the release: the
+        # date, the track and disc counts and the kind of record do too. A
+        # song found on a compilation used to give the file that
+        # compilation's 40 tracks and its year, as long as the cover was
+        # held back. Mornye applies release fields only from the same
+        # release, and so does this now.
         if not album_name or _same_release(album_name, found_album):
             out.cover_url_hd = raw_art.replace("100x100", "600x600")
+            # ISO-8601 with a time part; only the date half is a release date.
+            out.release_date = str(item.get("releaseDate") or "")[:10]
+            out.total_tracks = int(item.get("trackCount") or 0)
+            out.total_discs = int(item.get("discCount") or 0)
+            # A song result carries no collectionType — that only appears on
+            # album lookups — so the release kind is inferred from its size,
+            # which is all iTunes actually tells us here.
+            if out.total_tracks:
+                out.album_type = "single" if out.total_tracks == 1 else "album"
         else:
             logger.debug(
                 "[meta/apple] release mismatch: wanted %r, got %r — keeping "
@@ -711,15 +803,6 @@ class _AppleMusicMeta:
                 album_name,
                 found_album,
             )
-        # ISO-8601 with a time part; only the date half is a release date.
-        out.release_date = str(item.get("releaseDate") or "")[:10]
-        out.total_tracks = int(item.get("trackCount") or 0)
-        out.total_discs = int(item.get("discCount") or 0)
-        # A song result carries no collectionType — that only appears on
-        # album lookups — so the release kind is inferred from its size,
-        # which is all iTunes actually tells us here.
-        if out.total_tracks:
-            out.album_type = "single" if out.total_tracks == 1 else "album"
         return out
 
 
@@ -769,13 +852,13 @@ class _TidalMeta:
     def fetch(self, track_name: str, artist_name: str) -> EnrichedMetadata:
         return _run_async_sync(self.fetch_async(track_name, artist_name))
 
-    def _try_api(self, api: str, query: str) -> dict | None:
+    def _try_api(self, api: str, query: str) -> list[dict]:
         return _run_async_sync(self._try_api_async(api, query))
 
-    def _search_parallel(self, title: str, artist: str) -> dict | None:
+    def _search_parallel(self, title: str, artist: str) -> list[dict]:
         return _run_async_sync(self._search_parallel_async(title, artist))
 
-    async def _try_api_async(self, api: str, query: str) -> dict | None:
+    async def _try_api_async(self, api: str, query: str) -> list[dict]:
         base = api.rstrip("/")
         client = await NetworkManager.get_async_client_safe()
         for endpoint in (
@@ -796,13 +879,14 @@ class _TidalMeta:
                     if isinstance(data, list)
                     else data.get("tracks", {}).get("items", [])
                 )
+                items = [item for item in items if isinstance(item, dict)]
                 if items:
-                    return items[0]
+                    return items
             except Exception:
                 pass
-        return None
+        return []
 
-    async def _search_parallel_async(self, title: str, artist: str) -> dict | None:
+    async def _search_parallel_async(self, title: str, artist: str) -> list[dict]:
         from urllib.parse import quote
 
         clean = re.sub(r"\s*[\(\[][^\)\]]*[\)\]]", "", title).strip() or title
@@ -814,9 +898,9 @@ class _TidalMeta:
 
         apis_to_try = apis[:_TIDAL_MAX_APIS]
         if not apis_to_try:
-            return None
+            return []
 
-        async def _one(api: str) -> dict | None:
+        async def _one(api: str) -> list[dict]:
             return await self._try_api_async(api, query)
 
         tasks = [asyncio.create_task(_one(api)) for api in apis_to_try]
@@ -832,17 +916,59 @@ class _TidalMeta:
             for task in tasks:
                 if not task.done():
                     task.cancel()
-        return None
+        return []
 
-    async def fetch_async(self, track_name: str, artist_name: str) -> EnrichedMetadata:
+    async def fetch_async(
+        self,
+        track_name: str,
+        artist_name: str,
+        album_name: str = "",
+        duration_ms: int = 0,
+    ) -> EnrichedMetadata:
+        """Tidal's view of the track, found by searching title and artist.
+
+        A search always answers with *something*, and this used to take the
+        first hit on faith — its cover, its explicit flag and even its ISRC,
+        which then outlived the track in the file. Now every hit is scored
+        the way Apple's are, and nothing is taken below the same threshold.
+        The cover is the release's, so it also needs the release to agree,
+        as Mornye requires before applying release fields.
+        """
         out = EnrichedMetadata()
-        track_data = await self._search_parallel_async(track_name, artist_name)
-        if not track_data:
+        items = await self._search_parallel_async(track_name, artist_name)
+        best: dict[str, Any] | None = None
+        best_score = 0.0
+        for item in items:
+            candidate = _TidalCandidate.of(item)
+            if _other_length(
+                duration_ms, candidate.duration_ms, track_name, candidate.title
+            ):
+                continue
+            score = score_track_match(
+                title=track_name,
+                artist=artist_name,
+                album=album_name,
+                duration_ms=duration_ms,
+                candidate=candidate,
+            )
+            if score > best_score:
+                best, best_score = item, score
+        if best is None or best_score < _TIDAL_MATCH_MIN:
+            if items:
+                logger.debug(
+                    "[meta/tidal] no result above %.2f for %r / %r (best %.2f)",
+                    _TIDAL_MATCH_MIN,
+                    track_name,
+                    artist_name,
+                    best_score,
+                )
             return out
-        album = track_data.get("album", {})
-        out.cover_url_hd = album.get("cover", "")
-        out.explicit = bool(track_data.get("explicit"))
-        out.isrc = track_data.get("isrc", "")
+        album = best.get("album") if isinstance(best.get("album"), dict) else {}
+        found_album = str(album.get("title") or "")
+        if not album_name or _same_release(album_name, found_album):
+            out.cover_url_hd = str(album.get("cover") or "")
+        out.explicit = bool(best.get("explicit"))
+        out.isrc = str(best.get("isrc") or "")
         return out
 
 
@@ -865,7 +991,11 @@ class _QobuzMeta:
         return _run_async_sync(self.fetch_async(isrc, album_name))
 
     async def fetch_async(
-        self, isrc: str, album_name: str = "", track_name: str = ""
+        self,
+        isrc: str,
+        album_name: str = "",
+        track_name: str = "",
+        duration_ms: int = 0,
     ) -> EnrichedMetadata:
         """Qobuz's view of one recording, looked up by ISRC.
 
@@ -902,6 +1032,19 @@ class _QobuzMeta:
                     "[meta/qobuz] asked for ISRC %s, answered with %s — ignored",
                     isrc,
                     track.get("isrc"),
+                )
+                return out
+            if _other_length(
+                duration_ms,
+                _as_int(track.get("duration")) * 1000,
+                track_name,
+                str(track.get("title") or ""),
+            ):
+                logger.debug(
+                    "[meta/qobuz] ISRC %s runs %ss, not ~%ss — ignored",
+                    isrc,
+                    track.get("duration"),
+                    duration_ms // 1000,
                 )
                 return out
             album = track.get("album", {}) or {}
@@ -1040,9 +1183,9 @@ def _get_sc() -> _SoundCloudMeta:
 
 
 async def _deezer_fetch_async(
-    isrc: str, album_name: str = "", track_name: str = ""
+    isrc: str, album_name: str = "", track_name: str = "", duration_ms: int = 0
 ) -> EnrichedMetadata:
-    return await _get_deezer().fetch_async(isrc, album_name, track_name)
+    return await _get_deezer().fetch_async(isrc, album_name, track_name, duration_ms)
 
 
 async def _apple_fetch_async(
@@ -1061,14 +1204,24 @@ async def _apple_fetch_async(
     )
 
 
-async def _tidal_fetch_async(track_name: str, artist_name: str) -> EnrichedMetadata:
-    return await _get_tidal().fetch_async(track_name, artist_name)
+async def _tidal_fetch_async(
+    track_name: str, artist_name: str, album_name: str = "", duration_ms: int = 0
+) -> EnrichedMetadata:
+    return await _get_tidal().fetch_async(
+        track_name, artist_name, album_name, duration_ms
+    )
 
 
 async def _qobuz_fetch_async(
-    isrc: str, qobuz_token: str | None, album_name: str = "", track_name: str = ""
+    isrc: str,
+    qobuz_token: str | None,
+    album_name: str = "",
+    track_name: str = "",
+    duration_ms: int = 0,
 ) -> EnrichedMetadata:
-    return await _get_qobuz_meta(qobuz_token).fetch_async(isrc, album_name, track_name)
+    return await _get_qobuz_meta(qobuz_token).fetch_async(
+        isrc, album_name, track_name, duration_ms
+    )
 
 
 async def _soundcloud_fetch_async(
@@ -1114,7 +1267,7 @@ async def enrich_metadata_async(
         try:
             if name == "deezer":
                 return name, await _deezer_fetch_async(
-                    isrc, album_name, track_name=track_name
+                    isrc, album_name, track_name=track_name, duration_ms=duration_ms
                 )
             if name == "apple":
                 return name, await _apple_fetch_async(
@@ -1125,10 +1278,16 @@ async def enrich_metadata_async(
                     duration_ms,
                 )
             if name == "tidal":
-                return name, await _tidal_fetch_async(track_name, artist_name)
+                return name, await _tidal_fetch_async(
+                    track_name, artist_name, album_name, duration_ms
+                )
             if name == "qobuz":
                 return name, await _qobuz_fetch_async(
-                    isrc, qobuz_token, album_name, track_name=track_name
+                    isrc,
+                    qobuz_token,
+                    album_name,
+                    track_name=track_name,
+                    duration_ms=duration_ms,
                 )
             if name == "soundcloud":
                 return name, await _soundcloud_fetch_async(track_name, artist_name)
