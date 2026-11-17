@@ -2836,10 +2836,17 @@ class MornyeDownloader:
         try:
             from ..core.session_memory import add_url_to_history_async
 
-            cover_url = tracks[0].cover_url if tracks and tracks[0].cover_url else ""
             url_type = info.get("type", "")
             if url_type == "artist_discography":
                 url_type = "artist"
+            # The collection's own picture: an artist's photo, a playlist's
+            # cover. The first track's cover only stands in for a track or an
+            # album, where it is the same picture; for an artist it was the
+            # cover of whichever song came first, which then replaced the
+            # right one the fetch had stored.
+            cover_url = str(info.get("cover") or "")
+            if not cover_url and url_type in ("track", "album") and tracks:
+                cover_url = tracks[0].cover_url or ""
             artist = tracks[0].artists if tracks and url_type == "track" else ""
             await add_url_to_history_async(
                 url,
@@ -2910,6 +2917,10 @@ class MornyeDownloader:
         catalogue = parse_catalogue_url(url)
         own_source = None if catalogue else _own_source_extension_for(url)
         own_meta: dict = {}
+        #: What get_url returned after (name, tracks): the collection's own
+        #: picture first. Kept for the recent-links history (see
+        #: _record_history_async), which used the first track's cover.
+        collection_cover: list = []
 
         try:
             client: Any
@@ -2929,6 +2940,7 @@ class MornyeDownloader:
                 ).get_url_async(url)
                 if len(own_rest) > 1 and isinstance(own_rest[1], dict):
                     own_meta = own_rest[1]
+                collection_cover = list(own_rest)
             elif catalogue:
                 client = ExtensionMetadataClient.for_url(url)
                 (
@@ -3002,7 +3014,7 @@ class MornyeDownloader:
                 (
                     collection_name,
                     tracks,
-                    *_collection_cover,
+                    *collection_cover,
                 ) = await get_url_with_fallback(
                     url,
                     self._metadata_client,
@@ -3064,6 +3076,9 @@ class MornyeDownloader:
                 ErrorKind.INVALID_URL, f"Unsupported or invalid URL: {url}"
             )
 
+        cover = collection_cover[0] if collection_cover else ""
+        if isinstance(cover, str) and cover.strip():
+            info = {**info, "cover": cover.strip()}
         return collection_name, tracks, info
 
     async def _resolve_isrc_bulk_async(
