@@ -869,6 +869,7 @@ const ALL_SERVICES = [
 //: Logos shipped for services that come from extensions rather than the
 //: built-in list (ids as get_download_services() names them).
 const EXTENSION_SERVICE_ICONS = {
+  beatport: 'beatport.png',
   jellyfin: 'jellyfin.png',
   jiosaavn: 'jiosaavn.png',
   'melon-music': 'melon-music.png',
@@ -880,13 +881,13 @@ const ALL_LYRICS = [
   { id:'binilyrics', label:'BiniLyrics', on:true, icon:'BL', iconClass:'binilyrics' },
   { id:'lrclib',     label:'LRCLib',     on:true,  iconFile:'lrclib.png', iconClass:'lrclib' },
   { id:'lyricsplus', label:'LyricsPlus', on:false, icon:'LP', iconClass:'lyricsplus' },
-  { id:'lrcred',     label:'lrc.red',    on:false, icon:'LR', iconClass:'lrcred' },
+  { id:'lrcred',     label:'lrc.red',    on:false, icon:'LR', iconClass:'lrcred', iconFile:'lrcred.svg' },
   { id:'amazon',     label:'Amazon',     on:false, iconFile:'amzn.png', iconClass:'amazon' },
-  { id:'unison',     label:'Unison',     on:false, icon:'UN', iconClass:'unison' },
+  { id:'unison',     label:'Unison',     on:false, icon:'UN', iconClass:'unison', iconFile:'unison.png' },
   { id:'jiosaavn',   label:'JioSaavn',   on:false, icon:'JS', iconClass:'jiosaavn', iconFile:'jiosaavn.png' },
-  { id:'kugou',      label:'KuGou',      on:false, icon:'KG', iconClass:'kugou' },
-  { id:'qq',         label:'QQ Music',   on:false, icon:'QQ', iconClass:'qq' },
-  { id:'genius',     label:'Genius',     on:false, icon:'GE', iconClass:'genius' },
+  { id:'kugou',      label:'KuGou',      on:false, icon:'KG', iconClass:'kugou', iconFile:'kugou.png' },
+  { id:'qq',         label:'QQ Music',   on:false, icon:'QQ', iconClass:'qq', iconFile:'qq.png' },
+  { id:'genius',     label:'Genius',     on:false, icon:'GE', iconClass:'genius', iconFile:'genius.png' },
   { id:'spotify',    label:'Spotify',    on:false, iconFile:'spotify.svg', iconClass:'spotify' },
 ];
 const ALL_ENRICH = [
