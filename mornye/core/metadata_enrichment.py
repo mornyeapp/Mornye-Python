@@ -432,6 +432,11 @@ def _as_int(value: Any) -> int:
         return 0
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    """`value` if it is a JSON object, else an empty one to read from."""
+    return value if isinstance(value, dict) else {}
+
+
 class _DeezerMeta:
     BASE = "https://api.deezer.com/2.0"
 
@@ -608,9 +613,9 @@ class _TidalCandidate:
             if isinstance(a, dict)
         ]
         names = [n for n in names if n]
-        main = item.get("artist") if isinstance(item.get("artist"), dict) else {}
+        main = _as_dict(item.get("artist"))
         first = str(main.get("name") or "") or (names[0] if names else "")
-        album = item.get("album") if isinstance(item.get("album"), dict) else {}
+        album = _as_dict(item.get("album"))
         return cls(
             title=str(item.get("title") or ""),
             artists=", ".join(names) or first,
@@ -963,7 +968,7 @@ class _TidalMeta:
                     best_score,
                 )
             return out
-        album = best.get("album") if isinstance(best.get("album"), dict) else {}
+        album = _as_dict(best.get("album"))
         found_album = str(album.get("title") or "")
         if not album_name or _same_release(album_name, found_album):
             out.cover_url_hd = str(album.get("cover") or "")
