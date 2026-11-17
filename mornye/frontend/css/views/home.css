@@ -257,18 +257,34 @@
   opacity: .65;
   transform: scale(1.04); /* hides the blur's soft edge against the tile's border */
 }
-#album-cover:hover .cover-download-btn { opacity: 1; }
-.cover-download-btn {
-  position: absolute; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center;
-  background: var(--overlay); border-radius: var(--radius-2); opacity: 0; transition: all 0.2s ease;
-  border: none; cursor: pointer; color: var(--text); font-family: inherit;
+#album-cover:hover .cover-download-btn, .cover-download-btn:focus-visible { opacity: 1; }
+/* A soft scrim over the artwork while the pointer is on it, so the button
+   reads on a light cover as well as a dark one. */
+#album-cover::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(circle at center, rgba(0, 0, 0, .38), rgba(0, 0, 0, .12) 70%);
+  opacity: 0; transition: opacity .2s ease;
 }
-.cover-download-btn:hover { background: rgba(var(--shade-rgb), 0.85); transform: scale(1.1); }
-.cover-download-btn svg { width: 24px; height: 24px; }
+#album-cover:hover::after { opacity: 1; }
+/* The button sits on artwork of any colour, so it carries its own contrast:
+   white ink on a dark, blurred disc, never the theme's text colour (dark in
+   the light theme, which made it vanish on dark or busy covers). It is
+   centred by an inline translate, which every transform here keeps. */
+.cover-download-btn {
+  position: absolute; z-index: 1; width: 52px; height: 52px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, .58); border-radius: 50%; opacity: 0;
+  -webkit-backdrop-filter: blur(10px) saturate(140%); backdrop-filter: blur(10px) saturate(140%);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .35), inset 0 0 0 1px rgba(255, 255, 255, .22);
+  transition: opacity .2s ease, transform .2s ease, background-color .2s ease;
+  border: none; cursor: pointer; color: #fff; font-family: inherit;
+}
+.cover-download-btn:hover { background: rgba(0, 0, 0, .78); transform: translate(-50%, -50%) scale(1.08) !important; }
+.cover-download-btn svg { width: 24px; height: 24px; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .4)); }
 .cover-download-btn.loading svg { animation: spin 0.8s linear infinite; }
 .cover-download-btn.success { background: var(--ok); opacity: 1; }
 .cover-download-btn.error { background: var(--error); opacity: 1; }
-.cover-download-btn.success:hover, .cover-download-btn.error:hover { cursor: default; transform: none; }
+.cover-download-btn.success:hover, .cover-download-btn.error:hover { cursor: default; transform: translate(-50%, -50%) !important; }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 /* The cover is the tallest thing in the card, so the text column is
    always shorter — the question is only where its leftover height goes.
