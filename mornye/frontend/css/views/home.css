@@ -1544,3 +1544,30 @@ body:has(#album-card:not(.hidden)) #fetchBtn {
   #urlInput { height: 44px; }
 }
 
+
+/* ── Album card on a wide screen ─────────────────────────────────────────
+   At 1200px and up the card had a 200px cover, a text column pinned to its
+   top and the facts panel in the far corner, with most of the width empty
+   between them. Here the cover grows with the window, the text column is as
+   tall as the cover with the actions along its foot, the title steps up,
+   and the facts panel is centred beside them with readable values. */
+@media (min-width: 1200px) {
+  #album-card { align-items: stretch; padding: var(--space-5); gap: var(--space-6); }
+  #album-cover { width: clamp(200px, 14vw, 280px); height: clamp(200px, 14vw, 280px); }
+  #album-info { align-self: stretch; padding-top: 0; }
+  #album-title { font-size: clamp(24px, 1.7vw, 34px); line-height: 1.15; }
+  #album-subtitle, #album-artist { font-size: var(--text-lg); }
+  #album-description { max-width: 72ch; }
+  #album-actions { margin-top: auto; padding-top: var(--space-3); }
+  #album-tech {
+    align-self: center;
+    width: clamp(320px, 30%, 500px);
+    padding-left: var(--space-6);
+    row-gap: var(--space-4);
+  }
+  #album-tech .tech-v { font-size: var(--text-md); }
+  /* A playlist or artist has only a couple of facts: they read as figures. */
+  #album-tech:not(:has(.tech-barcode)):not(:has(.tech-row:nth-child(4))) .tech-v {
+    font-size: var(--text-2xl); font-weight: var(--weight-bold); line-height: 1.1;
+  }
+}
