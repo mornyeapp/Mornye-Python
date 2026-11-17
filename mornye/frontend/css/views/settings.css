@@ -795,3 +795,50 @@ input[type="password"].full { width: 100%; }
 .status-overall.online { border-color: var(--ok); color: var(--ok); }
 .status-overall.offline { border-color: var(--error); color: var(--error); }
 .status-overall-icon { background: transparent; border-radius: 0; color: inherit; }
+
+/* ── Download sources, redrawn ───────────────────────────────────────────
+   Tighter rows with the logo as a proper 32px tile (it was a 14px-high
+   image in a grey square), the name first, the role and quality next to it,
+   and the on/off control as a switch. A source that is off fades its logo
+   and name only, so its controls stay readable. */
+#services-list { gap: 6px; }
+#services-list .service-sort-item {
+  grid-template-columns: 26px 14px 32px minmax(110px, 1fr) auto auto minmax(120px, auto);
+  min-height: 50px; padding: 8px 12px; gap: 12px;
+  border-radius: var(--radius-2);
+}
+#services-list .service-sort-item.inactive { opacity: 1; }
+#services-list .service-sort-item.inactive .svc-icon,
+#services-list .service-sort-item.inactive .svc-name { opacity: .45; filter: grayscale(1); }
+#services-list .service-sort-item.inactive .svc-badge,
+#services-list .service-sort-item.inactive .service-order-status { opacity: .6; }
+#services-list .drag-h { opacity: .35; transition: opacity var(--motion) var(--ease); }
+#services-list .service-sort-item:hover .drag-h { opacity: 1; }
+#services-list .svc-icon,
+#services-list .svc-icon.icon-image {
+  width: 32px; height: 32px; border-radius: 7px;
+  background: var(--raised); border: 1px solid var(--rule);
+  font-size: var(--text-xs); font-weight: var(--weight-bold); letter-spacing: .02em;
+}
+#services-list .svc-icon img { width: 100%; height: 100%; object-fit: cover; display: block; }
+#services-list .svc-icon img[src$=".svg"] { object-fit: contain; padding: 5px; }
+#services-list .svc-name { font-size: var(--text-md); font-weight: var(--weight-medium); color: var(--text); }
+#services-list .service-order-status { padding: 2px 8px; border-radius: 999px; }
+#services-list .svc-badge { padding: 1px 6px; border-radius: var(--radius-1); letter-spacing: .04em; }
+/* On/off as a switch. */
+#services-list .service-enable { gap: 8px; min-width: 58px; }
+#services-list .service-enable input {
+  -webkit-appearance: none; appearance: none; margin: 0; flex: 0 0 auto;
+  width: 30px; height: 18px; border-radius: 999px; position: relative; cursor: pointer;
+  background: var(--rule-strong); transition: background var(--motion) var(--ease);
+}
+#services-list .service-enable input::after {
+  content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .3); transition: transform var(--motion) var(--ease);
+}
+#services-list .service-enable input:checked { background: var(--signal-strong); }
+#services-list .service-enable input:checked::after { transform: translateX(12px); }
+#services-list .service-enable input:focus-visible { outline: 2px solid var(--signal-strong); outline-offset: 2px; }
+@media (max-width: 700px) {
+  #services-list .service-sort-item { grid-template-columns: 22px 12px 30px minmax(0, 1fr) auto; }
+}

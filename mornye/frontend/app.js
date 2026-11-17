@@ -866,6 +866,15 @@ const ALL_SERVICES = [
   { id:'apple',       label:'Apple Music',    badge:'M4A',  on:false, icon:'AM', iconClass:'apple', iconFile:'am.png' },
   { id:'pandora',     label:'Pandora',        badge:'MP3',  on:false, icon:'P',  iconClass:'pandora', iconFile:'pandora.svg' },
 ];
+//: Logos shipped for services that come from extensions rather than the
+//: built-in list (ids as get_download_services() names them).
+const EXTENSION_SERVICE_ICONS = {
+  jellyfin: 'jellyfin.png',
+  jiosaavn: 'jiosaavn.png',
+  'melon-music': 'melon-music.png',
+  'bugs-music': 'bugs-music.png',
+  'genie-music': 'genie-music.png',
+};
 const ALL_LYRICS = [
   { id:'apple',      label:'Apple Music',on:true, iconFile:'am.png', iconClass:'apple' },
   { id:'binilyrics', label:'BiniLyrics', on:true, icon:'BL', iconClass:'binilyrics' },
@@ -874,7 +883,7 @@ const ALL_LYRICS = [
   { id:'lrcred',     label:'lrc.red',    on:false, icon:'LR', iconClass:'lrcred' },
   { id:'amazon',     label:'Amazon',     on:false, iconFile:'amzn.png', iconClass:'amazon' },
   { id:'unison',     label:'Unison',     on:false, icon:'UN', iconClass:'unison' },
-  { id:'jiosaavn',   label:'JioSaavn',   on:false, icon:'JS', iconClass:'jiosaavn' },
+  { id:'jiosaavn',   label:'JioSaavn',   on:false, icon:'JS', iconClass:'jiosaavn', iconFile:'jiosaavn.png' },
   { id:'kugou',      label:'KuGou',      on:false, icon:'KG', iconClass:'kugou' },
   { id:'qq',         label:'QQ Music',   on:false, icon:'QQ', iconClass:'qq' },
   { id:'genius',     label:'Genius',     on:false, icon:'GE', iconClass:'genius' },
@@ -1070,9 +1079,13 @@ function buildServiceSortItem(item, index) {
   d.className = `sort-item service-sort-item ${item.on ? '' : 'inactive'}`;
   d.dataset.value = item.id;
   if (item.title) d.title = `Provided by ${item.title}`;
+  // A logo shipped with the app, else the one the extension itself ships
+  // (iconUrl, a data URL from get_download_services), else two letters.
   const iconHtml = item.iconFile
     ? `<span class="svc-icon ${item.iconClass} icon-image"><img src="assets/icons/${item.iconFile}" alt="" data-onerror="this.onerror=null; this.src='assets/icons/${item.id}.png';"></span>`
-    : item.icon ? `<span class="svc-icon ${item.iconClass}">${escHtml(item.icon)}</span>` : '';
+    : item.iconUrl && /^data:image\//.test(item.iconUrl)
+      ? `<span class="svc-icon ${item.iconClass} icon-image"><img src="${escHtml(item.iconUrl)}" alt=""></span>`
+      : item.icon ? `<span class="svc-icon ${item.iconClass}">${escHtml(item.icon)}</span>` : '';
   d.innerHTML = `
     <span class="priority-num">${index + 1}</span>
     <span class="drag-h" aria-hidden="true">⠿</span>
@@ -1268,15 +1281,18 @@ async function refreshInstalledServices() {
     // primary extension's manifest says it delivers.
     const title = serviceTitle(svc);
     const badge = serviceBadge(svc);
-    if (preset) return { ...preset, badge: badge || preset.badge, title };
+    if (preset) return { ...preset, badge: badge || preset.badge, title, iconUrl: svc.icon || '' };
     // A provider this build has no artwork or label for — a third-party
-    // extension, most likely. It still belongs in the list.
+    // extension, most likely. It still belongs in the list, with the logo
+    // its extension ships when there is one.
     return {
       id: svc.id,
       label: svc.label || svc.id,
       badge,
       on: false,
       icon: (svc.id || '?').slice(0, 2).toUpperCase(),
+      iconFile: EXTENSION_SERVICE_ICONS[svc.id] || '',
+      iconUrl: svc.icon || '',
       iconClass: svc.id,
       title,
     };
@@ -1431,6 +1447,7 @@ function renderPlatformIcon(type) {
     netease: 'netease.svg',
     migu: 'migu.jpeg',
     songstats: 'songstats.png',
+    ...EXTENSION_SERVICE_ICONS,
   };
   const iconFile = iconMap[type];
   if (!iconFile) {

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from .manager import ExtensionManager
 
 # Public service names historically accepted by the CLI/API, mapped to the
@@ -133,9 +135,61 @@ def installed_download_services(
                     for option in (getattr(primary, "quality_options", None) or [])
                 ],
                 "atmos": bool(getattr(primary, "has_atmos", False)),
+                # The service's own logo when one of its extensions ships
+                # one, so a provider this build has no artwork for (Jellyfin,
+                # JioSaavn, a third-party one) is not just two letters.
+                "icon": next(
+                    (
+                        url
+                        for url in (
+                            extension_icon_data_url(e) for e in [primary, *extensions]
+                        )
+                        if url
+                    ),
+                    "",
+                ),
             }
         )
     return rows
+
+
+#: Logo formats an extension may ship, and the largest file read.
+_ICON_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".svg": "image/svg+xml",
+}
+_ICON_MAX_BYTES = 96 * 1024
+
+
+def extension_icon_data_url(ext: object) -> str:
+    """The logo named by an installed extension's manifest ``icon``, as a
+    data URL, or "" when it has none.
+
+    Only a plain file name inside the extension's own folder is read — the
+    same rule the registry's packager enforces — and only a small image."""
+    import base64
+
+    manifest = getattr(ext, "manifest", None) or {}
+    name = manifest.get("icon") if isinstance(manifest, dict) else None
+    ext_dir = getattr(ext, "ext_dir", None)
+    if not isinstance(name, str) or not name or ext_dir is None:
+        return ""
+    if Path(name).name != name or name in (".", ".."):
+        return ""
+    mime = _ICON_TYPES.get(Path(name).suffix.lower())
+    if not mime:
+        return ""
+    try:
+        path = Path(ext_dir) / name
+        if not path.is_file() or path.stat().st_size > _ICON_MAX_BYTES:
+            return ""
+        data = path.read_bytes()
+    except OSError:
+        return ""
+    return f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
 
 
 def _primary_extension(extensions: list[object]) -> object:
