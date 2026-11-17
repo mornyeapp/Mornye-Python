@@ -163,7 +163,12 @@
    fill by flowing, so the two sides stay roughly level instead of
    leaving a grid row as tall as its tallest cell. break-inside stops a
    card being split down the middle across the column boundary. */
-@media (min-width: 1900px) {
+/* Measured on the page itself, not the window: the page is capped at
+   1180px and sits next to the sidebar and the category column, so a wide
+   window said nothing about how much room each column would really get
+   and split the cards into two ~420px strips the source list overflowed. */
+#view-settings > .s-body { container-type: inline-size; }
+@container (min-width: 1100px) {
   .tc.active { columns: 2; column-gap: var(--space-3); }
   #tc-files.active,
   #tc-status.active { columns: 1; }
@@ -177,7 +182,8 @@
   .tc.active .s-section:last-child { margin-bottom: var(--space-3); }
   /* Sections that are a wide table or a grid of their own read badly at
        half width — they keep the full row. */
-  .tc.active .s-section.s-wide { column-span: all; }
+  .tc.active .s-section.s-wide,
+  .tc.active .s-section.source-priority-section { column-span: all; }
 }
 .s-row:last-child { margin-bottom: 0; }
 .s-section > .s-row + .s-row { border-top: 1px solid var(--rule); }
@@ -839,6 +845,18 @@ input[type="password"].full { width: 100%; }
 #services-list .service-enable input:checked { background: var(--signal-strong); }
 #services-list .service-enable input:checked::after { transform: translateX(12px); }
 #services-list .service-enable input:focus-visible { outline: 2px solid var(--signal-strong); outline-offset: 2px; }
+/* Narrow page (small window, or the page beside an open panel): the
+   badges go and the controls take a second line, as on a phone. */
+@container (max-width: 700px) {
+  #services-list .service-sort-item {
+    grid-template-columns: 26px 14px 32px minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+  .service-sort-item .service-order-status { grid-column: 4; justify-self: start; }
+  .service-sort-item .svc-badge { display: none; }
+  .service-row-actions { grid-column: 5; grid-row: 1 / span 2; }
+  .source-priority-intro { flex-direction: column; gap: 6px; }
+}
 @media (max-width: 700px) {
   #services-list .service-sort-item { grid-template-columns: 22px 12px 30px minmax(0, 1fr) auto; }
 }
