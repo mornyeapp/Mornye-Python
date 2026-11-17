@@ -1857,7 +1857,6 @@ window.updateFolderLabel = (path) => {
             }
           }
         }
-        if (Array.isArray(data.queue)) updateAlbumQualityFromStats(data.queue);
         if (Array.isArray(data.queue) && data.queue.length) {
           // The queue is indexed once per push instead of being scanned once
           // per stat entry: those scans were quadratic in the queue length,
@@ -2191,61 +2190,32 @@ function collapseCopyright(value) {
   return [...seen.values()].join(' · ');
 }
 
-// ── Album quality readout (§2, signature 1) ─────────────────────────────────
-// Before anything is downloaded the card shows the tier asked for in
-// Settings ("REQ · HI-RES LOSSLESS"); once a track of the card finishes,
-// the first such file is read (probe_audio_quality) and the readout becomes
-// what it really is: "24 / 96 · FLAC", or "320 KBPS · MP3" for a lossy file.
-const REQUESTED_QUALITY_LABELS = {
-  HI_RES_LOSSLESS: 'HI-RES LOSSLESS', LOSSLESS: 'LOSSLESS', DOLBY_ATMOS: 'DOLBY ATMOS',
-};
-let albumQualityProbed = false;   // a real value is shown (or being read) for this card
-
-function formatAudioQuality(info) {
-  if (!info) return '';
-  const fmt = String(info.format || '').toUpperCase();
-  if (info.bit_depth && info.sample_rate) {
-    const khz = Math.round(info.sample_rate / 100) / 10;
-    return `${info.bit_depth} / ${khz} · ${fmt}`.trim();
+// The owner row is a fixed run of fields with a "·" between each; any of
+// them can be empty (no follower count, no source…). Empty fields are
+// hidden and a separator is shown only between two visible fields, so the
+// row never reads "Spotify · · 90 tracks ·".
+function tidyOwnerRow() {
+  const row = $('album-owner-row');
+  if (!row) return;
+  let pendingSep = null;
+  let seenField = false;
+  for (const el of row.children) {
+    if (el.id === 'album-owner-avatar') continue;
+    if (el.classList.contains('dot-sep')) {
+      el.style.display = 'none';
+      if (seenField) pendingSep = el;
+      continue;
+    }
+    const filled = !!el.textContent.trim();
+    el.style.display = filled ? '' : 'none';
+    if (!filled) continue;
+    if (pendingSep) pendingSep.style.display = '';
+    pendingSep = null;
+    seenField = true;
   }
-  if (info.bitrate) return `${Math.round(info.bitrate / 1000)} KBPS · ${fmt}`;
-  return fmt;
-}
-
-function showRequestedAlbumQuality() {
-  const el = $('album-quality');
-  if (!el) return;
-  albumQualityProbed = false;
-  const q = $('config-quality')?.value || '';
-  const label = REQUESTED_QUALITY_LABELS[q] || q.replace(/_/g, ' ');
-  el.textContent = label ? `REQ · ${label}` : '';
-  el.dataset.state = 'requested';
-  el.title = 'The quality asked for in Settings; replaced by the real one once a track has downloaded';
-  el.classList.toggle('hidden', !label);
-}
-
-function updateAlbumQualityFromStats(items) {
-  const el = $('album-quality');
-  if (!el || albumQualityProbed || !el.textContent) return;
-  if ($('album-card')?.classList.contains('hidden')) return;
-  const ids = new Set(currentTracks.map(t => t && t.id).filter(Boolean));
-  if (!ids.size) return;
-  const done = (items || []).find(i => i && i.status === 'completed' && i.file_path && ids.has(i.spotify_id));
-  const api = window.pywebview?.api;
-  if (!done || typeof api?.probe_audio_quality !== 'function') return;
-  albumQualityProbed = true;
-  Promise.resolve(api.probe_audio_quality(done.file_path)).then(res => {
-    const label = res && res.status === 'ok' ? formatAudioQuality(res.info) : '';
-    if (!label) { albumQualityProbed = false; return; }
-    el.textContent = label;
-    el.dataset.state = 'actual';
-    el.title = `Read from ${res.info.file || 'the first downloaded track'}`;
-    el.classList.remove('hidden');
-  }).catch(() => { albumQualityProbed = false; });
 }
 
 function setAlbumCard(title, artist, coverUrl, quality, description, followers, owner, ownerAvatar, source, artistListeners, artistRank, artistVerified, artistBiography, releaseDate, trackCount, artistUrl, artistsData) {
-  showRequestedAlbumQuality();
   g_albumReleaseDate = releaseDate || '';
   g_albumTrackCount = trackCount || 0;
   g_albumArtistUrl = artistUrl || '';
@@ -2304,9 +2274,9 @@ function setAlbumCard(title, artist, coverUrl, quality, description, followers, 
     subtitle.className = bio ? 'artist-bio' : '';
     subtitle.style.display = bio ? '' : 'none';
   } else {
-    subtitle.textContent = description || quality || '';
+    subtitle.textContent = description || '';
     subtitle.className = '';
-    subtitle.style.display = (description || quality) ? '' : 'none';
+    subtitle.style.display = description ? '' : 'none';
   }
   setupBioToggle(subtitle, isArtistCard);
 
@@ -2349,8 +2319,12 @@ function setAlbumCard(title, artist, coverUrl, quality, description, followers, 
     // then kept the whole meta-details row visible.
     const followerCount = (followers === 0 || followers) ? Number(followers) : NaN;
     if (followersEl) followersEl.textContent = Number.isFinite(followerCount) && followerCount > 0 ? `${followerCount.toLocaleString()} followers` : '';
-    if (sourceEl) sourceEl.textContent = source || '';
+    // "Spotify · 90 tracks · … · Spotify": a playlist Spotify curates has
+    // Spotify as both owner and source, and the second says nothing new.
+    const sameAsOwner = owner && source && owner.trim().toLowerCase() === source.trim().toLowerCase();
+    if (sourceEl) sourceEl.textContent = sameAsOwner ? '' : (source || '');
   }
+  tidyOwnerRow();
 
   if (!isArtistCard) {
     const hasMetaDetails = !!(
@@ -2519,6 +2493,7 @@ function updateAlbumMeta(trackCount) {
   if (trackCountEl) {
     trackCountEl.textContent = `${trackCount} track${trackCount !== 1 ? 's' : ''}`;
   }
+  tidyOwnerRow();
   // For an album the subtitle already reads "<artist> · <date> · <n> tracks";
   // the standalone artist line right under it was the same word again.
   $('album-meta').style.display = badgeType === 'ALBUM' ? 'none' : '';
@@ -2644,9 +2619,7 @@ function showSingleTrackCard(t) {
     factsRow.className = 'track-quality-row';
     $('album-actions').insertAdjacentElement('afterend', factsRow);
   }
-  const quality = $('album-subtitle').textContent?.trim() || '';
   const chips = [];
-  if (quality) chips.push(`<span class="track-quality-chip">${escHtml(quality)}</span>`);
   if (dur && dur !== '—') chips.push(`<span class="track-quality-chip">${escHtml(dur)}</span>`);
   factsRow.innerHTML = chips.join('');
   factsRow.classList.toggle('hidden', chips.length === 0);

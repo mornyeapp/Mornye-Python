@@ -1,7 +1,7 @@
-"""The album card's quality readout (plan §2, signature 1; §0 item 7).
+"""``probe_audio_quality``: reads a downloaded file's real format.
 
-The card shows the tier asked for in Settings until a track of it has
-downloaded; then ``probe_audio_quality`` reads that file.
+The album card no longer shows a quality tag; the API stays for callers
+that want to know what a file really is.
 """
 
 from __future__ import annotations
@@ -11,10 +11,6 @@ from pathlib import Path
 
 from mornye.api_mixins.library_tools import LibraryToolsMixin
 from mornye.webapp import ALLOWED_METHODS
-
-APP_JS = (
-    Path(__file__).resolve().parents[1] / "mornye" / "frontend" / "app.js"
-).read_text(encoding="utf-8")
 
 
 class _Api(LibraryToolsMixin):
@@ -46,9 +42,3 @@ def test_probe_refuses_paths_outside_the_approved_folders(tmp_path, monkeypatch)
 
 def test_probe_is_reachable_from_the_web_ui():
     assert "probe_audio_quality" in ALLOWED_METHODS
-
-
-def test_frontend_shows_requested_then_real_quality():
-    assert "showRequestedAlbumQuality();" in APP_JS
-    assert "updateAlbumQualityFromStats(data.queue)" in APP_JS
-    assert "REQ · " in APP_JS
