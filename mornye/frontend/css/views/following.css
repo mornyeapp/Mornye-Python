@@ -72,6 +72,65 @@
 .field-hint { color: var(--text-muted); font-size: var(--text-sm); }
 .bulk-follow { border-top: 1px solid var(--rule); }
 
+/* The bulk textarea wraps its links instead of growing a horizontal bar. */
+#subscription-bulk-input { white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: hidden; }
+
+/* ── Followed artists & playlists: one row each, picture first ──
+   Artists get a round photo and playlists a square cover, as in the music
+   apps; without a picture yet the row shows the kind's icon in its place. */
+#subscription-list.sort-list { display: flex; flex-direction: column; gap: 0; }
+.sub-row {
+  display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: center;
+  gap: var(--space-4); padding: var(--space-3) var(--space-2);
+  border-bottom: 1px solid var(--rule);
+}
+.sub-row:last-child { border-bottom: 0; }
+.sub-row:hover { background: color-mix(in srgb, var(--raised) 60%, transparent); }
+.sub-row.is-paused .sub-art, .sub-row.is-paused .sub-main { opacity: .55; }
+.sub-art {
+  width: 64px; height: 64px; display: flex; align-items: center; justify-content: center;
+  overflow: hidden; background: var(--raised); color: var(--text-muted);
+  border: 1px solid var(--rule); text-decoration: none;
+  transition: transform var(--motion) var(--ease);
+}
+.sub-art.is-artist { border-radius: 50%; }
+.sub-art.is-playlist { border-radius: var(--radius-2); }
+.sub-art:hover { transform: scale(1.04); }
+.sub-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sub-art svg { width: 26px; height: 26px; }
+.sub-main { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.sub-name-row { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.sub-kind {
+  flex: 0 0 auto; font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .08em;
+  color: var(--text-muted);
+}
+.sub-name {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--text); font-size: var(--text-lg); font-weight: var(--weight-bold);
+}
+.sub-state {
+  flex: 0 0 auto; font-size: var(--text-xs); padding: 1px 6px; border-radius: var(--radius-1);
+  text-transform: uppercase; letter-spacing: .06em;
+}
+.sub-state.auto { color: var(--signal-ink); background: var(--signal-strong); }
+.sub-state.paused { color: var(--text-muted); border: 1px solid var(--rule-strong); }
+.sub-facts { color: var(--text-2); font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sub-meta { color: var(--text-muted); font-size: var(--text-xs); }
+.sub-error {
+  color: var(--error); font-size: var(--text-xs);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sub-actions { display: flex; align-items: center; gap: var(--space-2); }
+#view-following .sub-actions select { width: 140px; height: 30px; padding: 0 8px; font-size: var(--text-sm); }
+.sub-btn { height: 30px; padding: 0 12px; font-size: var(--text-sm); white-space: nowrap; }
+.sub-unfollow:hover { color: var(--error); border-color: var(--error); }
+
+@media (max-width: 860px) {
+  .sub-row { grid-template-columns: 56px minmax(0, 1fr); }
+  .sub-art { width: 56px; height: 56px; }
+  .sub-actions { grid-column: 1 / -1; flex-wrap: wrap; }
+}
+
 /* New this week: one release per row, on rules like every other list. */
 .weekly-row {
   padding: var(--space-2) var(--space-3);

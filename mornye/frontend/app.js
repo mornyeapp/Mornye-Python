@@ -9744,49 +9744,124 @@ function renderSubscriptions(subs) {
     return;
   }
 
-  list.innerHTML = subs.map((s) => {
-    const name = regEscapeHtml(s.name || s.url);
-    const isPlaylist = s.kind === 'playlist';
-    const err = s.last_error
-      ? `<div class="s-label u-fs-11 u-c-red">Last check failed: ${regEscapeHtml(s.last_error)}</div>`
-      : '';
-    const what = isPlaylist
-      ? `Playlist · ${s.seen_count} track(s) seen`
-      : `Artist · ${regEscapeHtml(s.include_groups)} · ${s.seen_count} release(s) seen`;
-    const next = s.next_check_at && s.enabled
-      ? ` · next check ${regEscapeHtml(subFormatDate(s.next_check_at))}`
-      : '';
-    const target = isPlaylist ? 'playlist' : 'artist';
-    return `
-      <div class="sort-item reg-item${s.enabled ? '' : ' reg-item-disabled'}">
-        <div class="reg-item-main">
-          <span class="reg-url" title="${regEscapeHtml(s.url)}">${name}</span>
-          <div class="s-label u-fs-11">
-            ${what} · checked ${regEscapeHtml(subFormatDate(s.last_checked_at))}${next}
-          </div>
-          ${err}
+  list.innerHTML = subs.map(subRowHtml).join('');
+  subWireImages(list);
+  subFillMissingDetails(subs);
+}
+
+// A picture that no longer loads (an expired CDN link) shows the kind's
+// icon instead of an empty frame.
+function subWireImages(root) {
+  root.querySelectorAll('.sub-art img').forEach(img => img.addEventListener('error', () => {
+    const art = img.parentElement;
+    if (!art) return;
+    const playlist = art.classList.contains('is-playlist');
+    art.classList.add('is-empty');
+    art.innerHTML = playlist
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>';
+  }, { once: true }));
+}
+
+const SUB_GROUP_LABELS = {
+  'album,single': 'Albums & singles', album: 'Albums', single: 'Singles', all: 'Everything',
+};
+
+function subRelative(ts) {
+  if (!ts) return 'never checked';
+  const s = Math.round(Date.now() / 1000 - ts);
+  if (s < 60) return 'checked just now';
+  if (s < 3600) return `checked ${Math.round(s / 60)} min ago`;
+  if (s < 86400) return `checked ${Math.round(s / 3600)} h ago`;
+  return `checked ${Math.round(s / 86400)} d ago`;
+}
+
+// One followed artist or playlist: its picture, name and description, what
+// has been seen, and its controls. Artists get a round photo, playlists a
+// square cover, as in the music apps.
+function subRowHtml(s) {
+  const id = regEscapeHtml(s.id);
+  const isPlaylist = s.kind === 'playlist';
+  const target = isPlaylist ? 'playlist' : 'artist';
+  const name = regEscapeHtml(s.name || (isPlaylist ? 'Playlist' : 'Artist'));
+  const icon = isPlaylist
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>';
+  const art = s.image_url
+    ? `<img src="${regEscapeHtml(s.image_url)}" alt="" loading="lazy" referrerpolicy="no-referrer">`
+    : icon;
+  const facts = [
+    s.subtitle ? regEscapeHtml(s.subtitle) : '',
+    isPlaylist ? '' : regEscapeHtml(SUB_GROUP_LABELS[s.include_groups] || s.include_groups),
+  ].filter(Boolean).join(' · ');
+  const seen = `${s.seen_count} ${isPlaylist ? 'track' : 'release'}${s.seen_count === 1 ? '' : 's'} seen`;
+  const next = s.next_check_at && s.enabled
+    ? ` · next ${regEscapeHtml(subFormatDate(s.next_check_at))}`
+    : '';
+  const status = !s.enabled
+    ? '<span class="sub-state paused">Paused</span>'
+    : (s.interval_minutes ? '<span class="sub-state auto">Auto</span>' : '');
+  const err = s.last_error
+    ? `<div class="sub-error" title="${regEscapeHtml(s.last_error)}">Last check failed: ${regEscapeHtml(s.last_error)}</div>`
+    : '';
+  return `
+    <div class="sub-row${s.enabled ? '' : ' is-paused'}" data-sub-id="${id}">
+      <a class="sub-art ${isPlaylist ? 'is-playlist' : 'is-artist'}${s.image_url ? '' : ' is-empty'}"
+         href="${regEscapeHtml(s.url)}" target="_blank" rel="noopener" title="Open on Spotify">${art}</a>
+      <div class="sub-main">
+        <div class="sub-name-row">
+          <span class="sub-kind">${isPlaylist ? 'Playlist' : 'Artist'}</span>
+          <span class="sub-name" title="${regEscapeHtml(s.url)}">${name}</span>
+          ${status}
         </div>
-        <select class="u-maxw-140 u-p-5-8 u-fs-fs-75 u-shrink-0"
-                title="Check this ${target} automatically and download what is new"
-                data-onchange="setSubscriptionInterval('${regEscapeHtml(s.id)}', this.value)">
+        ${facts ? `<div class="sub-facts">${facts}</div>` : ''}
+        <div class="sub-meta">${seen} · ${regEscapeHtml(subRelative(s.last_checked_at))}${next}</div>
+        ${err}
+      </div>
+      <div class="sub-actions">
+        <select title="Check this ${target} automatically and download what is new"
+                aria-label="Schedule for ${name}"
+                data-onchange="setSubscriptionInterval('${id}', this.value)">
           ${subIntervalOptions(s.interval_minutes)}
         </select>
-        <button class="act-btn secondary reg-remove-btn" type="button"
-                data-onclick="toggleSubscription('${regEscapeHtml(s.id)}', ${s.enabled ? 'false' : 'true'})"
+        <button class="act-btn secondary sub-btn" type="button"
+                data-onclick="toggleSubscription('${id}', ${s.enabled ? 'false' : 'true'})"
                 title="${s.enabled ? `Stop checking this ${target} without forgetting what has been seen` : `Resume checking this ${target}`}">
           ${s.enabled ? 'Pause' : 'Resume'}
         </button>
-        <button class="act-btn secondary reg-remove-btn" type="button"
-                data-onclick="resetSubscription('${regEscapeHtml(s.id)}')"
+        <button class="act-btn secondary sub-btn" type="button"
+                data-onclick="resetSubscription('${id}')"
                 title="Forget what this subscription has seen, so the whole back catalogue counts as new again">
           Reset
         </button>
-        <button class="act-btn secondary reg-remove-btn" type="button"
-                data-onclick="removeSubscription('${regEscapeHtml(s.id)}')">
+        <button class="act-btn secondary sub-btn sub-unfollow" type="button"
+                data-onclick="removeSubscription('${id}')" title="Stop following this ${target}">
           Unfollow
         </button>
-      </div>`;
-  }).join('');
+      </div>
+    </div>`;
+}
+
+// Rows followed before pictures were stored get them now, one at a time in
+// the background, each row redrawn as its details arrive. Asked once per id
+// per page load, so a link Spotify cannot describe is not asked forever.
+const subDetailsAsked = new Set();
+async function subFillMissingDetails(subs) {
+  if (!window.pywebview?.api?.refresh_subscription_details) return;
+  for (const s of subs || []) {
+    if (s.image_url || subDetailsAsked.has(s.id)) continue;
+    subDetailsAsked.add(s.id);
+    try {
+      const res = await window.pywebview.api.refresh_subscription_details(s.id);
+      if (!res?.ok || !res.subscription) continue;
+      const row = document.querySelector(`.sub-row[data-sub-id="${CSS.escape(s.id)}"]`);
+      if (row) {
+        row.outerHTML = subRowHtml(res.subscription);
+        const fresh = document.querySelector(`.sub-row[data-sub-id="${CSS.escape(s.id)}"]`);
+        if (fresh) subWireImages(fresh);
+      }
+    } catch (e) { /* the row stays as it is */ }
+  }
 }
 
 function parseSubscriptionUrlList(raw) {

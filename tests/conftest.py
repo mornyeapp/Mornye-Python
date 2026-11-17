@@ -202,7 +202,26 @@ def _no_extension_enrichment(request, monkeypatch):
     monkeypatch.setenv("MORNYE_ENRICH_EXTENSIONS", "0")
 
 
+@pytest.fixture(autouse=True)
+def _no_subscription_lookup(request, monkeypatch):
+    """Following a link reads its picture and description from Spotify
+    (core/subscriptions.describe_async). Tests get no details instead of a
+    network call; a test that drives the lookup itself opts out."""
+    if request.node.get_closest_marker("uses_subscription_lookup"):
+        return
+
+    async def _nothing(url, *, client=None):
+        return {"name": "", "image_url": "", "subtitle": ""}
+
+    monkeypatch.setattr("mornye.core.subscriptions.describe_async", _nothing)
+
+
 def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "uses_subscription_lookup: test exercises subscriptions.describe_async "
+        "(with its own client); the autouse no-op is skipped",
+    )
     config.addinivalue_line(
         "markers",
         "uses_system_clipboard: test exercises tui/clipboard.py's command lookup "

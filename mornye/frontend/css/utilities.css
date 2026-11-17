@@ -43,7 +43,6 @@
 .u-fs-16.u-fs-16 { font-size: 16px; }
 .u-fs-28.u-fs-28 { font-size: 28px; }
 .u-fs-9_5.u-fs-9_5 { font-size: 9.5px; }
-.u-fs-fs-75.u-fs-fs-75 { font-size: var(--text-sm); }
 .u-fst-italic.u-fst-italic { font-style: italic; }
 .u-fw-400.u-fw-400 { font-weight: 400; }
 .u-fw-600.u-fw-600 { font-weight: 600; }
@@ -87,7 +86,6 @@
 .u-maxh-260.u-maxh-260 { max-height: 260px; }
 .u-maxh-62vh.u-maxh-62vh { max-height: 62vh; }
 .u-maxw-130.u-maxw-130 { max-width: 130px; }
-.u-maxw-140.u-maxw-140 { max-width: 140px; }
 .u-maxw-150.u-maxw-150 { max-width: 150px; }
 .u-maxw-170.u-maxw-170 { max-width: 170px; }
 .u-maxw-210.u-maxw-210 { max-width: 210px; }
@@ -121,7 +119,6 @@
 .u-p-40.u-p-40 { padding: 40px; }
 .u-p-5-10.u-p-5-10 { padding: 5px 10px; }
 .u-p-5-12.u-p-5-12 { padding: 5px 12px; }
-.u-p-5-8.u-p-5-8 { padding: 5px 8px; }
 .u-p-6-12.u-p-6-12 { padding: 6px 12px; }
 .u-p-6-14.u-p-6-14 { padding: 6px 14px; }
 .u-p-6-2.u-p-6-2 { padding: 6px 2px; }

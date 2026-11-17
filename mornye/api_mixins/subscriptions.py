@@ -107,9 +107,42 @@ class SubscriptionsMixin:
                 interval_minutes=interval_minutes,
                 download_config=config,
             )
+            # Its picture and description, so the row is more than a link.
+            # Best effort: following works without them, and the page asks
+            # again (refresh_subscription_details) for a row still lacking.
+            sub = self._describe_subscription(sub) or sub
             return {"ok": True, "subscription": sub.to_dict()}
         except Exception as e:
             return {"ok": False, "error": str(e)}
+
+    def _describe_subscription(self, sub):
+        """Reads and stores `sub`'s name, picture and description. Returns
+        the updated subscription, or None when the lookup failed."""
+        from ..core.loop_runner import run_sync
+        from ..core.subscriptions import describe_async, set_details
+
+        try:
+            details = run_sync(describe_async(sub.url))
+        except Exception as exc:
+            self.log(f"Could not read details for {sub.url}: {exc}", "debug")
+            return None
+        return set_details(
+            sub.id,
+            name=details.get("name", ""),
+            image_url=details.get("image_url", ""),
+            subtitle=details.get("subtitle", ""),
+        )
+
+    def refresh_subscription_details(self, subscription_id: str) -> dict:
+        """Looks up the picture and description of a followed artist or
+        playlist again, for a row followed before they were stored."""
+        sub = self._owned_subscription(subscription_id)
+        if sub is None:
+            return {"ok": False, "error": "No such subscription."}
+        updated = self._describe_subscription(sub)
+        if updated is None:
+            return {"ok": False, "error": "Could not read its details."}
+        return {"ok": True, "subscription": updated.to_dict()}
 
     def remove_subscription(self, subscription_id: str) -> dict:
         try:

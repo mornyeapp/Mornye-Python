@@ -215,6 +215,7 @@ ALLOWED_METHODS: set[str] = {
     "set_subscription_enabled",
     "set_subscription_interval",
     "reset_subscription",
+    "refresh_subscription_details",
     "check_subscriptions",
     # Extension health (read-only, plus a counter reset), and each
     # extension's own manifest `serviceHealth` checks (read-only GETs to the
