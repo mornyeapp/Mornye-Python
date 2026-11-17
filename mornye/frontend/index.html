@@ -376,7 +376,20 @@
         </div>
       </div>
       <div class="s-body" id="player-body">
-        <div class="s-section player-source">
+        <div class="player-libbar hidden" id="player-libbar">
+          <span class="plb-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h6l2 2h10v10H3z"/></svg>
+          </span>
+          <div class="plb-main">
+            <strong id="plb-name"></strong>
+            <span id="plb-stats" class="plb-stats"></span>
+          </div>
+          <div class="plb-actions">
+            <button class="act-btn secondary" type="button" data-onclick="togglePlayerSource()">Change folder</button>
+            <button class="act-btn secondary" type="button" id="plb-rescan" data-onclick="scanPlayerLibrary()">Rescan</button>
+          </div>
+        </div>
+        <div class="s-section player-source" id="player-source">
           <label class="player-folder-label" for="player-path-input">Music folder</label>
           <div class="s-row u-items-center u-gap-8">
             <input type="text" id="player-path-input" class="full" placeholder="Enter a folder path"
@@ -398,6 +411,11 @@
           <span class="player-empty-copy">Your tracks will appear here after the library is scanned.</span>
         </div>
         <div id="player-toolbar" class="player-toolbar hidden">
+          <div class="seg-tabs player-tabs" role="tablist" aria-label="Browse the library by">
+            <button type="button" class="seg-tab active" data-tab="songs" data-onclick="setPlayerTab('songs')" role="tab" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg><span>Songs</span><span class="seg-count" id="ptab-count-songs">0</span></button>
+            <button type="button" class="seg-tab" data-tab="albums" data-onclick="setPlayerTab('albums')" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg><span>Albums</span><span class="seg-count" id="ptab-count-albums">0</span></button>
+            <button type="button" class="seg-tab" data-tab="artists" data-onclick="setPlayerTab('artists')" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>Artists</span><span class="seg-count" id="ptab-count-artists">0</span></button>
+          </div>
           <div class="pt-row">
             <div class="pt-group" role="group" aria-label="Playback">
               <button class="pt-btn primary" type="button" data-onclick="playFromLibrary(0, false)">
@@ -410,7 +428,7 @@
               <input type="search" id="player-search" placeholder="Search title, artist or album" data-oninput="filterPlayerLibrary()" autocomplete="off" spellcheck="false">
               <button type="button" class="pt-clear hidden" id="player-search-clear" data-onclick="clearPlayerSearch()" aria-label="Clear search">×</button>
             </label>
-            <label class="pt-sort"><span>Sort</span>
+            <label class="pt-sort" id="player-sort-wrap"><span>Sort</span>
               <select id="player-sort" data-onchange="filterPlayerLibrary()" aria-label="Sort by">
                 <option value="path">Folder order</option>
                 <option value="title">Title</option>
@@ -421,12 +439,16 @@
             </label>
             <span id="player-count" class="player-count"></span>
           </div>
-          <div class="pt-colhead" aria-hidden="true">
+          <div class="pt-colhead" id="player-colhead" aria-hidden="true">
             <span class="c-num">#</span><span></span><span>Title</span><span class="c-dur">Time</span><span class="c-fmt">Format</span>
           </div>
         </div>
-        <div class="u-fs-12_5 u-c-muted u-p-6-2" id="player-status"></div>
-        <div id="player-list" class="player-list" role="list"></div>
+        <div class="player-scroll" id="player-scroll">
+          <div class="player-status" id="player-status" role="status" aria-live="polite"></div>
+          <div id="player-detail" class="player-detail hidden"></div>
+          <div id="player-grid" class="player-grid hidden" role="list"></div>
+          <div id="player-list" class="player-list" role="list"></div>
+        </div>
       </div>
     </div>
 

@@ -309,17 +309,27 @@ class LibraryToolsMixin:
         ).start()
         return {"status": "started", "scan": scan_id}
 
-    def get_track_thumb(self, path: str) -> str:
-        """A small cover for the Player's list as a data URL, "" if none."""
-        from ..core.library_scan import thumbnail_jpeg
+    def get_track_thumb(self, path: str, size: int = 0) -> str:
+        """A cover for the Player as a data URL, "" if none.
+
+        `size` is the longest side in pixels: 0 keeps the small list
+        thumbnail; the album grid asks for a larger one, clamped to 32–512.
+        """
+        from ..core.library_scan import THUMB_PX, thumbnail_jpeg
 
         if not self._is_approved_path(path):
             return ""
-        cache = self._library_thumb_cache
-        if path in cache:
-            return cache[path]
         try:
-            raw = thumbnail_jpeg(path)
+            px = int(size or 0)
+        except (TypeError, ValueError):
+            px = 0
+        px = THUMB_PX if px <= 0 else max(32, min(512, px))
+        key = path if px == THUMB_PX else f"{path}\0{px}"
+        cache = self._library_thumb_cache
+        if key in cache:
+            return cache[key]
+        try:
+            raw = thumbnail_jpeg(path, px)
         except Exception:
             raw = None
         url = (
@@ -329,5 +339,5 @@ class LibraryToolsMixin:
         )
         if len(cache) > 4000:
             cache.clear()
-        cache[path] = url
+        cache[key] = url
         return url

@@ -8919,7 +8919,8 @@ function npRenderQueue() {
 }
 
 // ── Player: browse and play a folder ────────────────────────────────────────
-const lib = { items: [], view: [], scan: null, lastScan: 0, shown: 0, loading: false, started: false, raf: 0, thumbBusy: 0 };
+const lib = { items: [], view: [], scan: null, lastScan: 0, shown: 0, loading: false, started: false, raf: 0, thumbBusy: 0,
+  tab: 'songs', album: null, artist: null, folder: '', cards: 0 };
 const LIB_PAGE = 150;
 const LIB_FOLDERS_KEY = 'mornye-player-folders';
 
@@ -8962,21 +8963,48 @@ async function scanPlayerLibrary() {
   const path = $('player-path-input').value.trim();
   if (!path) { toastMgr.error('Enter or pick a folder first.'); return; }
   lib.items = []; lib.view = []; lib.shown = 0; lib.scan = null; lib.loading = true;
+  lib.album = null; lib.artist = null;
   $('player-list').innerHTML = '';
+  $('player-grid').innerHTML = '';
   $('player-toolbar').classList.add('hidden');
-  $('player-status').textContent = 'Scanning…';
+  setPlayerStatus('Scanning…');
   renderPlayerEmptyState();
-  $('player-scan-btn').disabled = true;
+  setPlayerScanBusy(true);
   const res = await window.pywebview?.api?.scan_music_library?.(path);
   if (!res || res.status !== 'started') {
     lib.loading = false;
-    $('player-scan-btn').disabled = false;
-    $('player-status').textContent = res?.error || 'Could not open that folder.';
+    setPlayerScanBusy(false);
+    setPlayerStatus(res?.error || 'Could not open that folder.');
+    showPlayerSource(true);
     renderPlayerEmptyState();
     return;
   }
   lib.lastScan = Math.max(lib.lastScan, res.scan);
   if (lib.scan === null) lib.scan = res.scan;
+}
+
+function setPlayerScanBusy(busy) {
+  $('player-scan-btn').disabled = busy;
+  const rescan = $('plb-rescan');
+  if (rescan) { rescan.disabled = busy; rescan.textContent = busy ? 'Scanning…' : 'Rescan'; }
+}
+
+function setPlayerStatus(text) {
+  const el = $('player-status');
+  if (el) el.textContent = text || '';
+}
+
+// The folder panel is what you need before a library is loaded; after that
+// it is one line (folder, counts, Change / Rescan) and opens on demand.
+function showPlayerSource(show) {
+  $('player-source')?.classList.toggle('hidden', !show);
+}
+function togglePlayerSource() {
+  const src = $('player-source');
+  if (!src) return;
+  const opening = src.classList.contains('hidden');
+  showPlayerSource(opening);
+  if (opening) $('player-path-input')?.focus();
 }
 
 function libAccept(p) {
@@ -8987,24 +9015,31 @@ function libAccept(p) {
 window.app_library_scan_chunk = function(p) {
   if (!libAccept(p)) return;
   lib.items.push(...p.items);
-  $('player-status').textContent = `Scanning… ${p.done} / ${p.total}`;
+  setPlayerStatus(`Scanning… ${p.done} / ${p.total}`);
   if (!lib.raf) lib.raf = requestAnimationFrame(() => { lib.raf = 0; filterPlayerLibrary(true); });
 };
 
 window.app_library_scan_finished = function(p) {
   if (!libAccept(p)) return;
   lib.loading = false;
-  $('player-scan-btn').disabled = false;
+  setPlayerScanBusy(false);
+  setPlayerStatus('');
+  if (lib.items.length) {
+    libRemember(p.folder);
+    lib.folder = p.folder || $('player-path-input').value.trim();
+    showPlayerSource(false);
+  } else {
+    showPlayerSource(true);
+  }
   filterPlayerLibrary(true);
-  if (!lib.items.length) $('player-status').textContent = '';
-  else { $('player-status').textContent = ''; libRemember(p.folder); }
 };
 
 window.app_library_scan_error = function(p) {
   if (p && p.scan != null && !libAccept(p)) return;
   lib.loading = false;
-  $('player-scan-btn').disabled = false;
-  $('player-status').textContent = 'Scan failed: ' + (p?.error || 'unknown error');
+  setPlayerScanBusy(false);
+  setPlayerStatus('Scan failed: ' + (p?.error || 'unknown error'));
+  showPlayerSource(true);
   renderPlayerEmptyState();
 };
 
@@ -9019,6 +9054,116 @@ function libSortKey(key) {
   }
 }
 
+// ── Library grouping: albums and artists ────────────────────────────────────
+// An album is (album artist, album title): two "Greatest Hits" by different
+// artists stay apart, and a compilation tagged with one ALBUMARTIST stays one
+// album however many track artists it credits.
+const libTrackOrder = (a, b) => (a.disc || 0) - (b.disc || 0) || (a.track || 0) - (b.track || 0)
+  || String(a.title || '').localeCompare(String(b.title || ''));
+function libArtistOf(t) { return (t.album_artist || t.artist || '').trim() || 'Unknown artist'; }
+// The key travels through a data- attribute, so its separator must survive
+// HTML parsing (a NUL comes back as U+FFFD and the album is never found).
+function libAlbumKey(t) { return `${libArtistOf(t).toLowerCase()} /// ${(t.album || '').trim().toLowerCase()}`; }
+
+function libAlbums(items) {
+  const map = new Map();
+  for (const t of items) {
+    const key = libAlbumKey(t);
+    let a = map.get(key);
+    if (!a) {
+      a = { key, title: (t.album || '').trim() || 'Unknown album', artist: libArtistOf(t), year: '', tracks: [], duration: 0, formats: new Set() };
+      map.set(key, a);
+    }
+    a.tracks.push(t);
+    a.duration += t.duration_s || 0;
+    if (!a.year && t.year) a.year = t.year;
+    if (t.format) a.formats.add(t.format);
+  }
+  const albums = [...map.values()];
+  albums.forEach(a => a.tracks.sort(libTrackOrder));
+  return albums.sort((x, y) => x.artist.localeCompare(y.artist, undefined, { sensitivity: 'base' })
+    || (x.year || '').localeCompare(y.year || '') || x.title.localeCompare(y.title, undefined, { sensitivity: 'base' }));
+}
+
+function libArtists(items) {
+  const map = new Map();
+  for (const t of items) {
+    const name = libArtistOf(t);
+    const key = name.toLowerCase();
+    let a = map.get(key);
+    if (!a) { a = { key, name, albums: new Set(), tracks: [], duration: 0 }; map.set(key, a); }
+    a.tracks.push(t);
+    a.albums.add(libAlbumKey(t));
+    a.duration += t.duration_s || 0;
+  }
+  return [...map.values()].sort((x, y) => x.name.localeCompare(y.name, undefined, { sensitivity: 'base' }));
+}
+
+function libDuration(seconds) {
+  const s = Math.round(seconds || 0);
+  const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60);
+  if (!s) return '';
+  if (h) return `${h} h ${m} min`;
+  return m ? `${m} min` : `${s} s`;
+}
+const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
+
+function setPlayerTab(tab) {
+  lib.tab = tab;
+  lib.album = null;
+  lib.artist = null;
+  document.querySelectorAll('.player-tabs .seg-tab').forEach(b => {
+    const on = b.dataset.tab === tab;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  filterPlayerLibrary();
+  playerScrollTop();
+}
+
+// The music scrolls in its own box (the whole page on a phone): a new page
+// of the library starts at its top in both.
+function playerScrollTop() {
+  $('player-scroll')?.scrollTo?.({ top: 0 });
+  $('player-body')?.scrollTo?.({ top: 0 });
+}
+
+function openPlayerAlbum(key) {
+  lib.tab = 'albums';
+  lib.album = key;
+  document.querySelectorAll('.player-tabs .seg-tab').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === 'albums');
+    b.setAttribute('aria-selected', b.dataset.tab === 'albums' ? 'true' : 'false');
+  });
+  filterPlayerLibrary();
+  playerScrollTop();
+}
+
+function openPlayerArtist(key) {
+  lib.tab = 'artists';
+  lib.album = null;
+  lib.artist = key;
+  document.querySelectorAll('.player-tabs .seg-tab').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === 'artists');
+    b.setAttribute('aria-selected', b.dataset.tab === 'artists' ? 'true' : 'false');
+  });
+  filterPlayerLibrary();
+  playerScrollTop();
+}
+
+// Back from an album page goes to the artist it was opened from, if any.
+function playerBack() {
+  if (lib.album && lib.artist) { lib.album = null; lib.tab = 'artists'; }
+  else if (lib.album) lib.album = null;
+  else lib.artist = null;
+  document.querySelectorAll('.player-tabs .seg-tab').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === lib.tab);
+    b.setAttribute('aria-selected', b.dataset.tab === lib.tab ? 'true' : 'false');
+  });
+  filterPlayerLibrary();
+  playerScrollTop();
+}
+
 function clearPlayerSearch() {
   $('player-search').value = '';
   filterPlayerLibrary();
@@ -9028,27 +9173,175 @@ function clearPlayerSearch() {
 function filterPlayerLibrary(keepScroll) {
   const q = ($('player-search').value || '').trim().toLowerCase();
   $('player-search-clear').classList.toggle('hidden', !q);
-  let view = q
-    ? lib.items.filter(t => `${t.title} ${t.artist} ${t.album}`.toLowerCase().includes(q))
-    : lib.items.slice();
-  const cmp = libSortKey($('player-sort').value);
-  if (cmp) view.sort(cmp);
-  lib.view = view;
-  lib.shown = Math.min(view.length, Math.max(LIB_PAGE, keepScroll === true ? lib.shown : 0));
-  renderPlayerRows();
-  const total = view.reduce((s, t) => s + (t.duration_s || 0), 0);
-  const hours = Math.floor(total / 3600), mins = Math.round((total % 3600) / 60);
+  const matches = q
+    ? lib.items.filter(t => `${t.title} ${t.artist} ${t.album} ${t.album_artist || ''}`.toLowerCase().includes(q))
+    : lib.items;
+  const allAlbums = libAlbums(lib.items);
+  const allArtists = libArtists(lib.items);
+  const tab = lib.tab || 'songs';
+
+  // Library bar and tab counts describe the whole library, not the search.
+  const total = lib.items.reduce((s, t) => s + (t.duration_s || 0), 0);
+  const folder = lib.folder || $('player-path-input').value.trim();
+  $('plb-name').textContent = folder.split(/[\\/]/).filter(Boolean).pop() || folder || 'Library';
+  $('plb-name').title = folder;
+  $('plb-stats').textContent = [plural(lib.items.length, 'track'), plural(allAlbums.length, 'album'),
+    plural(allArtists.length, 'artist'), libDuration(total)].filter(Boolean).join(' · ');
+  $('player-libbar').classList.toggle('hidden', lib.items.length === 0 || lib.loading);
+  $('ptab-count-songs').textContent = lib.items.length.toLocaleString();
+  $('ptab-count-albums').textContent = allAlbums.length.toLocaleString();
+  $('ptab-count-artists').textContent = allArtists.length.toLocaleString();
   $('player-toolbar').classList.toggle('hidden', lib.items.length === 0);
-  $('player-count').textContent = `${view.length.toLocaleString()} track${view.length === 1 ? '' : 's'}`
-    + (total ? ` · ${hours ? hours + ' h ' : ''}${mins} min` : '');
+
+  const list = $('player-list'), grid = $('player-grid'), detail = $('player-detail');
+  let rows = null, cards = null, header = '', count = '';
+
+  if (tab === 'albums' && lib.album) {
+    const album = allAlbums.find(a => a.key === lib.album);
+    if (!album) { lib.album = null; return filterPlayerLibrary(keepScroll); }
+    rows = album.tracks;
+    header = libAlbumHeaderHtml(album);
+    count = '';
+  } else if (tab === 'artists' && lib.artist) {
+    const artist = allArtists.find(a => a.key === lib.artist);
+    if (!artist) { lib.artist = null; return filterPlayerLibrary(keepScroll); }
+    const albums = allAlbums.filter(a => a.artist.toLowerCase() === artist.key);
+    cards = albums.map(libAlbumCardHtml);
+    header = libArtistHeaderHtml(artist, albums);
+  } else if (tab === 'albums') {
+    const albums = libAlbums(matches);
+    cards = albums.map(libAlbumCardHtml);
+    count = plural(albums.length, 'album');
+  } else if (tab === 'artists') {
+    const artists = libArtists(matches);
+    cards = artists.map(a => libArtistCardHtml(a, allAlbums));
+    count = plural(artists.length, 'artist');
+  } else {
+    rows = matches.slice();
+    const cmp = libSortKey($('player-sort').value);
+    if (cmp) rows.sort(cmp);
+    const dur = rows.reduce((s, t) => s + (t.duration_s || 0), 0);
+    count = [plural(rows.length, 'track'), libDuration(dur)].filter(Boolean).join(' · ');
+  }
+
+  const inDetail = !!header;
+  $('player-sort-wrap').classList.toggle('hidden', tab !== 'songs');
+  $('player-colhead').classList.toggle('hidden', tab !== 'songs');
+  $('player-count').textContent = count;
+  detail.innerHTML = header;
+  detail.classList.toggle('hidden', !inDetail);
+  if (header) libObserve(detail);
+
+  if (cards) {
+    lib.view = [];
+    lib.shown = 0;
+    list.innerHTML = '';
+    grid.innerHTML = cards.join('');
+    grid.classList.remove('hidden');
+    libObserve(grid);
+  } else {
+    grid.innerHTML = '';
+    grid.classList.add('hidden');
+    lib.view = rows || [];
+    list.classList.toggle('album-tracks', !!lib.album);
+    // Under the column header the rows start at once; elsewhere the page gap stays.
+    list.classList.toggle('flush', tab === 'songs');
+    lib.shown = Math.min(lib.view.length, Math.max(LIB_PAGE, keepScroll === true ? lib.shown : 0));
+    renderPlayerRows();
+  }
+  lib.cards = cards ? cards.length : 0;
+  // What "Play all" / "Shuffle" in the toolbar play on the current page: the
+  // rows when there are rows, otherwise every album shown, in grid order.
+  if (cards) {
+    const shown = tab === 'artists' && !lib.artist
+      ? libArtists(matches).map(a => a.key)
+      : null;
+    const albums = allAlbums.filter(a => shown
+      ? shown.includes(a.artist.toLowerCase())
+      : lib.artist ? a.artist.toLowerCase() === lib.artist : libAlbums(matches).some(m => m.key === a.key));
+    lib.playAll = albums.flatMap(a => a.tracks);
+  } else {
+    lib.playAll = null;
+  }
+  renderPlayerEmptyState();
+}
+
+const LIB_PLAY_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+const LIB_SHUFFLE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>';
+const LIB_BACK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>';
+const LIB_NOTE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
+
+function libCoverHtml(path, size, extraClass = '') {
+  return `<div class="pl-cover ${extraClass}" data-p="${escHtml(path || '')}" data-size="${size}">
+    <img alt="" draggable="false"><span class="pl-cover-ph">${LIB_NOTE_SVG}</span></div>`;
+}
+
+function libAlbumCardHtml(a) {
+  const meta = [a.artist, a.year].filter(Boolean).join(' · ');
+  return `<div class="pl-card" role="listitem" tabindex="0" data-activate data-album="${escHtml(a.key)}" title="${escHtml(a.title)} — ${escHtml(a.artist)}">
+    <div class="pl-card-art">${libCoverHtml(a.tracks[0]?.path, 320)}
+      <button type="button" class="pl-card-play" data-play-album="${escHtml(a.key)}" aria-label="Play ${escHtml(a.title)}">${LIB_PLAY_SVG}</button></div>
+    <div class="pl-card-t">${escHtml(a.title)}</div>
+    <div class="pl-card-a">${escHtml(meta)}</div>
+  </div>`;
+}
+
+function libArtistCardHtml(a, allAlbums) {
+  const first = allAlbums.find(al => al.artist.toLowerCase() === a.key);
+  const meta = `${plural(a.albums.size, 'album')} · ${plural(a.tracks.length, 'track')}`;
+  return `<div class="pl-card artist" role="listitem" tabindex="0" data-activate data-artist="${escHtml(a.key)}" title="${escHtml(a.name)}">
+    <div class="pl-card-art">${libCoverHtml((first?.tracks[0] || a.tracks[0])?.path, 320)}
+      <button type="button" class="pl-card-play" data-play-artist="${escHtml(a.key)}" aria-label="Play ${escHtml(a.name)}">${LIB_PLAY_SVG}</button></div>
+    <div class="pl-card-t">${escHtml(a.name)}</div>
+    <div class="pl-card-a">${escHtml(meta)}</div>
+  </div>`;
+}
+
+function libDetailActions(kind, key) {
+  return `<div class="pl-detail-actions">
+    <button class="pt-btn primary" type="button" data-play-${kind}="${escHtml(key)}">${LIB_PLAY_SVG}Play</button>
+    <button class="pt-btn" type="button" data-shuffle-${kind}="${escHtml(key)}">${LIB_SHUFFLE_SVG}Shuffle</button>
+  </div>`;
+}
+
+function libAlbumHeaderHtml(a) {
+  const back = lib.artist ? 'Artist' : 'Albums';
+  const meta = [a.year, plural(a.tracks.length, 'track'), libDuration(a.duration), [...a.formats].join(' / ')].filter(Boolean);
+  return `<button type="button" class="pl-back" data-onclick="playerBack()">${LIB_BACK_SVG}${back}</button>
+    <div class="pl-detail-head">
+      ${libCoverHtml(a.tracks[0]?.path, 400, 'pl-detail-cover')}
+      <div class="pl-detail-info">
+        <span class="pl-detail-kind">Album</span>
+        <h2 class="pl-detail-title">${escHtml(a.title)}</h2>
+        <button type="button" class="pl-detail-artist" data-artist-link="${escHtml(a.artist.toLowerCase())}">${escHtml(a.artist)}</button>
+        <div class="pl-detail-meta">${meta.map(escHtml).join('<span aria-hidden="true"> · </span>')}</div>
+        ${libDetailActions('album', a.key)}
+      </div>
+    </div>`;
+}
+
+function libArtistHeaderHtml(a, albums) {
+  const meta = [plural(albums.length, 'album'), plural(a.tracks.length, 'track'), libDuration(a.duration)].filter(Boolean);
+  return `<button type="button" class="pl-back" data-onclick="playerBack()">${LIB_BACK_SVG}Artists</button>
+    <div class="pl-detail-head">
+      ${libCoverHtml((albums[0]?.tracks[0] || a.tracks[0])?.path, 400, 'pl-detail-cover')}
+      <div class="pl-detail-info">
+        <span class="pl-detail-kind">Artist</span>
+        <h2 class="pl-detail-title">${escHtml(a.name)}</h2>
+        <div class="pl-detail-meta">${meta.map(escHtml).join('<span aria-hidden="true"> · </span>')}</div>
+        ${libDetailActions('artist', a.key)}
+      </div>
+    </div>`;
 }
 
 function libRowHtml(t, i) {
-  const art = [t.artist, t.album].filter(Boolean).join(' — ');
-  return `<div class="pl-row" role="listitem" tabindex="0" data-activate data-i="${i}" data-p="${escHtml(t.path)}">
-    <div class="pl-num"><span class="n">${i + 1}</span><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span></div>
+  const inAlbum = !!lib.album;
+  const art = inAlbum ? (t.artist && t.artist !== libArtistOf(t) ? t.artist : '') : [t.artist, t.album].filter(Boolean).join(' — ');
+  const num = inAlbum && t.track ? t.track : i + 1;
+  return `<div class="pl-row" role="listitem" tabindex="0" data-activate data-i="${i}" data-p="${escHtml(t.path)}" data-size="0">
+    <div class="pl-num"><span class="n">${num}</span><span class="pi" aria-hidden="true">${LIB_PLAY_SVG}</span><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span></div>
     <div class="pl-thumb"><img alt="" draggable="false"></div>
-    <div class="pl-main"><div class="pl-t">${escHtml(t.title)}</div><div class="pl-a">${escHtml(art)}</div></div>
+    <div class="pl-main"><div class="pl-t">${escHtml(t.title)}</div>${art ? `<div class="pl-a">${escHtml(art)}</div>` : ''}</div>
     <div class="pl-dur">${t.duration_s ? fmtTime(t.duration_s) : ''}</div>
     <div class="pl-fmt">${escHtml(t.format)}</div>
   </div>`;
@@ -9060,13 +9353,12 @@ function renderPlayerRows() {
     + (lib.shown < lib.view.length ? '<div id="player-sentinel" class="pl-more">Loading more…</div>' : '');
   libObserve(list);
   markPlayingRow();
-  renderPlayerEmptyState();
 }
 
 function renderPlayerEmptyState() {
   const empty = $('player-empty');
   if (!empty) return;
-  const show = !lib.loading && lib.view.length === 0;
+  const show = !lib.loading && lib.view.length === 0 && !lib.cards && !lib.album && !lib.artist;
   empty.classList.toggle('hidden', !show);
   if (!show) return;
 
@@ -9074,7 +9366,7 @@ function renderPlayerEmptyState() {
   const copy = empty.querySelector('.player-empty-copy');
   const query = ($('player-search')?.value || '').trim();
   if (query && lib.items.length) {
-    title.textContent = 'No matching tracks';
+    title.textContent = 'Nothing matches';
     copy.textContent = 'Try a different title, artist, or album search.';
   } else if (lib.scan !== null && !lib.items.length) {
     title.textContent = 'No audio files found';
@@ -9108,29 +9400,43 @@ const libIO = typeof IntersectionObserver === 'function' ? new IntersectionObser
   });
 }, { rootMargin: '300px' }) : null;
 
-function libObserve(list) {
-  if (!libIO) return;
-  list.querySelectorAll('.pl-row:not([data-th])').forEach(r => libIO.observe(r));
-  const s = list.querySelector('#player-sentinel');
+function libObserve(root) {
+  const targets = root.querySelectorAll('.pl-row:not([data-th]), .pl-cover:not([data-th])');
+  if (!libIO) { targets.forEach(libLoadThumb); return; }
+  targets.forEach(r => libIO.observe(r));
+  const s = root.querySelector('#player-sentinel');
   if (s) libIO.observe(s);
 }
 
+// Re-rendering a grid (search, tab switch) must not ask the backend again
+// for covers it has already sent.
+const libThumbCache = new Map();
 const libThumbQueue = [];
-function libLoadThumb(row) {
-  row.dataset.th = '1';
-  libThumbQueue.push(row);
+function libLoadThumb(el) {
+  el.dataset.th = '1';
+  if (!el.dataset.p) return;
+  const key = `${el.dataset.p}\u0000${el.dataset.size || 0}`;
+  if (libThumbCache.has(key)) { libShowThumb(el, libThumbCache.get(key)); return; }
+  libThumbQueue.push(el);
   libPumpThumbs();
 }
+function libShowThumb(el, url) {
+  const img = el.querySelector('img');
+  if (!url || !img) return;
+  img.src = url;
+  el.classList.add('has-cover');
+}
 async function libPumpThumbs() {
-  while (lib.thumbBusy < 3 && libThumbQueue.length) {
-    const row = libThumbQueue.shift();
-    if (!row.isConnected) continue;
+  while (lib.thumbBusy < 4 && libThumbQueue.length) {
+    const el = libThumbQueue.shift();
+    if (!el.isConnected) continue;
     lib.thumbBusy++;
     (async () => {
+      const key = `${el.dataset.p}\u0000${el.dataset.size || 0}`;
       try {
-        const url = await window.pywebview?.api?.get_track_thumb?.(row.dataset.p);
-        const img = row.querySelector('img');
-        if (url && img && row.isConnected) { img.src = url; row.classList.add('has-cover'); }
+        const url = await window.pywebview?.api?.get_track_thumb?.(el.dataset.p, Number(el.dataset.size) || 0);
+        libThumbCache.set(key, url || '');
+        if (el.isConnected) libShowThumb(el, url);
       } catch (e) { /* a missing cover is fine */ }
       lib.thumbBusy--;
       libPumpThumbs();
@@ -9138,9 +9444,23 @@ async function libPumpThumbs() {
   }
 }
 
+function libQueueItems(tracks) {
+  return tracks.map(t => ({ path: t.path, title: t.title, artist: t.artist, album: t.album }));
+}
+
 function playFromLibrary(index, shuffle) {
-  const items = lib.view.map(t => ({ path: t.path, title: t.title, artist: t.artist, album: t.album }));
-  startPlayback(items, index, shuffle, false);
+  const tracks = lib.view.length ? lib.view : (lib.playAll || []);
+  if (tracks.length) startPlayback(libQueueItems(tracks), index, shuffle, false);
+}
+
+function playLibraryGroup(kind, key, shuffle) {
+  let tracks = [];
+  if (kind === 'album') tracks = libAlbums(lib.items).find(a => a.key === key)?.tracks || [];
+  else {
+    // An artist plays album by album, each in track order.
+    tracks = libAlbums(lib.items).filter(a => a.artist.toLowerCase() === key).flatMap(a => a.tracks);
+  }
+  if (tracks.length) startPlayback(libQueueItems(tracks), 0, !!shuffle, false);
 }
 
 function markPlayingRow() {
@@ -9159,6 +9479,20 @@ function markPlayingRow() {
     const row = e.target.closest('.pl-row');
     if (row) playFromLibrary(Number(row.dataset.i));
   });
+  const onGroupClick = e => {
+    const t = e.target.closest('[data-play-album],[data-play-artist],[data-shuffle-album],[data-shuffle-artist],[data-artist-link],.pl-card');
+    if (!t) return;
+    const d = t.dataset;
+    if (d.playAlbum != null) { e.stopPropagation(); playLibraryGroup('album', d.playAlbum, false); return; }
+    if (d.playArtist != null) { e.stopPropagation(); playLibraryGroup('artist', d.playArtist, false); return; }
+    if (d.shuffleAlbum != null) { playLibraryGroup('album', d.shuffleAlbum, true); return; }
+    if (d.shuffleArtist != null) { playLibraryGroup('artist', d.shuffleArtist, true); return; }
+    if (d.artistLink != null) { openPlayerArtist(d.artistLink); return; }
+    if (d.album != null) { openPlayerAlbum(d.album); return; }
+    if (d.artist != null) openPlayerArtist(d.artist);
+  };
+  $('player-grid')?.addEventListener('click', onGroupClick);
+  $('player-detail')?.addEventListener('click', onGroupClick);
   const audio = $('player-audio');
   audio.addEventListener('play', () => $('player-list').classList.remove('paused'));
   audio.addEventListener('pause', () => $('player-list').classList.add('paused'));
