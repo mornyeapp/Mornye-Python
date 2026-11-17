@@ -91,10 +91,8 @@ def test_dolby_atmos_is_exclusive_to_tidal():
 
 
 def test_soundcloud_is_not_a_default_metadata_enrichment_provider():
-    """SoundCloud remains a selectable enrichment provider (CLI --enrich-
-    providers choices, the interactive wizard's options, the GUI checklist
-    item) but is no longer checked/included by default anywhere.
-    """
+    """SoundCloud is not an enrichment source at all any more: not a
+    default, not a CLI choice, not in the TUI or the GUI checklist."""
     default_providers = DownloadOptions(output_dir=".").enrich_providers
     assert "soundcloud" not in default_providers
     assert default_providers == ["deezer", "apple", "qobuz", "tidal"]
@@ -896,3 +894,26 @@ def test_setup_logger_leaves_a_host_application_s_logging_alone():
         root.handlers[:] = saved_root_handlers
         package.handlers[:] = saved_handlers
         package.propagate, package.level = saved_propagate, saved_level
+
+
+def test_a_saved_soundcloud_enrichment_setting_is_ignored(monkeypatch):
+    import asyncio
+
+    from mornye.core import metadata_enrichment as me
+
+    asked: list[str] = []
+
+    async def deezer(isrc, album_name="", track_name="", duration_ms=0):
+        asked.append("deezer")
+        return me.EnrichedMetadata(genre="Pop")
+
+    monkeypatch.setattr(me, "_deezer_fetch_async", deezer)
+    monkeypatch.setattr(me, "_get_cached", lambda isrc: None)
+    monkeypatch.setattr(me, "_put_cached", lambda isrc, data: None)
+    monkeypatch.setenv("MORNYE_ENRICH_EXTENSIONS", "0")
+    out = asyncio.run(
+        me.enrich_metadata_async("t", "a", "X", providers=["deezer", "soundcloud"])
+    )
+    assert asked == ["deezer"]
+    assert out.genre == "Pop"
+    assert "soundcloud" not in out._sources.values()

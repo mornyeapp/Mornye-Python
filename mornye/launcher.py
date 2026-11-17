@@ -976,10 +976,7 @@ def parse_args(profile_defaults: dict | None = None) -> argparse.Namespace:
             ["deezer", "apple", "qobuz", "tidal"],
         ),
         dest="enrich_providers",
-        # SoundCloud isn't in the default above but stays a valid choice —
-        # pass it explicitly (--enrich-providers deezer apple qobuz tidal
-        # soundcloud) if you want it.
-        choices=["deezer", "apple", "qobuz", "tidal", "soundcloud"],
+        choices=["deezer", "apple", "qobuz", "tidal"],
     )
     enrich_grp.add_argument(
         "--animated-artwork",

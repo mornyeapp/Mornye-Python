@@ -885,7 +885,6 @@ const ALL_ENRICH = [
   { id:'apple',      label:'Apple Music',on:true, iconFile:'am.png', iconClass:'apple' },
   { id:'qobuz',      label:'Qobuz',      on:true, iconFile:'qbz.png', iconClass:'qobuz' },
   { id:'tidal',      label:'Tidal',      on:true, iconFile:'tidal_l.png', iconClass:'tidal' },
-  { id:'soundcloud', label:'SoundCloud', on:false, iconFile:'soundcloud.svg', iconClass:'soundcloud' },
 ];
 
 const SETTINGS_STORAGE_KEY = 'mornye-settings';

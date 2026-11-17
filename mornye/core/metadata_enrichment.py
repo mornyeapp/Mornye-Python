@@ -1095,46 +1095,6 @@ def _get_qobuz_meta(token: str | None) -> _QobuzMeta:
     return _QobuzMeta(qobuz_token=token)
 
 
-class _SoundCloudMeta:
-    def __init__(self) -> None:
-        self._provider: Any = None
-        self._init_attempted = False
-
-    def _get_provider(self) -> Any:
-        if self._init_attempted:
-            return self._provider
-        self._init_attempted = True
-        try:
-            self._provider = _get_dynamic_python_provider("soundcloud")
-        except Exception as exc:
-            logger.debug("[meta/soundcloud] cannot init provider: %s", exc)
-        return self._provider
-
-    def fetch(self, track_name: str, artist_name: str) -> EnrichedMetadata:
-        return _run_async_sync(self.fetch_async(track_name, artist_name))
-
-    async def fetch_async(self, track_name: str, artist_name: str) -> EnrichedMetadata:
-        out = EnrichedMetadata()
-        try:
-            prov = self._get_provider()
-            if prov is None:
-                return out
-            query = f"{artist_name} {track_name}".strip()
-            data = await prov._api_get_async(
-                "search/tracks",
-                {"q": query, "limit": 1, "access": "playable"},
-            )
-            items = data.get("collection", []) if isinstance(data, dict) else []
-            if not items:
-                return out
-            formatted = prov._format_track(items[0])
-            if formatted:
-                out.cover_url_hd = formatted.get("cover_url", "")
-        except Exception as exc:
-            logger.debug("[meta/soundcloud] async %s", exc)
-        return out
-
-
 # ---------------------------------------------------------------------------
 # Singleton provider instances
 # ---------------------------------------------------------------------------
@@ -1143,7 +1103,6 @@ _singleton_lock = threading.Lock()
 _deezer_inst: _DeezerMeta | None = None
 _apple_inst: _AppleMusicMeta | None = None
 _tidal_inst: _TidalMeta | None = None
-_sc_inst: _SoundCloudMeta | None = None
 
 
 def _get_deezer() -> _DeezerMeta:
@@ -1171,15 +1130,6 @@ def _get_tidal() -> _TidalMeta:
             if _tidal_inst is None:
                 _tidal_inst = _TidalMeta()
     return _tidal_inst
-
-
-def _get_sc() -> _SoundCloudMeta:
-    global _sc_inst
-    if _sc_inst is None:
-        with _singleton_lock:
-            if _sc_inst is None:
-                _sc_inst = _SoundCloudMeta()
-    return _sc_inst
 
 
 # ---------------------------------------------------------------------------
@@ -1229,13 +1179,6 @@ async def _qobuz_fetch_async(
     )
 
 
-async def _soundcloud_fetch_async(
-    track_name: str,
-    artist_name: str,
-) -> EnrichedMetadata:
-    return await _get_sc().fetch_async(track_name, artist_name)
-
-
 # ---------------------------------------------------------------------------
 # Async enrich_metadata — Phase 2 (new)
 # ---------------------------------------------------------------------------
@@ -1262,6 +1205,10 @@ async def enrich_metadata_async(
     """
     if providers is None:
         providers = ["deezer", "apple", "qobuz", "tidal"]
+    # SoundCloud is no longer an enrichment source: it has no ISRC, label
+    # or release data to add, only a title search. A saved setting or
+    # profile that still names it is read without it.
+    providers = [p for p in providers if p != "soundcloud"]
 
     if isrc:
         cached = _get_cached(isrc)
@@ -1294,8 +1241,6 @@ async def enrich_metadata_async(
                     track_name=track_name,
                     duration_ms=duration_ms,
                 )
-            if name == "soundcloud":
-                return name, await _soundcloud_fetch_async(track_name, artist_name)
             logger.warning("[meta/enrich] provider sconosciuto: %s", name)
             return name, EnrichedMetadata()
         except Exception as exc:
