@@ -102,8 +102,10 @@ def test_failures_and_empty_feeds_are_reported_not_raised() -> None:
 
 def test_a_feed_is_fetched_and_normalised() -> None:
     class Provider:
-        def _call(self, method, *args):
+        def _call(self, method, *args, call_timeout_s=None):
             assert method == "getHomeFeed"
+            # A feed reads many pages: it gets more than the per-track limit.
+            assert call_timeout_s == HF.HOME_FEED_TIMEOUT_S > 20
             return {
                 "success": True,
                 "greeting": "Good evening",

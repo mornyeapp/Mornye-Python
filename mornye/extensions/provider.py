@@ -343,7 +343,13 @@ class JSExtensionProvider(BaseProvider):
             # After work is done (e.g. download finished), put the process back in the pool
             self._idle_runtimes.put(rt)
 
-    def _call(self, method: str, *args, **kw) -> Any:
+    def _call(
+        self, method: str, *args, call_timeout_s: float | None = None, **kw
+    ) -> Any:
+        """Calls `method` in the extension. `call_timeout_s` overrides the
+        provider's timeout for this one call: one runtime serves quick
+        per-track calls and slow whole-page ones (a home feed built from a
+        dozen pages), and a single limit fitted one of them only."""
         if self._stop_requested():
             # Refused rather than queued: this runs in a pool thread, and by
             # the time one is free the run it belongs to may be long gone.
@@ -357,7 +363,8 @@ class JSExtensionProvider(BaseProvider):
         try:
             # Acquire a "worker" from the Pool and assign it the task
             with self._acquire_runtime() as rt:
-                return rt.call(method, *args, timeout=self._timeout_s, **kw)
+                timeout = self._timeout_s if call_timeout_s is None else call_timeout_s
+                return rt.call(method, *args, timeout=timeout, **kw)
         except ExtensionRuntimeError as e:
             # An extension that has no such function is not a network
             # problem: nothing was sent, and trying again cannot help.
