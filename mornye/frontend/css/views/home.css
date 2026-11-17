@@ -262,7 +262,7 @@
    reads on a light cover as well as a dark one. */
 #album-cover::after {
   content: ''; position: absolute; inset: 0; pointer-events: none;
-  background: radial-gradient(circle at center, rgba(0, 0, 0, .38), rgba(0, 0, 0, .12) 70%);
+  background: radial-gradient(circle at center, rgba(var(--shade-rgb), .38), rgba(var(--shade-rgb), .12) 70%);
   opacity: 0; transition: opacity .2s ease;
 }
 #album-cover:hover::after { opacity: 1; }
@@ -273,14 +273,14 @@
 .cover-download-btn {
   position: absolute; z-index: 1; width: 52px; height: 52px;
   display: flex; align-items: center; justify-content: center;
-  background: rgba(0, 0, 0, .58); border-radius: 50%; opacity: 0;
+  background: rgba(var(--shade-rgb), .58); border-radius: 50%; opacity: 0;
   -webkit-backdrop-filter: blur(10px) saturate(140%); backdrop-filter: blur(10px) saturate(140%);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, .35), inset 0 0 0 1px rgba(255, 255, 255, .22);
+  box-shadow: 0 4px 18px rgba(var(--shade-rgb), .35), inset 0 0 0 1px rgba(var(--media-ink-rgb), .22);
   transition: opacity .2s ease, transform .2s ease, background-color .2s ease;
-  border: none; cursor: pointer; color: #fff; font-family: inherit;
+  border: none; cursor: pointer; color: var(--media-ink); font-family: inherit;
 }
-.cover-download-btn:hover { background: rgba(0, 0, 0, .78); transform: translate(-50%, -50%) scale(1.08) !important; }
-.cover-download-btn svg { width: 24px; height: 24px; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .4)); }
+.cover-download-btn:hover { background: rgba(var(--shade-rgb), .78); transform: translate(-50%, -50%) scale(1.08) !important; }
+.cover-download-btn svg { width: 24px; height: 24px; filter: drop-shadow(0 1px 1px rgba(var(--shade-rgb), .4)); }
 .cover-download-btn.loading svg { animation: spin 0.8s linear infinite; }
 .cover-download-btn.success { background: var(--ok); opacity: 1; }
 .cover-download-btn.error { background: var(--error); opacity: 1; }

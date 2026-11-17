@@ -834,7 +834,7 @@ input[type="password"].full { width: 100%; }
 }
 #services-list .service-enable input::after {
   content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%;
-  background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .3); transition: transform var(--motion) var(--ease);
+  background: var(--media-ink); box-shadow: 0 1px 2px rgba(var(--shade-rgb), .3); transition: transform var(--motion) var(--ease);
 }
 #services-list .service-enable input:checked { background: var(--signal-strong); }
 #services-list .service-enable input:checked::after { transform: translateX(12px); }
