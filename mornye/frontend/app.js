@@ -7736,7 +7736,45 @@ function renderLocalTracks() {
             <div class="u-ta-center">${scoreCol}</div>
             ${newCol}
         `;
+        // What the summary above the list counts and filters by.
+        row.dataset.state = item.error && !hasMatch ? 'error'
+            : !hasMatch ? 'none' : isSafe ? 'matched' : 'review';
         container.appendChild(row);
+    });
+    renderLocalSummary();
+}
+
+//: Which rows the list shows: '' for all, else one row state.
+let localFilter = '';
+
+// Counts per state above the list; a click shows only that state.
+function renderLocalSummary() {
+    const box = $('local-summary');
+    if (!box) return;
+    const rows = [...document.querySelectorAll('#local-track-rows > [data-state]')];
+    const count = state => rows.filter(r => r.dataset.state === state).length;
+    const chips = [
+        ['', `${rows.length} file${rows.length === 1 ? '' : 's'}`, rows.length],
+        ['matched', 'Ready', count('matched')],
+        ['review', 'Check', count('review')],
+        ['none', 'No match', count('none')],
+        ['error', 'Errors', count('error')],
+    ].filter(([state, , n]) => state === '' || n > 0);
+    if (localFilter && !chips.some(([state]) => state === localFilter)) localFilter = '';
+    box.innerHTML = rows.length ? chips.map(([state, label, n]) =>
+        `<button type="button" class="local-chip ${state || 'all'}${localFilter === state ? ' active' : ''}" data-state="${state}" aria-pressed="${localFilter === state}">`
+        + (state ? `<span class="local-chip-n">${n}</span> ` : '') + `${escHtml(label)}</button>`).join('') : '';
+    box.querySelectorAll('.local-chip').forEach(btn => btn.addEventListener('click', () => {
+        localFilter = btn.dataset.state === localFilter ? '' : btn.dataset.state;
+        applyLocalFilter();
+        renderLocalSummary();
+    }));
+    applyLocalFilter();
+}
+
+function applyLocalFilter() {
+    document.querySelectorAll('#local-track-rows > [data-state]').forEach(r => {
+        r.classList.toggle('hidden', !!localFilter && r.dataset.state !== localFilter);
     });
 }
 

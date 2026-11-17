@@ -171,6 +171,7 @@
  "local-path-input",
  "local-results-wrap",
  "local-selected-count",
+ "local-summary",
  "local-track-rows",
  "logArea",
  "login-error",
