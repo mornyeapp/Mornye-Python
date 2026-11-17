@@ -37,9 +37,15 @@ class FailedTracksMixin:
         """
         from ..core import failed_tracks
 
-        groups = failed_tracks.retry_groups(getattr(self, "owner", "") or "", keys)
+        owner = getattr(self, "owner", "") or ""
+        groups = failed_tracks.retry_groups(owner, keys)
         queued = 0
         for source_url, playlist_name, tracks in groups:
+            if not playlist_name and failed_tracks.is_playlist_url(source_url):
+                # Saved before failures kept their playlist (issue #277):
+                # ask the playlist its name once, and keep it on the rows.
+                playlist_name = self._playlist_name_for(source_url)
+                failed_tracks.fill_playlist_name(owner, source_url, playlist_name)
             payload = {
                 "indices": list(range(len(tracks))),
                 "tracks": tracks,
@@ -58,6 +64,25 @@ class FailedTracksMixin:
         if queued:
             self.log(f"Retrying {queued} failed track(s)…", "info")
         return {"queued": queued}
+
+    def _playlist_name_for(self, source_url: str) -> str:
+        """The playlist's own name, as the tracklist fetch reads it, or ""
+        when it cannot be read. Never raises: without a name the retry still
+        runs, only loose in the download folder as before."""
+        from ..core.loop_runner import run_sync
+        from ..core.metadata_fallback import get_url_with_fallback
+        from ..core.tracklist import metadata_client_for
+
+        try:
+            result = run_sync(
+                get_url_with_fallback(
+                    source_url, lambda: metadata_client_for(source_url)
+                )
+            )
+            return str(result[0] or "").strip()
+        except Exception as exc:
+            self.log(f"Could not read the playlist name for a retry: {exc}", "warning")
+            return ""
 
     def clear_failed_tracks(self, keys: list[str] | None = None) -> dict:
         """Drops failures from the list without retrying them."""

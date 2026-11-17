@@ -91,7 +91,14 @@ def record_failure(
                 ON CONFLICT(owner, source_url, track_key) DO UPDATE SET
                     track          = excluded.track,
                     source_url     = excluded.source_url,
-                    playlist_name  = excluded.playlist_name,
+                    -- A run that does not know the playlist (a retry of a
+                    -- row saved before #277) must not erase a name already
+                    -- known, or the next retry lands loose again.
+                    playlist_name  = CASE
+                        WHEN excluded.playlist_name <> ''
+                        THEN excluded.playlist_name
+                        ELSE failed_tracks.playlist_name
+                    END,
                     error          = excluded.error,
                     attempts       = failed_tracks.attempts + 1,
                     last_failed_at = excluded.last_failed_at
@@ -109,6 +116,36 @@ def record_failure(
             )
     except Exception:
         logger.debug("[failed_tracks] could not record %s", key, exc_info=True)
+
+
+def is_playlist_url(url: str) -> bool:
+    """Whether `url` names a playlist, which downloads into a folder of its
+    own. The same test the tracklist fetch uses to decide that (app.py)."""
+    lower = (url or "").lower()
+    return "/playlist/" in lower or ("list=" in lower and "olak5uy_" not in lower)
+
+
+def fill_playlist_name(owner: str, source_url: str, playlist_name: str) -> int:
+    """Gives a playlist's failures with no folder name that name. Never raises.
+
+    Rows recorded before failures kept their playlist (issue #277) have an
+    empty name, so retrying them downloaded into the bare download folder
+    and left them off the M3U. Only empty names are filled; returns how many.
+    """
+    name = (playlist_name or "").strip()
+    if not name or not source_url:
+        return 0
+    try:
+        with db.transaction() as conn:
+            return conn.execute(
+                "UPDATE failed_tracks SET playlist_name = ?"
+                " WHERE owner = ? AND source_url = ?"
+                " AND TRIM(playlist_name) = ''",
+                (name, owner or "", source_url),
+            ).rowcount
+    except Exception:
+        logger.debug("[failed_tracks] could not name %s", source_url, exc_info=True)
+        return 0
 
 
 def failure_key(key: str, source_url: str = "") -> str:

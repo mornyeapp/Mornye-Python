@@ -282,10 +282,12 @@ def test_a_batchs_failures_are_listed_with_their_source(tmp_path, monkeypatch):
     assert source == PLAYLIST
 
 
-def test_retry_submits_the_missing_tracks_as_a_background_job():
+def test_retry_submits_the_missing_tracks_as_a_background_job(monkeypatch):
     failed_tracks.hook(source_url=PLAYLIST)(DownloadResult.fail("t", "e"), _track(7))
     api = MornyeAPI()
     api._download_queue = _RecordingQueue()
+    # The playlist cannot be read here, so it keeps no name.
+    monkeypatch.setattr(api, "_playlist_name_for", lambda url: "")
 
     assert api.retry_failed_tracks({"services": ["tidal"]}) == {"queued": 1}
 
@@ -311,6 +313,64 @@ def test_a_retry_goes_back_to_the_playlist_folder_it_failed_in():
     [(_, payload)] = api._download_queue.jobs
     assert payload["playlist_name"] == "Top 50 - India"
     assert payload["whole"] is False
+
+
+def test_a_failure_saved_without_its_playlist_is_retried_into_the_playlist(
+    monkeypatch,
+):
+    """Issue #277: rows from before the fix had no playlist name, so their
+    retries still landed loose. The retry now asks the playlist its name
+    and keeps it on the rows."""
+    failed_tracks.hook(source_url=PLAYLIST)(DownloadResult.fail("t", "e"), _track(9))
+    api = MornyeAPI()
+    api._download_queue = _RecordingQueue()
+    asked: list[str] = []
+    monkeypatch.setattr(
+        api, "_playlist_name_for", lambda url: asked.append(url) or "RAP 91 Hindi"
+    )
+
+    api.retry_failed_tracks({})
+
+    [(_, payload)] = api._download_queue.jobs
+    assert payload["playlist_name"] == "RAP 91 Hindi"
+    assert asked == [PLAYLIST]
+    [(_, name, _tracks)] = failed_tracks.retry_groups()
+    assert name == "RAP 91 Hindi", "kept, so the next retry needs no lookup"
+
+
+def test_a_lookup_is_only_made_for_a_playlist(monkeypatch):
+    album = "https://open.spotify.com/album/a"
+    failed_tracks.hook(source_url=album)(DownloadResult.fail("t", "e"), _track(10))
+    api = MornyeAPI()
+    api._download_queue = _RecordingQueue()
+    monkeypatch.setattr(
+        api, "_playlist_name_for", lambda url: pytest.fail("albums have no folder")
+    )
+
+    api.retry_failed_tracks({})
+
+    [(_, payload)] = api._download_queue.jobs
+    assert "playlist_name" not in payload
+
+
+def test_a_failure_without_a_name_keeps_the_name_already_known():
+    failed_tracks.hook(source_url=PLAYLIST, playlist_name="Top 50 - India")(
+        DownloadResult.fail("t", "e"), _track(11)
+    )
+    # The same track fails again from a run that does not know the playlist.
+    failed_tracks.hook(source_url=PLAYLIST)(DownloadResult.fail("t", "e2"), _track(11))
+
+    [(_, name, _tracks)] = failed_tracks.retry_groups()
+    assert name == "Top 50 - India"
+
+
+def test_is_playlist_url():
+    assert failed_tracks.is_playlist_url(PLAYLIST)
+    assert failed_tracks.is_playlist_url("https://music.youtube.com/playlist?list=PL1")
+    assert not failed_tracks.is_playlist_url("https://open.spotify.com/album/a")
+    assert not failed_tracks.is_playlist_url(
+        "https://music.youtube.com/playlist?list=OLAK5uy_album"
+    )
 
 
 def test_a_whole_playlist_job_records_its_name_only_for_failures(tmp_path):
