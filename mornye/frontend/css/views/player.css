@@ -183,8 +183,17 @@
 /* shuffle / repeat */
 .np-mode { opacity: .65; }
 .np-mode.on { opacity: 1; color: var(--media-ink); background: rgba(var(--media-ink-rgb), .2); }
-.np-btn.np-mode { position: relative; }
-[id$="repeat"] .rep1 { display: none; position: absolute; right: 3px; bottom: 1px; font-size: 9px; font-weight: 700; line-height: 1; }
+.np-btn.np-mode, .pl-btn.pl-mode { position: relative; }
+/* Repeat one: the "1" sits inside the loop of the two arrows, centred on
+   the icon (the button's padding is symmetric, so its centre is the
+   icon's), in both the bar and Now Playing. */
+[id$="repeat"] .rep1 {
+  display: none; position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  font-family: var(--font); font-weight: 800; line-height: 1; pointer-events: none;
+}
+#pl-repeat .rep1 { font-size: 7px; }
+#np-repeat .rep1 { font-size: 9.5px; }
 [id$="repeat"][data-mode="one"] .rep1 { display: block; }
 
 /* Player page: one height and one text size for every control in a row. */
