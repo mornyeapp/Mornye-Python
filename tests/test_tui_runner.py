@@ -50,7 +50,7 @@ def _clean_singletons():
     output_sink.clear_output_sink()
 
 
-async def _fake_download(cfg: dict, log_level: int) -> None:
+async def _fake_download(cfg: dict, log_level: int, **_kwargs) -> None:
     """One track, start to finish, through the real progress plumbing."""
     manager = DownloadManager()
     print_run_header(1, cfg["services"], cfg["quality"], cfg["output_dir"], 1)
@@ -125,7 +125,7 @@ async def test_the_sink_is_removed_once_the_run_ends(monkeypatch, capfd) -> None
 
 @drives_the_ui
 async def test_a_failing_run_is_reported_rather_than_raised(monkeypatch, capfd) -> None:
-    async def _explode(cfg: dict, log_level: int) -> None:
+    async def _explode(cfg: dict, log_level: int, **_kwargs) -> None:
         msg = "the provider said no"
         raise RuntimeError(msg)
 
@@ -149,7 +149,7 @@ async def test_cancelling_the_iteration_restores_the_terminal(
     monkeypatch,
     capfd,
 ) -> None:
-    async def _forever(cfg: dict, log_level: int) -> None:
+    async def _forever(cfg: dict, log_level: int, **_kwargs) -> None:
         while True:
             await asyncio.sleep(0.01)
 

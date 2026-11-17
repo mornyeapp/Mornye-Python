@@ -246,7 +246,6 @@
                 <!-- Quality readout (§2, signature 1): the tier asked for in
                      Settings, marked REQ, until the first track of this card
                      finishes; then what that file really is. -->
-                <div id="album-quality" class="album-quality hidden" aria-live="polite"></div>
                 <div id="album-meta-details" class="album-meta-details hidden">
                   <div class="u-items-center u-gap-8" id="album-owner-row" style="display:flex;">
                     <div id="album-owner-avatar" class="owner-avatar hidden"></div>
@@ -377,14 +376,33 @@
         </div>
       </div>
       <div class="s-body" id="player-body">
-        <div class="s-section player-source">
-          <label class="player-folder-label" for="player-path-input">Music folder</label>
+        <div class="player-libbar hidden" id="player-libbar">
+          <span class="plb-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h6l2 2h10v10H3z"/></svg>
+          </span>
+          <div class="plb-main">
+            <strong id="plb-name"></strong>
+            <span id="plb-stats" class="plb-stats"></span>
+          </div>
+          <div class="plb-actions">
+            <button class="act-btn secondary" type="button" data-onclick="togglePlayerSource()">Folders</button>
+            <button class="act-btn secondary" type="button" id="plb-rescan" data-onclick="scanPlayerLibrary()">Rescan</button>
+          </div>
+        </div>
+        <div class="s-section player-source" id="player-source">
+          <div class="psrc-head">
+            <label class="player-folder-label" for="player-path-input">Music folders</label>
+            <span class="psrc-hint">Every folder is scanned into one library. A network share works too once it is mounted — type <code>smb://nas/Music</code> or pick it below.</span>
+          </div>
+          <ul id="player-folder-list" class="psrc-list" aria-label="Folders in the library"></ul>
           <div class="s-row u-items-center u-gap-8">
-            <input type="text" id="player-path-input" class="full" placeholder="Enter a folder path"
-                   data-onkeydown="if(event.key==='Enter') scanPlayerLibrary()">
+            <input type="text" id="player-path-input" class="full" placeholder="Add a folder: /Users/you/Music or smb://nas/Music"
+                   data-onkeydown="if(event.key==='Enter') addPlayerFolderFromInput()">
             <button class="act-btn secondary" type="button" data-onclick="openPlayerFolderBrowser()">Choose folder</button>
+            <button class="act-btn secondary" type="button" data-onclick="addPlayerFolderFromInput()">Add</button>
             <button class="act-btn primary" type="button" data-onclick="scanPlayerLibrary()" id="player-scan-btn">Scan library</button>
           </div>
+          <div id="player-network" class="share-chips hidden" aria-label="Mounted network shares"></div>
           <div id="player-recent" class="share-chips hidden" aria-label="Recent folders"></div>
         </div>
         <div class="player-empty" id="player-empty" role="status" aria-live="polite">
@@ -399,6 +417,11 @@
           <span class="player-empty-copy">Your tracks will appear here after the library is scanned.</span>
         </div>
         <div id="player-toolbar" class="player-toolbar hidden">
+          <div class="seg-tabs player-tabs" role="tablist" aria-label="Browse the library by">
+            <button type="button" class="seg-tab active" data-tab="songs" data-onclick="setPlayerTab('songs')" role="tab" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg><span>Songs</span><span class="seg-count" id="ptab-count-songs">0</span></button>
+            <button type="button" class="seg-tab" data-tab="albums" data-onclick="setPlayerTab('albums')" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg><span>Albums</span><span class="seg-count" id="ptab-count-albums">0</span></button>
+            <button type="button" class="seg-tab" data-tab="artists" data-onclick="setPlayerTab('artists')" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>Artists</span><span class="seg-count" id="ptab-count-artists">0</span></button>
+          </div>
           <div class="pt-row">
             <div class="pt-group" role="group" aria-label="Playback">
               <button class="pt-btn primary" type="button" data-onclick="playFromLibrary(0, false)">
@@ -411,7 +434,7 @@
               <input type="search" id="player-search" placeholder="Search title, artist or album" data-oninput="filterPlayerLibrary()" autocomplete="off" spellcheck="false">
               <button type="button" class="pt-clear hidden" id="player-search-clear" data-onclick="clearPlayerSearch()" aria-label="Clear search">×</button>
             </label>
-            <label class="pt-sort"><span>Sort</span>
+            <label class="pt-sort" id="player-sort-wrap"><span>Sort</span>
               <select id="player-sort" data-onchange="filterPlayerLibrary()" aria-label="Sort by">
                 <option value="path">Folder order</option>
                 <option value="title">Title</option>
@@ -422,12 +445,16 @@
             </label>
             <span id="player-count" class="player-count"></span>
           </div>
-          <div class="pt-colhead" aria-hidden="true">
+          <div class="pt-colhead" id="player-colhead" aria-hidden="true">
             <span class="c-num">#</span><span></span><span>Title</span><span class="c-dur">Time</span><span class="c-fmt">Format</span>
           </div>
         </div>
-        <div class="u-fs-12_5 u-c-muted u-p-6-2" id="player-status"></div>
-        <div id="player-list" class="player-list" role="list"></div>
+        <div class="player-scroll" id="player-scroll">
+          <div class="player-status" id="player-status" role="status" aria-live="polite"></div>
+          <div id="player-detail" class="player-detail hidden"></div>
+          <div id="player-grid" class="player-grid hidden" role="list"></div>
+          <div id="player-list" class="player-list" role="list"></div>
+        </div>
       </div>
     </div>
 
@@ -447,8 +474,8 @@
       </div>
       
       <div class="s-body u-dir-column u-gap-16" style="display:flex;">
-        <div class="s-section u-p-16-20">
-          <div class="s-title">Target Directory</div>
+        <div class="s-section local-target">
+          <div class="s-title">Folder to fix</div>
           <div
             id="local-drop-zone"
             class="local-drop-zone"
@@ -456,24 +483,40 @@
             data-ondragleave="onLocalDragLeave(event)"
             data-ondrop="onLocalDrop(event)"
           >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-            <span class="local-drop-zone-text">Drag & drop a folder or audio file here, or paste a path below</span>
-            <div class="s-row u-items-center u-gap-8 u-w-100pct">
-              <input type="text" id="local-path-input" class="full u-flex-1" placeholder="Folder path or network share — /Users/name/Music, C:\Music, smb://nas/Music" data-onclick="event.stopPropagation()">
-              <button class="act-btn secondary u-p-6-12 u-fs-12 u-ws-nowrap" data-onclick="openFolderBrowser()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                Browse
-              </button>
+            <span class="local-drop-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg></span>
+            <div class="local-drop-main">
+              <span class="local-drop-zone-text">Drop a folder or an audio file here, or type its path</span>
+              <div class="s-row u-items-center u-gap-8 u-w-100pct">
+                <input type="text" id="local-path-input" class="full u-flex-1" placeholder="Folder path or network share — /Users/name/Music, C:\Music, smb://nas/Music" data-onclick="event.stopPropagation()">
+                <button class="act-btn secondary u-p-6-12 u-fs-12 u-ws-nowrap" data-onclick="openFolderBrowser()">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                  Browse
+                </button>
+              </div>
+              <div id="local-network-shares" class="share-chips hidden" data-onclick="event.stopPropagation()" aria-label="Mounted network shares"></div>
             </div>
-            <div id="local-network-shares" class="share-chips hidden" data-onclick="event.stopPropagation()" aria-label="Mounted network shares"></div>
           </div>
-          <p class="u-fs-11_5 u-c-muted u-mt-8 u-lh-1_5">
-            Paste (or drop) the folder or file you want to fix — a NAS works too: type its smb:// address or a \\server\share path once the share is connected on this computer. Supported formats: FLAC, MP3, M4A/AAC, OGG Vorbis, Opus, WAV, AIFF, WMA, WavPack, Monkey's Audio, Musepack, TrueAudio.
-            Mornye will scan them, find the correct Spotify metadata, and let you compare before applying changes.
-          </p>
+          <details class="local-help">
+            <summary>Supported formats &amp; network shares</summary>
+            <p>
+              FLAC, MP3, M4A/AAC, OGG Vorbis, Opus, WAV, AIFF, WMA, WavPack, Monkey's Audio, Musepack, TrueAudio.
+              A NAS works too: type its smb:// address or a \\server\share path once the share is connected on this computer.
+              Mornye scans the files, finds the right metadata and lets you compare before anything is written.
+            </p>
+          </details>
         </div>
-        
-        <div id="local-results-wrap" class="hidden u-dir-column u-minh-0" style="display:flex;flex:1;">
+
+        <div class="local-empty" id="local-empty" role="status">
+          <span class="local-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg></span>
+          <strong>Scan a folder to fix its tags</strong>
+          <span>Each file is matched against Spotify by its ISRC, or its title and artist, and shown next to the tags it would get. Nothing changes until you apply.</span>
+        </div>
+
+        <!-- flex-basis, not 0: with the cards above and below as tall as
+             the panel, a 0 basis left the list no height at all, so a scan
+             showed its column header and "1 file(s) selected" but no rows. -->
+        <div id="local-results-wrap" class="hidden u-dir-column u-minh-0" style="display:flex;flex:1 0 min(68vh, 640px);">
+          <div class="local-summary" id="local-summary" role="group" aria-label="Filter the scanned files"></div>
           <div class="track-table-header u-cols-24-1fr-80-1fr u-mb-8">
             <div><input id="check-all-local" type="checkbox" checked data-onchange="toggleAllLocal(this)"></div>
             <div>Current File (Local)</div>
@@ -495,8 +538,8 @@
         <!-- Library-wide duplicates (core/library_dedup.py). Different tool
              from the fingerprint scan above: metadata first, so it scales to
              a whole library, and it can act on what it finds. -->
-        <div class="s-section u-p-16-20">
-          <div class="s-title">Library Duplicates</div>
+        <details class="s-section local-tools" id="local-dup-tools">
+          <summary class="s-title">Library duplicates</summary>
           <p class="u-fs-11_5 u-c-muted u-m-n4-0-12 u-lh-1_5">
             Groups every copy of the same recording in the folder above — by ISRC, then by
             artist/title and duration for the files that have none — and keeps the best copy of
@@ -539,7 +582,7 @@
             <span id="libdedup-manifest" class="reg-url u-flex-1 u-minw-0"></span>
             <button class="act-btn secondary" data-onclick="undoLibraryDedup()" id="btn-libdedup-undo">Undo</button>
           </div>
-        </div>
+        </details>
       </div>
 
       <div class="s-footer hidden u-p-14-18 u-border-top-1-solid-border u-bg-surface2 u-justify-space-between u-items-center u-shrink-0" id="local-footer">
@@ -683,7 +726,7 @@
       <div class="s-actions">
         <button class="act-btn secondary" type="button" data-onclick="openConfigFolder()">Open Config Folder</button>
         <button class="act-btn secondary" type="button" data-onclick="resetSettings()">Reset to Default</button>
-        <button class="act-btn primary" type="button" data-onclick="saveSettings()">Save Changes</button>
+        <button class="act-btn primary" type="button" id="settings-save-btn" data-onclick="saveSettings()">Save Changes</button>
       </div>
     </div>
     
@@ -871,7 +914,7 @@
                 <span class="toggle-sl"></span>
               </label>
             </div>
-            <div class="s-row verify-hires-opt u-bl-2-solid-border2 u-ml-4" style="display:none;">
+            <div class="s-row verify-hires-opt s-sub" style="display:none;">
               <span class="s-label">Replace fake Hi-Res<small>Off = a finding is only reported. On = the flagged file is set aside, the track is re-downloaded as LOSSLESS, and the flagged file is deleted only once the replacement is on disk</small></span>
               <label class="toggle">
                 <input type="checkbox" id="config-redownload-fake-hires">
@@ -986,7 +1029,7 @@
                 </optgroup>
               </select>
             </div>
-            <div class="s-row transcode-lossy u-bl-2-solid-border2 u-ml-4" style="display:none;">
+            <div class="s-row transcode-lossy s-sub" style="display:none;">
               <span class="s-label">Bitrate</span>
               <select id="config-transcode-bitrate">
                 <option value="320k">320 kbps</option>
@@ -995,7 +1038,7 @@
                 <option value="128k">128 kbps</option>
               </select>
             </div>
-            <div class="s-row transcode-opt u-bl-2-solid-border2 u-ml-4" style="display:none;">
+            <div class="s-row transcode-opt s-sub" style="display:none;">
               <span class="s-label">Keep original file<small>Off = the downloaded source is deleted after conversion</small></span>
               <label class="toggle">
                 <input type="checkbox" id="config-transcode-keep">
@@ -1060,7 +1103,7 @@
                 <span class="toggle-sl"></span>
               </label>
             </div>
-            <div class="s-row u-bl-2-solid-border2 u-ml-4" id="album-track-row" style="display:none;">
+            <div class="s-row s-sub" id="album-track-row" style="display:none;">
               <span class="s-label">Use original album track number</span>
               <label class="toggle">
                 <input type="checkbox" id="config-album-track-numbers">
@@ -1103,7 +1146,7 @@
                 <span class="toggle-sl"></span>
               </label>
             </div>
-            <div class="s-row u-bl-2-solid-border2 u-ml-4" id="config-artist-sep-row">
+            <div class="s-row s-sub" id="config-artist-sep-row">
               <span class="s-label">Artist Separator<small>(e.g. ", " or " / ")</small></span>
               <input class="u-w-160" type="text" id="config-artist-separator" placeholder="None (Standard Vorbis array)">
             </div>
@@ -1413,6 +1456,7 @@
       <div class="s-header">
         <h1>Queue</h1>
         <div class="s-actions">
+          <button class="act-btn secondary" type="button" data-onclick="finishCurrentDownloads()" title="Let the tracks downloading now finish, then stop — nothing else starts">Finish current</button>
           <button class="act-btn secondary" type="button" data-onclick="stopAllDownloads()">Stop all downloads</button>
           <button class="act-btn primary" type="button" id="sq-start-all" data-onclick="startStaged(false)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4"/></svg>Start all</button>
         </div>
@@ -1886,10 +1930,10 @@
   </div>
   <div class="pl-seek">
     <span id="pl-cur" class="pl-time">0:00</span>
-    <input type="range" id="pl-seek" min="0" max="1000" value="0" aria-label="Seek">
+    <input type="range" id="pl-seek" class="am-range" min="0" max="1000" value="0" aria-label="Seek">
     <span id="pl-dur" class="pl-time">0:00</span>
   </div>
-  <input type="range" id="pl-vol" class="pl-vol" min="0" max="100" value="100" aria-label="Volume">
+  <input type="range" id="pl-vol" class="pl-vol am-range" min="0" max="100" value="100" aria-label="Volume">
   <button type="button" class="pl-btn" data-onclick="openNowPlaying()" aria-label="Open the full player" title="Open the full player"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>
   <button type="button" class="pl-btn" data-onclick="closePlayer()" aria-label="Close player">✕</button>
 </div>
@@ -1899,7 +1943,7 @@
   <button type="button" class="np-close" data-onclick="closeNowPlaying()" aria-label="Back to the library">✕</button>
   <div class="np-volume">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9z"/></svg>
-    <input type="range" id="np-vol" min="0" max="100" value="100" aria-label="Volume">
+    <input type="range" id="np-vol" class="am-range" min="0" max="100" value="100" aria-label="Volume">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg>
   </div>
   <div class="np-left">
@@ -1908,7 +1952,7 @@
       <div class="np-title-row"><span id="np-title" class="np-title"></span><span id="np-explicit" class="np-e hidden">E</span></div>
       <div id="np-artist" class="np-artist"></div>
     </div>
-    <input type="range" id="np-seek" class="np-seek" min="0" max="1000" value="0" aria-label="Seek">
+    <div class="np-seek-wrap"><input type="range" id="np-seek" class="np-seek" min="0" max="1000" value="0" aria-label="Seek"></div>
     <div class="np-times"><span id="np-cur">0:00</span><span id="np-tech" class="np-tech" title="Played exactly as stored. Formats the window cannot decode are played as a lossless FLAC copy."></span><span id="np-rem">-0:00</span></div>
     <div class="np-controls">
       <button type="button" class="np-btn np-mode" id="np-shuffle" data-onclick="playerToggleShuffle()" aria-label="Shuffle"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg></button>

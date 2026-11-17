@@ -123,6 +123,11 @@ class Subscription:
     #: Whether a check has ever succeeded for this subscription. The first
     #: one records what exists as the baseline; see check_async().
     baselined: bool = False
+    #: The artist's photo or the playlist's cover, and a one-line
+    #: description ("2.1M monthly listeners", "50 tracks"), read when it is
+    #: followed (see describe_async). Empty until then.
+    image_url: str = ""
+    subtitle: str = ""
 
     @property
     def groups(self) -> list[str]:
@@ -155,6 +160,8 @@ class Subscription:
             "interval_minutes": self.interval_minutes,
             "next_check_at": self.next_check_at,
             "seen_count": count_seen(self.id),
+            "image_url": self.image_url,
+            "subtitle": self.subtitle,
         }
 
 
@@ -182,6 +189,8 @@ def _row_to_subscription(row) -> Subscription:
         interval_minutes=int(row["interval_minutes"] or 0),
         download_config=_load_config(row["download_config"]),
         baselined=bool(row["baselined"]),
+        image_url=row["image_url"] or "",
+        subtitle=row["subtitle"] or "",
     )
 
 
@@ -333,6 +342,23 @@ def add(
             ),
         )
     return sub
+
+
+def set_details(
+    subscription_id: str, *, name: str = "", image_url: str = "", subtitle: str = ""
+) -> Subscription | None:
+    """Stores what a subscription looks like. An empty value keeps the one
+    already stored, so a lookup that found less never erases what is known."""
+    with db.transaction() as conn:
+        conn.execute(
+            "UPDATE subscriptions SET "
+            "name = CASE WHEN ? <> '' THEN ? ELSE name END, "
+            "image_url = CASE WHEN ? <> '' THEN ? ELSE image_url END, "
+            "subtitle = CASE WHEN ? <> '' THEN ? ELSE subtitle END "
+            "WHERE id = ?",
+            (name, name, image_url, image_url, subtitle, subtitle, subscription_id),
+        )
+    return get(subscription_id)
 
 
 def remove(subscription_id: str) -> bool:
@@ -633,6 +659,73 @@ async def list_releases_async(
         )
 
     return artist_name, releases
+
+
+def _compact_count(value: int) -> str:
+    """1234567 → "1.2M", 45300 → "45.3K", 900 → "900"."""
+    for size, unit in ((1_000_000_000, "B"), (1_000_000, "M"), (1_000, "K")):
+        if value >= size:
+            text = f"{value / size:.1f}".rstrip("0").rstrip(".")
+            return f"{text}{unit}"
+    return str(value)
+
+
+async def describe_async(url: str, *, client: Any = None) -> dict:
+    """``{"name", "image_url", "subtitle"}`` for an artist or playlist link.
+
+    What the Following list shows for a row: an artist's photo and its
+    monthly listeners, or a playlist's cover and its size. Reads the
+    artist's profile, not its discography, and for a playlist the same
+    listing a check reads. Values it cannot find are "".
+    """
+    import asyncio
+    import inspect
+
+    from .spotify_metadata import SpotifyMetadataClient, parse_spotify_url
+
+    info = parse_spotify_url(url)
+    metadata_client = client or SpotifyMetadataClient()
+    if info["type"] in ("artist", "artist_discography"):
+        profile = await metadata_client.get_artist_profile_async(info["id"])
+        stats = profile.get("stats") or {}
+        listeners = int(stats.get("listeners") or 0)
+        followers = int(stats.get("followers") or 0)
+        if listeners:
+            subtitle = f"{_compact_count(listeners)} monthly listeners"
+        elif followers:
+            subtitle = f"{_compact_count(followers)} followers"
+        else:
+            subtitle = ""
+        name = str((profile.get("profile") or {}).get("name") or "")
+        return {
+            "name": "" if name == "Unknown" else name,
+            "image_url": str(profile.get("avatar") or ""),
+            "subtitle": subtitle,
+        }
+    if info["type"] == "playlist":
+        fetch = (
+            getattr(metadata_client, "get_url_async", None) or metadata_client.get_url
+        )
+        if inspect.iscoroutinefunction(fetch):
+            result = await fetch(url)
+        else:
+            result = await asyncio.to_thread(fetch, url)
+        tracks = list(result[1] or []) if len(result) > 1 else []
+        cover = str(result[2] or "") if len(result) > 2 else ""
+        meta = result[3] if len(result) > 3 and isinstance(result[3], dict) else {}
+        owner = str(meta.get("owner") or "").strip()
+        count = int(meta.get("track_count") or len(tracks))
+        cover = cover or str(meta.get("cover_url") or "")
+        parts = [f"{count} track{'s' if count != 1 else ''}"] if count else []
+        if owner:
+            parts.insert(0, f"by {owner}")
+        return {
+            "name": str(result[0] or ""),
+            "image_url": cover,
+            "subtitle": " · ".join(parts),
+        }
+    msg = f"{url} is a {info['type']}, not an artist or a playlist"
+    raise SubscriptionError(msg)
 
 
 async def list_playlist_tracks_async(

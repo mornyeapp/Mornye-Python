@@ -198,7 +198,151 @@ def test_a_transport_failure_is_not_an_exception(monkeypatch) -> None:
 
     monkeypatch.setattr(resolver, "http", _Boom())
     monkeypatch.setattr(resolver, "unitune_http", _Boom())
+    monkeypatch.setattr(resolver, "songlink_http", _Boom())
     assert asyncio.run(resolver._resolve_links_async({"url": "https://x"})) == {}
+
+
+def _empty_then_songlink(songlink_calls: list[dict]):
+    """Clients where zarz and UniTune know nothing and Song.link answers."""
+
+    class _Zarz:
+        async def post(self, *_args, **_kwargs):
+            return httpx.Response(
+                200,
+                json={"success": False},
+                request=httpx.Request("POST", "https://api.zarz.moe/v1/resolve"),
+            )
+
+    class _UniTune:
+        async def get(self, url, **_kwargs):
+            return httpx.Response(
+                200, json={"linksByPlatform": {}}, request=httpx.Request("GET", url)
+            )
+
+    class _SongLink:
+        async def get(self, url, **kwargs):
+            songlink_calls.append({"url": url, **kwargs})
+            return httpx.Response(
+                200,
+                json={
+                    "linksByPlatform": {
+                        "tidal": {
+                            "url": "https://listen.tidal.com/track/42",
+                            "entityUniqueId": "TIDAL_SONG::42",
+                        },
+                        "amazonMusic": {
+                            "url": "https://music.amazon.com/albums/B000000001?trackAsin=B000000002",
+                        },
+                    }
+                },
+                request=httpx.Request("GET", url),
+            )
+
+    return _Zarz(), _UniTune(), _SongLink()
+
+
+def test_songlink_is_tried_when_unitune_also_has_no_links(monkeypatch) -> None:
+    from mornye.core import link_resolver as lr
+
+    monkeypatch.setattr(lr, "_unitune_unavailable_until", 0.0)
+    monkeypatch.setattr(lr, "_songlink_unavailable_until", 0.0)
+    monkeypatch.setenv(lr.SONGLINK_API_KEY_ENV, "test-key")
+    calls: list[dict] = []
+    resolver = LinkResolver()
+    resolver.http, resolver.unitune_http, resolver.songlink_http = _empty_then_songlink(
+        calls
+    )
+
+    links = asyncio.run(
+        resolver._resolve_links_async(
+            {"platform": "spotify", "type": "track", "id": "abc"}
+        )
+    )
+
+    assert links == {
+        "tidal": "https://listen.tidal.com/track/42",
+        "amazonMusic": "https://music.amazon.com/tracks/B000000002?musicTerritory=US",
+    }
+    assert calls[0]["url"] == lr.LinkResolver.SONGLINK_RESOLVE_API_URL
+    assert calls[0]["params"] == {
+        "url": "https://open.spotify.com/track/abc",
+        "key": "test-key",
+    }
+
+
+def test_songlink_is_never_asked_without_a_key(monkeypatch) -> None:
+    from mornye.core import link_resolver as lr
+
+    monkeypatch.setattr(lr, "_songlink_unavailable_until", 0.0)
+    monkeypatch.delenv(lr.SONGLINK_API_KEY_ENV, raising=False)
+    calls: list[dict] = []
+    resolver = LinkResolver()
+    _zarz, _unitune, resolver.songlink_http = _empty_then_songlink(calls)
+
+    payload = {"platform": "spotify", "type": "track", "id": "abc"}
+    assert asyncio.run(resolver._resolve_songlink_async(payload)) == {}
+    assert calls == []
+
+
+def test_songlink_is_not_asked_when_unitune_found_links(monkeypatch) -> None:
+    from mornye.core import link_resolver as lr
+
+    monkeypatch.setattr(lr, "_unitune_unavailable_until", 0.0)
+    calls: list[dict] = []
+    resolver = LinkResolver()
+    zarz, _unitune, songlink = _empty_then_songlink(calls)
+
+    class _UniTune:
+        async def get(self, url, **_kwargs):
+            return httpx.Response(
+                200,
+                json={
+                    "linksByPlatform": {"deezer": {"url": "https://deezer.com/track/1"}}
+                },
+                request=httpx.Request("GET", url),
+            )
+
+    resolver.http, resolver.unitune_http, resolver.songlink_http = (
+        zarz,
+        _UniTune(),
+        songlink,
+    )
+    links = asyncio.run(resolver._resolve_links_async({"url": "https://x"}))
+    assert links == {"deezer": "https://www.deezer.com/track/1"}
+    assert calls == []
+
+
+def test_a_rate_limited_songlink_is_skipped_for_the_rest_of_the_queue(
+    monkeypatch,
+) -> None:
+    from mornye.core import link_resolver as lr
+    from mornye.core.errors import RateLimitedError
+
+    monkeypatch.setattr(lr, "_songlink_unavailable_until", 0.0)
+    monkeypatch.setenv(lr.SONGLINK_API_KEY_ENV, "test-key")
+    calls: list[str] = []
+
+    class _Throttled:
+        async def get(self, url, **_kwargs):
+            calls.append(url)
+            raise RateLimitedError("songlink", 60)
+
+    payload = {"platform": "spotify", "type": "track", "id": "abc"}
+    first, second = LinkResolver(), LinkResolver()
+    first.songlink_http = _Throttled()
+    second.songlink_http = _Throttled()
+
+    assert asyncio.run(first._resolve_songlink_async(payload)) == {}
+    assert asyncio.run(second._resolve_songlink_async(payload)) == {}
+    assert len(calls) == 1
+
+
+def test_songlink_gets_one_short_attempt() -> None:
+    from mornye.core import link_resolver as lr
+
+    client = LinkResolver().songlink_http
+    assert client._retry.max_attempts == 1
+    assert client._timeout == lr.SONGLINK_TIMEOUT_S <= 5
 
 
 def test_unitune_gets_one_short_attempt() -> None:

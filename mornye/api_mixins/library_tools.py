@@ -7,7 +7,8 @@ Three surfaces, all reached from the "Fix Local Files" page:
 * a library reorganiser (`plan_library_reorganize` / `apply_library_reorganize`).
 
 Every path the frontend sends is checked against the same approved roots the
-local tagger uses (the download folder and the home folder).
+local tagger uses (the download folder, the home folder and the mounted
+network shares).
 """
 
 from __future__ import annotations
@@ -15,10 +16,30 @@ from __future__ import annotations
 import base64
 import binascii
 import threading
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ..core.loop_runner import run_sync
+
+#: The mounted shares, read at most this often. Reading them runs `mount`
+#: on macOS, and the Player checks a path for every cover it draws.
+_NETWORK_ROOTS_TTL_S = 15.0
+_network_roots_state: dict[str, Any] = {"at": 0.0, "roots": []}
+_network_roots_lock = threading.Lock()
+
+
+def _network_roots_cached() -> list[Path]:
+    with _network_roots_lock:
+        if time.monotonic() - _network_roots_state["at"] > _NETWORK_ROOTS_TTL_S:
+            try:
+                from ..core.network_paths import network_roots
+
+                roots = [root.resolve() for root in network_roots()]
+            except Exception:
+                roots = []
+            _network_roots_state.update(at=time.monotonic(), roots=roots)
+        return list(_network_roots_state["roots"])
 
 
 class LibraryToolsMixin:
@@ -28,12 +49,24 @@ class LibraryToolsMixin:
         _push: Any
 
     def _is_approved_path(self, candidate: str) -> bool:
+        """Inside the download folder, the home folder, or a mounted network
+        share: mounting a share is the user granting access to it, the same
+        rule Fix Local Files and the duplicate scan apply."""
         try:
             resolved = Path(candidate).resolve()
         except Exception:
             return False
-        roots = (Path(self.download_dir).resolve(), Path.home().resolve())
-        return any(resolved.is_relative_to(root) for root in roots)
+        local = (Path(self.download_dir).resolve(), Path.home().resolve())
+        if any(resolved.is_relative_to(root) for root in local):
+            return True
+        # Windows opens \\server\share without mounting it, so a UNC path has
+        # no mount point to compare with: allowed as Fix Local Files and the
+        # duplicate scan already allow it (api_mixins/dedup.py).
+        from ..core.network_paths import is_unc_path
+
+        if is_unc_path(str(candidate)):
+            return True
+        return any(resolved.is_relative_to(root) for root in _network_roots_cached())
 
     # ── Tag editor ──────────────────────────────────────────────────────────
 
@@ -259,11 +292,15 @@ class LibraryToolsMixin:
         """Where the Player starts: the download folder."""
         return {"path": self.download_dir}
 
-    def _scan_music_library_thread(self, scan_id: int, root: str) -> None:
+    def _scan_music_library_thread(self, scan_id: int, roots: list[str]) -> None:
         from ..core.library_scan import iter_audio_files, read_track_row
 
         try:
-            files = list(iter_audio_files(root))
+            # Every folder of the library, a file listed once even when one
+            # folder sits inside another.
+            files = list(
+                dict.fromkeys(path for root in roots for path in iter_audio_files(root))
+            )
             total = len(files)
             batch: list = []
             done = 0
@@ -286,40 +323,70 @@ class LibraryToolsMixin:
             )
             self._push(
                 "app_library_scan_finished",
-                {"scan": scan_id, "total": total, "folder": root},
+                {"scan": scan_id, "total": total, "folder": roots[0], "folders": roots},
             )
         except Exception as e:
             self.log(f"[player] scan failed: {e}", "error")
             self._push("app_library_scan_error", {"scan": scan_id, "error": str(e)})
 
-    def scan_music_library(self, path: str) -> dict:
+    def scan_music_library(self, path: str | list[str]) -> dict:
         """Lists the audio files under `path` for the Player, in the
         background: rows arrive via 'app_library_scan_chunk', the end via
-        'app_library_scan_finished'. Starting a scan cancels the previous one."""
-        if not self._is_approved_path(path):
-            return {"status": "error", "error": "Path is outside approved directories"}
-        if not Path(path).exists():
-            return {"status": "error", "error": "That folder does not exist"}
+        'app_library_scan_finished'. Starting a scan cancels the previous one.
+
+        `path` is one folder or a list of them (the library's folders). A
+        network share may be named by its address — ``smb://nas/Music``,
+        ``\\\\nas\\Music`` — once the OS has mounted it; it is mapped to the
+        mounted folder (core/network_paths.py)."""
+        from ..core.network_paths import resolve_library_path
+
+        raw = [path] if isinstance(path, str) else list(path or [])
+        roots: list[str] = []
+        for item in raw:
+            local, error = resolve_library_path(str(item))
+            if error:
+                return {"status": "error", "error": error}
+            if not self._is_approved_path(local):
+                return {
+                    "status": "error",
+                    "error": f"{item} is outside approved directories",
+                }
+            if not Path(local).is_dir():
+                return {"status": "error", "error": f"{item} is not a folder"}
+            if local not in roots:
+                roots.append(local)
+        if not roots:
+            return {"status": "error", "error": "Add a music folder first"}
         self._library_scan_id += 1
         scan_id = self._library_scan_id
         threading.Thread(
             target=self._scan_music_library_thread,
-            args=(scan_id, str(path)),
+            args=(scan_id, roots),
             daemon=True,
         ).start()
-        return {"status": "started", "scan": scan_id}
+        return {"status": "started", "scan": scan_id, "folders": roots}
 
-    def get_track_thumb(self, path: str) -> str:
-        """A small cover for the Player's list as a data URL, "" if none."""
-        from ..core.library_scan import thumbnail_jpeg
+    def get_track_thumb(self, path: str, size: int = 0) -> str:
+        """A cover for the Player as a data URL, "" if none.
+
+        `size` is the longest side in pixels: 0 keeps the small list
+        thumbnail; the album grid asks for a larger one, clamped to 32–512.
+        """
+        from ..core.library_scan import THUMB_PX, thumbnail_jpeg
 
         if not self._is_approved_path(path):
             return ""
-        cache = self._library_thumb_cache
-        if path in cache:
-            return cache[path]
         try:
-            raw = thumbnail_jpeg(path)
+            px = int(size or 0)
+        except (TypeError, ValueError):
+            px = 0
+        px = THUMB_PX if px <= 0 else max(32, min(512, px))
+        key = path if px == THUMB_PX else f"{path}\0{px}"
+        cache = self._library_thumb_cache
+        if key in cache:
+            return cache[key]
+        try:
+            raw = thumbnail_jpeg(path, px)
         except Exception:
             raw = None
         url = (
@@ -329,5 +396,5 @@ class LibraryToolsMixin:
         )
         if len(cache) > 4000:
             cache.clear()
-        cache[path] = url
+        cache[key] = url
         return url

@@ -28,6 +28,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Any
+import threading
 import time
 import warnings
 from collections.abc import Awaitable, Callable
@@ -975,10 +976,7 @@ def parse_args(profile_defaults: dict | None = None) -> argparse.Namespace:
             ["deezer", "apple", "qobuz", "tidal"],
         ),
         dest="enrich_providers",
-        # SoundCloud isn't in the default above but stays a valid choice —
-        # pass it explicitly (--enrich-providers deezer apple qobuz tidal
-        # soundcloud) if you want it.
-        choices=["deezer", "apple", "qobuz", "tidal", "soundcloud"],
+        choices=["deezer", "apple", "qobuz", "tidal"],
     )
     enrich_grp.add_argument(
         "--animated-artwork",
@@ -2225,7 +2223,12 @@ def _split_positionals(args: argparse.Namespace) -> tuple[list[str], str | None]
     return playlists, args.output_dir or args.url
 
 
-async def run_download_from_cfg(cfg: dict, log_level: int) -> None:
+async def run_download_from_cfg(
+    cfg: dict,
+    log_level: int,
+    *,
+    finish_event: threading.Event | None = None,
+) -> None:
     """Runs one guided-mode configuration, `--loop`/`--watch` included.
 
     The single place a `cfg` dict becomes a download. Both guided frontends
@@ -2282,6 +2285,7 @@ async def run_download_from_cfg(cfg: dict, log_level: int) -> None:
             resume=cfg.get("resume", True),
             post_download_hooks=cfg.get("post_download_hooks", []),
             timeout_s=cfg.get("timeout_s"),
+            finish_event=finish_event,
             transcode_to=cfg.get("transcode_to"),
             transcode_bitrate=cfg.get("transcode_bitrate", "320k"),
             transcode_keep_original=cfg.get("transcode_keep_original", False),

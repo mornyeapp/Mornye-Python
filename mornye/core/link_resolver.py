@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import random
 import re
 import time
@@ -30,6 +31,26 @@ UNITUNE_TIMEOUT_S = 5
 UNITUNE_COOLDOWN_S = 300.0
 _unitune_unavailable_until = 0.0
 
+#: Song.link (Odesli) is the last resort, asked only when both the primary
+#: resolver and UniTune came back empty. UniTune is a clone of its API, so the
+#: answer has the same `linksByPlatform` shape. Odesli has closed its keyless
+#: public API (it answers 401 PUBLIC_API_ACCESS_DEPRECATED), so it is only
+#: asked when a key is set in this environment variable; without one no
+#: request is made. A 429 switches it off for a while, as an outage does.
+SONGLINK_API_KEY_ENV = "MORNYE_SONGLINK_API_KEY"
+SONGLINK_TIMEOUT_S = 5
+SONGLINK_COOLDOWN_S = 300.0
+_songlink_unavailable_until = 0.0
+
+#: Errors that mean the service itself is down, slow or throttling us, as
+#: opposed to simply not knowing this track.
+_UNREACHABLE_ERRORS = (
+    NetworkError,
+    RateLimitedError,
+    httpx.TransportError,
+    TimeoutError,
+)
+
 
 class LinkResolver:
     """Resolves cross-platform links using a Multi-Provider approach (Async-only)."""
@@ -38,6 +59,7 @@ class LinkResolver:
     #: the links and accepts both source URLs and platform/id payloads.
     RESOLVE_API_URL = "https://api.zarz.moe/v1/resolve"
     UNITUNE_RESOLVE_API_URL = "https://api.unitune.art/v1-alpha.1/links"
+    SONGLINK_RESOLVE_API_URL = "https://api.song.link/v1-alpha.1/links"
 
     #: The resolver's platform names, mapped onto the names used by the app.
     _RESOLVE_PLATFORM_KEYS = {
@@ -69,6 +91,11 @@ class LinkResolver:
         self.unitune_http = AsyncHttpClient(
             "unitune",
             timeout_s=UNITUNE_TIMEOUT_S,
+            retry=RetryConfig(max_attempts=1),
+        )
+        self.songlink_http = AsyncHttpClient(
+            "songlink",
+            timeout_s=SONGLINK_TIMEOUT_S,
             retry=RetryConfig(max_attempts=1),
         )
 
@@ -279,12 +306,7 @@ class LinkResolver:
                 timeout=UNITUNE_TIMEOUT_S,
             )
             return self._process_unitune_response(response.json())
-        except (
-            NetworkError,
-            RateLimitedError,
-            httpx.TransportError,
-            TimeoutError,
-        ) as exc:
+        except _UNREACHABLE_ERRORS as exc:
             # The service itself is down or slow, not just missing this
             # track: stop asking it for a while.
             _unitune_unavailable_until = time.monotonic() + UNITUNE_COOLDOWN_S
@@ -298,8 +320,39 @@ class LinkResolver:
             logger.debug("[link_resolver] UniTune API failed: %s", exc)
             return {}
 
+    async def _resolve_songlink_async(self, payload: dict) -> dict[str, str]:
+        global _songlink_unavailable_until
+        api_key = os.environ.get(SONGLINK_API_KEY_ENV, "").strip()
+        if not api_key:
+            return {}
+        source_url = self._unitune_source_url(payload)
+        if not source_url:
+            return {}
+        if time.monotonic() < _songlink_unavailable_until:
+            logger.debug("[link_resolver] Song.link skipped: recently unreachable")
+            return {}
+        try:
+            response = await self.songlink_http.get(
+                self.SONGLINK_RESOLVE_API_URL,
+                params={"url": source_url, "key": api_key},
+                timeout=SONGLINK_TIMEOUT_S,
+            )
+            # Same `linksByPlatform` shape as UniTune, which copies its API.
+            return self._process_unitune_response(response.json())
+        except _UNREACHABLE_ERRORS as exc:
+            _songlink_unavailable_until = time.monotonic() + SONGLINK_COOLDOWN_S
+            logger.debug(
+                "[link_resolver] Song.link unreachable (%s); skipped for %ds",
+                exc,
+                int(SONGLINK_COOLDOWN_S),
+            )
+            return {}
+        except Exception as exc:
+            logger.debug("[link_resolver] Song.link API failed: %s", exc)
+            return {}
+
     async def _resolve_links_async(self, payload: dict) -> dict[str, str]:
-        """Ask the cross-platform resolver, returning an empty result on error."""
+        """Ask the resolvers in turn (zarz, UniTune, Song.link); empty on error."""
         try:
             resp = await self.http.post(self.RESOLVE_API_URL, json=payload, timeout=20)
             links = self._process_resolve_response(resp.json())
@@ -307,7 +360,10 @@ class LinkResolver:
                 return links
         except Exception as exc:
             logger.debug("[link_resolver] resolve API failed for %s: %s", payload, exc)
-        return await self._resolve_unitune_async(payload)
+        links = await self._resolve_unitune_async(payload)
+        if links:
+            return links
+        return await self._resolve_songlink_async(payload)
 
     def _normalize_platform_url(self, platform: str, url: str) -> str:
         url = url.strip()

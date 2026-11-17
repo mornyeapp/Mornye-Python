@@ -28,6 +28,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import threading
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
 from typing import Any
@@ -74,6 +75,12 @@ class DownloadRunner:
         self._events: asyncio.Queue[Event | None] = asyncio.Queue()
         self._loop: asyncio.AbstractEventLoop | None = None
         self.outcome = RunOutcome()
+        # Set by request_finish(): the tracks already downloading complete,
+        # nothing further is started, and the run then ends on its own.
+        self.finish_event = threading.Event()
+
+    def request_finish(self) -> None:
+        self.finish_event.set()
 
     # ------------------------------------------------------------------
     # Producing
@@ -183,7 +190,9 @@ class DownloadRunner:
         from ..launcher import run_download_from_cfg
 
         try:
-            await run_download_from_cfg(self._cfg, self._log_level)
+            await run_download_from_cfg(
+                self._cfg, self._log_level, finish_event=self.finish_event
+            )
         except asyncio.CancelledError:
             raise
         except SystemExit as exc:

@@ -343,7 +343,13 @@ class JSExtensionProvider(BaseProvider):
             # After work is done (e.g. download finished), put the process back in the pool
             self._idle_runtimes.put(rt)
 
-    def _call(self, method: str, *args, **kw) -> Any:
+    def _call(
+        self, method: str, *args, call_timeout_s: float | None = None, **kw
+    ) -> Any:
+        """Calls `method` in the extension. `call_timeout_s` overrides the
+        provider's timeout for this one call: one runtime serves quick
+        per-track calls and slow whole-page ones (a home feed built from a
+        dozen pages), and a single limit fitted one of them only."""
         if self._stop_requested():
             # Refused rather than queued: this runs in a pool thread, and by
             # the time one is free the run it belongs to may be long gone.
@@ -357,7 +363,8 @@ class JSExtensionProvider(BaseProvider):
         try:
             # Acquire a "worker" from the Pool and assign it the task
             with self._acquire_runtime() as rt:
-                return rt.call(method, *args, timeout=self._timeout_s, **kw)
+                timeout = self._timeout_s if call_timeout_s is None else call_timeout_s
+                return rt.call(method, *args, timeout=timeout, **kw)
         except ExtensionRuntimeError as e:
             # An extension that has no such function is not a network
             # problem: nothing was sent, and trying again cannot help.
@@ -1173,22 +1180,48 @@ class JSExtensionProvider(BaseProvider):
                 # download — but download() reports the title/artist/album it
                 # actually fetched, which is enough to catch a wrong match here,
                 # before the requested track's tags are written over it.
-                mismatch = track_identity_mismatch(
-                    expected_title=metadata.title,
-                    expected_artist=metadata.artists,
-                    expected_album=metadata.album,
-                    expected_isrc=metadata.isrc,
-                    found_title=str(
+                identity = {
+                    "expected_title": metadata.title,
+                    "expected_artist": metadata.artists,
+                    "expected_album": metadata.album,
+                    "found_title": str(
                         dl_result.get("title") or dl_result.get("name") or ""
                     ),
-                    found_artist=str(
+                    "found_artist": str(
                         dl_result.get("artist") or dl_result.get("artists") or ""
                     ),
-                    found_album=str(
+                    "found_album": str(
                         dl_result.get("album") or dl_result.get("album_name") or ""
                     ),
-                    found_isrc=str(dl_result.get("isrc") or ""),
+                }
+                found_isrc = str(dl_result.get("isrc") or "")
+                mismatch = track_identity_mismatch(
+                    **identity,
+                    expected_isrc=metadata.isrc,
+                    found_isrc=found_isrc,
                 )
+                # A conflicting ISRC is often a reissue of the same master
+                # (deluxe edition, remaster, compilation) rather than another
+                # take. When the names agree in every other respect, ask
+                # MusicBrainz whether one recording carries both ISRCs; only a
+                # positive answer overrides the rejection.
+                if mismatch.startswith(
+                    "different recording"
+                ) and not track_identity_mismatch(**identity):
+                    from mornye.core.musicbrainz import (
+                        isrcs_share_recording_async,
+                    )
+
+                    if await isrcs_share_recording_async(metadata.isrc, found_isrc):
+                        logger.info(
+                            "[%s] ISRC %s differs from requested %s, but "
+                            "MusicBrainz lists both on the same recording — "
+                            "accepting.",
+                            self.name,
+                            found_isrc,
+                            metadata.isrc,
+                        )
+                        mismatch = ""
                 if mismatch:
                     logger.warning("[%s] Wrong track: %s", self.name, mismatch)
                     with contextlib.suppress(OSError):

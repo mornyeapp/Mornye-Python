@@ -24,6 +24,7 @@ from .branding import key_hint, panel_tag, panel_title
 KEYS: tuple[tuple[str, str], ...] = (
     ("Ctrl+R", "Start the download"),
     ("Ctrl+C", "Stop the download, or quit when nothing is running"),
+    ("Ctrl+F", "Finish the tracks in progress, then stop"),
     ("Ctrl+L", "Show or hide the log pane"),
     ("Ctrl+Y", "Copy the equivalent CLI command to the clipboard"),
     ("Ctrl+O", "Copy the whole log to the clipboard"),

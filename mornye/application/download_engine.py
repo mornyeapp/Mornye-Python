@@ -282,6 +282,9 @@ class DownloadOptions:
     provider_delay_max_s: float = 0.0
     auto_rate_limit_cooldown: bool = True
     stop_event: threading.Event | None = None
+    # The gentle stop: once set, no further track is started, while the ones
+    # already downloading finish normally. stop_event is the hard one.
+    finish_event: threading.Event | None = None
     post_download_action: str = "none"
     post_download_command: str = ""
     tidal_custom_api: str | None = None
@@ -1153,6 +1156,25 @@ async def _record_provider_outcome(
         )
 
 
+#: What a provider says when the track simply is not there. Asking it again
+#: a few seconds later gets the same answer: unlike a 503, a timeout or a
+#: dropped connection, these are not worth a retry.
+_DEFINITIVE_FAILURE = re.compile(
+    r"not available|not found|no verified|no match|unavailable in|"
+    r"\bHTTP 404\b|\b404 Not Found\b|TRACK_NOT_FOUND",
+    re.IGNORECASE,
+)
+
+
+def _definitive_failure(error: str | None) -> bool:
+    """Whether a provider's failure is an answer ("not there") rather than
+    a hiccup. A 503 or a timeout is never definitive."""
+    text = str(error or "")
+    if re.search(r"\b(5\d\d|429)\b|timed? ?out|timeout|connection", text, re.I):
+        return False
+    return bool(_DEFINITIVE_FAILURE.search(text))
+
+
 async def _download_one_pass_async(
     metadata: TrackMetadata,
     output_dir: str,
@@ -1173,6 +1195,8 @@ async def _download_one_pass_async(
     stop_event = asyncio.Event()
     DownloadManager()
     errors: dict[str, str] = {}
+    #: Providers that answered "not there" (see _definitive_failure).
+    settled: set[str] = set()
     started_at = time.monotonic()
 
     def pause_after_429(error: object, provider_name: str) -> None:
@@ -1227,6 +1251,7 @@ async def _download_one_pass_async(
         await _write_animated_artwork_sidecar_async(skipped, metadata, opts)
         return skipped
 
+    attempts_made = 0
     for attempt in range(opts.track_max_retries + 1):
         if stop_event.is_set():
             return DownloadResult.fail(
@@ -1234,17 +1259,29 @@ async def _download_one_pass_async(
                 f"Download timed out after {opts.timeout_s}s",
             )
 
+        usable = provider_cooldown.usable_providers(providers)
         if attempt > 0:
+            # A provider that answered "not there" is not asked again: the
+            # log of a track no service carries showed every provider asked
+            # three times for the same "Track not available". When that is
+            # every provider, the retries stop here.
+            retrying = [p for p in usable if p.name not in settled]
+            if not retrying:
+                break
             wait = min(2**attempt, 30)
             safe_tqdm_write(
                 f"\n  ↺  [#{position}] Retry {attempt}/{opts.track_max_retries} in {wait}s…",
             )
             await asyncio.sleep(wait)
-            errors.clear()
+            for name in list(errors):
+                if name not in settled:
+                    del errors[name]
+            usable = retrying
 
+        attempts_made = attempt + 1
         # Per attempt, not per track: a pause that starts on the first
         # attempt already applies to the retries.
-        for idx, provider in enumerate(provider_cooldown.usable_providers(providers)):
+        for idx, provider in enumerate(usable):
             if idx > 0:
                 is_ext = provider.name.startswith("ext:")
                 target_type = "extension" if is_ext else "provider"
@@ -1586,6 +1623,8 @@ async def _download_one_pass_async(
             _restore_identity(metadata, requested)
 
             errors[provider.name] = result.error or "unknown error"
+            if _definitive_failure(result.error):
+                settled.add(provider.name)
             await _record_provider_outcome(
                 provider.name,
                 False,
@@ -1600,7 +1639,7 @@ async def _download_one_pass_async(
             if stop_after_atmos_error:
                 return result
 
-    attempts_str = f"{opts.track_max_retries + 1} attempt(s)"
+    attempts_str = f"{attempts_made} attempt(s)"
     summary = "; ".join(f"{k}: {v}" for k, v in errors.items())
     return DownloadResult.fail(
         "none",
@@ -2137,7 +2176,10 @@ class LegacyDownloadWorker:
                 error = result.error or "unknown"
                 self._failed.append((track.id, track.title, track.artists, error))
                 await manager.fail_download(track.id, error)
-                ProgressCallback.clear_item(track.id)
+            # Every outcome, not only failures: an extension's reported total
+            # is often larger than the file it delivers, so a finished
+            # track's bar never reaches 100% and would stay on screen.
+            ProgressCallback.clear_item(track.id)
             ProgressManager.increment_master()
 
         worker = ApplicationDownloadWorker(
@@ -2830,10 +2872,17 @@ class MornyeDownloader:
         try:
             from ..core.session_memory import add_url_to_history_async
 
-            cover_url = tracks[0].cover_url if tracks and tracks[0].cover_url else ""
             url_type = info.get("type", "")
             if url_type == "artist_discography":
                 url_type = "artist"
+            # The collection's own picture: an artist's photo, a playlist's
+            # cover. The first track's cover only stands in for a track or an
+            # album, where it is the same picture; for an artist it was the
+            # cover of whichever song came first, which then replaced the
+            # right one the fetch had stored.
+            cover_url = str(info.get("cover") or "")
+            if not cover_url and url_type in ("track", "album") and tracks:
+                cover_url = tracks[0].cover_url or ""
             artist = tracks[0].artists if tracks and url_type == "track" else ""
             await add_url_to_history_async(
                 url,
@@ -2904,6 +2953,10 @@ class MornyeDownloader:
         catalogue = parse_catalogue_url(url)
         own_source = None if catalogue else _own_source_extension_for(url)
         own_meta: dict = {}
+        #: What get_url returned after (name, tracks): the collection's own
+        #: picture first. Kept for the recent-links history (see
+        #: _record_history_async), which used the first track's cover.
+        collection_cover: list = []
 
         try:
             client: Any
@@ -2923,6 +2976,7 @@ class MornyeDownloader:
                 ).get_url_async(url)
                 if len(own_rest) > 1 and isinstance(own_rest[1], dict):
                     own_meta = own_rest[1]
+                collection_cover = list(own_rest)
             elif catalogue:
                 client = ExtensionMetadataClient.for_url(url)
                 (
@@ -2996,7 +3050,7 @@ class MornyeDownloader:
                 (
                     collection_name,
                     tracks,
-                    *_collection_cover,
+                    *collection_cover,
                 ) = await get_url_with_fallback(
                     url,
                     self._metadata_client,
@@ -3058,6 +3112,9 @@ class MornyeDownloader:
                 ErrorKind.INVALID_URL, f"Unsupported or invalid URL: {url}"
             )
 
+        cover = collection_cover[0] if collection_cover else ""
+        if isinstance(cover, str) and cover.strip():
+            info = {**info, "cover": cover.strip()}
         return collection_name, tracks, info
 
     async def _resolve_isrc_bulk_async(

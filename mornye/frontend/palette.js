@@ -64,6 +64,7 @@
     ['Open the download queue drawer', 'Action', () => window.toggleQueueDrawer()],
     ['Start the queue', 'Action', () => { window.switchView('queue'); window.startStaged(false); }],
     ['Stop all downloads', 'Action', () => window.stopAllDownloads()],
+    ['Finish current tracks, then stop', 'Action', () => window.finishCurrentDownloads()],
     ['Retry failed tracks', 'Action', () => window.retryFailedTracks()],
     ['Check providers', 'Action', () => { settingsTab('status')(); window.checkAll(); }],
     ['Play / pause', 'Player', () => window.playerToggle()],

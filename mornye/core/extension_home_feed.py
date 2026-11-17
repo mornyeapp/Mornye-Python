@@ -27,6 +27,12 @@ logger = logging.getLogger(__name__)
 
 PREFIX = "ext:"
 
+#: How long one getHomeFeed() may take. Not the per-track enrichment limit
+#: (20s) the shared provider carries: a feed is built from many pages one
+#: after another — Melon's reads eleven, about 2-3s each from outside Korea —
+#: and is cached by the extension once built, so only the first one is slow.
+HOME_FEED_TIMEOUT_S = 90.0
+
 
 def has_home_feed(ext: Any) -> bool:
     caps = (getattr(ext, "manifest", None) or {}).get("capabilities")
@@ -150,7 +156,9 @@ def fetch_home_feed(
     except Exception:
         settings = {}
     try:
-        result = _provider(ext.name, provider_factory)._call("getHomeFeed")
+        result = _provider(ext.name, provider_factory)._call(
+            "getHomeFeed", call_timeout_s=HOME_FEED_TIMEOUT_S
+        )
     except Exception as exc:
         logger.debug("[home/%s] getHomeFeed failed: %s", ext.name, exc)
         return {"success": False, "error": str(exc)}

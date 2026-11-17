@@ -306,6 +306,16 @@ _MIGRATIONS: tuple[tuple[str, ...], ...] = (
         "DROP TABLE failed_tracks",
         "ALTER TABLE failed_tracks_v9 RENAME TO failed_tracks",
     ),
+    # v10 — what a followed artist or playlist looks like.
+    #
+    # The Following list showed nothing but a link until the first check
+    # had filled in a name. The picture (an artist's photo, a playlist's
+    # cover) and a one-line description are read when it is followed, so the
+    # row is recognisable at once.
+    (
+        "ALTER TABLE subscriptions ADD COLUMN image_url TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE subscriptions ADD COLUMN subtitle TEXT NOT NULL DEFAULT ''",
+    ),
 )
 
 

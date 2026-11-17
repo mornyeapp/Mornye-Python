@@ -274,12 +274,12 @@ def both_halves(monkeypatch):
     monkeypatch.setattr(me, "_put_cached", lambda isrc, data: None)
     monkeypatch.setattr(me, "_get_cached", lambda isrc: None)
 
-    async def deezer(isrc, album_name="", track_name=""):
+    async def deezer(isrc, album_name="", track_name="", duration_ms=0):
         return EnrichedMetadata(
             genre="R&B", label="Republic Records", upc="602508836060"
         )
 
-    async def tidal(track_name, artist_name):
+    async def tidal(track_name, artist_name, album_name="", duration_ms=0):
         return EnrichedMetadata()  # the built-in Tidal lookup finding nothing
 
     monkeypatch.setattr(me, "_deezer_fetch_async", deezer)

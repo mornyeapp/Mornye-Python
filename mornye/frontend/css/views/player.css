@@ -34,8 +34,36 @@
 .np-title { font-size: 22px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .np-e { font-size: 11px; font-weight: 700; padding: 1px 6px; background: rgba(var(--media-ink-rgb), .28); }
 .np-artist { font-size: 17px; color: rgba(var(--media-ink-rgb), .62); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.np-seek { width: 100%; accent-color: var(--media-ink); margin: 4px 0 0; }
-.np-times { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: rgba(var(--media-ink-rgb), .6); font-variant-numeric: tabular-nums; }
+/* The seek bar the way Apple Music draws it: a thin rounded track with no
+   knob, the played part in near-white ink, that thickens while the pointer
+   is on it and brightens while dragging. The wrapper has a fixed height so
+   growing the bar never moves the times below it. --p is the played share,
+   set from app.js (npPaintSeek). */
+.np-seek-wrap { height: 20px; display: flex; align-items: center; margin: 4px 0 -4px; }
+.np-seek {
+  -webkit-appearance: none; appearance: none; display: block;
+  width: 100%; height: 7px; margin: 0; padding: 0; border: 0; border-radius: 999px;
+  background: linear-gradient(to right,
+    rgba(var(--media-ink-rgb), .62) 0 var(--p, 0%),
+    rgba(var(--media-ink-rgb), .2) var(--p, 0%) 100%);
+  cursor: pointer; outline: none;
+  transition: height .22s cubic-bezier(.2, .8, .2, 1);
+}
+.np-seek::-webkit-slider-runnable-track { height: 100%; background: transparent; border: 0; }
+.np-seek::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 0; height: 100%; border: 0; background: transparent; box-shadow: none; }
+.np-seek::-moz-range-track { height: 100%; background: transparent; border: 0; }
+.np-seek::-moz-range-progress { background: transparent; }
+.np-seek::-moz-range-thumb { width: 0; height: 0; border: 0; background: transparent; }
+.np-seek-wrap:hover .np-seek, .np-seek:focus-visible, .np-seek.dragging { height: 12px; }
+.np-seek-wrap:hover .np-seek, .np-seek.dragging {
+  background: linear-gradient(to right,
+    rgba(var(--media-ink-rgb), .95) 0 var(--p, 0%),
+    rgba(var(--media-ink-rgb), .24) var(--p, 0%) 100%);
+}
+.np-seek:focus-visible { box-shadow: 0 0 0 2px rgba(var(--media-ink-rgb), .5); }
+.np-times { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: rgba(var(--media-ink-rgb), .6); font-variant-numeric: tabular-nums; transition: color .2s; }
+.np-left:has(.np-seek.dragging) .np-times > span:not(.np-tech) { color: var(--media-ink); }
+@media (prefers-reduced-motion: reduce) { .np-seek { transition: none; } }
 .np-tech { font-size: 12px; font-weight: 600; letter-spacing: .02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 10px; }
 .np-controls { display: flex; justify-content: center; align-items: center; gap: clamp(28px, 5vw, 64px); margin-top: 6px; }
 .np-btn { border: 0; background: transparent; color: var(--media-ink); cursor: pointer; padding: 8px; line-height: 0; }
@@ -155,8 +183,17 @@
 /* shuffle / repeat */
 .np-mode { opacity: .65; }
 .np-mode.on { opacity: 1; color: var(--media-ink); background: rgba(var(--media-ink-rgb), .2); }
-.np-btn.np-mode { position: relative; }
-[id$="repeat"] .rep1 { display: none; position: absolute; right: 3px; bottom: 1px; font-size: 9px; font-weight: 700; line-height: 1; }
+.np-btn.np-mode, .pl-btn.pl-mode { position: relative; }
+/* Repeat one: the "1" sits inside the loop of the two arrows, centred on
+   the icon (the button's padding is symmetric, so its centre is the
+   icon's), in both the bar and Now Playing. */
+[id$="repeat"] .rep1 {
+  display: none; position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  font-family: var(--font); font-weight: 800; line-height: 1; pointer-events: none;
+}
+#pl-repeat .rep1 { font-size: 7px; }
+#np-repeat .rep1 { font-size: 9.5px; }
 [id$="repeat"][data-mode="one"] .rep1 { display: block; }
 
 /* Player page: one height and one text size for every control in a row. */
@@ -354,7 +391,38 @@
   gap: 8px;
 }
 #view-player #player-path-input { min-width: 0; width: 100%; }
-#view-player #player-recent { margin-top: 12px; }
+#view-player #player-recent, #view-player #player-network { margin-top: 12px; }
+#view-player .player-source > .s-row { grid-template-columns: minmax(0, 1fr) auto auto auto; }
+
+/* The library's folders: one row each, removable. */
+.psrc-head { display: grid; gap: 4px; margin-bottom: var(--space-3); }
+.psrc-head .player-folder-label { margin-bottom: 0; }
+.psrc-hint { color: var(--text-muted); font-size: var(--text-xs); line-height: 1.5; }
+.psrc-hint code { font-family: var(--font); color: var(--text-2); }
+.psrc-list {
+  list-style: none; margin: 0 0 var(--space-3); padding: 0;
+  display: grid; gap: 6px;
+}
+.psrc-item {
+  display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; align-items: center; gap: var(--space-3);
+  padding: 8px 10px; border: 1px solid var(--rule); border-radius: var(--radius-2);
+  background: var(--surface);
+}
+.psrc-icon {
+  width: 32px; height: 32px; display: grid; place-items: center;
+  border: 1px solid var(--rule); border-radius: var(--radius-1); color: var(--signal-text); background: var(--ground);
+}
+.psrc-icon svg { width: 16px; height: 16px; }
+.psrc-item.is-network .psrc-icon { color: var(--text-2); }
+.psrc-text { display: grid; gap: 1px; min-width: 0; }
+.psrc-text strong { color: var(--text); font-size: var(--text-md); font-weight: var(--weight-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.psrc-text span { color: var(--text-muted); font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.psrc-remove {
+  width: 28px; height: 28px; border: 1px solid transparent; border-radius: var(--radius-1);
+  background: transparent; color: var(--text-muted); cursor: pointer; font-size: 12px;
+}
+.psrc-remove:hover { color: var(--error); border-color: var(--error); }
+.psrc-empty { color: var(--text-muted); font-size: var(--text-sm); padding: var(--space-2) 0; }
 #view-player .player-source .act-btn { padding-inline: 14px; }
 .player-empty {
   display: grid;
@@ -385,7 +453,6 @@
 #view-player #player-status:not(:empty) { padding: 2px 2px 0; color: var(--text-2); }
 
 .player-toolbar {
-  top: 0;
   margin-inline: calc(-1 * var(--space-4));
   padding-inline: var(--space-4);
 }
@@ -449,4 +516,177 @@
   .pt-group .pt-btn { gap: 5px; padding-inline: 8px; }
   .pl-row { grid-template-columns: 26px 36px minmax(0, 1fr) 42px; gap: 8px; }
   .pt-colhead { grid-template-columns: 26px 36px minmax(0, 1fr) 42px; gap: 8px; }
+}
+
+/* ── Library: one-line folder bar, Songs / Albums / Artists ──────────────
+   Before a library is loaded the folder panel is the page; after, it folds
+   into a single bar (folder, counts, Change / Rescan) and the music takes
+   the space. Albums and artists are a cover grid; opening one shows a
+   header with Play / Shuffle over its tracklist or its albums. */
+#view-player #player-body { gap: var(--space-4); }
+/* Library bar, tabs and toolbar stay put; only the music below scrolls, in
+   its own box. A sticky toolbar inside one scroller let rows show through
+   above it in the desktop window while scrolling. The outer body still
+   scrolls if a very short window cannot fit the fixed part. */
+#view-player .player-toolbar { position: static; }
+.player-scroll {
+  flex: 1 1 0; min-height: 220px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: var(--space-4);
+  margin-inline: calc(-1 * var(--space-4)); padding: 0 var(--space-4) var(--space-4);
+}
+.player-scroll::-webkit-scrollbar { width: 3px; }
+.player-scroll::-webkit-scrollbar-thumb { background: var(--rule-strong); border-radius: 99px; }
+#view-player #player-body:has(.player-toolbar:not(.hidden)) { padding-bottom: 0; }
+/* Rows start right under the column header; a page (album, artist, grid)
+   keeps the usual space above it. */
+.player-toolbar:has(.pt-colhead:not(.hidden)) + .player-scroll { margin-top: calc(-1 * var(--space-4)); }
+
+/* Scrolling the music folds the subtitle and the library bar up (app.js
+   adds .player-compact), giving the list their room. */
+#view-player .s-header, #view-player #player-body { transition: padding .2s ease; }
+.player-heading { transition: gap .2s ease; }
+.player-heading p { max-height: 2.6em; overflow: hidden; transition: max-height .2s ease, opacity .2s ease; }
+#view-player .player-libbar {
+  /* Never squeezed by the folder panel opening under it (it used to shrink
+     until its text was cut). */
+  flex: 0 0 auto;
+  max-height: 140px; overflow: hidden;
+  transition: max-height .2s ease, padding .2s ease, margin .2s ease, opacity .15s ease;
+}
+#view-player.player-compact .s-header { padding-top: var(--space-3); padding-bottom: 0; }
+#view-player.player-compact #player-body { padding-top: 0; }
+#view-player.player-compact .player-heading { gap: 0; }
+#view-player.player-compact .player-heading p { max-height: 0; opacity: 0; }
+#view-player.player-compact .player-libbar {
+  max-height: 0; padding-block: 0; opacity: 0; border-width: 0;
+  margin-top: 0; margin-bottom: calc(-1 * var(--space-4));
+}
+@media (prefers-reduced-motion: reduce) {
+  #view-player .s-header, #view-player #player-body, .player-heading, .player-heading p, #view-player .player-libbar { transition: none; }
+}
+.player-status:empty { display: none; }
+.player-status { padding: 0 2px; color: var(--text-2); font-size: var(--text-sm); }
+
+.player-libbar {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--rule); border-radius: var(--radius-2);
+  background: var(--raised);
+}
+.plb-icon {
+  display: grid; place-items: center; flex: 0 0 auto;
+  width: 36px; height: 36px; border: 1px solid var(--rule); border-radius: var(--radius-1);
+  color: var(--signal-text); background: var(--ground);
+}
+.plb-icon svg { width: 18px; height: 18px; }
+.plb-main { display: grid; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.plb-main strong {
+  color: var(--text); font-size: var(--text-md); font-weight: var(--weight-medium);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.plb-stats { color: var(--text-muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.plb-actions { display: flex; gap: var(--space-2); flex: 0 0 auto; }
+#view-player .plb-actions .act-btn { padding-inline: 14px; }
+
+.player-tabs { margin-bottom: var(--space-3); padding-bottom: var(--space-3); flex-wrap: nowrap; }
+
+/* Song rows: the number turns into a play button under the pointer, and the
+   playing row's bars keep a height when motion is reduced (they used to
+   collapse to nothing, leaving the row with no number at all). */
+.pl-num .pi { display: none; color: var(--text); }
+.pl-num .pi svg { width: 14px; height: 14px; display: block; margin: 0 auto; }
+.pl-row:hover .pl-num .n, .pl-row:focus-visible .pl-num .n { display: none; }
+.pl-row:hover .pl-num .pi, .pl-row:focus-visible .pl-num .pi { display: block; }
+.pl-row.playing:hover .pl-num .pi, .pl-row.playing .pl-num .pi { display: none; }
+.pl-num .eq i { height: 8px; }
+.pl-num .eq i:nth-child(2) { height: 13px; }
+.pl-num .eq i:nth-child(3) { height: 5px; }
+.pl-row .pl-main { min-width: 0; }
+.pl-row .pl-a { margin-top: 2px; }
+.player-list.album-tracks .pl-row { grid-template-columns: 36px minmax(0, 1fr) 56px 56px; }
+.player-list.album-tracks .pl-thumb { display: none; }
+
+/* Cover art, shared by cards, headers and the placeholder. */
+.pl-cover { position: relative; overflow: hidden; background: var(--ground); border-radius: var(--radius-1); }
+.pl-cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; }
+.pl-cover.has-cover img { display: block; }
+.pl-cover-ph { position: absolute; inset: 0; display: grid; place-items: center; color: var(--text-muted); }
+.pl-cover-ph svg { width: 34%; height: 34%; opacity: .55; }
+.pl-cover.has-cover .pl-cover-ph { display: none; }
+
+.player-grid {
+  display: grid; gap: var(--space-5) var(--space-4);
+  grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
+  padding-bottom: var(--space-6);
+}
+.pl-card {
+  display: grid; gap: 4px; align-content: start; min-width: 0;
+  padding: var(--space-2); margin: calc(-1 * var(--space-2));
+  border-radius: var(--radius-2); cursor: pointer;
+  content-visibility: auto; contain-intrinsic-size: auto 230px;
+  transition: background var(--motion, .15s) ease;
+}
+.pl-card:hover { background: var(--raised); }
+.pl-card:focus-visible { outline: 2px solid var(--signal-strong); outline-offset: 0; }
+.pl-card-art { position: relative; margin-bottom: 6px; }
+.pl-card-art .pl-cover { aspect-ratio: 1; width: 100%; box-shadow: 0 1px 0 var(--rule); }
+.pl-card-play {
+  position: absolute; right: 8px; bottom: 8px; width: 38px; height: 38px;
+  display: grid; place-items: center; border: 0; border-radius: var(--radius-1);
+  background: var(--signal); color: var(--signal-ink); cursor: pointer;
+  opacity: 0; transform: translateY(4px);
+  transition: opacity .15s ease, transform .15s ease;
+  box-shadow: 0 4px 14px rgba(var(--shade-rgb), .35);
+}
+.pl-card-play svg { width: 16px; height: 16px; }
+.pl-card:hover .pl-card-play, .pl-card:focus-within .pl-card-play { opacity: 1; transform: none; }
+.pl-card-t {
+  color: var(--text); font-size: var(--text-md); font-weight: var(--weight-medium);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pl-card-a { color: var(--text-muted); font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Album / artist page header. */
+.player-detail { display: grid; gap: var(--space-3); }
+.pl-back {
+  justify-self: start; display: inline-flex; align-items: center; gap: 4px;
+  height: 28px; padding: 0 10px 0 4px; border: 0; border-radius: var(--radius-1);
+  background: transparent; color: var(--text-2); font-family: var(--font); font-size: var(--text-sm); cursor: pointer;
+}
+.pl-back svg { width: 16px; height: 16px; }
+.pl-back:hover { background: var(--raised); color: var(--text); }
+.pl-detail-head { display: grid; grid-template-columns: 184px minmax(0, 1fr); gap: var(--space-5); align-items: end; padding-bottom: var(--space-4); border-bottom: 1px solid var(--rule); }
+.pl-detail-cover { width: 184px; aspect-ratio: 1; box-shadow: 0 10px 30px rgba(var(--shade-rgb), .35); }
+.pl-detail-info { display: grid; gap: 6px; min-width: 0; justify-items: start; }
+.pl-detail-kind {
+  color: var(--text-muted); font-size: var(--text-xs); font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-label); text-transform: uppercase;
+}
+.pl-detail-title {
+  margin: 0; color: var(--text); font-size: clamp(22px, 3vw, 34px); line-height: 1.15; font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.pl-detail-artist {
+  padding: 0; border: 0; background: none; cursor: pointer;
+  color: var(--text); font-family: var(--font); font-size: var(--text-lg); font-weight: var(--weight-medium);
+}
+.pl-detail-artist:hover { color: var(--signal-text); text-decoration: underline; }
+.pl-detail-meta { color: var(--text-muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.pl-detail-actions { display: inline-flex; margin-top: var(--space-2); }
+.pl-detail-actions .pt-btn svg { width: 14px; height: 14px; }
+.player-detail + .player-grid { margin-top: var(--space-2); }
+
+@media (max-width: 700px) {
+  /* A phone has no room for a fixed header: the whole page scrolls. */
+  .player-scroll { flex: none; min-height: 0; overflow: visible; margin-inline: 0; padding-inline: 0; }
+  #view-player #player-body:has(.player-toolbar:not(.hidden)) { padding-bottom: var(--space-4); }
+  .player-libbar { flex-wrap: wrap; }
+  .plb-actions { width: 100%; }
+  .plb-actions .act-btn { flex: 1 1 0; }
+  .player-tabs .seg-tab { flex: 1 1 0; justify-content: center; gap: 6px; padding: 0 8px; min-width: 0; }
+  .player-tabs .seg-tab svg { display: none; }
+  .pl-detail-head { grid-template-columns: 1fr; justify-items: start; }
+  .pl-detail-cover { width: min(240px, 70vw); }
+  .player-grid { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); }
+  .player-list.album-tracks .pl-row { grid-template-columns: 30px minmax(0, 1fr) 48px; }
 }

@@ -101,6 +101,8 @@ def test_a_third_party_provider_is_listed_too():
             "primary": "my-own-provider",
             "quality_options": [],
             "atmos": False,
+            # No logo shipped by this extension.
+            "icon": "",
         }
     ]
 

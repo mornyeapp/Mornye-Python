@@ -254,13 +254,10 @@ body.sidebar-collapsed .nav-btn + .sb-group { margin-top: 0; }
   min-height: 0;
   scroll-behavior: smooth;
 }
-#content::-webkit-scrollbar { width: 8px; }
-#content::-webkit-scrollbar-thumb {
-  background: var(--rule-strong);
-  border-radius: 999px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
+/* The page still scrolls (wheel, trackpad, keyboard) but draws no bar:
+   the classic WebKit scrollbar took an 8px strip down the right edge. */
+#content { scrollbar-width: none; }
+#content::-webkit-scrollbar { display: none; width: 0; height: 0; }
 
 /* Queue drawer */
 /* ── Download bar ──
@@ -916,8 +913,45 @@ body.has-player #queue-dock { bottom: var(--player-h); }
   background: var(--signal); border-color: var(--signal);
   color: var(--signal-ink);
 }
-#player-bar .pl-time { font-family: var(--font); font-size: var(--text-xs); color: var(--text-muted); }
+#player-bar .pl-time { font-family: var(--font); font-size: var(--text-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
 #player-bar input[type=range] { accent-color: var(--signal-strong); }
+
+/* ── Apple Music sliders (.am-range): seek and volume ──
+   A thin rounded track with no knob; the filled part is the ink colour and
+   the rest a faint rule. Under the pointer the track thickens and the fill
+   brightens. The input keeps a tall hit area and draws the track in its
+   pseudo-element, so thickening never moves anything. --p (0–100%) is the
+   filled share, set from app.js (amPaint). */
+.am-range {
+  --am-fill: color-mix(in srgb, var(--text) 70%, transparent);
+  --am-fill-hot: var(--text);
+  --am-track: color-mix(in srgb, var(--text) 16%, transparent);
+  --am-h: 4px;
+  -webkit-appearance: none; appearance: none;
+  height: 18px; margin: 0; padding: 0; background: transparent;
+  cursor: pointer; accent-color: initial;
+}
+.am-range:hover, .am-range:active, .am-range.dragging { --am-h: 7px; --am-fill: var(--am-fill-hot); }
+.am-range:focus { outline: none; }
+.am-range:focus-visible { outline: 2px solid var(--signal-strong); outline-offset: 2px; border-radius: 999px; }
+.am-range::-webkit-slider-runnable-track {
+  height: var(--am-h); border-radius: 999px; border: 0;
+  background: linear-gradient(to right, var(--am-fill) 0 var(--p, 0%), var(--am-track) var(--p, 0%) 100%);
+  transition: height .18s cubic-bezier(.2, .8, .2, 1);
+}
+.am-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 0; height: var(--am-h); border: 0; background: transparent; box-shadow: none; }
+.am-range::-moz-range-track { height: var(--am-h); border-radius: 999px; border: 0; background: var(--am-track); }
+.am-range::-moz-range-progress { height: var(--am-h); border-radius: 999px; background: var(--am-fill); }
+.am-range::-moz-range-thumb { width: 0; height: 0; border: 0; background: transparent; }
+@media (prefers-reduced-motion: reduce) { .am-range::-webkit-slider-runnable-track { transition: none; } }
+/* On Now Playing's tinted backdrop the ink is the view's own. */
+#np-view .am-range {
+  --am-fill: rgba(var(--media-ink-rgb), .62);
+  --am-fill-hot: var(--media-ink);
+  --am-track: rgba(var(--media-ink-rgb), .22);
+}
+#player-bar .pl-seek { gap: var(--space-3); }
+#player-bar .pl-vol { width: 96px; }
 
 @media (max-width: 760px) {
   #player-bar { gap: var(--space-2); padding-inline: var(--space-2); }

@@ -121,14 +121,19 @@ async def add_url_to_history_async(
     nurl = _normalize_history_url(url)
     data = await _load_async()
 
-    # Remove any occurrences of the same normalized URL
+    # Remove any occurrences of the same normalized URL. What the previous
+    # entry knew and this one does not (its picture) is carried over, so a
+    # later record without one never blanks the card.
+    previous: dict = next(
+        (h for h in data.get("url_history", []) if h.get("url") == nurl), {}
+    )
     history = [h for h in data.get("url_history", []) if h.get("url") != nurl]
     history.insert(
         0,
         {
             "url": nurl,
-            "label": label or nurl[:65],
-            "cover": cover or "",
+            "label": label or previous.get("label") or nurl[:65],
+            "cover": cover or previous.get("cover") or "",
             "track_count": track_count,
             "url_type": url_type,
             "artist": artist,

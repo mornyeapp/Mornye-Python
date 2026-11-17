@@ -249,6 +249,10 @@ class MornyeAPI(
         # a process — see _await_download_slot().
         self._download_lock = threading.Lock()
         self._active_download_events: set[threading.Event] = set()
+        # One per running batch, beside its stop event: set by
+        # finish_current_downloads() so the tracks in flight complete and
+        # nothing further starts.
+        self._active_finish_events: set[threading.Event] = set()
         self._active_download_events_lock = threading.Lock()
         self._stop_generation = 0
         # Set by webapp.py in --web mode: a persisted JobQueue that
@@ -1872,12 +1876,14 @@ class MornyeAPI(
                 self.log("Download stopped before it started.", "warning")
                 return
             stop_event = threading.Event()
+            finish_event = threading.Event()
             self._active_download_events.add(stop_event)
+            self._active_finish_events.add(finish_event)
         lock_acquired = False
         try:
             self._await_download_slot(selected_indices)
             lock_acquired = True
-            if stop_event.is_set():
+            if stop_event.is_set() or finish_event.is_set():
                 self.log("Download stopped before it started.", "warning")
                 return
             # Settings the page does not send (timeout_s, save_lrc, …) come
@@ -1891,6 +1897,7 @@ class MornyeAPI(
                 selected_indices,
                 config,
                 stop_event=stop_event,
+                finish_event=finish_event,
                 **batch,
             )
         finally:
@@ -1898,6 +1905,7 @@ class MornyeAPI(
                 self._download_lock.release()
             with self._active_download_events_lock:
                 self._active_download_events.discard(stop_event)
+                self._active_finish_events.discard(finish_event)
 
     def stop_all_downloads(self) -> dict[str, int | bool]:
         """Stop current batches and cancel this account's queued downloads."""
@@ -1920,6 +1928,39 @@ class MornyeAPI(
         return {
             "ok": True,
             "stopped": len(active),
+            "cancelled_pending": cancelled_pending,
+        }
+
+    def finish_current_downloads(self) -> dict[str, int | bool]:
+        """Let the tracks downloading now finish, then stop.
+
+        The gentle counterpart of stop_all_downloads(): nothing in flight is
+        cut off, but no further track of a running batch is started, a batch
+        still waiting for its turn never starts, and this account's queued
+        downloads are cancelled.
+        """
+        with self._active_download_events_lock:
+            # A batch that has not reached _download_task yet is caught by
+            # the generation check there.
+            self._stop_generation += 1
+            active = tuple(self._active_finish_events)
+            for event in active:
+                event.set()
+            queue = self._download_queue
+            cancelled_pending = (
+                queue.cancel_pending(getattr(self, "owner", "") or "")
+                if callable(getattr(queue, "cancel_pending", None))
+                else 0
+            )
+        self.log(
+            f"Finishing the tracks in progress in {len(active)} download(s); "
+            f"nothing else will start. Cancelled {cancelled_pending} queued "
+            "download(s).",
+            "warning",
+        )
+        return {
+            "ok": True,
+            "finishing": len(active),
             "cancelled_pending": cancelled_pending,
         }
 
@@ -1979,6 +2020,7 @@ class MornyeAPI(
         collection_name: str | None = None,
         announce: bool = True,
         stop_event: threading.Event | None = None,
+        finish_event: threading.Event | None = None,
     ) -> None:
         """One batch, start to finish.
 
@@ -2428,6 +2470,7 @@ class MornyeAPI(
                 redownload_fake_hires=redownload_fake_hires,
                 timeout_s=timeout_s,
                 stop_event=stop_event,
+                finish_event=finish_event,
                 metadata_delay_min_s=metadata_delay[0],
                 metadata_delay_max_s=metadata_delay[1],
                 provider_delay_min_s=provider_delay[0],
@@ -2753,8 +2796,68 @@ def _purge_webview_http_cache() -> None:
         )
 
 
+def _enable_macos_first_click() -> None:
+    """Make the first click on an inactive window act as a click (macOS).
+
+    WKWebView answers NO to ``acceptsFirstMouse:``, so while Mornye is not
+    the active app a click on the window only activates it and the button
+    under the cursor never sees it: it took a second click. That happened
+    whenever the window was not frontmost — after switching to another app,
+    and at launch too, since macOS 14 treats ``activateIgnoringOtherApps``
+    (what pywebview calls) as a request it may turn down, leaving the
+    terminal in front. Answering YES lets one click both activate the
+    window and reach the page. pywebview's WebKitHost is a PyObjC subclass
+    of WKWebView, so the method is added to it before any window exists.
+    """
+    if sys.platform != "darwin":
+        return
+    try:
+        import objc
+        from webview.platforms.cocoa import BrowserView
+
+        def acceptsFirstMouse_(self, event):  # noqa: N802 - Cocoa selector
+            return True
+
+        objc.classAddMethods(
+            BrowserView.WebKitHost,
+            [
+                objc.selector(
+                    acceptsFirstMouse_,
+                    selector=b"acceptsFirstMouse:",
+                    signature=b"Z@:@",
+                )
+            ],
+        )
+    except Exception:
+        _quiet_log.debug("could not enable first-click on macOS", exc_info=True)
+
+
+def _activate_macos_app() -> None:
+    """Bring Mornye in front once its window is shown (macOS).
+
+    pywebview's ``activateIgnoringOtherApps`` is ignored on macOS 14+, so
+    the window could open behind the terminal without keyboard focus.
+    ``NSApp.activate()`` is the call macOS 14+ honours.
+    """
+    if sys.platform != "darwin":
+        return
+    with contextlib.suppress(Exception):
+        import AppKit
+        from PyObjCTools import AppHelper
+
+        def _activate():
+            app = AppKit.NSApplication.sharedApplication()
+            if hasattr(app, "activate"):
+                app.activate()
+            else:
+                app.activateIgnoringOtherApps_(True)
+
+        AppHelper.callAfter(_activate)
+
+
 def run_gui() -> None:
     configure_console_logging(saved_log_level())
+    _enable_macos_first_click()
     # Before pywebview creates the native app: from source the process is the
     # Python interpreter, so without this every OS shows Python's icon (and
     # on macOS its name) for the window. See desktop_branding.
@@ -2833,6 +2936,7 @@ def run_gui() -> None:
     api.set_window(window)
     if window is not None:
         window.events.loaded += api._on_loaded
+        window.events.shown += _activate_macos_app
 
     # Two defaults conspired to make the theme picker look broken in the
     # desktop window, both of them about *where* the page's localStorage

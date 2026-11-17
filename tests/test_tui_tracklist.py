@@ -81,7 +81,7 @@ def capture_runs(monkeypatch) -> Any:
     """
     seen: list[dict] = []
 
-    async def _capture(cfg, log_level):
+    async def _capture(cfg, log_level, **_kwargs):
         seen.append(cfg)
 
     monkeypatch.setattr(launcher_module, "run_download_from_cfg", _capture)

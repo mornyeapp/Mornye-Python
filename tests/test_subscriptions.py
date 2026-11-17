@@ -438,3 +438,91 @@ def test_a_failed_check_is_not_a_baseline():
     )
     assert result.watermarked is True
     assert subs.is_baselined(sub.id) is True
+
+
+# ── What a followed row looks like ───────────────────────────────────────
+
+
+class _ProfileClient:
+    async def get_artist_profile_async(self, artist_id):
+        return {
+            "profile": {"name": "Mariah Carey"},
+            "stats": {"followers": 9_000_000, "listeners": 41_234_567},
+            "avatar": "https://i.scdn.co/image/avatar",
+        }
+
+    async def get_url_async(self, url):
+        info = {"owner": "Spotify", "track_count": 50, "cover_url": "https://c/cov"}
+        return "Top 50 - Global", [object()] * 50, "https://c/cov", info
+
+
+@pytest.mark.uses_subscription_lookup
+def test_an_artist_is_described_by_its_photo_and_listeners():
+    from mornye.core.subscriptions import describe_async
+
+    out = asyncio.run(
+        describe_async(
+            "https://open.spotify.com/artist/4iHNK0tOyZPYnBU7nGAgpQ",
+            client=_ProfileClient(),
+        )
+    )
+    assert out == {
+        "name": "Mariah Carey",
+        "image_url": "https://i.scdn.co/image/avatar",
+        "subtitle": "41.2M monthly listeners",
+    }
+
+
+@pytest.mark.uses_subscription_lookup
+def test_a_playlist_is_described_by_its_cover_owner_and_size():
+    from mornye.core.subscriptions import describe_async
+
+    out = asyncio.run(
+        describe_async(
+            "https://open.spotify.com/playlist/37i9dQZEVXbMDoHDwVN2tF",
+            client=_ProfileClient(),
+        )
+    )
+    assert out == {
+        "name": "Top 50 - Global",
+        "image_url": "https://c/cov",
+        "subtitle": "by Spotify · 50 tracks",
+    }
+
+
+def test_details_never_erase_what_is_known():
+    from mornye.core import subscriptions as subs
+
+    sub = subs.add(
+        "https://open.spotify.com/artist/4iHNK0tOyZPYnBU7nGAgpQ", name="Known"
+    )
+    subs.set_details(sub.id, image_url="https://img", subtitle="1M monthly listeners")
+    after = subs.set_details(sub.id, name="", image_url="", subtitle="")
+    assert after is not None
+    assert (after.name, after.image_url, after.subtitle) == (
+        "Known",
+        "https://img",
+        "1M monthly listeners",
+    )
+    assert after.to_dict()["image_url"] == "https://img"
+
+
+def test_following_stores_the_details_it_reads(monkeypatch):
+    from mornye.app import MornyeAPI
+    from mornye.core import subscriptions as subs
+
+    async def fake(url, *, client=None):
+        return {
+            "name": "Hot Hits Hindi",
+            "image_url": "https://c",
+            "subtitle": "40 tracks",
+        }
+
+    monkeypatch.setattr(subs, "describe_async", fake)
+    res = MornyeAPI().add_subscription(
+        "https://open.spotify.com/playlist/37i9dQZF1DX0XUfTFmNBRM"
+    )
+    assert res["ok"] is True
+    assert res["subscription"]["image_url"] == "https://c"
+    assert res["subscription"]["subtitle"] == "40 tracks"
+    assert res["subscription"]["name"] == "Hot Hits Hindi"

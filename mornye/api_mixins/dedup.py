@@ -95,10 +95,12 @@ class DedupMixin:
             "install_hint": (
                 None
                 if available
-                else "Install Chromaprint: the 'fpcalc' binary on PATH and "
-                "the libchromaprint shared library (Homebrew's chromaprint "
-                "formula installs fpcalc only). The Python side ships with "
-                "Mornye — there is nothing to pip install."
+                else "Install Chromaprint, which provides both the 'fpcalc' "
+                "tool and the libchromaprint library this needs: "
+                "'brew install chromaprint' on macOS, 'libchromaprint-tools' "
+                "and 'libchromaprint1' on Debian/Ubuntu. Then restart Mornye. "
+                "The Python side ships with Mornye — there is nothing to pip "
+                "install."
             ),
         }
 

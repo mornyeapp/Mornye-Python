@@ -71,8 +71,8 @@ def lyrics_provider_choices(selected: list[str] | tuple[str, ...] = ()) -> list[
     return choices
 
 
-#: Enrichment providers. SoundCloud is selectable but not on by default.
-ENRICH_PROVIDERS: tuple[str, ...] = ("deezer", "apple", "qobuz", "tidal", "soundcloud")
+#: Enrichment providers.
+ENRICH_PROVIDERS: tuple[str, ...] = ("deezer", "apple", "qobuz", "tidal")
 
 DEFAULT_LYRICS_PROVIDERS: tuple[str, ...] = ("apple", "binilyrics", "lrclib")
 

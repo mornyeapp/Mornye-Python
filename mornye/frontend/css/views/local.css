@@ -103,3 +103,70 @@
 
 /* The footer under the results: a ruled strip, not a tinted band. */
 #view-local .s-footer { background: var(--surface); border-top: 1px solid var(--rule); }
+
+/* ── Fix Local Files, redrawn ────────────────────────────────────────────
+   The folder card is one compact drop row (icon, path, Browse) with the long
+   help folded into a disclosure; before a scan an empty state says what the
+   page does; over the results a summary counts the rows by state and
+   filters them; the library-duplicates tool is a collapsible section below,
+   so the tagger stays the subject of the page. */
+.local-target { padding: var(--space-4) var(--space-5); }
+.local-target .s-title { margin-bottom: var(--space-3); }
+#view-local .local-drop-zone {
+  flex-direction: row; align-items: center; gap: var(--space-4);
+  padding: var(--space-3) var(--space-4); border-radius: var(--radius-2);
+}
+.local-drop-icon {
+  flex: 0 0 auto; width: 40px; height: 40px; display: grid; place-items: center;
+  border: 1px solid var(--rule); border-radius: var(--radius-2); background: var(--raised);
+}
+.local-drop-main { flex: 1 1 auto; min-width: 0; display: grid; gap: var(--space-2); }
+#view-local .local-drop-zone-text { text-align: left; color: var(--text-2); }
+.local-help { margin-top: var(--space-3); color: var(--text-muted); font-size: var(--text-xs); }
+.local-help summary { cursor: pointer; width: max-content; color: var(--text-2); }
+.local-help summary:hover { color: var(--text); }
+.local-help p { margin: var(--space-2) 0 0; line-height: 1.6; max-width: 90ch; }
+
+.local-empty {
+  display: grid; justify-items: center; gap: var(--space-2); text-align: center;
+  padding: var(--space-8) var(--space-5); color: var(--text-muted); font-size: var(--text-sm);
+  border: 1px dashed var(--rule); border-radius: var(--radius-2);
+}
+.local-empty strong { color: var(--text); font-size: var(--text-md); font-weight: var(--weight-medium); }
+.local-empty span:last-child { max-width: 52ch; line-height: 1.55; }
+.local-empty-icon {
+  width: 44px; height: 44px; display: grid; place-items: center; margin-bottom: var(--space-1);
+  border: 1px solid var(--rule); border-radius: 50%; color: var(--signal-text); background: var(--raised);
+}
+.local-empty-icon svg { width: 20px; height: 20px; }
+#view-local .s-body:has(#local-results-wrap:not(.hidden)) #local-empty { display: none; }
+
+.local-summary { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: var(--space-3); }
+.local-summary:empty { display: none; }
+.local-chip {
+  display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 12px;
+  border: 1px solid var(--rule); border-radius: 999px; background: var(--surface);
+  color: var(--text-2); font: inherit; font-size: var(--text-xs); cursor: pointer;
+  transition: border-color var(--motion) var(--ease), background var(--motion) var(--ease);
+}
+.local-chip:hover { border-color: var(--rule-strong); color: var(--text); }
+.local-chip.active { border-color: var(--signal-strong); background: var(--selected); color: var(--text); }
+.local-chip-n { font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; }
+.local-chip.matched .local-chip-n { color: var(--ok); }
+.local-chip.review .local-chip-n { color: var(--signal-text); }
+.local-chip.none .local-chip-n, .local-chip.error .local-chip-n { color: var(--error); }
+#local-track-rows > .hidden { display: none !important; }
+
+.local-tools { padding: var(--space-4) var(--space-5); }
+.local-tools > summary {
+  cursor: pointer; list-style: none; display: flex; align-items: center; gap: var(--space-2); margin: 0;
+}
+.local-tools > summary::-webkit-details-marker { display: none; }
+.local-tools > summary::before { content: '›'; display: inline-block; transition: transform var(--motion) var(--ease); }
+.local-tools[open] > summary::before { transform: rotate(90deg); }
+.local-tools[open] > summary { margin-bottom: var(--space-3); }
+
+@media (max-width: 700px) {
+  #view-local .local-drop-zone { flex-direction: column; align-items: stretch; }
+  .local-drop-icon { display: none; }
+}
