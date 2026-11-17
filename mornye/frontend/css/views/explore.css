@@ -16,8 +16,11 @@
 /* --- EXPLORE VIEW --- */
 .explore-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  margin-bottom: 32px;
+  /* Compact tiles: the minimum follows the window (140–170px), so a
+     desktop window fits six or more covers a row instead of four big
+     ones. */
+  grid-template-columns: repeat(auto-fill, minmax(clamp(140px, 11vw, 170px), 1fr));
+  margin-bottom: var(--space-6);
 }
 .explore-card {
   transition: transform 0.2s;
@@ -94,7 +97,7 @@
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
-.explore-grid { gap: var(--space-4); }
+.explore-grid { gap: var(--space-4) var(--space-3); }
 
 .explore-card {
   padding: 0;
