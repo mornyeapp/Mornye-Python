@@ -3598,17 +3598,41 @@ function onCheckChange() {
   }
 }
 // 1. Handling Ricerche Recenti nel LocalStorage
+function loadRecentSearches() {
+    try {
+        const list = JSON.parse(localStorage.getItem('recent_searches') || '[]');
+        return Array.isArray(list) ? list.filter(s => typeof s === 'string') : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function storeRecentSearches(list) {
+    try { localStorage.setItem('recent_searches', JSON.stringify(list)); } catch (e) { /* private mode */ }
+}
+
+// Searching runs as you type, so a query is kept once typing settles (or on
+// Enter). Typing "tayl" then "taylor swift" keeps only the finished query:
+// an entry the new one extends is dropped, case-insensitively.
 function saveRecentSearch(query) {
-    if (!query || query.length < 2) return;
-    let searches = JSON.parse(localStorage.getItem('recent_searches') || '[]');
-    searches = searches.filter(s => s !== query);
+    query = String(query || '').trim();
+    if (query.length < 2) return;
+    const lower = query.toLowerCase();
+    let searches = loadRecentSearches().filter(s => {
+        const other = s.toLowerCase();
+        return other !== lower && !lower.startsWith(other);
+    });
     searches.unshift(query);
-    if (searches.length > 15) searches.pop();
-    localStorage.setItem('recent_searches', JSON.stringify(searches));
+    storeRecentSearches(searches.slice(0, 15));
+}
+
+function removeRecentSearch(query) {
+    storeRecentSearches(loadRecentSearches().filter(s => s !== query));
+    renderRecentSearches();
 }
 
 function renderRecentSearches() {
-    const searches = JSON.parse(localStorage.getItem('recent_searches') || '[]');
+    const searches = loadRecentSearches();
     const grid = $('recent-grid');
     grid.innerHTML = '';
     // Chips that wrap, not one full-width row per search: a past query is
@@ -3626,13 +3650,21 @@ function renderRecentSearches() {
         chip.title = q;
         // Same stroke icon as the search-mode toggle, not an emoji: it sits
         // in a themed chip and has to take its colour from the theme.
-        chip.innerHTML = `<span class="rc-search-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg></span><span class="search-chip-text">${escHtml(q)}</span>`;
-        chip.onclick = () => {
+        chip.innerHTML = `<span class="rc-search-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg></span><span class="search-chip-text">${escHtml(q)}</span><span class="search-chip-remove" role="button" tabindex="0" aria-label="Remove this search" title="Remove">✕</span>`;
+        chip.onclick = (e) => {
+            if (e.target.closest('.search-chip-remove')) {
+                e.stopPropagation();
+                removeRecentSearch(q);
+                return;
+            }
             $('urlInput').value = q;
             $('urlInput').dispatchEvent(new Event('input'));
         };
         grid.appendChild(chip);
     });
+    if (!searches.length) {
+        grid.innerHTML = '<div class="search-chip-empty">Your searches will appear here.</div>';
+    }
 }
 
 function toggleSearchMode() {
@@ -7111,7 +7143,15 @@ window.addEventListener('beforeunload', function (e) {
 
 // ── Real-time search on keystroke ────────────────────────────────────────────
 let _searchDebounceTimer = null;
+let _searchSaveTimer = null;
 let _lastSearchQuery = '';
+
+// Enter in search mode keeps the query in the recent searches at once.
+$('urlInput')?.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || $('searchMode')?.value !== 'search') return;
+  clearTimeout(_searchSaveTimer);
+  saveRecentSearch($('urlInput').value);
+});
 
 // Every provider search gets a number, and only the newest one's answer is
 // shown. Searches overlap all the time — a debounced keystroke, a source
@@ -7168,6 +7208,9 @@ $('urlInput').addEventListener('input', function() {
   if (query === _lastSearchQuery) return;
 
   clearTimeout(_searchDebounceTimer);
+  clearTimeout(_searchSaveTimer);
+  // Kept in the recent searches once typing has settled on it.
+  _searchSaveTimer = setTimeout(() => saveRecentSearch(query), 1500);
   _searchDebounceTimer = setTimeout(() => {
     _lastSearchQuery = query;
 

@@ -765,6 +765,17 @@
   transition: background var(--motion) var(--ease), border-color var(--motion) var(--ease), color var(--motion) var(--ease);
 }
 .search-chip:hover { background: var(--raised); border-color: var(--signal-strong); color: var(--text); }
+/* Remove one search: shown on the chip under the pointer (always on touch). */
+.search-chip-remove {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; margin-right: -4px; border-radius: 50%;
+  color: var(--text-muted); font-size: 10px; line-height: 1;
+  opacity: 0; transition: opacity var(--motion) var(--ease), background var(--motion) var(--ease);
+}
+.search-chip:hover .search-chip-remove, .search-chip:focus-within .search-chip-remove { opacity: 1; }
+.search-chip-remove:hover { background: var(--rule); color: var(--text); }
+@media (hover: none) { .search-chip-remove { opacity: 1; } }
+.search-chip-empty { color: var(--text-muted); font-size: var(--text-sm); padding: var(--space-2) 0; }
 .search-chip .rc-search-icon { color: var(--text-muted); }
 .search-chip:hover .rc-search-icon { color: var(--signal-text); }
 /* A pasted URL can be a search too, and one of those is 90 characters —
