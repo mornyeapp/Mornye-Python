@@ -181,7 +181,7 @@
     'get_trusted_keys',
     'get_subscriptions', 'add_subscription', 'remove_subscription',
     'set_subscription_enabled', 'set_subscription_interval',
-    'reset_subscription', 'check_subscriptions',
+    'reset_subscription', 'refresh_subscription_details', 'check_subscriptions',
     'get_extension_health', 'reset_extension_health', 'check_extension_health',
     'get_signed_sessions', 'clear_signed_session', 'prune_signed_sessions',
     'get_stats',
