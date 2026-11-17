@@ -34,8 +34,36 @@
 .np-title { font-size: 22px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .np-e { font-size: 11px; font-weight: 700; padding: 1px 6px; background: rgba(var(--media-ink-rgb), .28); }
 .np-artist { font-size: 17px; color: rgba(var(--media-ink-rgb), .62); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.np-seek { width: 100%; accent-color: var(--media-ink); margin: 4px 0 0; }
-.np-times { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: rgba(var(--media-ink-rgb), .6); font-variant-numeric: tabular-nums; }
+/* The seek bar the way Apple Music draws it: a thin rounded track with no
+   knob, the played part in near-white ink, that thickens while the pointer
+   is on it and brightens while dragging. The wrapper has a fixed height so
+   growing the bar never moves the times below it. --p is the played share,
+   set from app.js (npPaintSeek). */
+.np-seek-wrap { height: 20px; display: flex; align-items: center; margin: 4px 0 -4px; }
+.np-seek {
+  -webkit-appearance: none; appearance: none; display: block;
+  width: 100%; height: 7px; margin: 0; padding: 0; border: 0; border-radius: 999px;
+  background: linear-gradient(to right,
+    rgba(var(--media-ink-rgb), .62) 0 var(--p, 0%),
+    rgba(var(--media-ink-rgb), .2) var(--p, 0%) 100%);
+  cursor: pointer; outline: none;
+  transition: height .22s cubic-bezier(.2, .8, .2, 1);
+}
+.np-seek::-webkit-slider-runnable-track { height: 100%; background: transparent; border: 0; }
+.np-seek::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 0; height: 100%; border: 0; background: transparent; box-shadow: none; }
+.np-seek::-moz-range-track { height: 100%; background: transparent; border: 0; }
+.np-seek::-moz-range-progress { background: transparent; }
+.np-seek::-moz-range-thumb { width: 0; height: 0; border: 0; background: transparent; }
+.np-seek-wrap:hover .np-seek, .np-seek:focus-visible, .np-seek.dragging { height: 12px; }
+.np-seek-wrap:hover .np-seek, .np-seek.dragging {
+  background: linear-gradient(to right,
+    rgba(var(--media-ink-rgb), .95) 0 var(--p, 0%),
+    rgba(var(--media-ink-rgb), .24) var(--p, 0%) 100%);
+}
+.np-seek:focus-visible { box-shadow: 0 0 0 2px rgba(var(--media-ink-rgb), .5); }
+.np-times { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: rgba(var(--media-ink-rgb), .6); font-variant-numeric: tabular-nums; transition: color .2s; }
+.np-left:has(.np-seek.dragging) .np-times > span:not(.np-tech) { color: var(--media-ink); }
+@media (prefers-reduced-motion: reduce) { .np-seek { transition: none; } }
 .np-tech { font-size: 12px; font-weight: 600; letter-spacing: .02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 10px; }
 .np-controls { display: flex; justify-content: center; align-items: center; gap: clamp(28px, 5vw, 64px); margin-top: 6px; }
 .np-btn { border: 0; background: transparent; color: var(--media-ink); cursor: pointer; padding: 8px; line-height: 0; }

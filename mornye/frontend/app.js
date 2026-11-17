@@ -8382,20 +8382,41 @@ function closePlayer() {
   audio.addEventListener('timeupdate', () => {
     $('np-cur').textContent = fmtTime(audio.currentTime);
     $('np-rem').textContent = '-' + fmtTime((audio.duration || 0) - audio.currentTime);
-    if (!playerSeeking && audio.duration) npSeek.value = Math.round(audio.currentTime / audio.duration * 1000);
+    if (!playerSeeking && audio.duration) {
+      npSeek.value = Math.round(audio.currentTime / audio.duration * 1000);
+      npPaintSeek();
+    }
     npSyncLyrics(audio.currentTime);
   });
   audio.addEventListener('play', () => { npIcon.innerHTML = PAUSE; npStartTick(); });
   audio.addEventListener('pause', () => { npIcon.innerHTML = PLAY; });
-  npSeek.addEventListener('input', () => { playerSeeking = true; });
+  npSeek.addEventListener('input', () => {
+    playerSeeking = true;
+    npSeek.classList.add('dragging');
+    npPaintSeek();
+    // While dragging, the times follow the bar, as in Apple Music.
+    if (audio.duration) {
+      const at = npSeek.value / 1000 * audio.duration;
+      $('np-cur').textContent = fmtTime(at);
+      $('np-rem').textContent = '-' + fmtTime(audio.duration - at);
+    }
+  });
   npSeek.addEventListener('change', () => {
     if (audio.duration) audio.currentTime = npSeek.value / 1000 * audio.duration;
     playerSeeking = false;
+    npSeek.classList.remove('dragging');
   });
+  npSeek.addEventListener('blur', () => npSeek.classList.remove('dragging'));
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && !$('np-view').classList.contains('hidden')) closeNowPlaying();
   });
 })();
+
+// The played share of the seek bar, which its CSS draws from --p.
+function npPaintSeek() {
+  const seek = $('np-seek');
+  if (seek) seek.style.setProperty('--p', (seek.value / 10).toFixed(1) + '%');
+}
 
 // ── Now playing: cover, synced lyrics, queue ────────────────────────────────
 let npLines = [];       // [{t: seconds|null, text}]
@@ -8609,6 +8630,7 @@ function fillNowPlaying(item, res) {
   npApplyColors(res.cover);
   $('np-tech').textContent = npTechLabel(res);
   $('np-seek').value = 0;
+  npPaintSeek();
   $('np-cur').textContent = '0:00';
   $('np-rem').textContent = '-0:00';
   const parsed = parseLyrics(res.lyrics);
@@ -8648,6 +8670,7 @@ function fillNowPlaying(item, res) {
       l.end = l.words ? l.words[l.words.length - 1].e : (next && next.t != null ? next.t : (l.t ?? 0) + 4);
       if (l.words && next && next.t != null && l.end > next.t + 8) l.end = next.t;
     });
+    if (npSynced) npLines = npAddRests(npLines);
     box.innerHTML = npLines.map((l, i) => {
       if (npSynced && !l.text) {
         return `<div class="np-line gap" data-i="${i}"><span class="gd"></span><span class="gd"></span><span class="gd"></span></div>`;
@@ -8675,6 +8698,34 @@ function fillNowPlaying(item, res) {
   }
   if (!$('np-queue').classList.contains('hidden')) npRenderQueue();
   if (npSynced) npUpdate(npLyricsTime($('player-audio').currentTime), true);
+}
+
+// How long a pause between two lines has to be before the intro's three
+// dots stand in for it, as Apple Music does for an instrumental break.
+const NP_REST_MIN_S = 5;
+
+// Synced lyrics with a blank row for every long pause between two sung lines.
+// A word-synced line knows when its last word ends; a line-synced one only
+// knows when it starts, so how long it is sung for is estimated from its
+// word count (about 0.45 s a word plus a second, between 2.5 s and 8 s),
+// and the line then ends there instead of lasting up to the next one.
+// Blank rows already in the file are left as they are.
+function npAddRests(lines) {
+  const out = [];
+  lines.forEach((l, i) => {
+    out.push(l);
+    const next = lines[i + 1];
+    if (!l.text || !next || !next.text || l.t == null || next.t == null) return;
+    let sungUntil = l.end;
+    if (!l.words) {
+      const count = (l.text.match(/\S+/g) || []).length;
+      sungUntil = l.t + Math.min(8, Math.max(2.5, 0.45 * count + 1));
+    }
+    if (next.t - sungUntil < NP_REST_MIN_S) return;
+    l.end = Math.min(l.end, sungUntil);
+    out.push({ t: sungUntil, end: next.t, text: '', words: null, voice: 1, bg: '', tr: '', rom: '' });
+  });
+  return out;
 }
 
 function setPlayerArtwork(src) {
