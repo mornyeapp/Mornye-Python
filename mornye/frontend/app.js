@@ -8863,13 +8863,17 @@ function npScrollToFocus(focus, mode) {
   if (!NP.motionRaf) NP.motionRaf = requestAnimationFrame(npMotionTick);
 }
 
+// The line the view follows. A line still being sung keeps the focus only
+// when another voice has started over it (a duet); for one singer, a held
+// last word running into the next line used to keep the view a line behind.
 function npFocusFor(active, set, time) {
   const start = npLines[active].t;
+  const voice = npLines[active].voice || 1;
   for (let i = active - 1; i >= 0; i--) {
     const line = npLines[i];
     if (line.t >= start) continue;
     if (!line.text) return active;
-    return set.has(i) && line.end > time ? i : active;
+    return set.has(i) && line.end > time && (line.voice || 1) !== voice ? i : active;
   }
   return active;
 }
