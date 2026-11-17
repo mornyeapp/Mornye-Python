@@ -75,7 +75,9 @@ function initSettingsTracking() {
 }
 
 function updateSaveButtonVisual() {
-    const btn = document.querySelector('.s-actions .act-btn.primary');
+    // By id: `.s-actions .act-btn.primary` matched the Local Auto-Tagger's
+    // scan button first, so the Settings button never showed the edits.
+    const btn = $('settings-save-btn');
     if (!btn) return;
     if (isDirty) {
         btn.style.opacity = "1";
@@ -693,14 +695,18 @@ async function loadSettingsFromStorage() {
   }
 }
 
-// Track any changes in settings input fields
-document.querySelector('.s-body').addEventListener('input', (e) => {
+// Track any changes in the settings fields. On #view-settings itself: the
+// first `.s-body` in the page is the Player's, so the listener used to sit
+// there and never saw a settings edit. `change` as well as `input`, for the
+// controls that only report a committed value.
+function refreshSettingsDirty() {
     const current = JSON.stringify(buildConfig());
     const initial = JSON.stringify(initialSettings);
-    
     isDirty = (current !== initial);
     updateSaveButtonVisual();
-});
+}
+['input', 'change'].forEach(type =>
+    $('view-settings')?.addEventListener(type, refreshSettingsDirty));
 
 function showToast(message, type = 'success') {
   toastMgr[type](message);
@@ -719,7 +725,9 @@ async function saveSettings() {
     }
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(cfg));
     isDirty = false;
-    initialSettings = cfg;
+    // buildConfig(), not cfg: cfg carries theme/accent/density on top, so
+    // comparing against it made every later edit look unsaved forever.
+    initialSettings = buildConfig();
     updateSaveButtonVisual();
     logMessage('Settings saved.', 'ok');
   } catch(e) {
