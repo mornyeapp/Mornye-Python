@@ -500,7 +500,10 @@
           </p>
         </div>
         
-        <div id="local-results-wrap" class="hidden u-dir-column u-minh-0" style="display:flex;flex:1;">
+        <!-- flex-basis, not 0: with the cards above and below as tall as
+             the panel, a 0 basis left the list no height at all, so a scan
+             showed its column header and "1 file(s) selected" but no rows. -->
+        <div id="local-results-wrap" class="hidden u-dir-column u-minh-0" style="display:flex;flex:1 0 min(68vh, 640px);">
           <div class="track-table-header u-cols-24-1fr-80-1fr u-mb-8">
             <div><input id="check-all-local" type="checkbox" checked data-onchange="toggleAllLocal(this)"></div>
             <div>Current File (Local)</div>
