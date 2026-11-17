@@ -282,6 +282,9 @@ class DownloadOptions:
     provider_delay_max_s: float = 0.0
     auto_rate_limit_cooldown: bool = True
     stop_event: threading.Event | None = None
+    # The gentle stop: once set, no further track is started, while the ones
+    # already downloading finish normally. stop_event is the hard one.
+    finish_event: threading.Event | None = None
     post_download_action: str = "none"
     post_download_command: str = ""
     tidal_custom_api: str | None = None

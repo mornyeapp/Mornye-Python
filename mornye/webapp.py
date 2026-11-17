@@ -171,6 +171,7 @@ ALLOWED_METHODS: set[str] = {
     "fetch_metadata",
     "download_tracks",
     "stop_all_downloads",
+    "finish_current_downloads",
     "run_health_check",
     "scan_local",
     "apply_local_tags",

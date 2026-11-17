@@ -4916,6 +4916,27 @@ async function stopAllDownloads() {
   }
 }
 
+async function finishCurrentDownloads() {
+  const finish = window.pywebview?.api?.finish_current_downloads;
+  if (typeof finish !== 'function') {
+    showToast('Finish current is unavailable in this client.', 'error');
+    return;
+  }
+  try {
+    const result = await finish();
+    if (!result?.ok) throw new Error(result?.error || 'The request failed.');
+    showToast(
+      result.finishing
+        ? `Finishing the tracks in progress, then stopping. Cancelled ${result.cancelled_pending} queued download(s).`
+        : `Nothing is downloading. Cancelled ${result.cancelled_pending} queued download(s).`,
+      'info',
+    );
+    logMessage('Finish-current requested: no further tracks will start.', 'warning');
+  } catch (error) {
+    showToast(`Could not finish downloads: ${error}`, 'error');
+  }
+}
+
 async function startStagedOne(id) {
   const config = await chooseProviderForBatch(buildConfig());
   if (!config) return;

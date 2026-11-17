@@ -183,6 +183,8 @@ class MornyeTui(App[None]):
     BINDINGS = [
         Binding("ctrl+r", "start_download", "Run", priority=True),
         Binding("ctrl+c", "stop_download", "Stop", priority=True),
+        # Ctrl+F types nothing in Textual's Input, so it is safe as priority.
+        Binding("ctrl+f", "finish_download", "Finish current", priority=True),
         # priority: a focused widget must never be able to swallow this.
         # Safe here in a way `j`/`q`/`t` are not — Ctrl+L types nothing.
         Binding("ctrl+l", "toggle_log", "Log", priority=True),
@@ -213,6 +215,8 @@ class MornyeTui(App[None]):
         # and ignore what the operator typed on this very command line.
         self._min_trust_tier = min_trust_tier
         self._runner: DownloadRunner | None = None
+        # Ctrl+F: finish what is downloading, then stop — the queue too.
+        self._finish_requested = False
         # Not `_running`: textual.app.App uses that name for "the app is
         # running" and sets it True on startup, so a guard reading it would
         # have refused every download and every quit.
@@ -512,6 +516,7 @@ class MornyeTui(App[None]):
             self._show_panel("download")
             return
         self._download_running = True
+        self._finish_requested = False
         self.query_one("#queue", QueuePanel).reset()
         self._show_panel("queue")
         self._set_log_visible(True)
@@ -546,6 +551,11 @@ class MornyeTui(App[None]):
                 cfg["url"] = staged_queue.download_target(item)
                 cfg["csv_path"] = ""
                 outcome = await self._consume_run(cfg)
+                if self._finish_requested:
+                    # Cut short by Ctrl+F: some of its tracks may never have
+                    # started, so it goes back to waiting. Running it again
+                    # skips the files that did arrive.
+                    break
                 if outcome is not None and bool(getattr(outcome, "error", "")):
                     staged_queue.set_status(item["id"], "failed", str(outcome.error))
                 else:
@@ -877,6 +887,7 @@ class MornyeTui(App[None]):
             return
 
         self._download_running = True
+        self._finish_requested = False
         self.query_one("#queue", QueuePanel).reset()
         self._show_panel("queue")
         self._set_log_visible(True)
@@ -890,6 +901,24 @@ class MornyeTui(App[None]):
         self.workers.cancel_group(self, "download")
         self._download_running = False
         self._announce("Stopped.", "warning")
+
+    def action_finish_download(self) -> None:
+        """Let the tracks already downloading finish, start nothing else."""
+        runner = self._runner
+        if not self._download_running or runner is None:
+            self._announce("No download is running.", "warning")
+            return
+        if self._finish_requested or runner.finish_event.is_set():
+            self._announce("Already finishing — Ctrl+C stops immediately.", "warning")
+            return
+        self._finish_requested = True
+        runner.request_finish()
+        self._set_status("Finishing current tracks…")
+        self._announce(
+            "Finishing the tracks in progress; nothing else will start. "
+            "Ctrl+C stops immediately.",
+            "warning",
+        )
 
     # ------------------------------------------------------------------
     # The run

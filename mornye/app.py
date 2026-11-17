@@ -249,6 +249,10 @@ class MornyeAPI(
         # a process — see _await_download_slot().
         self._download_lock = threading.Lock()
         self._active_download_events: set[threading.Event] = set()
+        # One per running batch, beside its stop event: set by
+        # finish_current_downloads() so the tracks in flight complete and
+        # nothing further starts.
+        self._active_finish_events: set[threading.Event] = set()
         self._active_download_events_lock = threading.Lock()
         self._stop_generation = 0
         # Set by webapp.py in --web mode: a persisted JobQueue that
@@ -1872,12 +1876,14 @@ class MornyeAPI(
                 self.log("Download stopped before it started.", "warning")
                 return
             stop_event = threading.Event()
+            finish_event = threading.Event()
             self._active_download_events.add(stop_event)
+            self._active_finish_events.add(finish_event)
         lock_acquired = False
         try:
             self._await_download_slot(selected_indices)
             lock_acquired = True
-            if stop_event.is_set():
+            if stop_event.is_set() or finish_event.is_set():
                 self.log("Download stopped before it started.", "warning")
                 return
             # Settings the page does not send (timeout_s, save_lrc, …) come
@@ -1891,6 +1897,7 @@ class MornyeAPI(
                 selected_indices,
                 config,
                 stop_event=stop_event,
+                finish_event=finish_event,
                 **batch,
             )
         finally:
@@ -1898,6 +1905,7 @@ class MornyeAPI(
                 self._download_lock.release()
             with self._active_download_events_lock:
                 self._active_download_events.discard(stop_event)
+                self._active_finish_events.discard(finish_event)
 
     def stop_all_downloads(self) -> dict[str, int | bool]:
         """Stop current batches and cancel this account's queued downloads."""
@@ -1920,6 +1928,39 @@ class MornyeAPI(
         return {
             "ok": True,
             "stopped": len(active),
+            "cancelled_pending": cancelled_pending,
+        }
+
+    def finish_current_downloads(self) -> dict[str, int | bool]:
+        """Let the tracks downloading now finish, then stop.
+
+        The gentle counterpart of stop_all_downloads(): nothing in flight is
+        cut off, but no further track of a running batch is started, a batch
+        still waiting for its turn never starts, and this account's queued
+        downloads are cancelled.
+        """
+        with self._active_download_events_lock:
+            # A batch that has not reached _download_task yet is caught by
+            # the generation check there.
+            self._stop_generation += 1
+            active = tuple(self._active_finish_events)
+            for event in active:
+                event.set()
+            queue = self._download_queue
+            cancelled_pending = (
+                queue.cancel_pending(getattr(self, "owner", "") or "")
+                if callable(getattr(queue, "cancel_pending", None))
+                else 0
+            )
+        self.log(
+            f"Finishing the tracks in progress in {len(active)} download(s); "
+            f"nothing else will start. Cancelled {cancelled_pending} queued "
+            "download(s).",
+            "warning",
+        )
+        return {
+            "ok": True,
+            "finishing": len(active),
             "cancelled_pending": cancelled_pending,
         }
 
@@ -1979,6 +2020,7 @@ class MornyeAPI(
         collection_name: str | None = None,
         announce: bool = True,
         stop_event: threading.Event | None = None,
+        finish_event: threading.Event | None = None,
     ) -> None:
         """One batch, start to finish.
 
@@ -2428,6 +2470,7 @@ class MornyeAPI(
                 redownload_fake_hires=redownload_fake_hires,
                 timeout_s=timeout_s,
                 stop_event=stop_event,
+                finish_event=finish_event,
                 metadata_delay_min_s=metadata_delay[0],
                 metadata_delay_max_s=metadata_delay[1],
                 provider_delay_min_s=provider_delay[0],

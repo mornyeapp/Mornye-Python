@@ -84,6 +84,9 @@ class WorkerReport:
     skipped: list[tuple[str, str]] = field(default_factory=list)
     completed: dict[str, str] = field(default_factory=dict)
     results: dict[str, DownloadResult] = field(default_factory=dict)
+    #: Tracks never started because a "finish current downloads" stop was
+    #: requested before their turn came.
+    not_started: list[tuple[str, str]] = field(default_factory=list)
 
 
 class ApplicationDownloadWorker:
@@ -121,9 +124,23 @@ class ApplicationDownloadWorker:
     async def run(self, options: Any) -> WorkerReport:
         report = WorkerReport()
         semaphore = asyncio.Semaphore(self._max_concurrent)
+        finish_event = getattr(options, "finish_event", None)
+        announced_finish = False
 
         async def process(index: int, track: TrackMetadata) -> None:
+            nonlocal announced_finish
             async with semaphore:
+                # Checked once the slot is ours, so the tracks already
+                # running are left to finish and only the waiting ones stop.
+                if finish_event is not None and finish_event.is_set():
+                    if not announced_finish:
+                        announced_finish = True
+                        logger.warning(
+                            "Finishing the tracks in progress; the rest of "
+                            "the batch will not be started."
+                        )
+                    report.not_started.append((track.id, track.title))
+                    return
                 if self._on_start is not None:
                     await self._on_start(track, index)
                 existing = self._existing_paths.get(track.id)

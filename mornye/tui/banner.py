@@ -24,6 +24,7 @@ from .branding import header_line, hint_bar, hint_bar_markup, version
 DEFAULT_HINTS: tuple[tuple[str, str], ...] = (
     ("Ctrl+R", "Run"),
     ("Ctrl+C", "Stop"),
+    ("Ctrl+F", "Finish"),
     ("/", "Search"),
     ("Ctrl+Y", "Copy CLI"),
     ("Ctrl+L", "Log"),
