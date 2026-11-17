@@ -700,10 +700,15 @@
 .act-btn[data-tip]:hover::after { opacity: 1; }
 
 /* ── RECENT FETCHES ── */
-#recent-wrap { 
-  padding: 24px 0 0; 
-  overflow: visible; 
-  min-height: 0; 
+/* Bottom padding: room under the last row of cards when scrolled to the
+   end, instead of the cards touching the window's bottom edge. It only
+   shows because flex-shrink is 0: shrunk to the viewport (min-height: 0)
+   the cards overflowed this box and the padding sat above the last row. */
+#recent-wrap {
+  padding: 24px 0 var(--space-8);
+  overflow: visible;
+  min-height: 0;
+  flex-shrink: 0;
 }
 
 /* New container to align it with the Search Bar */
