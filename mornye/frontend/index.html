@@ -1908,10 +1908,10 @@
   </div>
   <div class="pl-seek">
     <span id="pl-cur" class="pl-time">0:00</span>
-    <input type="range" id="pl-seek" min="0" max="1000" value="0" aria-label="Seek">
+    <input type="range" id="pl-seek" class="am-range" min="0" max="1000" value="0" aria-label="Seek">
     <span id="pl-dur" class="pl-time">0:00</span>
   </div>
-  <input type="range" id="pl-vol" class="pl-vol" min="0" max="100" value="100" aria-label="Volume">
+  <input type="range" id="pl-vol" class="pl-vol am-range" min="0" max="100" value="100" aria-label="Volume">
   <button type="button" class="pl-btn" data-onclick="openNowPlaying()" aria-label="Open the full player" title="Open the full player"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>
   <button type="button" class="pl-btn" data-onclick="closePlayer()" aria-label="Close player">✕</button>
 </div>
@@ -1921,7 +1921,7 @@
   <button type="button" class="np-close" data-onclick="closeNowPlaying()" aria-label="Back to the library">✕</button>
   <div class="np-volume">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9z"/></svg>
-    <input type="range" id="np-vol" min="0" max="100" value="100" aria-label="Volume">
+    <input type="range" id="np-vol" class="am-range" min="0" max="100" value="100" aria-label="Volume">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg>
   </div>
   <div class="np-left">

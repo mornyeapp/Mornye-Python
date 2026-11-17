@@ -8356,7 +8356,10 @@ function closePlayer() {
   const seek = $('pl-seek');
   audio.addEventListener('timeupdate', () => {
     $('pl-cur').textContent = fmtTime(audio.currentTime);
-    if (!playerSeeking && audio.duration) seek.value = Math.round(audio.currentTime / audio.duration * 1000);
+    if (!playerSeeking && audio.duration) {
+      seek.value = Math.round(audio.currentTime / audio.duration * 1000);
+      amPaint(seek);
+    }
   });
   audio.addEventListener('loadedmetadata', () => { $('pl-dur').textContent = fmtTime(audio.duration); });
   audio.addEventListener('ended', playerEnded);
@@ -8367,14 +8370,27 @@ function closePlayer() {
   audio.addEventListener('error', () => {
     if (audio.getAttribute('src')) $('pl-quality').textContent = 'This window cannot decode the file';
   });
-  seek.addEventListener('input', () => { playerSeeking = true; });
+  seek.addEventListener('input', () => {
+    playerSeeking = true;
+    seek.classList.add('dragging');
+    amPaint(seek);
+    if (audio.duration) $('pl-cur').textContent = fmtTime(seek.value / 1000 * audio.duration);
+  });
   seek.addEventListener('change', () => {
     if (audio.duration) audio.currentTime = seek.value / 1000 * audio.duration;
     playerSeeking = false;
+    seek.classList.remove('dragging');
   });
-  $('pl-vol').addEventListener('input', e => { audio.volume = e.target.value / 100; $('np-vol').value = e.target.value; });
+  const setVolume = value => {
+    audio.volume = value / 100;
+    $('pl-vol').value = value; $('np-vol').value = value;
+    amPaint($('pl-vol')); amPaint($('np-vol'));
+  };
+  $('pl-vol').addEventListener('input', e => setVolume(e.target.value));
   updatePlayerModes();
-  $('np-vol').addEventListener('input', e => { audio.volume = e.target.value / 100; $('pl-vol').value = e.target.value; });
+  $('np-vol').addEventListener('input', e => setVolume(e.target.value));
+  setVolume($('pl-vol').value);
+  amPaint(seek);
 
   // Full-screen view: same audio element, its own controls.
   const npSeek = $('np-seek');
@@ -8411,6 +8427,14 @@ function closePlayer() {
     if (e.key === 'Escape' && !$('np-view').classList.contains('hidden')) closeNowPlaying();
   });
 })();
+
+// The filled share of an Apple Music slider (.am-range), drawn from --p.
+function amPaint(el) {
+  if (!el) return;
+  const min = Number(el.min) || 0, max = Number(el.max) || 100;
+  const p = max > min ? (Number(el.value) - min) / (max - min) * 100 : 0;
+  el.style.setProperty('--p', p.toFixed(2) + '%');
+}
 
 // The played share of the seek bar, which its CSS draws from --p.
 function npPaintSeek() {
