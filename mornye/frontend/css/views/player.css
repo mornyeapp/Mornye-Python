@@ -472,6 +472,27 @@
 /* Rows start right under the column header; a page (album, artist, grid)
    keeps the usual space above it. */
 .player-toolbar:has(.pt-colhead:not(.hidden)) + .player-scroll { margin-top: calc(-1 * var(--space-4)); }
+
+/* Scrolling the music folds the subtitle and the library bar up (app.js
+   adds .player-compact), giving the list their room. */
+#view-player .s-header, #view-player #player-body { transition: padding .2s ease; }
+.player-heading { transition: gap .2s ease; }
+.player-heading p { max-height: 2.6em; overflow: hidden; transition: max-height .2s ease, opacity .2s ease; }
+#view-player .player-libbar {
+  max-height: 140px; overflow: hidden;
+  transition: max-height .2s ease, padding .2s ease, margin .2s ease, opacity .15s ease;
+}
+#view-player.player-compact .s-header { padding-top: var(--space-3); padding-bottom: 0; }
+#view-player.player-compact #player-body { padding-top: 0; }
+#view-player.player-compact .player-heading { gap: 0; }
+#view-player.player-compact .player-heading p { max-height: 0; opacity: 0; }
+#view-player.player-compact .player-libbar {
+  max-height: 0; padding-block: 0; opacity: 0; border-width: 0;
+  margin-top: 0; margin-bottom: calc(-1 * var(--space-4));
+}
+@media (prefers-reduced-motion: reduce) {
+  #view-player .s-header, #view-player #player-body, .player-heading, .player-heading p, #view-player .player-libbar { transition: none; }
+}
 .player-status:empty { display: none; }
 .player-status { padding: 0 2px; color: var(--text-2); font-size: var(--text-sm); }
 

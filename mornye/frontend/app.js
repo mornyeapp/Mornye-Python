@@ -9493,6 +9493,17 @@ function markPlayingRow() {
   };
   $('player-grid')?.addEventListener('click', onGroupClick);
   $('player-detail')?.addEventListener('click', onGroupClick);
+  // Scrolling the music folds the page title's subtitle and the library bar
+  // away, so the list gets their room; back at the top they return. Only
+  // when there is enough to scroll: a list that barely overflows would
+  // un-fold itself as soon as the extra room let it fit.
+  $('player-scroll')?.addEventListener('scroll', e => {
+    const box = e.currentTarget;
+    const view = $('view-player');
+    const top = box.scrollTop;
+    if (top > 40 && box.scrollHeight - box.clientHeight > 160) view.classList.add('player-compact');
+    else if (top < 8) view.classList.remove('player-compact');
+  }, { passive: true });
   const audio = $('player-audio');
   audio.addEventListener('play', () => $('player-list').classList.remove('paused'));
   audio.addEventListener('pause', () => $('player-list').classList.add('paused'));
