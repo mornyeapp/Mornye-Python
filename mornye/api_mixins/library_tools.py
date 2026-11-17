@@ -59,6 +59,13 @@ class LibraryToolsMixin:
         local = (Path(self.download_dir).resolve(), Path.home().resolve())
         if any(resolved.is_relative_to(root) for root in local):
             return True
+        # Windows opens \\server\share without mounting it, so a UNC path has
+        # no mount point to compare with: allowed as Fix Local Files and the
+        # duplicate scan already allow it (api_mixins/dedup.py).
+        from ..core.network_paths import is_unc_path
+
+        if is_unc_path(str(candidate)):
+            return True
         return any(resolved.is_relative_to(root) for root in _network_roots_cached())
 
     # ── Tag editor ──────────────────────────────────────────────────────────

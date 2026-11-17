@@ -68,10 +68,19 @@ def test_a_share_address_is_mapped_to_its_mount(api, tmp_path, monkeypatch):
 def test_a_share_that_is_not_mounted_says_how_to_mount_it(api, monkeypatch):
     import mornye.core.network_paths as np_
 
+    # macOS and Linux need the share mounted; Windows opens it as UNC.
+    monkeypatch.setattr(np_.sys, "platform", "darwin")
     monkeypatch.setattr(np_, "current_mounts", lambda: [])
     res = api.scan_music_library(["smb://nas/Music"])
     assert res["status"] == "error"
     assert "not mounted" in res["error"]
+
+
+def test_a_unc_share_is_approved_on_windows(api, monkeypatch):
+    import mornye.core.network_paths as np_
+
+    monkeypatch.setattr(np_.sys, "platform", "win32")
+    assert api._is_approved_path("\\\\nas\\Music\\song.flac")
 
 
 def test_a_folder_outside_the_approved_roots_is_refused(api, tmp_path, monkeypatch):
