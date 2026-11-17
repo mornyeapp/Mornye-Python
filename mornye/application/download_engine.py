@@ -2137,7 +2137,10 @@ class LegacyDownloadWorker:
                 error = result.error or "unknown"
                 self._failed.append((track.id, track.title, track.artists, error))
                 await manager.fail_download(track.id, error)
-                ProgressCallback.clear_item(track.id)
+            # Every outcome, not only failures: an extension's reported total
+            # is often larger than the file it delivers, so a finished
+            # track's bar never reaches 100% and would stay on screen.
+            ProgressCallback.clear_item(track.id)
             ProgressManager.increment_master()
 
         worker = ApplicationDownloadWorker(

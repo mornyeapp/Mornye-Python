@@ -1076,6 +1076,49 @@ async def fetch_mb_metadata_async(
     return {} if res is _LOOKUP_FAILED else res  # type: ignore
 
 
+_isrc_pair_cache: dict[frozenset[str], bool] = {}
+
+
+async def isrcs_share_recording_async(isrc_a: str, isrc_b: str) -> bool | None:
+    """Whether MusicBrainz lists both ISRCs on one recording.
+
+    Labels re-register ISRCs for reissues, deluxe editions and remasters of
+    the very same master — Michael Bublé's "Holly Jolly Christmas" is
+    USRE11100705 on the 2011 album and USRE11300228 on the 2013 deluxe
+    edition — so two different ISRCs are not proof of two recordings.
+    MusicBrainz groups every ISRC a recording was issued under, which is the
+    one place that can tell a reissue from a different take.
+
+    True: some recording carries both. False: the lookup answered and none
+    does. None: MusicBrainz could not be asked (paused, offline, error) —
+    callers must treat that as "unknown", not as a match.
+    """
+    a = (isrc_a or "").strip().upper()
+    b = (isrc_b or "").strip().upper()
+    if not a or not b:
+        return None
+    if a == b:
+        return True
+    key = frozenset((a, b))
+    if key in _isrc_pair_cache:
+        return _isrc_pair_cache[key]
+    if should_skip_mb():
+        return None
+    try:
+        data = await _query_recordings_async(f"isrc:{a}")
+    except Exception as exc:
+        logger.debug("[MusicBrainz] ISRC pair lookup %s/%s failed: %s", a, b, exc)
+        return None
+    shared = False
+    for rec in data.get("recordings") or []:
+        isrcs = {str(i).strip().upper() for i in (rec.get("isrcs") or [])}
+        if a in isrcs and b in isrcs:
+            shared = True
+            break
+    _isrc_pair_cache[key] = shared
+    return shared
+
+
 def mb_result_to_tags(res: dict) -> dict[str, str]:
     """Convert the MusicBrainz response dictionary into standard tags."""
     if not res:

@@ -715,6 +715,11 @@ class DownloadManager:
         await DownloadBroadcaster().broadcast_immediate(stats)
 
 
+#: Marker in the track-name slot of a queued event: release the bar instead
+#: of updating it. See ProgressManager.clear_item().
+_RELEASE: Any = object()
+
+
 class ProgressManager:
     """Manages per-track tqdm bars.
 
@@ -815,6 +820,14 @@ class ProgressManager:
                 break
 
             item_id, track_name, current_bytes, total_bytes = event
+
+            if track_name is _RELEASE:
+                # Queued by clear_item(): handled in order with the progress
+                # events before it, so a late update cannot rebuild the bar
+                # after the download has already returned.
+                with tqdm.get_lock():
+                    cls.release_bar(item_id)
+                continue
 
             if not progress_bars_enabled():
                 cls._log_progress(item_id, track_name, current_bytes, total_bytes)
@@ -975,6 +988,24 @@ class ProgressManager:
 
     @classmethod
     def clear_item(cls, item_id: str) -> None:
+        """Remove the bar of a download that has returned.
+
+        A bar only closes on its own when the bytes reach the reported
+        total, and the total an extension reports is often an estimate
+        larger than the file it delivers — such a bar would sit on screen,
+        frozen, for the rest of the batch. With the consumer running the
+        release goes through its queue, behind any progress still pending
+        for the item; otherwise it happens immediately.
+        """
+        queue = cls._event_queue
+        worker = cls._worker_task
+        if queue is not None and worker is not None and not worker.done():
+            try:
+                if asyncio.get_running_loop() is cls._queue_loop:
+                    queue.put_nowait((item_id, _RELEASE, 0, None))
+                    return
+            except RuntimeError:
+                pass
         with tqdm.get_lock():
             cls.release_bar(item_id)
 

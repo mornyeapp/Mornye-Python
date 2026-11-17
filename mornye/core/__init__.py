@@ -87,7 +87,7 @@ def _load_registry() -> dict:
     except Exception as exc:
         logger.warning(
             "Unable to contact Cloud servers (%s). Falling back to local cache...",
-            exc,
+            str(exc) or type(exc).__name__,
         )
         try:
             if os.path.exists(cache_file_path):

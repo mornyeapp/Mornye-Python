@@ -1173,22 +1173,48 @@ class JSExtensionProvider(BaseProvider):
                 # download — but download() reports the title/artist/album it
                 # actually fetched, which is enough to catch a wrong match here,
                 # before the requested track's tags are written over it.
-                mismatch = track_identity_mismatch(
-                    expected_title=metadata.title,
-                    expected_artist=metadata.artists,
-                    expected_album=metadata.album,
-                    expected_isrc=metadata.isrc,
-                    found_title=str(
+                identity = {
+                    "expected_title": metadata.title,
+                    "expected_artist": metadata.artists,
+                    "expected_album": metadata.album,
+                    "found_title": str(
                         dl_result.get("title") or dl_result.get("name") or ""
                     ),
-                    found_artist=str(
+                    "found_artist": str(
                         dl_result.get("artist") or dl_result.get("artists") or ""
                     ),
-                    found_album=str(
+                    "found_album": str(
                         dl_result.get("album") or dl_result.get("album_name") or ""
                     ),
-                    found_isrc=str(dl_result.get("isrc") or ""),
+                }
+                found_isrc = str(dl_result.get("isrc") or "")
+                mismatch = track_identity_mismatch(
+                    **identity,
+                    expected_isrc=metadata.isrc,
+                    found_isrc=found_isrc,
                 )
+                # A conflicting ISRC is often a reissue of the same master
+                # (deluxe edition, remaster, compilation) rather than another
+                # take. When the names agree in every other respect, ask
+                # MusicBrainz whether one recording carries both ISRCs; only a
+                # positive answer overrides the rejection.
+                if mismatch.startswith(
+                    "different recording"
+                ) and not track_identity_mismatch(**identity):
+                    from mornye.core.musicbrainz import (
+                        isrcs_share_recording_async,
+                    )
+
+                    if await isrcs_share_recording_async(metadata.isrc, found_isrc):
+                        logger.info(
+                            "[%s] ISRC %s differs from requested %s, but "
+                            "MusicBrainz lists both on the same recording — "
+                            "accepting.",
+                            self.name,
+                            found_isrc,
+                            metadata.isrc,
+                        )
+                        mismatch = ""
                 if mismatch:
                     logger.warning("[%s] Wrong track: %s", self.name, mismatch)
                     with contextlib.suppress(OSError):
