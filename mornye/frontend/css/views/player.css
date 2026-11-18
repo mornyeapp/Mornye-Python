@@ -130,6 +130,13 @@
 .np-queue-row.active { background: rgba(var(--media-ink-rgb), .16); }
 .np-queue-row .t { font-size: 16px; font-weight: 600; }
 .np-queue-row .a { font-size: 13px; color: rgba(var(--media-ink-rgb), .6); }
+/* Artist and album names that open their place in the library. They read as
+   the text around them until pointed at. */
+.np-link {
+  border: 0; padding: 0; background: none; font: inherit; color: inherit; cursor: pointer;
+  text-decoration: underline transparent; text-underline-offset: 3px; transition: text-decoration-color .15s, color .15s;
+}
+.np-link:hover, .np-link:focus-visible { color: var(--media-ink); text-decoration-color: currentColor; outline: none; }
 .np-tabs { position: absolute; right: 28px; bottom: 24px; display: flex; gap: 4px; padding: 6px; background: rgba(var(--media-ink-rgb), .12); }
 .np-tab { width: 38px; height: 38px; border: 0; background: transparent; color: var(--media-ink); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .np-tab.active { background: var(--media-ink); color: var(--media-ink-inverse); }

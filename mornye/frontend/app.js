@@ -8745,11 +8745,63 @@ function npApplyColors(src) {
   img.src = src;
 }
 
+// The artist and album under the title, as links into the library: an
+// artist with a page of their own opens it, anyone else (a featured artist
+// is rarely an album artist) opens the songs that name them; the album
+// opens its page.
+function npArtistLinks(names, fallback) {
+  const list = names && names.length ? names : artistNames(fallback);
+  return list.map(name => `<button type="button" class="np-link" data-artist-name="${escHtml(name)}"
+    data-onclick="event.stopPropagation(); npGoArtist(this.dataset.artistName)">${escHtml(name)}</button>`).join(', ');
+}
+
+function npFillCredits(item, res) {
+  const libItem = lib.items.find(t => t.path === item.path);
+  const names = artistNames(res.artist).length ? artistNames(res.artist) : (libItem?.artist_names || []);
+  const album = (res.album || item.album || '').trim();
+  NP.albumKey = libItem ? libAlbumKey(libItem) : '';
+  NP.albumName = album;
+  const parts = [];
+  const artists = npArtistLinks(names, item.artist);
+  if (artists) parts.push(artists);
+  if (album) parts.push(`<button type="button" class="np-link" data-onclick="npGoAlbum()">${escHtml(album)}</button>`);
+  $('np-artist').innerHTML = parts.join(' · ');
+}
+
+function npShowInLibrary() {
+  closeNowPlaying();
+  switchView('player');
+}
+
+function npGoArtist(name) {
+  const key = String(name || '').trim().toLowerCase();
+  if (!key) return;
+  npShowInLibrary();
+  if (libArtists(lib.items).some(a => a.key === key)) {
+    $('player-search').value = '';
+    openPlayerArtist(key);
+  } else {
+    $('player-search').value = name;
+    setPlayerTab('songs');
+  }
+}
+
+function npGoAlbum() {
+  npShowInLibrary();
+  if (NP.albumKey && libAlbums(lib.items).some(a => a.key === NP.albumKey)) {
+    $('player-search').value = '';
+    openPlayerAlbum(NP.albumKey);
+  } else if (NP.albumName) {
+    $('player-search').value = NP.albumName;
+    setPlayerTab('albums');
+  }
+}
+
 function fillNowPlaying(item, res) {
   setPlayerArtwork(res.cover || '');
   npResetSync();
   $('np-title').textContent = res.title || item.title;
-  $('np-artist').textContent = [displayArtists(res.artist || item.artist), res.album].filter(Boolean).join(' · ');
+  npFillCredits(item, res);
   $('np-explicit').classList.toggle('hidden', !res.explicit);
   const cover = $('np-cover');
   cover.parentElement.classList.toggle('empty', !res.cover);
@@ -9098,7 +9150,7 @@ function npRenderQueue() {
     const i = playerOrder[n], q = playerQueue[i];
     if (!q) continue;
     rows.push(`<div class="np-queue-row${n === playerPos ? ' active' : ''}" role="button" tabindex="0" data-activate data-onclick="loadPlayerTrack(${i})">
-       <span class="t">${escHtml(q.title)}</span><span class="a">${escHtml(q.artist || '')}</span></div>`);
+       <span class="t">${escHtml(q.title)}</span><span class="a">${npArtistLinks(lib.items.find(t => t.path === q.path)?.artist_names, q.artist)}</span></div>`);
   }
   $('np-queue').innerHTML = rows.join('');
 }
@@ -9284,14 +9336,14 @@ function togglePlayerSource() {
 // between multi-value frames); the player shows "Doja Cat, SZA". The tag on
 // disk is left alone. A slash splits only a credit that has spaces in it,
 // so "AC/DC" stays one name.
-function displayArtists(value) {
+function artistNames(value) {
   return String(value || '')
     .split(/\s*[;\u0000]\s*/)
     .flatMap(part => (/\s/.test(part) ? part.split(/\s*\/\s*/) : [part]))
     .map(part => part.trim())
-    .filter(Boolean)
-    .join(', ');
+    .filter(Boolean);
 }
+function displayArtists(value) { return artistNames(value).join(', '); }
 
 function libAccept(p) {
   if (lib.scan === null) { if (p.scan <= lib.lastScan) return false; lib.scan = p.scan; }
@@ -9302,6 +9354,9 @@ window.app_library_scan_chunk = function(p) {
   if (!libAccept(p)) return;
   lib.items.push(...p.items.map(t => ({
     ...t,
+    // The names one by one, for the now-playing links: once joined with
+    // commas they cannot be told apart from "Tyler, The Creator".
+    artist_names: artistNames(t.artist),
     artist: displayArtists(t.artist),
     album_artist: displayArtists(t.album_artist),
   })));
