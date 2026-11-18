@@ -165,6 +165,67 @@ def _file_exists(row: Any) -> bool:
     return bool(path) and os.path.isfile(path)
 
 
+#: How the library's own files are named among the sources.
+LIBRARY_SOURCE = "Before Mornye"
+
+
+def _track_key(title: Any, artist: Any) -> tuple[str, str]:
+    names = _split_names(str(artist or ""))
+    return (str(title or "").strip().lower(), names[0].lower() if names else "")
+
+
+def _library_rows(downloaded: Sequence[Any]) -> list[dict]:
+    """The Player's library files that Mornye did not download.
+
+    The download log only knows what Mornye fetched, so a library built up
+    before it counted for nothing. The Player stores a row for every file it
+    has seen (core/player_library.py); those not in the log, by path or, for
+    a file moved since, by title and first artist, are counted as well, as
+    rows shaped like the log's. They have no download date, so they stay out
+    of everything measured in time. Never raises.
+    """
+    try:
+        rows = (
+            db.connection()
+            .execute("SELECT path, size, row FROM player_library")
+            .fetchall()
+        )
+    except Exception:
+        logger.debug("[stats] could not read the Player's library", exc_info=True)
+        return []
+    paths = {
+        os.path.normpath(str(_value(r, "file_path")))
+        for r in downloaded
+        if _value(r, "file_path")
+    }
+    keys = {_track_key(_value(r, "title"), _value(r, "artist")) for r in downloaded}
+    out: list[dict] = []
+    for stored in rows:
+        data = db.loads(stored["row"], None)
+        if not isinstance(data, dict):
+            continue
+        if os.path.normpath(str(stored["path"])) in paths:
+            continue
+        if _track_key(data.get("title"), data.get("artist")) in keys:
+            continue
+        out.append(
+            {
+                "title": data.get("title", ""),
+                "artist": data.get("artist", ""),
+                "album": data.get("album", ""),
+                "genre": data.get("genre", ""),
+                "release_year": data.get("year", ""),
+                "duration_ms": int(float(data.get("duration_s") or 0) * 1000),
+                "format": data.get("format", ""),
+                "bytes": int(stored["size"] or 0),
+                "provider": LIBRARY_SOURCE,
+                "file_path": stored["path"],
+                "success": 1,
+            }
+        )
+    return out
+
+
 # ---------------------------------------------------------------------------
 # The dashboard
 # ---------------------------------------------------------------------------
@@ -176,6 +237,7 @@ def wrapped(
     window: Window | None = None,
     top: int = DEFAULT_TOP,
     existing_files: bool = False,
+    include_library: bool = True,
 ) -> dict:
     """Everything the dashboard shows, from one pass over the log.
 
@@ -190,15 +252,29 @@ def wrapped(
     """
     window = window or Window()
     rows = _fetch(window, owner)
+    downloaded = [row for row in rows if _value(row, "success", 0)]
     if existing_files:
         rows = [row for row in rows if _value(row, "success", 0) and _file_exists(row)]
     successful = [row for row in rows if _value(row, "success", 0)]
+    # The library's files from before Mornye (`include_library`): only over
+    # the whole history, since they have no date to fall in a period, and
+    # only for the whole instance, since the Player's library is not split
+    # by account and one account must not see another's files.
+    library = (
+        _library_rows(downloaded)
+        if include_library
+        and owner is None
+        and window.since is None
+        and window.until is None
+        else []
+    )
+    counted = [*successful, *library]
 
     document: dict[str, Any] = {
         "generated_at": time.time(),
         "owner": owner or "",
         "window": window.to_dict(),
-        "totals": _totals(rows, successful),
+        "totals": _totals(rows, successful, library),
         "top_artists": [],
         "top_albums": [],
         "top_genres": {"known": 0, "unknown": 0, "entries": []},
@@ -211,10 +287,10 @@ def wrapped(
         "first": None,
         "last": None,
     }
-    if not successful:
+    if not counted:
         return document
 
-    total = len(successful)
+    total = len(counted)
 
     artists: Counter = Counter()
     albums: Counter = Counter()
@@ -225,7 +301,7 @@ def wrapped(
     formats: Counter = Counter()
     genre_known = decade_known = 0
 
-    for row in successful:
+    for row in counted:
         for name in _split_names(_value(row, "artist")):
             artists[name] += 1
 
@@ -285,28 +361,31 @@ def wrapped(
     }
     document["providers"] = _ranked(providers, total, top)
     document["formats"] = _ranked(formats, total, top)
-    document["timeline"] = _timeline(successful)
-    document["activity"] = _activity(successful)
-    document["first"] = _milestone(successful[0])
-    document["last"] = _milestone(successful[-1])
+    # When: only what Mornye downloaded has a date.
+    if successful:
+        document["timeline"] = _timeline(successful)
+        document["activity"] = _activity(successful)
+        document["first"] = _milestone(successful[0])
+        document["last"] = _milestone(successful[-1])
     return document
 
 
-def _totals(rows: Sequence[Any], successful: Sequence[Any]) -> dict:
-    total_bytes = sum(int(_value(row, "bytes", 0) or 0) for row in successful)
-    listening_ms = sum(int(_value(row, "duration_ms", 0) or 0) for row in successful)
-    timed = sum(1 for row in successful if int(_value(row, "duration_ms", 0) or 0))
-    artists = {
-        name for row in successful for name in _split_names(_value(row, "artist"))
-    }
+def _totals(
+    rows: Sequence[Any], successful: Sequence[Any], library: Sequence[Any] = ()
+) -> dict:
+    counted = [*successful, *library]
+    total_bytes = sum(int(_value(row, "bytes", 0) or 0) for row in counted)
+    listening_ms = sum(int(_value(row, "duration_ms", 0) or 0) for row in counted)
+    timed = sum(1 for row in counted if int(_value(row, "duration_ms", 0) or 0))
+    artists = {name for row in counted for name in _split_names(_value(row, "artist"))}
     albums = {
         _value(row, "album")
-        for row in successful
+        for row in counted
         if _value(row, "album") and _value(row, "album").lower() != "unknown"
     }
     attempts = len(rows)
     return {
-        "tracks": len(successful),
+        "tracks": len(counted),
         "failed": attempts - len(successful),
         "attempts": attempts,
         "success_rate": _share(len(successful), attempts),
@@ -317,6 +396,8 @@ def _totals(rows: Sequence[Any], successful: Sequence[Any]) -> dict:
         # How much of the listening time is actually measured: durations are
         # only recorded from schema v2 onwards.
         "listening_known": timed,
+        # Of "tracks", those already in the library before Mornye.
+        "library_tracks": len(library),
     }
 
 

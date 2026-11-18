@@ -54,7 +54,7 @@ def reads(monkeypatch) -> list[str]:
 
     def fake_read(path: Path) -> dict:
         seen.append(Path(path).name)
-        return {"path": str(path), "title": Path(path).stem, "artist": "A"}
+        return {"path": str(path), "title": Path(path).stem, "artist": "A", "genre": ""}
 
     monkeypatch.setattr("mornye.core.library_scan.read_track_row", fake_read)
     return seen
@@ -139,3 +139,25 @@ def test_stored_rows_belong_to_the_folders_asked_for(tmp_path, library, reads):
 
     names = sorted(Path(p).name for p in player_library.stored_rows([str(library)]))
     assert names == ["a.flac", "b.flac", "c.flac"]
+
+
+def test_a_row_stored_before_genres_were_read_is_read_once_more(library, monkeypatch):
+    """Rows stored without a genre (for the Stats page) are refreshed once."""
+    monkeypatch.setattr(
+        "mornye.core.library_scan.read_track_row",
+        lambda path: {"path": str(path), "title": Path(path).stem},
+    )
+    api = MornyeAPI()
+    _scan(api, library)
+    seen: list[str] = []
+
+    def with_genre(path: Path) -> dict:
+        seen.append(Path(path).name)
+        return {"path": str(path), "title": Path(path).stem, "genre": "Rock"}
+
+    monkeypatch.setattr("mornye.core.library_scan.read_track_row", with_genre)
+    _scan(api, library)
+    assert sorted(seen) == ["a.flac", "b.flac", "c.flac"]
+    seen.clear()
+    _scan(api, library)
+    assert seen == []

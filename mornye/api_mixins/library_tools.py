@@ -356,7 +356,12 @@ class LibraryToolsMixin:
                 except OSError:
                     continue
                 known = stored.get(str(path))
-                if known is not None and known.matches(st.st_mtime_ns, st.st_size):
+                # A row stored before it carried a genre is read once more.
+                if (
+                    known is not None
+                    and known.matches(st.st_mtime_ns, st.st_size)
+                    and "genre" in known.row
+                ):
                     continue
                 row = read_track_row(path)
                 batch.append(row)

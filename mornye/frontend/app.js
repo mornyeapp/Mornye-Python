@@ -11175,6 +11175,10 @@ function renderStats(doc) {
         : ''}
       ${totals.failed ? statsTile('failed', totals.failed, `${Math.round((totals.success_rate || 0) * 100)}% succeeded`) : ''}
     </div>`);
+  // Files the Player found that Mornye did not download (core/stats.py).
+  if (totals.library_tracks) {
+    sections.push(`<div class="stats-source-note"><strong>${totals.library_tracks.toLocaleString()} from before Mornye</strong><span>tracks in your Player library that Mornye did not download. They count in the totals and rankings, not in the activity.</span></div>`);
+  }
 
   sections.push(statsSection('Top artists', statsBars(
     (doc.top_artists || []).map((e) => ({ label: e.name, value: e.tracks })),
