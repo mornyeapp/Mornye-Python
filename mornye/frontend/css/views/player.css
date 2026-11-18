@@ -105,6 +105,11 @@
           mask-image: linear-gradient(180deg, transparent 0, var(--ink) 22px, var(--ink) calc(100% - 90px), transparent 100%);
 }
 .np-lyrics { flex: 1 1 auto; min-height: 0; height: auto; }
+/* The rows' offsetTop is read from here (npScrollToFocus). Without it they
+   were measured from .np-right, which also holds the Lyrics sync toolbar, so
+   every scroll overshot by the toolbar's height and the sung line slid
+   under the top fade. */
+.np-lyrics { position: relative; }
 .np-queue { flex: 1 1 auto; min-height: 0; }
 .np-queue { padding-top: 30vh; padding-bottom: 30vh; }
 .np-lyrics::-webkit-scrollbar, .np-queue::-webkit-scrollbar { display: none; }

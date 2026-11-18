@@ -8894,7 +8894,10 @@ const npSoft = s => {                                                  // stiffn
 };
 const npEase = v => { const t = Math.min(1, Math.max(0, v)); return t * t * (3 - 2 * t); };
 
-function npInset() { return Math.min(48, Math.max(16, window.innerHeight * 0.06)); }
+// Where the sung line sits, from the top of the pane. Never less than 34px:
+// the pane's mask fades the first 22px out (player.css), and a smaller inset
+// put the first and the sung line half inside that fade on short windows.
+function npInset() { return Math.min(56, Math.max(34, window.innerHeight * 0.06)); }
 
 function npLayoutLyrics() {
   const box = $('np-lyrics');
