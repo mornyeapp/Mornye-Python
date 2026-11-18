@@ -6194,7 +6194,7 @@ function pyWin(method, arg) {
 // Double-clicking the titlebar zooms / restores the window, as a native
 // title bar does — the frameless window has none of its own.
 document.addEventListener('dblclick', (e) => {
-  if (e.target.closest?.('#titlebar .pywebview-drag-region')) pyWin('WindowToggleMaximise');
+  if (e.target.closest?.('#titlebar .pywebview-drag-region, #np-view .np-drag')) pyWin('WindowToggleMaximise');
 });
 
 // ── Extension Registries ───────────────────────────────────────────────────

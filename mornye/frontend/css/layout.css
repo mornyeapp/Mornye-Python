@@ -642,6 +642,15 @@ body {
 #np-view > * { position: relative; z-index: 1; }
 #np-view > #np-bg { position: absolute; }
 #np-view > #np-bg { inset: 0; z-index: 0; }
+/* The full-screen player covers the titlebar, which is the only place the
+   frameless desktop window can be dragged from. This strip along its top
+   takes over that job; it sits under the close and volume controls (later
+   in the markup) and is not needed in a browser tab. */
+#np-view > .np-drag {
+  position: absolute; top: 0; left: 0; right: 0; height: 56px;
+  -webkit-app-region: drag;
+}
+body.web-mode #np-view > .np-drag { display: none; }
 
 @media (max-width: 860px) {
   #np-view { grid-template-columns: 1fr; align-items: start; overflow-y: auto; padding-top: 70px; }

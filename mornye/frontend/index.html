@@ -1940,6 +1940,9 @@
 
 <div id="np-view" class="hidden" role="dialog" aria-modal="true" aria-label="Now playing">
   <div id="np-bg"></div>
+  <!-- The view covers the titlebar, so it brings its own strip to drag the
+       frameless window by (pywebview's drag-region class). -->
+  <div class="np-drag pywebview-drag-region" aria-hidden="true"></div>
   <button type="button" class="np-close" data-onclick="closeNowPlaying()" aria-label="Back to the library">✕</button>
   <div class="np-volume">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9z"/></svg>
