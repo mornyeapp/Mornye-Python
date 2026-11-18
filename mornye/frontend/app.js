@@ -8410,12 +8410,72 @@ async function loadPlayerTrack(index) {
   $('pl-quality').textContent = res.quality;
   fillNowPlaying(item, res);
   try { await audio.play(); } catch (e) { /* autoplay blocked: the play button works */ }
-  if ('mediaSession' in navigator) {
-    navigator.mediaSession.metadata = new MediaMetadata({ title: item.title, artist, album: item.album || '' });
-    navigator.mediaSession.setActionHandler('previoustrack', () => playerPrev());
-    navigator.mediaSession.setActionHandler('nexttrack', () => playerNext());
-  }
+  playerMediaMetadata(item, res, artist);
 }
+
+// ── Media keys and the system's "Now Playing" ───────────────────────────────
+// The Media Session is what the keyboard's play/pause/next keys, the macOS
+// Now Playing panel, the Windows media overlay and a Bluetooth headset talk
+// to, in the desktop window (WebView2, WebKit) as in a browser tab. Only
+// previous/next were wired: play, pause, stop and seeking were not, so the
+// play/pause key did nothing and the system showed no progress or cover.
+function playerMediaMetadata(item, res, artist) {
+  if (!('mediaSession' in navigator)) return;
+  try {
+    const cover = res?.cover || '';
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: res?.title || item.title,
+      artist,
+      album: res?.album || item.album || '',
+      artwork: cover ? [{ src: cover, sizes: '512x512' }] : [],
+    });
+  } catch (e) { /* an engine without MediaMetadata artwork support */ }
+}
+
+function playerMediaPosition() {
+  const audio = $('player-audio');
+  if (!('mediaSession' in navigator) || !navigator.mediaSession.setPositionState) return;
+  if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) return;
+  try {
+    navigator.mediaSession.setPositionState({
+      duration: audio.duration,
+      position: Math.min(audio.currentTime, audio.duration),
+      playbackRate: audio.playbackRate || 1,
+    });
+  } catch (e) { /* position past the end while a track changes */ }
+}
+
+(function initMediaSession() {
+  const audio = $('player-audio');
+  if (!audio || !('mediaSession' in navigator)) return;
+  const session = navigator.mediaSession;
+  const seekBy = (offset) => {
+    if (!audio.src || !Number.isFinite(audio.duration)) return;
+    audio.currentTime = Math.max(0, Math.min(audio.duration, audio.currentTime + offset));
+    playerMediaPosition();
+  };
+  const handlers = {
+    play: () => { if (audio.src) audio.play(); },
+    pause: () => audio.pause(),
+    stop: () => { audio.pause(); if (audio.src) audio.currentTime = 0; },
+    previoustrack: () => playerPrev(),
+    nexttrack: () => playerNext(),
+    seekbackward: (d) => seekBy(-(d?.seekOffset || 10)),
+    seekforward: (d) => seekBy(d?.seekOffset || 10),
+    seekto: (d) => {
+      if (!audio.src || d?.seekTime == null) return;
+      audio.currentTime = d.seekTime;
+      playerMediaPosition();
+    },
+  };
+  for (const [action, handler] of Object.entries(handlers)) {
+    try { session.setActionHandler(action, handler); } catch (e) { /* not supported here */ }
+  }
+  audio.addEventListener('play', () => { session.playbackState = 'playing'; playerMediaPosition(); });
+  audio.addEventListener('pause', () => { session.playbackState = 'paused'; playerMediaPosition(); });
+  audio.addEventListener('loadedmetadata', playerMediaPosition);
+  audio.addEventListener('seeked', playerMediaPosition);
+})();
 
 function playerToggle() {
   const audio = $('player-audio');
@@ -8455,6 +8515,10 @@ function closePlayer() {
   document.body.classList.remove('has-player');
   playerIndex = -1;
   markPlayingRow();
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.metadata = null;
+    navigator.mediaSession.playbackState = 'none';
+  }
 }
 
 (function initPlayer() {
