@@ -19,6 +19,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl
 from xml.etree import ElementTree as ET
 
 from fastapi import APIRouter, Request
@@ -45,17 +46,23 @@ class _Fail(Exception):
 
 
 async def _params(request: Request) -> dict[str, list[str]]:
+    """Query parameters, plus a form POST body (OpenSubsonic's formPost).
+
+    The body is decoded here rather than with `request.form()`: that needs
+    python-multipart, which Mornye does not depend on, and without it every
+    parameter of a POST was lost (the Windows CI runner had no copy of it).
+    formPost is always application/x-www-form-urlencoded.
+    """
     out: dict[str, list[str]] = {}
     for key, value in request.query_params.multi_items():
         out.setdefault(key, []).append(value)
-    if request.method == "POST":
-        try:
-            form = await request.form()
-            for key, field in form.multi_items():
-                if isinstance(field, str):  # an uploaded file is not a parameter
-                    out.setdefault(key, []).append(field)
-        except Exception:
-            pass
+    content_type = request.headers.get("content-type", "").lower()
+    if request.method == "POST" and content_type.startswith(
+        "application/x-www-form-urlencoded"
+    ):
+        body = (await request.body()).decode("utf-8", errors="replace")
+        for key, field in parse_qsl(body, keep_blank_values=True):
+            out.setdefault(key, []).append(field)
     return out
 
 

@@ -180,6 +180,34 @@ def test_form_post_works(client):
     assert resp.json()["subsonic-response"]["status"] == "ok"
 
 
+def test_form_post_needs_no_multipart_parser(client, monkeypatch):
+    """Starlette's request.form() needs python-multipart, which Mornye does
+    not depend on: on a machine without it (the Windows CI runner) every
+    parameter of a POST was lost."""
+
+    async def no_parser(self, *a, **k):
+        raise AssertionError("python-multipart is not installed")
+
+    monkeypatch.setattr("starlette.requests.Request.form", no_parser)
+    resp = client.post("/rest/ping.view", data={"u": "me", "p": PASSWORD, "f": "json"})
+    assert resp.json()["subsonic-response"]["status"] == "ok"
+
+
+def test_repeated_parameters_in_a_form_post(client, library):
+    ids = [
+        s["id"]
+        for s in _get(client, "search3", query='""', songCount=10)["searchResult3"][
+            "song"
+        ][:2]
+    ]
+    resp = client.post(
+        "/rest/createPlaylist.view",
+        data={**_auth(), "name": "Posted", "songId": ids},
+    )
+    playlist = resp.json()["subsonic-response"]["playlist"]
+    assert playlist["songCount"] == 2
+
+
 # ── browsing ─────────────────────────────────────────────────────────────
 
 
