@@ -125,9 +125,11 @@ SITES: tuple[CatalogueSite, ...] = (
         patterns=(
             ("album", r"/album/(\d+)"),
             ("track", r"/(?:[a-z]{2}/)?track/(\d+)"),
+            ("playlist", r"/(?:[a-z]{2}/)?playlist/(\d+)"),
         ),
         track_url="https://www.deezer.com/track/{id}",
         album_url="https://www.deezer.com/album/{id}",
+        playlist_url="https://www.deezer.com/playlist/{id}",
     ),
     CatalogueSite(
         key="qobuz",
@@ -168,7 +170,12 @@ SITES: tuple[CatalogueSite, ...] = (
             ("track", r"/(?:browse/)?track/(\d+)"),
             ("album", r"/(?:browse/)?album/(\d+)"),
             ("artist", r"/(?:browse/)?artist/(\d+)"),
-            ("playlist", r"/(?:browse/)?playlist/(\d+)"),
+            # Tidal playlist ids are UUIDs: `\d+` alone took the leading
+            # digits of one (`36` out of `36ea71a8-…`) or missed it outright.
+            (
+                "playlist",
+                r"/(?:browse/)?playlist/([0-9a-fA-F]{8}-[0-9a-fA-F-]{27}|\d+)",
+            ),
         ),
         track_url="https://tidal.com/browse/track/{id}",
         album_url="https://tidal.com/browse/album/{id}",

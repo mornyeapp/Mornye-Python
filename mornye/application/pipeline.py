@@ -55,13 +55,45 @@ def _is_catalogue_url(source: str) -> bool:
 
 class ResolveStep:
     async def execute(self, context: DownloadContext) -> DownloadContext:
-        is_spotify_urn = context.source.startswith("spotify:")
-        is_spotify_url = context.source.startswith(
-            ("https://open.spotify.com/", "http://open.spotify.com/")
-        )
-        if not (is_spotify_urn or is_spotify_url or _is_catalogue_url(context.source)):
+        # Checking only Spotify here rejected every Apple Music, Tidal,
+        # YouTube… link with source_not_supported before any provider was
+        # tried, although the engine reads them all.
+        if not is_supported_source(context.source):
             context.errors.append("source_not_supported")
         return context
+
+
+#: Hosts the engine reads through the provider of the same name
+#: (download_engine._resolve_metadata_impl_async).
+_PROVIDER_HOSTS = (
+    "soundcloud.com",
+    "youtube.com",
+    "youtu.be",
+    "pandora.com",
+    "pandora.app.link",
+)
+
+
+def is_supported_source(source: str) -> bool:
+    """Whether the download engine has a way to read this link.
+
+    Mirrors the dispatch in download_engine._resolve_metadata_impl_async:
+    the built-in Spotify / Apple Music / Tidal clients, the catalogue sites
+    an installed extension reads, SoundCloud / YouTube / Pandora, and any
+    other link an installed extension's urlHandler claims.
+    """
+    from mornye.core.metadata_fallback import native_service_for
+    from mornye.core.url_utils import url_host_matches
+
+    if native_service_for(source) is not None:
+        return True
+    if url_host_matches(source, *_PROVIDER_HOSTS):
+        return True
+    if _is_catalogue_url(source):
+        return True
+    from mornye.application.download_engine import _own_source_extension_for
+
+    return _own_source_extension_for(source) is not None
 
 
 class ProviderStep:
