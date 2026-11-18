@@ -4,6 +4,9 @@
 
 ### Added
 
+- **Subsonic / OpenSubsonic API** for `--web`, under `/rest`: Symfonium, Feishin, DSub and other Subsonic apps browse, search and stream the library, with stars, play counts, playlists and a saved play queue kept on the server. Off until `MORNYE_SUBSONIC_PASSWORD` (or `MORNYE_SUBSONIC_API_KEY`) is set. See [Subsonic](docs/guide/subsonic.md).
+- **The Player keeps its library between visits**: the page opens with the stored library at once and then reads only the files that are new or changed.
+- **Stats count the music from before Mornye**: files in the Player's library that Mornye did not download count in the totals and rankings, as the source "Before Mornye".
 - **Templates** in [`templates/`](templates/): a one-link download script, a headless NAS sync that re-checks a list of playlists every few hours, and a systemd service for `--web`, linked from the README next to the Docker compose files.
 - **Existing library folders** (#272): point Mornye at music you already have — an older library, another downloader's output — with *Existing library folders* in the GUI settings, `--library-scan-dir DIR` (repeatable) or `MORNYE_LIBRARY_SCAN_DIRS`. Playlist tracks and single tracks found there (by ISRC, tags or file name) are not downloaded again, and the playlist's M3U links to the file where it is. Albums still download in full, and a folder that is missing is skipped with a warning.
 - **Direct lyrics sources**: `kugou`, `qq` and `genius` in `--lyrics-providers` now actually fetch lyrics, straight from the services. They had been offered by the CLI and the TUI without anything answering to those names. KuGou and QQ Music return line-synced LRC; Genius returns plain lyrics with every verse and chorus container kept, and uses the official API when `MORNYE_GENIUS_TOKEN` is set. All three are opt-in and also appear in the web GUI and the health check.

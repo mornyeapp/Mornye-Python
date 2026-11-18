@@ -82,6 +82,7 @@ If you just want a GUI for personal use, with no code involved, the [Mobile](htt
 - **Library upgrade** — find files below a target quality (including fake Hi-Res) and re-fetch them
 - **Outbound notifications** — webhook, Discord, Telegram or ntfy, per track or one summary per run
 - **Versioned REST API** at `/api/v1`, with an OpenAPI document at `/docs`
+- **Subsonic / OpenSubsonic API** — play the library from Symfonium, Feishin, DSub and other Subsonic apps, with stars, playlists, play counts and a play queue that follows you between devices
 - **CSV and M3U input** — hand it a playlist export (Exportify, Soundiiz, an M3U/M3U8, a bare list of links) and it downloads what the file lists, matching rows that carry no link and reporting the ones it cannot
 - **Dashboard** — what you have actually downloaded, as numbers: top artists, genres, decades, providers, listening time, activity by weekday and streaks (`--stats`, or the Stats screen)
 - **Persistent staged download queue** (JSON) and **download log/history** (SQLite): queued work survives a restart, and completed downloads remain recorded
@@ -137,6 +138,7 @@ renders it usefully. Every page below is the same text that used to be here.
 | [Automation & Operations](docs/guide/automation.md) | JSON output, post-download hooks, notifications, M3U, existing library folders, library rescan, cache maintenance, running the web server, tracks still missing |
 | [Following Artists](docs/guide/subscriptions.md) | Subscriptions, new-release checks, scheduled playlist monitoring, and the library-upgrade pass |
 | [REST API](docs/guide/rest-api.md) | The versioned `/api/v1` surface, quotas and the admin endpoints |
+| [Subsonic](docs/guide/subsonic.md) | Playing the library from Symfonium, Feishin, DSub and other Subsonic apps |
 | [Docker](docs/guide/docker.md) | Headless and NAS setups |
 | [CLI](docs/guide/cli.md) | The standalone executables |
 
