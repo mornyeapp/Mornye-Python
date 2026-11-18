@@ -55,6 +55,8 @@ Two ready-made files live in the repository root:
 | [`docker-compose.example.yml`](../../docker-compose.example.yml) | A minimal stack that builds from source, with an HTTP healthcheck |
 | [`docker-compose.portainer.yml`](../../docker-compose.portainer.yml) | The published image, every variable below wired up, plus Watchtower auto-updates |
 
+Not using Docker? [`templates/`](../../templates/) has a headless Python sync script and a systemd service for the same job.
+
 ### User and Permissions (PUID / PGID)
 
 The image runs as an unprivileged user, UID/GID `1000`, by default. There are two ways to change that; pick by whether the mounted directories are already writable by the user you want.

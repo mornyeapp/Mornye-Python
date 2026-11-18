@@ -25,6 +25,8 @@ usefully. The text is unchanged by the split.
 
 Elsewhere in the repo:
 
+- [templates/](../../templates/) — ready-to-edit templates: a download script,
+  a headless NAS sync, a systemd service
 - [SECURITY.md](../../SECURITY.md) — reporting a vulnerability, and what is
   deliberately out of scope
 - [CONTRIBUTING.md](../../CONTRIBUTING.md)

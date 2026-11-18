@@ -1,0 +1,28 @@
+# The web interface as a systemd *user* service, for a headless Linux box.
+#
+#   mkdir -p ~/.config/systemd/user
+#   cp mornye-web.service ~/.config/systemd/user/
+#   (edit MORNYE_REGISTRIES below)
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now mornye-web
+#   loginctl enable-linger "$USER"   # keep it running after you log out
+#
+# Then open http://<this machine>:8000 and choose the download folder in
+# Settings: in --web mode the folder is set on the page, not on this line.
+
+[Unit]
+Description=Mornye web interface
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=MORNYE_REGISTRIES=https://example.com/your-registry.json
+# Protect the page if anyone else can reach this port (see docs/guide/quick-start.md).
+# Environment=MORNYE_WEB_TOKEN=change-me
+ExecStart=%h/.local/bin/mornye --web --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

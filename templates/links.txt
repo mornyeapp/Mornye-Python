@@ -1,0 +1,3 @@
+# One link per line. Playlists, albums, artists and tracks all work.
+# Lines starting with # are ignored.
+https://open.spotify.com/playlist/REPLACE_ME

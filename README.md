@@ -98,7 +98,21 @@ If you just want a GUI for personal use, with no code involved, the [Mobile](htt
 pip install mornye
 ```
 
-> **Important:** out of the box, Mornye does nothing but resolve metadata — it ships with **no built-in provider and no default extension source**. Before you can download anything, you need to point it at an extension registry of your own choosing and install at least one extension. See [Extensions](docs/guide/extensions.md#extensions) below.
+> **Important:** out of the box, Mornye does nothing but resolve metadata — it ships with **no built-in provider and no default extension source**. Before you can download anything, you need to point it at an extension registry of your own choosing and install at least one extension. See [Extensions](docs/guide/extensions.md#extensions).
+
+---
+
+## Templates (headless, NAS, scripts)
+
+New to it, or setting up a NAS? Start from a template in [`templates/`](templates/) instead of a blank file:
+
+| Template | For |
+| --- | --- |
+| [`templates/download.py`](templates/download.py) | Download one link from a Python script |
+| [`templates/nas_sync.py`](templates/nas_sync.py) | Keep a list of playlists and albums downloaded on a NAS, re-checking every few hours |
+| [`templates/mornye-web.service`](templates/mornye-web.service) | The web interface as a systemd service on a headless Linux machine |
+| [`docker-compose.portainer.yml`](docker-compose.portainer.yml) | The web interface in Docker (Portainer, Synology, Unraid…) |
+
 ---
 
 ## Documentation
