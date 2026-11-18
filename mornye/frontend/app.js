@@ -8335,10 +8335,14 @@ function playerBuildOrder(first) {
 }
 
 function updatePlayerModes() {
-  document.querySelectorAll('#pl-shuffle, #np-shuffle').forEach(b => b.classList.toggle('on', playerShuffle));
+  document.querySelectorAll('#pl-shuffle, #np-shuffle').forEach(b => {
+    b.classList.toggle('on', playerShuffle);
+    b.setAttribute('aria-pressed', String(playerShuffle));
+  });
   document.querySelectorAll('#pl-repeat, #np-repeat').forEach(b => {
     b.dataset.mode = playerRepeat;
     b.classList.toggle('on', playerRepeat !== 'off');
+    b.setAttribute('aria-pressed', String(playerRepeat !== 'off'));
     b.title = { off: 'Repeat: off', all: 'Repeat all', one: 'Repeat this track' }[playerRepeat];
   });
   try { localStorage.setItem('mornye-player-modes', JSON.stringify({ shuffle: playerShuffle, repeat: playerRepeat })); } catch (e) {}
