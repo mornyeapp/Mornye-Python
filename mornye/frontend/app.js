@@ -9361,6 +9361,7 @@ window.app_library_scan_chunk = function(p) {
     // The names one by one, for the now-playing links: once joined with
     // commas they cannot be told apart from "Tyler, The Creator".
     artist_names: artistNames(t.artist),
+    album_artist_names: artistNames(t.album_artist),
     artist: displayArtists(t.artist),
     album_artist: displayArtists(t.album_artist),
   })));
@@ -9435,16 +9436,47 @@ function libAlbums(items) {
     || (x.year || '').localeCompare(y.year || '') || x.title.localeCompare(y.title, undefined, { sensitivity: 'base' }));
 }
 
+// Every artist a track credits, one by one, as Jellyfin lists them: the
+// album artists first, then the track's own artists ("Doja Cat", "SZA").
+// A shared credit ("50 Cent;Olivia") gives each of them a page, and the
+// album shows on both; the album itself stays one album.
+function libCredited(t) {
+  const seen = new Set();
+  const out = [];
+  for (const name of [...(t.album_artist_names || []), ...(t.artist_names || [])]) {
+    const key = name.toLowerCase();
+    if (!seen.has(key)) { seen.add(key); out.push(name); }
+  }
+  if (!out.length) out.push(libArtistOf(t));
+  return out;
+}
+function libCredits(t, key) { return libCredited(t).some(n => n.toLowerCase() === key); }
+// Whether `key` is one of the album's own artists, rather than a guest on it.
+function libAlbumIsBy(album, key) {
+  const t = album.tracks[0] || {};
+  const names = t.album_artist_names && t.album_artist_names.length ? t.album_artist_names : [libArtistOf(t)];
+  return names.some(n => n.toLowerCase() === key);
+}
+function libAlbumsOf(allAlbums, key) {
+  const own = [], guest = [];
+  for (const a of allAlbums) {
+    if (libAlbumIsBy(a, key)) own.push(a);
+    else if (a.tracks.some(t => libCredits(t, key))) guest.push(a);
+  }
+  return { own, guest };
+}
+
 function libArtists(items) {
   const map = new Map();
   for (const t of items) {
-    const name = libArtistOf(t);
-    const key = name.toLowerCase();
-    let a = map.get(key);
-    if (!a) { a = { key, name, albums: new Set(), tracks: [], duration: 0 }; map.set(key, a); }
-    a.tracks.push(t);
-    a.albums.add(libAlbumKey(t));
-    a.duration += t.duration_s || 0;
+    for (const name of libCredited(t)) {
+      const key = name.toLowerCase();
+      let a = map.get(key);
+      if (!a) { a = { key, name, albums: new Set(), tracks: [], duration: 0 }; map.set(key, a); }
+      a.tracks.push(t);
+      a.albums.add(libAlbumKey(t));
+      a.duration += t.duration_s || 0;
+    }
   }
   return [...map.values()].sort((x, y) => x.name.localeCompare(y.name, undefined, { sensitivity: 'base' }));
 }
@@ -9559,9 +9591,12 @@ function filterPlayerLibrary(keepScroll) {
   } else if (tab === 'artists' && lib.artist) {
     const artist = allArtists.find(a => a.key === lib.artist);
     if (!artist) { lib.artist = null; return filterPlayerLibrary(keepScroll); }
-    const albums = allAlbums.filter(a => a.artist.toLowerCase() === artist.key);
-    cards = albums.map(libAlbumCardHtml);
-    header = libArtistHeaderHtml(artist, albums);
+    const { own, guest } = libAlbumsOf(allAlbums, artist.key);
+    cards = own.map(libAlbumCardHtml);
+    if (guest.length) {
+      cards.push(`<h3 class="pl-grid-head">Appears on</h3>`, ...guest.map(libAlbumCardHtml));
+    }
+    header = libArtistHeaderHtml(artist, [...own, ...guest]);
   } else if (tab === 'albums') {
     const albums = libAlbums(matches);
     cards = albums.map(libAlbumCardHtml);
@@ -9607,13 +9642,14 @@ function filterPlayerLibrary(keepScroll) {
   // What "Play all" / "Shuffle" in the toolbar play on the current page: the
   // rows when there are rows, otherwise every album shown, in grid order.
   if (cards) {
-    const shown = tab === 'artists' && !lib.artist
-      ? libArtists(matches).map(a => a.key)
-      : null;
-    const albums = allAlbums.filter(a => shown
-      ? shown.includes(a.artist.toLowerCase())
-      : lib.artist ? a.artist.toLowerCase() === lib.artist : libAlbums(matches).some(m => m.key === a.key));
-    lib.playAll = albums.flatMap(a => a.tracks);
+    if (tab === 'artists' && lib.artist) {
+      lib.playAll = libArtistTracks(lib.artist);
+    } else if (tab === 'artists') {
+      const shown = new Set(libArtists(matches).map(a => a.key));
+      lib.playAll = allAlbums.flatMap(a => a.tracks).filter(t => libCredited(t).some(n => shown.has(n.toLowerCase())));
+    } else {
+      lib.playAll = allAlbums.filter(a => libAlbums(matches).some(m => m.key === a.key)).flatMap(a => a.tracks);
+    }
   } else {
     lib.playAll = null;
   }
@@ -9641,7 +9677,7 @@ function libAlbumCardHtml(a) {
 }
 
 function libArtistCardHtml(a, allAlbums) {
-  const first = allAlbums.find(al => al.artist.toLowerCase() === a.key);
+  const first = allAlbums.find(al => libAlbumIsBy(al, a.key));
   const meta = `${plural(a.albums.size, 'album')} · ${plural(a.tracks.length, 'track')}`;
   return `<div class="pl-card artist" role="listitem" tabindex="0" data-activate data-artist="${escHtml(a.key)}" title="${escHtml(a.name)}">
     <div class="pl-card-art">${libCoverHtml((first?.tracks[0] || a.tracks[0])?.path, 320)}
@@ -9658,6 +9694,11 @@ function libDetailActions(kind, key) {
   </div>`;
 }
 
+function libAlbumArtistNames(a) {
+  const t = a.tracks[0] || {};
+  return t.album_artist_names && t.album_artist_names.length ? t.album_artist_names : [a.artist];
+}
+
 function libAlbumHeaderHtml(a) {
   const back = lib.artist ? 'Artist' : 'Albums';
   const meta = [a.year, plural(a.tracks.length, 'track'), libDuration(a.duration), [...a.formats].join(' / ')].filter(Boolean);
@@ -9667,7 +9708,8 @@ function libAlbumHeaderHtml(a) {
       <div class="pl-detail-info">
         <span class="pl-detail-kind">Album</span>
         <h2 class="pl-detail-title">${escHtml(a.title)}</h2>
-        <button type="button" class="pl-detail-artist" data-artist-link="${escHtml(a.artist.toLowerCase())}">${escHtml(a.artist)}</button>
+        <div class="pl-detail-artists">${libAlbumArtistNames(a).map(n =>
+          `<button type="button" class="pl-detail-artist" data-artist-link="${escHtml(n.toLowerCase())}">${escHtml(n)}</button>`).join(', ')}</div>
         <div class="pl-detail-meta">${meta.map(escHtml).join('<span aria-hidden="true"> · </span>')}</div>
         ${libDetailActions('album', a.key)}
       </div>
@@ -9807,12 +9849,18 @@ function playFromLibrary(index, shuffle) {
   if (tracks.length) startPlayback(libQueueItems(tracks), index, shuffle, false);
 }
 
+// An artist plays album by album, each in track order: their own albums
+// whole, then the tracks they appear on elsewhere.
+function libArtistTracks(key) {
+  const { own, guest } = libAlbumsOf(libAlbums(lib.items), key);
+  return [...own.flatMap(a => a.tracks), ...guest.flatMap(a => a.tracks.filter(t => libCredits(t, key)))];
+}
+
 function playLibraryGroup(kind, key, shuffle) {
   let tracks = [];
   if (kind === 'album') tracks = libAlbums(lib.items).find(a => a.key === key)?.tracks || [];
   else {
-    // An artist plays album by album, each in track order.
-    tracks = libAlbums(lib.items).filter(a => a.artist.toLowerCase() === key).flatMap(a => a.tracks);
+    tracks = libArtistTracks(key);
   }
   if (tracks.length) startPlayback(libQueueItems(tracks), 0, !!shuffle, false);
 }

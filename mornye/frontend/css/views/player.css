@@ -701,6 +701,13 @@
 .pl-detail-actions { display: inline-flex; margin-top: var(--space-2); }
 .pl-detail-actions .pt-btn svg { width: 14px; height: 14px; }
 .player-detail + .player-grid { margin-top: var(--space-2); }
+/* "Appears on" on an artist page: the albums they are a guest on, after their
+   own, across the whole row of the grid. */
+.pl-grid-head {
+  grid-column: 1 / -1; margin: var(--space-3) 0 0; color: var(--text-2);
+  font-size: var(--text-xs); font-weight: var(--weight-medium); letter-spacing: .08em; text-transform: uppercase;
+}
+.pl-detail-artists { color: var(--text-2); }
 
 @media (max-width: 700px) {
   /* A phone has no room for a fixed header: the whole page scrolls. */
