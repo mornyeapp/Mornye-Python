@@ -324,8 +324,12 @@ Downloads use the selected quality profile: `HI_RES_LOSSLESS` requests the best 
 | `wav` | `.wav` | lossless, uncompressed | For DJ software and audio editors that want raw PCM. Roughly 1.6× the size of FLAC |
 | `aiff` | `.aiff` | lossless, uncompressed | The Apple flavour of raw PCM, same size as WAV |
 | `mp3` | `.mp3` | lossy | 320 kbps by default, for players or car stereos that cannot handle lossless files |
+| `aac` | `.m4a` | lossy | AAC-LC: smaller than MP3 at the same quality, and what Apple devices play natively |
+| `opus` | `.opus` | lossy | The most efficient lossy codec; not every player reads it. Capped at 256 kbps, the most libopus accepts per channel |
 
-**The lossless targets are bit-exact.** The sample rate and bit depth of the source are carried over untouched — no resampling, no requantisation — so a 24-bit/96 kHz FLAC converted to ALAC decodes back to byte-identical PCM. Only `mp3` re-encodes the audio, and only it reads `transcode_bitrate` / `--transcode-bitrate`; the lossless encoders ignore it.
+**The lossless targets are bit-exact.** The sample rate and bit depth of the source are carried over untouched — no resampling, no requantisation — so a 24-bit/96 kHz FLAC converted to ALAC decodes back to byte-identical PCM. Only the lossy targets (`mp3`, `aac`, `opus`) re-encode the audio, and only they read `transcode_bitrate` / `--transcode-bitrate`; the lossless encoders ignore it. A Hi-Res source converted to MP3 is resampled within its rate family (88.2/176.4 kHz → 44.1 kHz, 96/192 kHz → 48 kHz), with the SoX resampler when ffmpeg is built with libsoxr.
+
+**Capping sample rate and bit depth.** `--transcode-max-rate HZ` (`transcode_max_sample_rate`) and `--transcode-max-depth 16|24` (`transcode_max_bit_depth`) bring a source above them down: the sample rate within its 44.1k/48k family, the bit depth with triangular dither. They apply even when the download is already in the `--transcode` format, in which case the file is re-encoded in place. Both default to no cap.
 
 Converting a *lossy* source to a lossless target is allowed but logs a warning: the output is a faithful copy of an already-degraded signal, not a recovered original, and it will be several times larger.
 
@@ -343,6 +347,12 @@ mornye https://open.spotify.com/album/... ./out --alac
 
 # Any other lossless target
 mornye https://open.spotify.com/album/... ./out --transcode wavpack
+
+# AAC or Opus, at the bitrate you choose
+mornye https://open.spotify.com/album/... ./out --transcode opus --transcode-bitrate 192k
+
+# FLAC, but never above 24-bit/48 kHz
+mornye https://open.spotify.com/album/... ./out --transcode flac --transcode-max-rate 48000 --transcode-max-depth 24
 ```
 
 ```python
@@ -352,8 +362,10 @@ Mornye(
     url="https://open.spotify.com/album/...",
     output_dir="./downloads",
     services=["ext:tidal-web", "ext:qobuz-web"],
-    transcode_to="alac",          # or flac / wav / aiff / wavpack / tta / mp3
-    transcode_bitrate="320k",     # mp3 only; ignored by the lossless targets
+    transcode_to="alac",          # or flac / wav / aiff / wavpack / tta / mp3 / aac / opus
+    transcode_bitrate="320k",     # mp3 / aac / opus only; ignored by the lossless targets
+    transcode_max_sample_rate=0,  # e.g. 48000; 0 = no cap
+    transcode_max_bit_depth=0,    # 16 or 24; 0 = no cap
 )
 ```
 
@@ -389,7 +401,7 @@ Mornye(
 
 The bit-depth test is the only one that says anything about a **24-bit / 44.1 kHz** file, which claims Hi-Res by depth alone: its sample rate claims nothing, so a CD-range spectrum is the correct answer for it rather than a finding. That case used to pass unexamined. A file is flagged if either test fails, and the warning names which one.
 
-**Formats.** FLAC, WAV, AIFF, OGG and MP3 are read directly. **ALAC (`.m4a`), WavPack (`.wv`) and TTA (`.tta`) go through ffmpeg**, because libsndfile cannot open those containers at all — and they are three of `--transcode`'s seven targets, so without that path `--transcode alac --verify-hires` looked enabled while checking nothing. If you converted your files with Mornye you already have ffmpeg; if it is missing, those three formats report an error naming ffmpeg rather than claiming the file is corrupt.
+**Formats.** FLAC, WAV, AIFF, OGG and MP3 are read directly. **ALAC (`.m4a`), WavPack (`.wv`) and TTA (`.tta`) go through ffmpeg**, because libsndfile cannot open those containers at all — and they are three of `--transcode`'s nine targets, so without that path `--transcode alac --verify-hires` looked enabled while checking nothing. If you converted your files with Mornye you already have ffmpeg; if it is missing, those three formats report an error naming ffmpeg rather than claiming the file is corrupt.
 
 **Design notes worth knowing before you turn it on:**
 

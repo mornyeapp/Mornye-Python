@@ -1441,6 +1441,41 @@ def test_download_pipeline_accepts_public_spotify_track_urls():
     assert context.errors == []
 
 
+@pytest.mark.parametrize(
+    "source",
+    [
+        "https://music.apple.com/us/album/never-lose-me-feat-sza-cardi-b/"
+        "1735574425?i=1735574610",
+        "https://music.apple.com/us/song/x/1735574610",
+        "https://tidal.com/browse/playlist/f5ad7a1e-0d1a-4b2c-9a4d-1c2b3a4d5e6f",
+        "https://tidal.com/browse/mix/0011223344aabb",
+        "tidal:track:123",
+        "https://music.youtube.com/playlist?list=PL1",
+        "https://www.youtube.com/watch?v=abc",
+        "https://youtu.be/abc",
+        "https://soundcloud.com/artist/track",
+        "https://www.pandora.com/artist/x/album/y/track/z",
+    ],
+)
+def test_download_pipeline_accepts_every_link_the_engine_reads(source):
+    request = DownloadRequest(sources=[source], config=MornyeConfig())
+    context = asyncio.run(
+        DownloadPipeline([ResolveStep()]).prepare(DownloadContext(request, source))
+    )
+
+    assert context.errors == []
+
+
+def test_download_pipeline_rejects_unknown_links():
+    source = "https://example.com/whatever"
+    request = DownloadRequest(sources=[source], config=MornyeConfig())
+    context = asyncio.run(
+        DownloadPipeline([ResolveStep()]).prepare(DownloadContext(request, source))
+    )
+
+    assert context.errors == ["source_not_supported"]
+
+
 def test_download_pipeline_publishes_namespaced_step_events():
     events = []
     bus = EventBus()
@@ -2514,3 +2549,27 @@ def test_failed_smb_delivery_names_its_retry_identifier(tmp_path, monkeypatch):
     with pytest.raises(network_destinations.DestinationError) as err:
         asyncio.run(service.download(request))
     assert "Retry identifier: abc123" in str(err.value)
+
+
+@pytest.mark.parametrize(
+    ("url", "kind", "item_id"),
+    [
+        (
+            "https://tidal.com/browse/playlist/36ea71a8-445e-41a4-82ab-6628c581535d",
+            "playlist",
+            "36ea71a8-445e-41a4-82ab-6628c581535d",
+        ),
+        (
+            "https://listen.tidal.com/playlist/f5ad7a1e-0d1a-4b2c-9a4d-1c2b3a4d5e6f",
+            "playlist",
+            "f5ad7a1e-0d1a-4b2c-9a4d-1c2b3a4d5e6f",
+        ),
+        ("https://www.deezer.com/en/playlist/908622995", "playlist", "908622995"),
+    ],
+)
+def test_catalogue_parser_reads_tidal_uuid_and_deezer_playlists(url, kind, item_id):
+    from mornye.core.extension_metadata import parse_catalogue_url
+
+    link = parse_catalogue_url(url)
+    assert link is not None
+    assert (link.kind, link.item_id) == (kind, item_id)

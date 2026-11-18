@@ -156,6 +156,11 @@
 .local-chip.review .local-chip-n { color: var(--signal-text); }
 .local-chip.none .local-chip-n, .local-chip.error .local-chip-n { color: var(--error); }
 #local-track-rows > .hidden { display: none !important; }
+/* The list is a scrolling flex column, and a row's min-height of 40px
+   (home.css) replaced the "as tall as my content" minimum: with many files
+   the column squeezed every row to 40px and the title, artist, file name and
+   buttons of one row ran over the next. A row keeps its own height. */
+#local-track-rows > .track-row { flex-shrink: 0; }
 
 .local-tools { padding: var(--space-4) var(--space-5); }
 .local-tools > summary {

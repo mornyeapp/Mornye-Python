@@ -105,6 +105,11 @@
           mask-image: linear-gradient(180deg, transparent 0, var(--ink) 22px, var(--ink) calc(100% - 90px), transparent 100%);
 }
 .np-lyrics { flex: 1 1 auto; min-height: 0; height: auto; }
+/* The rows' offsetTop is read from here (npScrollToFocus). Without it they
+   were measured from .np-right, which also holds the Lyrics sync toolbar, so
+   every scroll overshot by the toolbar's height and the sung line slid
+   under the top fade. */
+.np-lyrics { position: relative; }
 .np-queue { flex: 1 1 auto; min-height: 0; }
 .np-queue { padding-top: 30vh; padding-bottom: 30vh; }
 .np-lyrics::-webkit-scrollbar, .np-queue::-webkit-scrollbar { display: none; }
@@ -125,6 +130,13 @@
 .np-queue-row.active { background: rgba(var(--media-ink-rgb), .16); }
 .np-queue-row .t { font-size: 16px; font-weight: 600; }
 .np-queue-row .a { font-size: 13px; color: rgba(var(--media-ink-rgb), .6); }
+/* Artist and album names that open their place in the library. They read as
+   the text around them until pointed at. */
+.np-link {
+  border: 0; padding: 0; background: none; font: inherit; color: inherit; cursor: pointer;
+  text-decoration: underline transparent; text-underline-offset: 3px; transition: text-decoration-color .15s, color .15s;
+}
+.np-link:hover, .np-link:focus-visible { color: var(--media-ink); text-decoration-color: currentColor; outline: none; }
 .np-tabs { position: absolute; right: 28px; bottom: 24px; display: flex; gap: 4px; padding: 6px; background: rgba(var(--media-ink-rgb), .12); }
 .np-tab { width: 38px; height: 38px; border: 0; background: transparent; color: var(--media-ink); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .np-tab.active { background: var(--media-ink); color: var(--media-ink-inverse); }
@@ -561,8 +573,22 @@
   max-height: 0; padding-block: 0; opacity: 0; border-width: 0;
   margin-top: 0; margin-bottom: calc(-1 * var(--space-4));
 }
+/* The folder panel, when it is open, folds away the same way: scrolling the
+   music brings the tabs up under the title instead of leaving half the
+   window to the folder list. Back at the top it opens again as it was. The
+   max-height is only there to animate from; nothing is clipped while the
+   panel is open. */
+#view-player .player-source {
+  max-height: 100vh;
+  transition: max-height .2s ease, padding .2s ease, margin .2s ease, opacity .15s ease;
+}
+#view-player.player-compact .player-source:not(.hidden) {
+  max-height: 0; overflow: hidden; padding-block: 0; opacity: 0; border-width: 0;
+  margin-bottom: calc(-1 * var(--space-4));
+}
 @media (prefers-reduced-motion: reduce) {
-  #view-player .s-header, #view-player #player-body, .player-heading, .player-heading p, #view-player .player-libbar { transition: none; }
+  #view-player .s-header, #view-player #player-body, .player-heading, .player-heading p, #view-player .player-libbar,
+  #view-player .player-source { transition: none; }
 }
 .player-status:empty { display: none; }
 .player-status { padding: 0 2px; color: var(--text-2); font-size: var(--text-sm); }
@@ -675,6 +701,13 @@
 .pl-detail-actions { display: inline-flex; margin-top: var(--space-2); }
 .pl-detail-actions .pt-btn svg { width: 14px; height: 14px; }
 .player-detail + .player-grid { margin-top: var(--space-2); }
+/* "Appears on" on an artist page: the albums they are a guest on, after their
+   own, across the whole row of the grid. */
+.pl-grid-head {
+  grid-column: 1 / -1; margin: var(--space-3) 0 0; color: var(--text-2);
+  font-size: var(--text-xs); font-weight: var(--weight-medium); letter-spacing: .08em; text-transform: uppercase;
+}
+.pl-detail-artists { color: var(--text-2); }
 
 @media (max-width: 700px) {
   /* A phone has no room for a fixed header: the whole page scrolls. */

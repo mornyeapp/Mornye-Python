@@ -1161,7 +1161,12 @@ async def _record_provider_outcome(
 #: dropped connection, these are not worth a retry.
 _DEFINITIVE_FAILURE = re.compile(
     r"not available|not found|no verified|no match|unavailable in|"
-    r"\bHTTP 404\b|\b404 Not Found\b|TRACK_NOT_FOUND",
+    r"\bHTTP 404\b|\b404 Not Found\b|TRACK_NOT_FOUND|"
+    # The provider's file is another recording, or a different length: the
+    # same request returns the same file, which is downloaded only to be
+    # removed again (issue #284). A *truncated* short track is not in here:
+    # that one can be a dropped transfer.
+    r"\bWrong track:|\bWrong duration: file is",
     re.IGNORECASE,
 )
 
@@ -1889,17 +1894,10 @@ async def download_one_async(
 
 
 async def _send_system_notify_async(title: str, body: str) -> None:
-    """Sends a system notification asynchronously."""
-    try:
-        if sys.platform == "darwin":
-            script = f'display notification "{body}" with title "{title}"'
-            await asyncio.create_subprocess_exec("osascript", "-e", script)
-        elif sys.platform == "win32":
-            pass
-        else:
-            await asyncio.create_subprocess_exec("notify-send", title, body)
-    except Exception:
-        pass
+    """Sends a system notification (core/desktop_notify.py). Never raises."""
+    from ..core.desktop_notify import notify
+
+    await notify(title, body)
 
 
 async def _open_folder_async(path: str) -> None:

@@ -4282,7 +4282,7 @@ async function removeRecent(url) {
 }
 
 // ── Download queue ────────────────────────────────────────────────────────────
-function addToQueue(indices) {
+function addToQueue(indices, { requeueFinished = false } = {}) {
   console.log('addToQueue called', { indices, currentTracksLength: currentTracks.length, queueLengthBefore: queue.length });
   let added = false;
   const skipped = [];
@@ -4313,6 +4313,21 @@ function addToQueue(indices) {
         ? queue.find(q => sameList(q) && q.spotify_id === spotifyId)
         : queue.find(q => sameList(q) && q.index === realIndex && q.title === t.title);
       if (duplicate) {
+        if (requeueFinished && ['done', 'skipped', 'error'].includes(duplicate.status)) {
+          // A playlist rerun also repairs its M3U; the downloader skips audio
+          // already in the library and fetches only tracks that are missing.
+          duplicate.list = t.list_id ?? null;
+          duplicate.index = realIndex;
+          duplicate.title = t.title;
+          duplicate.artist = t.artist || t.artists || '';
+          duplicate.album = t.album || '';
+          duplicate.status = 'waiting';
+          duplicate.progress = 0;
+          duplicate.file_path = '';
+          duplicate.file_size_mb = 0;
+          added = true;
+          return;
+        }
         console.warn('Track already in queue', spotifyId || realIndex);
         skipped.push(duplicate);
         return;
@@ -5186,7 +5201,11 @@ async function retryFailedTracks(keys = null) {
     const config = await chooseProviderForBatch(buildConfig());
     if (!config) return;
     const res = await window.pywebview.api.retry_failed_tracks(config, keys);
-    if (!res?.queued) showToast('Nothing left to retry.', 'info');
+    if (!res?.queued) {
+      showToast(res?.already_queued
+        ? 'These tracks are already being retried.'
+        : 'Nothing left to retry.', 'info');
+    }
   } catch (e) {
     logMessage('Could not retry the missing tracks: ' + e, 'error');
   }
@@ -5288,7 +5307,7 @@ function downloadAll() {
   const all = currentTracks.map((_, i) => i);
   console.log('[downloadAll] Total tracks:', all.length);
   if (!all.length) { setStatus('No tracks loaded.'); return; }
-  addToQueue(all);
+  addToQueue(all, { requeueFinished: detectUrlType(currentUrl) === 'playlist' });
   console.log('[downloadAll] Queue length after addToQueue:', queue.length);
   startDownloadQueue();
   $('queue-drawer').classList.add('open');
@@ -6190,7 +6209,7 @@ function pyWin(method, arg) {
 // Double-clicking the titlebar zooms / restores the window, as a native
 // title bar does — the frameless window has none of its own.
 document.addEventListener('dblclick', (e) => {
-  if (e.target.closest?.('#titlebar .pywebview-drag-region')) pyWin('WindowToggleMaximise');
+  if (e.target.closest?.('#titlebar .pywebview-drag-region, #np-view .np-drag')) pyWin('WindowToggleMaximise');
 });
 
 // ── Extension Registries ───────────────────────────────────────────────────
@@ -8331,10 +8350,14 @@ function playerBuildOrder(first) {
 }
 
 function updatePlayerModes() {
-  document.querySelectorAll('#pl-shuffle, #np-shuffle').forEach(b => b.classList.toggle('on', playerShuffle));
+  document.querySelectorAll('#pl-shuffle, #np-shuffle').forEach(b => {
+    b.classList.toggle('on', playerShuffle);
+    b.setAttribute('aria-pressed', String(playerShuffle));
+  });
   document.querySelectorAll('#pl-repeat, #np-repeat').forEach(b => {
     b.dataset.mode = playerRepeat;
     b.classList.toggle('on', playerRepeat !== 'off');
+    b.setAttribute('aria-pressed', String(playerRepeat !== 'off'));
     b.title = { off: 'Repeat: off', all: 'Repeat all', one: 'Repeat this track' }[playerRepeat];
   });
   try { localStorage.setItem('mornye-player-modes', JSON.stringify({ shuffle: playerShuffle, repeat: playerRepeat })); } catch (e) {}
@@ -8386,7 +8409,8 @@ async function loadPlayerTrack(index) {
   $('player-bar').classList.remove('hidden');
   document.body.classList.add('has-player');
   setPlayerArtwork('');
-  $('pl-title').textContent = item.artist ? `${item.title} — ${item.artist}` : item.title;
+  const artist = displayArtists(item.artist);
+  $('pl-title').textContent = artist ? `${item.title} — ${artist}` : item.title;
   $('pl-quality').textContent = 'Preparing…';
   markPlayingRow();
   audio.pause();
@@ -8401,12 +8425,72 @@ async function loadPlayerTrack(index) {
   $('pl-quality').textContent = res.quality;
   fillNowPlaying(item, res);
   try { await audio.play(); } catch (e) { /* autoplay blocked: the play button works */ }
-  if ('mediaSession' in navigator) {
-    navigator.mediaSession.metadata = new MediaMetadata({ title: item.title, artist: item.artist, album: item.album || '' });
-    navigator.mediaSession.setActionHandler('previoustrack', () => playerPrev());
-    navigator.mediaSession.setActionHandler('nexttrack', () => playerNext());
-  }
+  playerMediaMetadata(item, res, artist);
 }
+
+// ── Media keys and the system's "Now Playing" ───────────────────────────────
+// The Media Session is what the keyboard's play/pause/next keys, the macOS
+// Now Playing panel, the Windows media overlay and a Bluetooth headset talk
+// to, in the desktop window (WebView2, WebKit) as in a browser tab. Only
+// previous/next were wired: play, pause, stop and seeking were not, so the
+// play/pause key did nothing and the system showed no progress or cover.
+function playerMediaMetadata(item, res, artist) {
+  if (!('mediaSession' in navigator)) return;
+  try {
+    const cover = res?.cover || '';
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: res?.title || item.title,
+      artist,
+      album: res?.album || item.album || '',
+      artwork: cover ? [{ src: cover, sizes: '512x512' }] : [],
+    });
+  } catch (e) { /* an engine without MediaMetadata artwork support */ }
+}
+
+function playerMediaPosition() {
+  const audio = $('player-audio');
+  if (!('mediaSession' in navigator) || !navigator.mediaSession.setPositionState) return;
+  if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) return;
+  try {
+    navigator.mediaSession.setPositionState({
+      duration: audio.duration,
+      position: Math.min(audio.currentTime, audio.duration),
+      playbackRate: audio.playbackRate || 1,
+    });
+  } catch (e) { /* position past the end while a track changes */ }
+}
+
+(function initMediaSession() {
+  const audio = $('player-audio');
+  if (!audio || !('mediaSession' in navigator)) return;
+  const session = navigator.mediaSession;
+  const seekBy = (offset) => {
+    if (!audio.src || !Number.isFinite(audio.duration)) return;
+    audio.currentTime = Math.max(0, Math.min(audio.duration, audio.currentTime + offset));
+    playerMediaPosition();
+  };
+  const handlers = {
+    play: () => { if (audio.src) audio.play(); },
+    pause: () => audio.pause(),
+    stop: () => { audio.pause(); if (audio.src) audio.currentTime = 0; },
+    previoustrack: () => playerPrev(),
+    nexttrack: () => playerNext(),
+    seekbackward: (d) => seekBy(-(d?.seekOffset || 10)),
+    seekforward: (d) => seekBy(d?.seekOffset || 10),
+    seekto: (d) => {
+      if (!audio.src || d?.seekTime == null) return;
+      audio.currentTime = d.seekTime;
+      playerMediaPosition();
+    },
+  };
+  for (const [action, handler] of Object.entries(handlers)) {
+    try { session.setActionHandler(action, handler); } catch (e) { /* not supported here */ }
+  }
+  audio.addEventListener('play', () => { session.playbackState = 'playing'; playerMediaPosition(); });
+  audio.addEventListener('pause', () => { session.playbackState = 'paused'; playerMediaPosition(); });
+  audio.addEventListener('loadedmetadata', playerMediaPosition);
+  audio.addEventListener('seeked', playerMediaPosition);
+})();
 
 function playerToggle() {
   const audio = $('player-audio');
@@ -8446,6 +8530,10 @@ function closePlayer() {
   document.body.classList.remove('has-player');
   playerIndex = -1;
   markPlayingRow();
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.metadata = null;
+    navigator.mediaSession.playbackState = 'none';
+  }
 }
 
 (function initPlayer() {
@@ -8740,11 +8828,63 @@ function npApplyColors(src) {
   img.src = src;
 }
 
+// The artist and album under the title, as links into the library: an
+// artist with a page of their own opens it, anyone else (a featured artist
+// is rarely an album artist) opens the songs that name them; the album
+// opens its page.
+function npArtistLinks(names, fallback) {
+  const list = names && names.length ? names : artistNames(fallback);
+  return list.map(name => `<button type="button" class="np-link" data-artist-name="${escHtml(name)}"
+    data-onclick="event.stopPropagation(); npGoArtist(this.dataset.artistName)">${escHtml(name)}</button>`).join(', ');
+}
+
+function npFillCredits(item, res) {
+  const libItem = lib.items.find(t => t.path === item.path);
+  const names = artistNames(res.artist).length ? artistNames(res.artist) : (libItem?.artist_names || []);
+  const album = (res.album || item.album || '').trim();
+  NP.albumKey = libItem ? libAlbumKey(libItem) : '';
+  NP.albumName = album;
+  const parts = [];
+  const artists = npArtistLinks(names, item.artist);
+  if (artists) parts.push(artists);
+  if (album) parts.push(`<button type="button" class="np-link" data-onclick="npGoAlbum()">${escHtml(album)}</button>`);
+  $('np-artist').innerHTML = parts.join(' · ');
+}
+
+function npShowInLibrary() {
+  closeNowPlaying();
+  switchView('player');
+}
+
+function npGoArtist(name) {
+  const key = String(name || '').trim().toLowerCase();
+  if (!key) return;
+  npShowInLibrary();
+  if (libArtists(lib.items).some(a => a.key === key)) {
+    $('player-search').value = '';
+    openPlayerArtist(key);
+  } else {
+    $('player-search').value = name;
+    setPlayerTab('songs');
+  }
+}
+
+function npGoAlbum() {
+  npShowInLibrary();
+  if (NP.albumKey && libAlbums(lib.items).some(a => a.key === NP.albumKey)) {
+    $('player-search').value = '';
+    openPlayerAlbum(NP.albumKey);
+  } else if (NP.albumName) {
+    $('player-search').value = NP.albumName;
+    setPlayerTab('albums');
+  }
+}
+
 function fillNowPlaying(item, res) {
   setPlayerArtwork(res.cover || '');
   npResetSync();
   $('np-title').textContent = res.title || item.title;
-  $('np-artist').textContent = [res.artist || item.artist, res.album].filter(Boolean).join(' · ');
+  npFillCredits(item, res);
   $('np-explicit').classList.toggle('hidden', !res.explicit);
   const cover = $('np-cover');
   cover.parentElement.classList.toggle('empty', !res.cover);
@@ -8889,7 +9029,10 @@ const npSoft = s => {                                                  // stiffn
 };
 const npEase = v => { const t = Math.min(1, Math.max(0, v)); return t * t * (3 - 2 * t); };
 
-function npInset() { return Math.min(48, Math.max(16, window.innerHeight * 0.06)); }
+// Where the sung line sits, from the top of the pane. Never less than 34px:
+// the pane's mask fades the first 22px out (player.css), and a smaller inset
+// put the first and the sung line half inside that fade on short windows.
+function npInset() { return Math.min(56, Math.max(34, window.innerHeight * 0.06)); }
 
 function npLayoutLyrics() {
   const box = $('np-lyrics');
@@ -8964,16 +9107,20 @@ function npScrollToFocus(focus, mode) {
 // The line the view follows. A line still being sung keeps the focus only
 // when another voice has started over it (a duet); for one singer, a held
 // last word running into the next line used to keep the view a line behind.
+// The line the view centres on: the earliest one still being sung. In
+// word-synced lyrics the next line often starts before the last word of the
+// current one ends; moving on at its start scrolled away from a line still
+// being sung. That used to be held only for a duet's other voice. The newer
+// line is lit meanwhile all the same (it is in `set`).
 function npFocusFor(active, set, time) {
-  const start = npLines[active].t;
-  const voice = npLines[active].voice || 1;
+  let focus = active;
   for (let i = active - 1; i >= 0; i--) {
+    if (!set.has(i)) continue;
     const line = npLines[i];
-    if (line.t >= start) continue;
-    if (!line.text) return active;
-    return set.has(i) && line.end > time && (line.voice || 1) !== voice ? i : active;
+    if (!line.text) break;
+    if (line.end > time && line.t < npLines[active].t) focus = i;
   }
-  return active;
+  return focus;
 }
 
 // Lift and glow envelopes of a timed word, as in the mobile app.
@@ -9090,7 +9237,7 @@ function npRenderQueue() {
     const i = playerOrder[n], q = playerQueue[i];
     if (!q) continue;
     rows.push(`<div class="np-queue-row${n === playerPos ? ' active' : ''}" role="button" tabindex="0" data-activate data-onclick="loadPlayerTrack(${i})">
-       <span class="t">${escHtml(q.title)}</span><span class="a">${escHtml(q.artist || '')}</span></div>`);
+       <span class="t">${escHtml(q.title)}</span><span class="a">${npArtistLinks(lib.items.find(t => t.path === q.path)?.artist_names, q.artist)}</span></div>`);
   }
   $('np-queue').innerHTML = rows.join('');
 }
@@ -9271,14 +9418,41 @@ function togglePlayerSource() {
   }
 }
 
+// An artist tag as the player shows it. Files tagged with an artist
+// separator read "Doja Cat;SZA" (";" for Navidrome, "/" from ID3v2.3, NUL
+// between multi-value frames); the player shows "Doja Cat, SZA". The tag on
+// disk is left alone. A slash splits only a credit that has spaces in it,
+// so "AC/DC" stays one name.
+function artistNames(value) {
+  return String(value || '')
+    .split(/\s*[;\u0000]\s*/)
+    .flatMap(part => (/\s/.test(part) ? part.split(/\s*\/\s*/) : [part]))
+    .map(part => part.trim())
+    .filter(Boolean);
+}
+function displayArtists(value) { return artistNames(value).join(', '); }
+
 function libAccept(p) {
   if (lib.scan === null) { if (p.scan <= lib.lastScan) return false; lib.scan = p.scan; }
   return p.scan === lib.scan;
 }
 
+// A row from the server as the library keeps it.
+function libItem(t) {
+  return {
+    ...t,
+    // The names one by one, for the now-playing links: once joined with
+    // commas they cannot be told apart from "Tyler, The Creator".
+    artist_names: artistNames(t.artist),
+    album_artist_names: artistNames(t.album_artist),
+    artist: displayArtists(t.artist),
+    album_artist: displayArtists(t.album_artist),
+  };
+}
+
 window.app_library_scan_chunk = function(p) {
   if (!libAccept(p)) return;
-  lib.items.push(...p.items);
+  lib.items.push(...p.items.map(libItem));
   setPlayerStatus(`Scanning… ${p.done} / ${p.total}`);
   if (!lib.raf) lib.raf = requestAnimationFrame(() => { lib.raf = 0; filterPlayerLibrary(true); });
 };
@@ -9286,7 +9460,9 @@ window.app_library_scan_chunk = function(p) {
 window.app_library_scan_finished = function(p) {
   if (!libAccept(p)) return;
   lib.loading = false;
-  setPlayerScanBusy(false);
+  // A stored library is usable at once; the check for changes on disk
+  // goes on behind it until app_library_scan_synced.
+  setPlayerScanBusy(!!p.stored);
   setPlayerStatus('');
   if (lib.items.length) {
     libFolders().forEach(libRemember);
@@ -9297,6 +9473,25 @@ window.app_library_scan_finished = function(p) {
     showPlayerSource(true);
   }
   filterPlayerLibrary(true);
+};
+
+// After a library stored from an earlier visit is shown, the server walks
+// the folders and sends only what changed: rows of new or edited files
+// (replacing their old row) and the paths of files that are gone.
+window.app_library_scan_delta = function(p) {
+  if (!libAccept(p)) return;
+  const removed = new Set(p.removed || []);
+  const fresh = new Map((p.items || []).map(t => [t.path, libItem(t)]));
+  if (!removed.size && !fresh.size) return;
+  lib.items = lib.items.filter(t => !removed.has(t.path) && !fresh.has(t.path));
+  lib.items.push(...fresh.values());
+  if (!lib.raf) lib.raf = requestAnimationFrame(() => { lib.raf = 0; filterPlayerLibrary(true); });
+};
+
+window.app_library_scan_synced = function(p) {
+  if (!libAccept(p)) return;
+  setPlayerScanBusy(false);
+  setPlayerStatus('');
 };
 
 window.app_library_scan_error = function(p) {
@@ -9350,16 +9545,47 @@ function libAlbums(items) {
     || (x.year || '').localeCompare(y.year || '') || x.title.localeCompare(y.title, undefined, { sensitivity: 'base' }));
 }
 
+// Every artist a track credits, one by one, as Jellyfin lists them: the
+// album artists first, then the track's own artists ("Doja Cat", "SZA").
+// A shared credit ("50 Cent;Olivia") gives each of them a page, and the
+// album shows on both; the album itself stays one album.
+function libCredited(t) {
+  const seen = new Set();
+  const out = [];
+  for (const name of [...(t.album_artist_names || []), ...(t.artist_names || [])]) {
+    const key = name.toLowerCase();
+    if (!seen.has(key)) { seen.add(key); out.push(name); }
+  }
+  if (!out.length) out.push(libArtistOf(t));
+  return out;
+}
+function libCredits(t, key) { return libCredited(t).some(n => n.toLowerCase() === key); }
+// Whether `key` is one of the album's own artists, rather than a guest on it.
+function libAlbumIsBy(album, key) {
+  const t = album.tracks[0] || {};
+  const names = t.album_artist_names && t.album_artist_names.length ? t.album_artist_names : [libArtistOf(t)];
+  return names.some(n => n.toLowerCase() === key);
+}
+function libAlbumsOf(allAlbums, key) {
+  const own = [], guest = [];
+  for (const a of allAlbums) {
+    if (libAlbumIsBy(a, key)) own.push(a);
+    else if (a.tracks.some(t => libCredits(t, key))) guest.push(a);
+  }
+  return { own, guest };
+}
+
 function libArtists(items) {
   const map = new Map();
   for (const t of items) {
-    const name = libArtistOf(t);
-    const key = name.toLowerCase();
-    let a = map.get(key);
-    if (!a) { a = { key, name, albums: new Set(), tracks: [], duration: 0 }; map.set(key, a); }
-    a.tracks.push(t);
-    a.albums.add(libAlbumKey(t));
-    a.duration += t.duration_s || 0;
+    for (const name of libCredited(t)) {
+      const key = name.toLowerCase();
+      let a = map.get(key);
+      if (!a) { a = { key, name, albums: new Set(), tracks: [], duration: 0 }; map.set(key, a); }
+      a.tracks.push(t);
+      a.albums.add(libAlbumKey(t));
+      a.duration += t.duration_s || 0;
+    }
   }
   return [...map.values()].sort((x, y) => x.name.localeCompare(y.name, undefined, { sensitivity: 'base' }));
 }
@@ -9474,9 +9700,12 @@ function filterPlayerLibrary(keepScroll) {
   } else if (tab === 'artists' && lib.artist) {
     const artist = allArtists.find(a => a.key === lib.artist);
     if (!artist) { lib.artist = null; return filterPlayerLibrary(keepScroll); }
-    const albums = allAlbums.filter(a => a.artist.toLowerCase() === artist.key);
-    cards = albums.map(libAlbumCardHtml);
-    header = libArtistHeaderHtml(artist, albums);
+    const { own, guest } = libAlbumsOf(allAlbums, artist.key);
+    cards = own.map(libAlbumCardHtml);
+    if (guest.length) {
+      cards.push(`<h3 class="pl-grid-head">Appears on</h3>`, ...guest.map(libAlbumCardHtml));
+    }
+    header = libArtistHeaderHtml(artist, [...own, ...guest]);
   } else if (tab === 'albums') {
     const albums = libAlbums(matches);
     cards = albums.map(libAlbumCardHtml);
@@ -9522,13 +9751,14 @@ function filterPlayerLibrary(keepScroll) {
   // What "Play all" / "Shuffle" in the toolbar play on the current page: the
   // rows when there are rows, otherwise every album shown, in grid order.
   if (cards) {
-    const shown = tab === 'artists' && !lib.artist
-      ? libArtists(matches).map(a => a.key)
-      : null;
-    const albums = allAlbums.filter(a => shown
-      ? shown.includes(a.artist.toLowerCase())
-      : lib.artist ? a.artist.toLowerCase() === lib.artist : libAlbums(matches).some(m => m.key === a.key));
-    lib.playAll = albums.flatMap(a => a.tracks);
+    if (tab === 'artists' && lib.artist) {
+      lib.playAll = libArtistTracks(lib.artist);
+    } else if (tab === 'artists') {
+      const shown = new Set(libArtists(matches).map(a => a.key));
+      lib.playAll = allAlbums.flatMap(a => a.tracks).filter(t => libCredited(t).some(n => shown.has(n.toLowerCase())));
+    } else {
+      lib.playAll = allAlbums.filter(a => libAlbums(matches).some(m => m.key === a.key)).flatMap(a => a.tracks);
+    }
   } else {
     lib.playAll = null;
   }
@@ -9556,7 +9786,7 @@ function libAlbumCardHtml(a) {
 }
 
 function libArtistCardHtml(a, allAlbums) {
-  const first = allAlbums.find(al => al.artist.toLowerCase() === a.key);
+  const first = allAlbums.find(al => libAlbumIsBy(al, a.key));
   const meta = `${plural(a.albums.size, 'album')} · ${plural(a.tracks.length, 'track')}`;
   return `<div class="pl-card artist" role="listitem" tabindex="0" data-activate data-artist="${escHtml(a.key)}" title="${escHtml(a.name)}">
     <div class="pl-card-art">${libCoverHtml((first?.tracks[0] || a.tracks[0])?.path, 320)}
@@ -9573,6 +9803,11 @@ function libDetailActions(kind, key) {
   </div>`;
 }
 
+function libAlbumArtistNames(a) {
+  const t = a.tracks[0] || {};
+  return t.album_artist_names && t.album_artist_names.length ? t.album_artist_names : [a.artist];
+}
+
 function libAlbumHeaderHtml(a) {
   const back = lib.artist ? 'Artist' : 'Albums';
   const meta = [a.year, plural(a.tracks.length, 'track'), libDuration(a.duration), [...a.formats].join(' / ')].filter(Boolean);
@@ -9582,7 +9817,8 @@ function libAlbumHeaderHtml(a) {
       <div class="pl-detail-info">
         <span class="pl-detail-kind">Album</span>
         <h2 class="pl-detail-title">${escHtml(a.title)}</h2>
-        <button type="button" class="pl-detail-artist" data-artist-link="${escHtml(a.artist.toLowerCase())}">${escHtml(a.artist)}</button>
+        <div class="pl-detail-artists">${libAlbumArtistNames(a).map(n =>
+          `<button type="button" class="pl-detail-artist" data-artist-link="${escHtml(n.toLowerCase())}">${escHtml(n)}</button>`).join(', ')}</div>
         <div class="pl-detail-meta">${meta.map(escHtml).join('<span aria-hidden="true"> · </span>')}</div>
         ${libDetailActions('album', a.key)}
       </div>
@@ -9722,12 +9958,18 @@ function playFromLibrary(index, shuffle) {
   if (tracks.length) startPlayback(libQueueItems(tracks), index, shuffle, false);
 }
 
+// An artist plays album by album, each in track order: their own albums
+// whole, then the tracks they appear on elsewhere.
+function libArtistTracks(key) {
+  const { own, guest } = libAlbumsOf(libAlbums(lib.items), key);
+  return [...own.flatMap(a => a.tracks), ...guest.flatMap(a => a.tracks.filter(t => libCredits(t, key)))];
+}
+
 function playLibraryGroup(kind, key, shuffle) {
   let tracks = [];
   if (kind === 'album') tracks = libAlbums(lib.items).find(a => a.key === key)?.tracks || [];
   else {
-    // An artist plays album by album, each in track order.
-    tracks = libAlbums(lib.items).filter(a => a.artist.toLowerCase() === key).flatMap(a => a.tracks);
+    tracks = libArtistTracks(key);
   }
   if (tracks.length) startPlayback(libQueueItems(tracks), 0, !!shuffle, false);
 }
@@ -11012,6 +11254,10 @@ function renderStats(doc) {
         : ''}
       ${totals.failed ? statsTile('failed', totals.failed, `${Math.round((totals.success_rate || 0) * 100)}% succeeded`) : ''}
     </div>`);
+  // Files the Player found that Mornye did not download (core/stats.py).
+  if (totals.library_tracks) {
+    sections.push(`<div class="stats-source-note"><strong>${totals.library_tracks.toLocaleString()} from before Mornye</strong><span>tracks in your Player library that Mornye did not download. They count in the totals and rankings, not in the activity.</span></div>`);
+  }
 
   sections.push(statsSection('Top artists', statsBars(
     (doc.top_artists || []).map((e) => ({ label: e.name, value: e.tracks })),

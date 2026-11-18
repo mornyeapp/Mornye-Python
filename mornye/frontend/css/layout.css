@@ -642,6 +642,15 @@ body {
 #np-view > * { position: relative; z-index: 1; }
 #np-view > #np-bg { position: absolute; }
 #np-view > #np-bg { inset: 0; z-index: 0; }
+/* The full-screen player covers the titlebar, which is the only place the
+   frameless desktop window can be dragged from. This strip along its top
+   takes over that job; it sits under the close and volume controls (later
+   in the markup) and is not needed in a browser tab. */
+#np-view > .np-drag {
+  position: absolute; top: 0; left: 0; right: 0; height: 56px;
+  -webkit-app-region: drag;
+}
+body.web-mode #np-view > .np-drag { display: none; }
 
 @media (max-width: 860px) {
   #np-view { grid-template-columns: 1fr; align-items: start; overflow-y: auto; padding-top: 70px; }
@@ -908,6 +917,15 @@ body.has-player #queue-dock { bottom: var(--player-h); }
   color: var(--text-2);
 }
 #player-bar .pl-btn:hover { background: var(--raised); border-color: var(--rule-strong); color: var(--text); }
+/* Shuffle and repeat when on: the accent chosen in Settings → Appearance,
+   so the state reads at a glance. `.pl-mode.on` alone (player.css) lost to
+   the rule above and left them grey either way. */
+#player-bar .pl-btn.pl-mode.on,
+#player-bar .pl-btn.pl-mode.on:hover {
+  color: var(--signal-text);
+  border-color: var(--signal-strong);
+  background: color-mix(in srgb, var(--signal) 16%, transparent);
+}
 #player-bar .pl-btn.pl-main {
   width: var(--row); height: var(--row);
   background: var(--signal); border-color: var(--signal);

@@ -40,7 +40,7 @@ If you are a copyright holder or an authorized representative and believe this r
 
 ## Why Python (instead of the standalone apps)
 
-The standalone apps is built for direct, immediate use: open it, paste a link, download. Python exists for a different case — **integrating** this logic into something else.
+The standalone apps are built for direct, immediate use: open it, paste a link, download. Python exists for a different case — **integrating** this logic into something else.
 
 It makes sense to start here if:
 
@@ -50,7 +50,7 @@ It makes sense to start here if:
 - **You need to run headless**, on a server, a NAS, or inside Docker, possibly as part of a larger pipeline.
 - **You want full control over which extensions get loaded** and from which registry, instead of relying on a fixed set baked into an app.
 
-If you just want a GUI for personal use, with no code involved, the [Mobile](https://github.com/mornyeapp/Mornye) app remain the simpler choice — this module is the building block those (and similar projects) can be built on top of.
+If you just want a GUI for personal use, with no code involved, the [Mobile](https://github.com/mornyeapp/Mornye) app remains the simpler choice — this module is the building block those (and similar projects) can be built on top of.
 
 ---
 
@@ -67,8 +67,11 @@ If you just want a GUI for personal use, with no code involved, the [Mobile](htt
 - Synchronized lyrics — embedded in the tag and, optionally, written out as `.lrc` files; word-by-word where the source has it, or line-synced if you prefer
 - Optional Canvas sidecars — the short looping visual a track carries, saved next to it as a video file (off by default; no media server reads these on its own)
 - Optional animated Apple Music album artwork — saved as `cover.webp` beside downloaded tracks and compatible with Navidrome (off by default)
-- Optional MP3 320 kbps transcoding
+- Optional conversion to FLAC, ALAC, WavPack, TTA, WAV, AIFF, MP3, AAC or Opus, with optional sample-rate and bit-depth caps
 - Watch mode: re-sync a playlist/album/artist/URL on an interval, indefinitely
+- **Existing library folders** — tracks you already have elsewhere are not downloaded again, and playlist M3Us still list them
+- **Tracks still missing** — every failed track stays listed, survives a restart, and can be retried back into its playlist or cleared
+- **CUE splitting** — turn a single-file album plus its `.cue` into one tagged file per track (`--split-cue`)
 - Optional shared-secret or per-account authentication for `--web`, plus a queued, per-user download history in multi-user mode
 - Extension discovery directories, and optional Ed25519 signature verification on top of registry checksums
 - Per-extension quality choices and settings, plus metadata fallback and field-by-field merging for Spotify, Apple Music, and Tidal links
@@ -79,7 +82,8 @@ If you just want a GUI for personal use, with no code involved, the [Mobile](htt
 - **Library upgrade** — find files below a target quality (including fake Hi-Res) and re-fetch them
 - **Outbound notifications** — webhook, Discord, Telegram or ntfy, per track or one summary per run
 - **Versioned REST API** at `/api/v1`, with an OpenAPI document at `/docs`
-- **CSV input** — hand it a playlist export (Exportify, Soundiiz, a bare list of links) and it downloads what the file lists, matching rows that carry no link and reporting the ones it cannot
+- **Subsonic / OpenSubsonic API** — play the library from Symfonium, Feishin, DSub and other Subsonic apps, with stars, playlists, play counts and a play queue that follows you between devices
+- **CSV and M3U input** — hand it a playlist export (Exportify, Soundiiz, an M3U/M3U8, a bare list of links) and it downloads what the file lists, matching rows that carry no link and reporting the ones it cannot
 - **Dashboard** — what you have actually downloaded, as numbers: top artists, genres, decades, providers, listening time, activity by weekday and streaks (`--stats`, or the Stats screen)
 - **Persistent staged download queue** (JSON) and **download log/history** (SQLite): queued work survives a restart, and completed downloads remain recorded
 - **Network destinations** — use OS-mounted folders, SMB2/SMB3, or WebDAV, with staged and verified remote delivery
@@ -95,7 +99,21 @@ If you just want a GUI for personal use, with no code involved, the [Mobile](htt
 pip install mornye
 ```
 
-> **Important:** out of the box, Mornye does nothing but resolve metadata — it ships with **no built-in provider and no default extension source**. Before you can download anything, you need to point it at an extension registry of your own choosing and install at least one extension. See [Extensions](docs/guide/extensions.md#extensions) below.
+> **Important:** out of the box, Mornye does nothing but resolve metadata — it ships with **no built-in provider and no default extension source**. Before you can download anything, you need to point it at an extension registry of your own choosing and install at least one extension. See [Extensions](docs/guide/extensions.md#extensions).
+
+---
+
+## Templates (headless, NAS, scripts)
+
+New to it, or setting up a NAS? Start from a template in [`templates/`](templates/) instead of a blank file:
+
+| Template | For |
+| --- | --- |
+| [`templates/download.py`](templates/download.py) | Download one link from a Python script |
+| [`templates/nas_sync.py`](templates/nas_sync.py) | Keep a list of playlists and albums downloaded on a NAS, re-checking every few hours |
+| [`templates/mornye-web.service`](templates/mornye-web.service) | The web interface as a systemd service on a headless Linux machine |
+| [`docker-compose.portainer.yml`](docker-compose.portainer.yml) | The web interface in Docker (Portainer, Synology, Unraid…) |
+
 ---
 
 ## Documentation
@@ -109,6 +127,7 @@ renders it usefully. Every page below is the same text that used to be here.
 | [Quick Start](docs/guide/quick-start.md) | Every way to run it — GUI, web, CLI, terminal UI, Python — and the URL types it accepts |
 | [Terminal UI](docs/guide/tui.md) | `--tui`, the guided mode: every setting on one screen, and the download queue live |
 | [Extensions](docs/guide/extensions.md) | Registries, installing providers, signature verification and trust tiers |
+| [Writing a Python Extension](docs/guide/python-extensions.md) | Building a download-provider extension: `BaseProvider`, the `core` toolbox, a full example, packaging and publishing |
 | [Downloading from a CSV](docs/guide/csv.md) | Feeding it a file of tracks instead of a link: supported exports, how rows without a link are matched, and the unmatched-row report |
 | [Your library in numbers](docs/guide/dashboard.md) | The dashboard built from what you have actually downloaded — top artists, genres, decades, activity |
 | [Configuration](docs/guide/configuration.md) | Every option: naming, quality, lyrics, enrichment, transcoding, watch mode, profiles |
@@ -116,9 +135,10 @@ renders it usefully. Every page below is the same text that used to be here.
 | [API Reference](docs/guide/api-reference.md) | `Mornye` and `AsyncMornye`, and the objects they return |
 | [Migration Guide](docs/guide/migration.md) | Moving from the old distribution, CLI, environment, and local state |
 | [Local Tagging](docs/guide/local-tagging.md) | Retagging an existing library, MusicBrainz enrichment, download validation |
-| [Automation & Operations](docs/guide/automation.md) | JSON output, post-download hooks, notifications, M3U, library rescan, cache maintenance, running the web server |
+| [Automation & Operations](docs/guide/automation.md) | JSON output, post-download hooks, notifications, M3U, existing library folders, library rescan, cache maintenance, running the web server, tracks still missing |
 | [Following Artists](docs/guide/subscriptions.md) | Subscriptions, new-release checks, scheduled playlist monitoring, and the library-upgrade pass |
 | [REST API](docs/guide/rest-api.md) | The versioned `/api/v1` surface, quotas and the admin endpoints |
+| [Subsonic](docs/guide/subsonic.md) | Playing the library from Symfonium, Feishin, DSub and other Subsonic apps |
 | [Docker](docs/guide/docker.md) | Headless and NAS setups |
 | [CLI](docs/guide/cli.md) | The standalone executables |
 

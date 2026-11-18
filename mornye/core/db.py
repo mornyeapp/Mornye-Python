@@ -316,6 +316,72 @@ _MIGRATIONS: tuple[tuple[str, ...], ...] = (
         "ALTER TABLE subscriptions ADD COLUMN image_url TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE subscriptions ADD COLUMN subtitle TEXT NOT NULL DEFAULT ''",
     ),
+    # v11 — the Player's library, kept between visits.
+    #
+    # Opening the Player read the tags of every file in every library folder,
+    # every time: minutes for a large library on a NAS share. One row per
+    # file (core/player_library.py): the row the Player shows, and the size
+    # and modification time it was read at, so the next visit shows it at
+    # once and re-reads only what changed on disk.
+    (
+        """
+        CREATE TABLE IF NOT EXISTS player_library (
+            path       TEXT PRIMARY KEY,
+            mtime_ns   INTEGER NOT NULL,
+            size       INTEGER NOT NULL,
+            row        TEXT NOT NULL,
+            scanned_at REAL NOT NULL
+        )
+        """,
+    ),
+    # v12 — what a Subsonic client keeps on the server (core/subsonic.py).
+    #
+    # Apps like Symfonium or Feishin star songs, count plays, build
+    # playlists and save the play queue to carry it to another device; all
+    # of it lives with the library they play from. Items are keyed by the
+    # Subsonic ids, which are derived from the file path (songs) or the
+    # names (albums, artists), so they survive a rescan.
+    (
+        """
+        CREATE TABLE IF NOT EXISTS subsonic_starred (
+            username   TEXT NOT NULL,
+            item_id    TEXT NOT NULL,
+            starred_at REAL NOT NULL,
+            PRIMARY KEY (username, item_id)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS subsonic_plays (
+            username    TEXT NOT NULL,
+            song_id     TEXT NOT NULL,
+            plays       INTEGER NOT NULL DEFAULT 0,
+            last_played REAL NOT NULL DEFAULT 0,
+            PRIMARY KEY (username, song_id)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS subsonic_playlists (
+            id       TEXT PRIMARY KEY,
+            username TEXT NOT NULL,
+            name     TEXT NOT NULL,
+            comment  TEXT NOT NULL DEFAULT '',
+            public   INTEGER NOT NULL DEFAULT 0,
+            songs    TEXT NOT NULL DEFAULT '[]',
+            created  REAL NOT NULL,
+            changed  REAL NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS subsonic_play_queue (
+            username   TEXT PRIMARY KEY,
+            current    TEXT NOT NULL DEFAULT '',
+            position   INTEGER NOT NULL DEFAULT 0,
+            songs      TEXT NOT NULL DEFAULT '[]',
+            changed    REAL NOT NULL,
+            changed_by TEXT NOT NULL DEFAULT ''
+        )
+        """,
+    ),
 )
 
 

@@ -289,7 +289,7 @@ def test_retry_submits_the_missing_tracks_as_a_background_job(monkeypatch):
     # The playlist cannot be read here, so it keeps no name.
     monkeypatch.setattr(api, "_playlist_name_for", lambda url: "")
 
-    assert api.retry_failed_tracks({"services": ["tidal"]}) == {"queued": 1}
+    assert api.retry_failed_tracks({"services": ["tidal"]})["queued"] == 1
 
     [(_, payload)] = api._download_queue.jobs
     assert payload["whole"] is False

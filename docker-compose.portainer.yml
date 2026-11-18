@@ -83,6 +83,12 @@ services:
       # enabling this does not make the container report itself unhealthy.
       MORNYE_WEB_TOKEN: "${MORNYE_WEB_TOKEN:?set a long random shared secret — the web GUI has no other authentication}"
 
+      # --- Subsonic apps (Symfonium, Feishin, DSub…) ----------------------
+      # The /rest API is off until a password is set (docs/guide/subsonic.md).
+      MORNYE_SUBSONIC_USER: "${MORNYE_SUBSONIC_USER:-}"
+      MORNYE_SUBSONIC_PASSWORD: "${MORNYE_SUBSONIC_PASSWORD:-}"
+      MORNYE_SUBSONIC_API_KEY: "${MORNYE_SUBSONIC_API_KEY:-}"
+
       # --- Identity (root-assisted variant only, see `user:` above) --------
       # PUID: "${PUID:-1000}"
       # PGID: "${PGID:-1000}"

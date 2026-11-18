@@ -293,9 +293,51 @@ class LibraryToolsMixin:
         return {"path": self.download_dir}
 
     def _scan_music_library_thread(self, scan_id: int, roots: list[str]) -> None:
+        """Fills the Player, then keeps it in step with the disk.
+
+        A library seen before (core/player_library.py) is sent whole at once,
+        from the database, and the Player is usable straight away; the walk
+        that follows reads the tags only of files that are new or changed
+        since, and sends just the difference ("app_library_scan_delta",
+        then "app_library_scan_synced"). A library never seen before is read
+        and sent file by file, as it always was, and stored on the way.
+        """
+        from ..core import db, player_library
         from ..core.library_scan import iter_audio_files, read_track_row
 
+        def current() -> bool:
+            return scan_id == self._library_scan_id  # a newer scan replaces this
+
         try:
+            stored = player_library.stored_rows(roots)
+            if stored:
+                rows = sorted(
+                    (s.row for s in stored.values()),
+                    key=lambda r: str(r.get("path", "")).lower(),
+                )
+                for start in range(0, len(rows), 500):
+                    if not current():
+                        return
+                    self._push(
+                        "app_library_scan_chunk",
+                        {
+                            "scan": scan_id,
+                            "items": rows[start : start + 500],
+                            "done": min(start + 500, len(rows)),
+                            "total": len(rows),
+                        },
+                    )
+                self._push(
+                    "app_library_scan_finished",
+                    {
+                        "scan": scan_id,
+                        "total": len(rows),
+                        "folder": roots[0],
+                        "folders": roots,
+                        "stored": True,
+                    },
+                )
+
             # Every folder of the library, a file listed once even when one
             # folder sits inside another.
             files = list(
@@ -303,31 +345,72 @@ class LibraryToolsMixin:
             )
             total = len(files)
             batch: list = []
+            to_store: list = []
             done = 0
             for path in files:
-                if scan_id != self._library_scan_id:
-                    return  # a newer scan replaced this one
-                batch.append(read_track_row(path))
+                if not current():
+                    return
                 done += 1
+                try:
+                    st = path.stat()
+                except OSError:
+                    continue
+                known = stored.get(str(path))
+                # A row stored before it carried a genre is read once more.
+                if (
+                    known is not None
+                    and known.matches(st.st_mtime_ns, st.st_size)
+                    and "genre" in known.row
+                ):
+                    continue
+                row = read_track_row(path)
+                batch.append(row)
+                to_store.append((str(path), st.st_mtime_ns, st.st_size, row))
+                if len(to_store) >= 200:
+                    player_library.store(to_store)
+                    to_store = []
                 if len(batch) >= 60:
                     self._push(
-                        "app_library_scan_chunk",
+                        (
+                            "app_library_scan_delta"
+                            if stored
+                            else "app_library_scan_chunk"
+                        ),
                         {"scan": scan_id, "items": batch, "done": done, "total": total},
                     )
                     batch = []
-            if scan_id != self._library_scan_id:
+            player_library.store(to_store)
+            if not current():
                 return
-            self._push(
-                "app_library_scan_chunk",
-                {"scan": scan_id, "items": batch, "done": done, "total": total},
-            )
-            self._push(
-                "app_library_scan_finished",
-                {"scan": scan_id, "total": total, "folder": roots[0], "folders": roots},
-            )
+            # A walk that found nothing at all is a share that stopped
+            # answering, not a library emptied: the stored rows stay.
+            gone = sorted(set(stored) - {str(p) for p in files}) if files else []
+            player_library.forget(gone)
+            if stored:
+                self._push(
+                    "app_library_scan_delta",
+                    {"scan": scan_id, "items": batch, "removed": gone},
+                )
+                self._push("app_library_scan_synced", {"scan": scan_id, "total": total})
+            else:
+                self._push(
+                    "app_library_scan_chunk",
+                    {"scan": scan_id, "items": batch, "done": done, "total": total},
+                )
+                self._push(
+                    "app_library_scan_finished",
+                    {
+                        "scan": scan_id,
+                        "total": total,
+                        "folder": roots[0],
+                        "folders": roots,
+                    },
+                )
         except Exception as e:
             self.log(f"[player] scan failed: {e}", "error")
             self._push("app_library_scan_error", {"scan": scan_id, "error": str(e)})
+        finally:
+            db.close_thread_connection()
 
     def scan_music_library(self, path: str | list[str]) -> dict:
         """Lists the audio files under `path` for the Player, in the

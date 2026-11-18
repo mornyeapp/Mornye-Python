@@ -297,6 +297,12 @@ class StatsTotals(BaseModel):
         "only recorded from schema v2 onwards, so an older history reports "
         "less listening time than it actually holds."
     )
+    library_tracks: int = Field(
+        default=0,
+        description="Of `tracks`, how many are files in the Player's library "
+        "that Mornye did not download (they were there before it). Counted in "
+        "the totals and rankings, never in the timeline or the activity.",
+    )
 
 
 class StatsEntry(BaseModel):

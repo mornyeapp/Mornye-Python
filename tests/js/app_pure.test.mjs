@@ -43,6 +43,107 @@ test('describeError sorts a failure into one kind (one error, one place)', () =>
   assert.equal(f.describeError('boom', 'Search').title, 'Search failed');
 });
 
+test('Download All requeues finished playlist tracks so a missing M3U can be rebuilt', () => {
+  for (const status of ['done', 'skipped', 'error']) {
+    const queue = [{
+      id: 'song',
+      spotify_id: 'song',
+      source: 'https://open.spotify.com/playlist/mix',
+      list: 1,
+      index: 0,
+      title: 'Old title',
+      artist: 'Old artist',
+      album: 'Old album',
+      status,
+      progress: 100,
+      file_path: '/music/Mix/song.flac',
+      file_size_mb: 12,
+    }];
+    const currentTracks = [{
+      id: 'song',
+      title: 'Song',
+      artist: 'Artist',
+      album: 'Album',
+      list_id: 2,
+    }];
+    const app = pick(['addToQueue'], {
+      queue,
+      currentTracks,
+      currentUrl: 'https://open.spotify.com/playlist/mix',
+      renderQueue() {},
+      $: () => null,
+      console: { log() {}, warn() {} },
+    });
+
+    assert.equal(app.addToQueue([0], { requeueFinished: true }), true);
+    assert.deepEqual(queue[0], {
+      id: 'song',
+      spotify_id: 'song',
+      source: 'https://open.spotify.com/playlist/mix',
+      list: 2,
+      index: 0,
+      title: 'Song',
+      artist: 'Artist',
+      album: 'Album',
+      status: 'waiting',
+      progress: 0,
+      file_path: '',
+      file_size_mb: 0,
+    });
+  }
+});
+
+test('Download All only requeues finished playlist tracks', () => {
+  const options = [];
+  for (const url of [
+    'https://open.spotify.com/playlist/mix',
+    'https://open.spotify.com/album/album',
+  ]) {
+    const app = pick(['downloadAll', 'detectUrlType'], {
+      currentTracks: [{}],
+      queue: [],
+      currentUrl: url,
+      addToQueue: (_indices, value) => { options.push(value); },
+      startDownloadQueue() {},
+      setStatus() {},
+      $: () => ({ classList: { add() {} } }),
+      console: { log() {} },
+    });
+    app.downloadAll();
+  }
+
+  assert.deepEqual(JSON.parse(JSON.stringify(options)), [
+    { requeueFinished: true },
+    { requeueFinished: false },
+  ]);
+});
+
+test('playlist Download All leaves waiting and active queue items alone', () => {
+  for (const status of ['waiting', 'active']) {
+    const queue = [{
+      id: 'song',
+      spotify_id: 'song',
+      source: 'https://open.spotify.com/playlist/mix',
+      index: 0,
+      title: 'Song',
+      status,
+      progress: 10,
+    }];
+    const app = pick(['addToQueue'], {
+      queue,
+      currentTracks: [{ id: 'song', title: 'Song' }],
+      currentUrl: 'https://open.spotify.com/playlist/mix',
+      renderQueue() {},
+      $: () => null,
+      toastMgr: { info() {} },
+      console: { log() {}, warn() {} },
+    });
+
+    assert.equal(app.addToQueue([0], { requeueFinished: true }), false);
+    assert.equal(queue[0].status, status);
+  }
+});
+
 test('batch source picker lists that provider’s declared qualities and restores its choice', () => {
   const qualitySelect = { value: '', disabled: false, innerHTML: '' };
   const picker = pick(['updateProviderPickerQuality', 'escHtml'], {

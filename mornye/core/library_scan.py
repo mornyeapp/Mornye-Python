@@ -72,6 +72,9 @@ def read_track_row(path: Path) -> dict[str, Any]:
         "track": _num(tags.get("TRACKNUMBER", "")),
         "disc": _num(tags.get("DISCNUMBER", "")),
         "year": (tags.get("DATE") or tags.get("YEAR") or "")[:4],
+        # Not shown by the Player; read for the Stats page, which counts the
+        # library's files from before Mornye too (core/stats.py).
+        "genre": tags.get("GENRE", ""),
         "duration_s": _duration_s(path),
         "format": path.suffix.lstrip(".").upper(),
     }

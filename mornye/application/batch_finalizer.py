@@ -140,17 +140,10 @@ class BatchFinalizer:
             logger.warning("[post-action] unknown action: %s", action)
 
     async def _notify(self, title: str, body: str) -> None:
-        try:
-            if sys.platform == "darwin":
-                await asyncio.create_subprocess_exec(
-                    "osascript",
-                    "-e",
-                    f'display notification "{body}" with title "{title}"',
-                )
-            elif sys.platform != "win32":
-                await asyncio.create_subprocess_exec("notify-send", title, body)
-        except Exception:
-            pass
+        # Names from metadata never go into a script (core/desktop_notify.py).
+        from ..core.desktop_notify import notify
+
+        await notify(title, body)
 
     async def _open_folder(self, path: str) -> None:
         try:

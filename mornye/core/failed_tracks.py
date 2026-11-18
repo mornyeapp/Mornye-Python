@@ -68,12 +68,19 @@ def record_failure(
     error: str = "",
     source_url: str = "",
     playlist_name: str = "",
+    *,
+    only_existing: bool = False,
 ) -> None:
     """Adds a failed track, or counts one more attempt at it. Never raises.
 
     The same contract as download_log.record(): this runs from a
     post-download hook, and bookkeeping must never turn into a failure of the
     download it is keeping books on.
+
+    `only_existing` is a retry's mode: it counts the attempt on a row that is
+    still listed and never adds one back. A retry still running when the
+    list was cleared used to write every track it failed back into it, so
+    the cleared tracks came back and were retried again (issue #284).
     """
     key = track_key(metadata)
     track = _serialise(metadata)
@@ -82,6 +89,29 @@ def record_failure(
     now = time.time()
     try:
         with db.transaction() as conn:
+            if only_existing:
+                name = (playlist_name or "").strip()
+                conn.execute(
+                    """
+                    UPDATE failed_tracks SET
+                        playlist_name  = CASE WHEN ? <> '' THEN ?
+                                         ELSE playlist_name END,
+                        error          = ?,
+                        attempts       = attempts + 1,
+                        last_failed_at = ?
+                    WHERE owner = ? AND source_url = ? AND track_key = ?
+                    """,
+                    (
+                        name,
+                        name,
+                        (error or "")[:_MAX_ERROR_CHARS],
+                        now,
+                        owner or "",
+                        source_url or "",
+                        key,
+                    ),
+                )
+                return
             conn.execute(
                 """
                 INSERT INTO failed_tracks (
@@ -186,7 +216,11 @@ def resolve(owner: str, metadata: Any, source_url: str | None = None) -> None:
 
 
 def hook(
-    owner: str = "", source_url: str = "", playlist_name: str = ""
+    owner: str = "",
+    source_url: str = "",
+    playlist_name: str = "",
+    *,
+    only_existing: bool = False,
 ) -> Callable[[Any, Any], None]:
     """A post-download hook that keeps the table in step with each run.
 
@@ -207,6 +241,7 @@ def hook(
                 getattr(result, "error", "") or "",
                 source_url,
                 playlist_name,
+                only_existing=only_existing,
             )
 
     _on_track.__qualname__ = "failed_tracks.hook.on_track"
@@ -269,18 +304,46 @@ def retry_groups(
     turns into a link next to the service that issued it, and one download
     job carries one source URL and one playlist folder. Never raises.
     """
+    return [(url, name, tracks) for url, name, tracks, _ in retry_batches(owner, keys)]
+
+
+def retry_batches(
+    owner: str = "", keys: Iterable[str] | None = None
+) -> list[tuple[str, str, list[dict], list[str]]]:
+    """retry_groups(), with each track's failure key beside it.
+
+    ``(source_url, playlist_name, tracks, keys)``, ``keys[i]`` naming
+    ``tracks[i]``: what lets a retry tell which tracks another retry already
+    has in hand, and a queued retry which of its tracks are still listed.
+    Never raises.
+    """
     try:
         rows = _rows(owner, keys)
     except Exception:
         logger.debug("[failed_tracks] could not read the list", exc_info=True)
         return []
-    groups: dict[tuple[str, str], list[dict]] = {}
+    groups: dict[tuple[str, str], tuple[list[dict], list[str]]] = {}
     for row in rows:
         track = db.loads(row["track"], None)
         if isinstance(track, dict):
             group = (row["source_url"] or "", row["playlist_name"] or "")
-            groups.setdefault(group, []).append(track)
-    return [(url, name, tracks) for (url, name), tracks in groups.items()]
+            tracks, group_keys = groups.setdefault(group, ([], []))
+            tracks.append(track)
+            group_keys.append(failure_key(row["track_key"], row["source_url"]))
+    return [
+        (url, name, tracks, group_keys)
+        for (url, name), (tracks, group_keys) in groups.items()
+    ]
+
+
+def listed_keys(owner: str = "") -> set[str]:
+    """The failure keys still on the list. Never raises."""
+    try:
+        rows = _rows(owner, None)
+    except Exception:
+        logger.debug("[failed_tracks] could not read the list", exc_info=True)
+        return set()
+    return {failure_key(row["track_key"], row["source_url"]) for row in rows}
 
 
 def clear(owner: str = "", keys: Iterable[str] | None = None) -> int:

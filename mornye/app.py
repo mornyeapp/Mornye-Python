@@ -1788,6 +1788,14 @@ class MornyeAPI(
         session id and finishes as a background download, since no open page
         dispatched it (see app_background_download_finished in app.js).
         """
+        retry_keys = payload.get("retry_keys")
+        try:
+            return self._run_download_job(payload)
+        finally:
+            if retry_keys:
+                self._retries_in_flight().difference_update(retry_keys)
+
+    def _run_download_job(self, payload: dict) -> dict:
         from .core.models import TrackMetadata
 
         indices = [int(i) for i in payload.get("indices") or []]
@@ -1795,6 +1803,24 @@ class MornyeAPI(
         if len(raw_tracks) != len(indices):
             msg = "Malformed download job: tracks and indices do not match"
             raise ValueError(msg)
+        retry_keys = payload.get("retry_keys")
+        if retry_keys is not None:
+            # A retry runs only what is still listed. Its tracks were copied
+            # into the job when it was queued; one cleared from the list (or
+            # downloaded by another job) since then is dropped here, so a
+            # Clear also empties the retries already waiting, those
+            # restored after a restart included (issue #284).
+            from .core import failed_tracks
+
+            if len(retry_keys) != len(indices):
+                msg = "Malformed retry job: keys and tracks do not match"
+                raise ValueError(msg)
+            listed = failed_tracks.listed_keys(getattr(self, "owner", "") or "")
+            kept = [n for n, key in enumerate(retry_keys) if str(key) in listed]
+            if not kept:
+                return {"tracks": 0}
+            raw_tracks = [raw_tracks[n] for n in kept]
+            indices = list(range(len(kept)))
         expected_generation = payload.get(
             "_stop_generation", self._current_stop_generation()
         )
@@ -1818,6 +1844,7 @@ class MornyeAPI(
             playlist_tracks=playlist_tracks,
             collection_name=str(payload.get("collection_name") or ""),
             announce=payload.get("session") == self._session_id,
+            is_retry=retry_keys is not None,
             expected_generation=expected_generation,
         )
         return {"tracks": len(indices)}
@@ -2019,6 +2046,7 @@ class MornyeAPI(
         playlist_tracks: list | None = None,
         collection_name: str | None = None,
         announce: bool = True,
+        is_retry: bool = False,
         stop_event: threading.Event | None = None,
         finish_event: threading.Event | None = None,
     ) -> None:
@@ -2029,6 +2057,8 @@ class MornyeAPI(
         whole-collection decision; without them the batch reads the tracklist
         on screen, as it always has. `announce=False` ends the batch with
         app_background_download_finished instead of app_download_finished.
+        `is_retry` keeps the failure list from growing back: a retry only
+        updates the rows still listed (core/failed_tracks.py).
         """
         self._download_active.set()
         from .client import _CleanConsoleFormatter
@@ -2383,7 +2413,10 @@ class MornyeAPI(
                     else ""
                 )
             failed_hook = failed_tracks.hook(
-                self.owner, collection_url, playlist_name or collection_name
+                self.owner,
+                collection_url,
+                playlist_name or collection_name,
+                only_existing=is_retry,
             )
             deferred_download_hooks: list[tuple[Any, Any]] = []
             post_delivery_hooks = [log_hook, failed_hook]
