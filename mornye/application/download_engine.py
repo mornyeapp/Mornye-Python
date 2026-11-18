@@ -1894,17 +1894,10 @@ async def download_one_async(
 
 
 async def _send_system_notify_async(title: str, body: str) -> None:
-    """Sends a system notification asynchronously."""
-    try:
-        if sys.platform == "darwin":
-            script = f'display notification "{body}" with title "{title}"'
-            await asyncio.create_subprocess_exec("osascript", "-e", script)
-        elif sys.platform == "win32":
-            pass
-        else:
-            await asyncio.create_subprocess_exec("notify-send", title, body)
-    except Exception:
-        pass
+    """Sends a system notification (core/desktop_notify.py). Never raises."""
+    from ..core.desktop_notify import notify
+
+    await notify(title, body)
 
 
 async def _open_folder_async(path: str) -> None:
