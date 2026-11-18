@@ -422,9 +422,16 @@ def entry_for(track: TrackMetadata, path: Path) -> M3UEntry:
 
 
 def _relative_to(path: Path, base: Path) -> str:
-    """Path as written in the playlist: relative and with forward slashes."""
+    """Path as written in the playlist: relative and with forward slashes.
+
+    Both sides are resolved first. A library reached through a symlink
+    (~/Music/Mornye -> ~/Music/unknown_folder) had the playlist under the
+    link and the track under its target, and relpath, which compares names
+    only, wrote "../../unknown_folder/<playlist>/x.flac" for a file in the
+    playlist's own folder (issue #277).
+    """
     try:
-        relative = os.path.relpath(path, base)
+        relative = os.path.relpath(os.path.realpath(path), os.path.realpath(base))
     except ValueError:
         # Different drive on Windows — an absolute path is the only option.
         return str(path)
@@ -445,6 +452,21 @@ def render_m3u(entries: list[M3UEntry], playlist_path: Path | str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _canonical_line(line: str, base: Path) -> str:
+    """An existing entry rewritten the way _relative_to() writes it now.
+
+    Playlists written through a symlinked library before #277 was fixed hold
+    "../../unknown_folder/<playlist>/x.flac" for "x.flac". Left as it was,
+    the entry would not match the new spelling of the same file, which would
+    then be listed twice; rewritten, the old playlist is repaired by the next
+    run that touches it. Comments and URLs are kept untouched.
+    """
+    text = line.strip()
+    if not text or text.startswith("#") or "://" in text:
+        return line
+    return _relative_to(base / text, base)
+
+
 def append_m3u(
     existing: str, entries: list[M3UEntry], playlist_path: Path | str
 ) -> str:
@@ -455,7 +477,9 @@ def append_m3u(
     go at the end. An empty or missing file starts a fresh one.
     """
     base = Path(playlist_path).parent
-    lines = [line for line in existing.splitlines() if line.strip()]
+    lines = [
+        _canonical_line(line, base) for line in existing.splitlines() if line.strip()
+    ]
     if not lines or lines[0].strip() != "#EXTM3U":
         lines.insert(0, "#EXTM3U")
     listed = {line.strip() for line in lines if not line.startswith("#")}
