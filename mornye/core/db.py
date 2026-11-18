@@ -316,6 +316,24 @@ _MIGRATIONS: tuple[tuple[str, ...], ...] = (
         "ALTER TABLE subscriptions ADD COLUMN image_url TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE subscriptions ADD COLUMN subtitle TEXT NOT NULL DEFAULT ''",
     ),
+    # v11 — the Player's library, kept between visits.
+    #
+    # Opening the Player read the tags of every file in every library folder,
+    # every time: minutes for a large library on a NAS share. One row per
+    # file (core/player_library.py): the row the Player shows, and the size
+    # and modification time it was read at, so the next visit shows it at
+    # once and re-reads only what changed on disk.
+    (
+        """
+        CREATE TABLE IF NOT EXISTS player_library (
+            path       TEXT PRIMARY KEY,
+            mtime_ns   INTEGER NOT NULL,
+            size       INTEGER NOT NULL,
+            row        TEXT NOT NULL,
+            scanned_at REAL NOT NULL
+        )
+        """,
+    ),
 )
 
 

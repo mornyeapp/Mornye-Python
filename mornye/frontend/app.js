@@ -9354,9 +9354,9 @@ function libAccept(p) {
   return p.scan === lib.scan;
 }
 
-window.app_library_scan_chunk = function(p) {
-  if (!libAccept(p)) return;
-  lib.items.push(...p.items.map(t => ({
+// A row from the server as the library keeps it.
+function libItem(t) {
+  return {
     ...t,
     // The names one by one, for the now-playing links: once joined with
     // commas they cannot be told apart from "Tyler, The Creator".
@@ -9364,7 +9364,12 @@ window.app_library_scan_chunk = function(p) {
     album_artist_names: artistNames(t.album_artist),
     artist: displayArtists(t.artist),
     album_artist: displayArtists(t.album_artist),
-  })));
+  };
+}
+
+window.app_library_scan_chunk = function(p) {
+  if (!libAccept(p)) return;
+  lib.items.push(...p.items.map(libItem));
   setPlayerStatus(`Scanning… ${p.done} / ${p.total}`);
   if (!lib.raf) lib.raf = requestAnimationFrame(() => { lib.raf = 0; filterPlayerLibrary(true); });
 };
@@ -9372,7 +9377,9 @@ window.app_library_scan_chunk = function(p) {
 window.app_library_scan_finished = function(p) {
   if (!libAccept(p)) return;
   lib.loading = false;
-  setPlayerScanBusy(false);
+  // A stored library is usable at once; the check for changes on disk
+  // goes on behind it until app_library_scan_synced.
+  setPlayerScanBusy(!!p.stored);
   setPlayerStatus('');
   if (lib.items.length) {
     libFolders().forEach(libRemember);
@@ -9383,6 +9390,25 @@ window.app_library_scan_finished = function(p) {
     showPlayerSource(true);
   }
   filterPlayerLibrary(true);
+};
+
+// After a library stored from an earlier visit is shown, the server walks
+// the folders and sends only what changed: rows of new or edited files
+// (replacing their old row) and the paths of files that are gone.
+window.app_library_scan_delta = function(p) {
+  if (!libAccept(p)) return;
+  const removed = new Set(p.removed || []);
+  const fresh = new Map((p.items || []).map(t => [t.path, libItem(t)]));
+  if (!removed.size && !fresh.size) return;
+  lib.items = lib.items.filter(t => !removed.has(t.path) && !fresh.has(t.path));
+  lib.items.push(...fresh.values());
+  if (!lib.raf) lib.raf = requestAnimationFrame(() => { lib.raf = 0; filterPlayerLibrary(true); });
+};
+
+window.app_library_scan_synced = function(p) {
+  if (!libAccept(p)) return;
+  setPlayerScanBusy(false);
+  setPlayerStatus('');
 };
 
 window.app_library_scan_error = function(p) {
