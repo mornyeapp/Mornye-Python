@@ -1161,7 +1161,12 @@ async def _record_provider_outcome(
 #: dropped connection, these are not worth a retry.
 _DEFINITIVE_FAILURE = re.compile(
     r"not available|not found|no verified|no match|unavailable in|"
-    r"\bHTTP 404\b|\b404 Not Found\b|TRACK_NOT_FOUND",
+    r"\bHTTP 404\b|\b404 Not Found\b|TRACK_NOT_FOUND|"
+    # The provider's file is another recording, or a different length: the
+    # same request returns the same file, which is downloaded only to be
+    # removed again (issue #284). A *truncated* short track is not in here:
+    # that one can be a dropped transfer.
+    r"\bWrong track:|\bWrong duration: file is",
     re.IGNORECASE,
 )
 

@@ -103,3 +103,24 @@ def test_no_retry_when_every_provider_said_not_there(tmp_path, monkeypatch):
     result = _run(tmp_path, monkeypatch, [a, b])
     assert (a.calls, b.calls) == (1, 1)
     assert "1 attempt(s)" in result.error
+
+
+# ── issue #284: a wrong file is not downloaded only to be removed again ──
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        "Validation failed: Wrong duration: file is 181s, expected ~139s — file removed",
+        "Wrong track: different recording: asked for ISRC QZNWX2296615, got USUM72306884",
+    ],
+)
+def test_a_wrong_file_is_definitive(error):
+    assert _definitive_failure(error)
+
+
+def test_a_truncated_file_is_retried():
+    assert not _definitive_failure(
+        "Validation failed: Wrong duration (short track truncated): "
+        "file is 20s, expected ~90s — file removed"
+    )
