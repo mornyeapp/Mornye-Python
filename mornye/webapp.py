@@ -85,6 +85,7 @@ SESSION_COOKIE = "mornye_session"
 
 #: Unauthenticated liveness probe — see the endpoint for why.
 HEALTH_PATH = "/healthz"
+SUBSONIC_PREFIX = "/rest/"
 
 
 def resolve_web_token(explicit: str | None) -> str | None:
@@ -544,6 +545,11 @@ def _install_token_gate(app: FastAPI, token: str | None) -> None:
             # reason that has nothing to do with health. It discloses only
             # that the process is answering.
             if request.url.path == HEALTH_PATH:
+                return await call_next(request)
+            # The Subsonic API (/rest) authenticates every call itself, with
+            # the credentials its clients send; they have no way to carry a
+            # ?token= or the cookie (webapi/subsonic.py).
+            if request.url.path.startswith(SUBSONIC_PREFIX):
                 return await call_next(request)
             supplied = request.query_params.get(
                 WEB_TOKEN_QUERY_PARAM
@@ -1556,9 +1562,27 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
         multiuser=multiuser,
         job_queue=job_queue,
     )
+    _register_subsonic(app, api)
     _register_frontend(app)
 
     return app
+
+
+def _register_subsonic(app: FastAPI, api: MornyeAPI) -> None:
+    """The Subsonic API under /rest (webapi/subsonic.py). Answers only once
+    MORNYE_SUBSONIC_PASSWORD or MORNYE_SUBSONIC_API_KEY is set; a scan syncs
+    the download folder and the existing library folders."""
+    from .core.env import env_value
+    from .webapi.subsonic import build_subsonic_router
+
+    def roots() -> list[str]:
+        extra = env_value("MORNYE_LIBRARY_SCAN_DIRS", "") or ""
+        folders = [api.download_dir, *(p.strip() for p in extra.split(","))]
+        return list(dict.fromkeys(f for f in folders if f))
+
+    # Registered before the frontend: its StaticFiles mount at "/" would
+    # otherwise answer /rest/... with a 404.
+    app.include_router(build_subsonic_router(roots))
 
 
 def _warn_if_exposed(host: str, token: str | None) -> None:

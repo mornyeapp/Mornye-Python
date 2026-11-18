@@ -90,6 +90,77 @@ def store(entries: Iterable[tuple[str, int, int, dict[str, Any]]]) -> None:
         )
 
 
+def sync(roots: Iterable[str]) -> dict[str, int]:
+    """Brings the stored rows of `roots` in step with the disk, headless.
+
+    The same rules as the Player's own scan: a file whose size and
+    modification time match its stored row is not read again, a new or
+    changed one is, and the rows of files that are gone are dropped (unless
+    the walk found nothing at all: a share that stopped answering). Used by
+    the Subsonic API, which has no Player page to trigger a scan.
+    """
+    from .library_scan import iter_audio_files, read_track_row
+
+    folders = [str(r) for r in roots if r and Path(r).is_dir()]
+    stored = stored_rows(folders)
+    files = list(dict.fromkeys(p for root in folders for p in iter_audio_files(root)))
+    batch: list = []
+    read = 0
+    for path in files:
+        try:
+            st = path.stat()
+        except OSError:
+            continue
+        known = stored.get(str(path))
+        if (
+            known is not None
+            and known.matches(st.st_mtime_ns, st.st_size)
+            and "genre" in known.row
+        ):
+            continue
+        batch.append((str(path), st.st_mtime_ns, st.st_size, read_track_row(path)))
+        read += 1
+        if len(batch) >= 200:
+            store(batch)
+            batch = []
+    store(batch)
+    gone = sorted(set(stored) - {str(p) for p in files}) if files else []
+    forget(gone)
+    return {"files": len(files), "read": read, "removed": len(gone)}
+
+
+def all_rows() -> list[tuple[str, int, dict[str, Any]]]:
+    """Every stored row as (path, size, row). [] on error."""
+    try:
+        rows = (
+            db.connection()
+            .execute("SELECT path, size, row FROM player_library ORDER BY path")
+            .fetchall()
+        )
+    except Exception:
+        logger.debug("[player_library] could not read the library", exc_info=True)
+        return []
+    out = []
+    for row in rows:
+        data = db.loads(row["row"], None)
+        if isinstance(data, dict):
+            out.append((row["path"], int(row["size"] or 0), data))
+    return out
+
+
+def version() -> tuple[int, float]:
+    """(rows, last scan time): changes whenever the stored library does."""
+    try:
+        row = (
+            db.connection()
+            .execute("SELECT COUNT(*) AS n, MAX(scanned_at) AS t FROM player_library")
+            .fetchone()
+        )
+        return int(row["n"] or 0), float(row["t"] or 0)
+    except Exception:
+        return 0, 0.0
+
+
 def forget(paths: Iterable[str]) -> None:
     """Drops the rows of files that are no longer on disk."""
     values = [(p,) for p in paths]
