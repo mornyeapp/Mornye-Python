@@ -573,8 +573,22 @@
   max-height: 0; padding-block: 0; opacity: 0; border-width: 0;
   margin-top: 0; margin-bottom: calc(-1 * var(--space-4));
 }
+/* The folder panel, when it is open, folds away the same way: scrolling the
+   music brings the tabs up under the title instead of leaving half the
+   window to the folder list. Back at the top it opens again as it was. The
+   max-height is only there to animate from; nothing is clipped while the
+   panel is open. */
+#view-player .player-source {
+  max-height: 100vh;
+  transition: max-height .2s ease, padding .2s ease, margin .2s ease, opacity .15s ease;
+}
+#view-player.player-compact .player-source:not(.hidden) {
+  max-height: 0; overflow: hidden; padding-block: 0; opacity: 0; border-width: 0;
+  margin-bottom: calc(-1 * var(--space-4));
+}
 @media (prefers-reduced-motion: reduce) {
-  #view-player .s-header, #view-player #player-body, .player-heading, .player-heading p, #view-player .player-libbar { transition: none; }
+  #view-player .s-header, #view-player #player-body, .player-heading, .player-heading p, #view-player .player-libbar,
+  #view-player .player-source { transition: none; }
 }
 .player-status:empty { display: none; }
 .player-status { padding: 0 2px; color: var(--text-2); font-size: var(--text-sm); }
