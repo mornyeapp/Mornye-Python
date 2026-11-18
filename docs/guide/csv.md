@@ -21,6 +21,16 @@ an M3U named after the file is written next to them (`--m3u none` turns that
 off). Running the same command again after adding rows only downloads the new
 ones.
 
+**An M3U/M3U8 playlist works too**, with the same flag, the GUI's import and
+the REST endpoint. Links in it are kept as they are, local files are
+identified by their own tags, and every other entry by its `#EXTINF` line
+(plus `#EXTART`/`#EXTALB`) or its file name. Whatever is left goes through
+the same matching and unresolved-row report as a CSV.
+
+```bash
+mornye --csv "Road trip.m3u8" ~/Music
+```
+
 ---
 
 ## What the file can look like
@@ -134,7 +144,7 @@ interrupted — the rows that need your attention are the part you can act on.
 | `--csv-delimiter CHAR` | Override the automatic detection. |
 
 Everything else about the run is unchanged: `--service`, `--quality`,
-`--filename-format`, `--transcode-to`, `--profile`, notifications, hooks and
+`--filename-format`, `--transcode`, `--profile`, notifications, hooks and
 `--json` all behave exactly as they do for a link.
 
 `--watch MINUTES` works and is worth knowing about: it re-reads the file on

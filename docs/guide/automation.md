@@ -145,7 +145,29 @@ Write an M3U of everything a run downloaded:
 mornye "<url>" ~/Music --write-m3u ~/Music/latest.m3u8
 ```
 
-Paths are relative to the playlist file, so the folder stays portable.
+Paths are relative to the playlist file, so the folder stays portable. They
+are computed between the real locations of both files, so a library reached
+through a symlink (`~/Music/Mornye` → another disk) gets plain `Track.flac`
+entries rather than `../../other-disk/...` ones.
+
+### Music you already have (`--library-scan-dir`)
+
+Point Mornye at a folder that already holds music (an older library,
+another downloader's output) and the tracks found there are not downloaded
+again:
+
+```bash
+mornye "<playlist url>" ~/Music --library-scan-dir /mnt/old-library --library-scan-dir ~/Downloads/music
+```
+
+Repeat the flag for several folders, or set `MORNYE_LIBRARY_SCAN_DIRS` to a
+comma-separated list; in the GUI it is *Existing library folders* in the
+settings. Tracks are recognised by ISRC, tags or file name. Playlist tracks
+and single tracks are skipped; albums still download in full. A playlist
+track found outside the download folder is hard-linked (or copied, across
+disks) into the playlist's folder, so a media server that scans only the
+download folder can still play everything its M3U lists. A folder that is
+missing is skipped with a warning.
 
 Tell a music server to rescan when the run finishes, instead of waiting for
 its own schedule:
@@ -227,6 +249,27 @@ re-fetch. Add `--json` to any of these for parseable output.
 ---
 
 ## Running the web server
+
+### Where downloads go
+
+In `--web` mode the download folder is the one set on the page, under
+**Settings**, and it is remembered between runs. The command line's
+`--output-path` is not a folder option: it names one exact file for a
+single-track CLI download, and the web server ignores it.
+
+### Tracks still missing
+
+A track that fails stays listed under *tracks still missing* in the queue
+panel, with its last error and how many times it was tried, until it
+downloads (in any later run, too) or is cleared. The list lives in the
+database, so it survives a restart.
+
+- **Retry** downloads the listed tracks again, back into the folder and M3U
+  of the playlist they failed in. A track that a retry already has queued
+  or running is not queued twice.
+- **Clear** drops tracks from the list without retrying them. Retries that
+  are still waiting in the queue skip the cleared tracks, including ones
+  restored after a restart.
 
 ### Liveness and metrics
 

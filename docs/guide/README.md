@@ -17,7 +17,7 @@ usefully. The text is unchanged by the split.
 | [API Reference](api-reference.md) | `Mornye` and `AsyncMornye`, and the objects they return |
 | [Migration Guide](migration.md) | Moving from the former distribution, CLI, environment, and local state |
 | [Local Tagging](local-tagging.md) | Retagging an existing library, finding and resolving duplicates, MusicBrainz enrichment, download validation |
-| [Automation & Operations](automation.md) | JSON output, post-download hooks, notifications, M3U, library rescan, cache maintenance, running the web server |
+| [Automation & Operations](automation.md) | JSON output, post-download hooks, notifications, M3U, existing library folders, library rescan, cache maintenance, running the web server, tracks still missing |
 | [Following Artists](subscriptions.md) | Subscriptions, new-release checks, and the library-upgrade pass |
 | [REST API](rest-api.md) | The versioned `/api/v1` surface, quotas and the admin endpoints |
 | [Docker](docker.md) | Headless and NAS setups |
