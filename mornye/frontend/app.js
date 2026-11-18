@@ -9028,16 +9028,20 @@ function npScrollToFocus(focus, mode) {
 // The line the view follows. A line still being sung keeps the focus only
 // when another voice has started over it (a duet); for one singer, a held
 // last word running into the next line used to keep the view a line behind.
+// The line the view centres on: the earliest one still being sung. In
+// word-synced lyrics the next line often starts before the last word of the
+// current one ends; moving on at its start scrolled away from a line still
+// being sung. That used to be held only for a duet's other voice. The newer
+// line is lit meanwhile all the same (it is in `set`).
 function npFocusFor(active, set, time) {
-  const start = npLines[active].t;
-  const voice = npLines[active].voice || 1;
+  let focus = active;
   for (let i = active - 1; i >= 0; i--) {
+    if (!set.has(i)) continue;
     const line = npLines[i];
-    if (line.t >= start) continue;
-    if (!line.text) return active;
-    return set.has(i) && line.end > time && (line.voice || 1) !== voice ? i : active;
+    if (!line.text) break;
+    if (line.end > time && line.t < npLines[active].t) focus = i;
   }
-  return active;
+  return focus;
 }
 
 // Lift and glow envelopes of a timed word, as in the mobile app.
