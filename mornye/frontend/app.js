@@ -4282,7 +4282,7 @@ async function removeRecent(url) {
 }
 
 // ── Download queue ────────────────────────────────────────────────────────────
-function addToQueue(indices) {
+function addToQueue(indices, { requeueFinished = false } = {}) {
   console.log('addToQueue called', { indices, currentTracksLength: currentTracks.length, queueLengthBefore: queue.length });
   let added = false;
   const skipped = [];
@@ -4313,6 +4313,21 @@ function addToQueue(indices) {
         ? queue.find(q => sameList(q) && q.spotify_id === spotifyId)
         : queue.find(q => sameList(q) && q.index === realIndex && q.title === t.title);
       if (duplicate) {
+        if (requeueFinished && ['done', 'skipped', 'error'].includes(duplicate.status)) {
+          // A playlist rerun also repairs its M3U; the downloader skips audio
+          // already in the library and fetches only tracks that are missing.
+          duplicate.list = t.list_id ?? null;
+          duplicate.index = realIndex;
+          duplicate.title = t.title;
+          duplicate.artist = t.artist || t.artists || '';
+          duplicate.album = t.album || '';
+          duplicate.status = 'waiting';
+          duplicate.progress = 0;
+          duplicate.file_path = '';
+          duplicate.file_size_mb = 0;
+          added = true;
+          return;
+        }
         console.warn('Track already in queue', spotifyId || realIndex);
         skipped.push(duplicate);
         return;
@@ -5292,7 +5307,7 @@ function downloadAll() {
   const all = currentTracks.map((_, i) => i);
   console.log('[downloadAll] Total tracks:', all.length);
   if (!all.length) { setStatus('No tracks loaded.'); return; }
-  addToQueue(all);
+  addToQueue(all, { requeueFinished: detectUrlType(currentUrl) === 'playlist' });
   console.log('[downloadAll] Queue length after addToQueue:', queue.length);
   startDownloadQueue();
   $('queue-drawer').classList.add('open');
