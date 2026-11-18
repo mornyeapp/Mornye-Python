@@ -8390,7 +8390,8 @@ async function loadPlayerTrack(index) {
   $('player-bar').classList.remove('hidden');
   document.body.classList.add('has-player');
   setPlayerArtwork('');
-  $('pl-title').textContent = item.artist ? `${item.title} — ${item.artist}` : item.title;
+  const artist = displayArtists(item.artist);
+  $('pl-title').textContent = artist ? `${item.title} — ${artist}` : item.title;
   $('pl-quality').textContent = 'Preparing…';
   markPlayingRow();
   audio.pause();
@@ -8406,7 +8407,7 @@ async function loadPlayerTrack(index) {
   fillNowPlaying(item, res);
   try { await audio.play(); } catch (e) { /* autoplay blocked: the play button works */ }
   if ('mediaSession' in navigator) {
-    navigator.mediaSession.metadata = new MediaMetadata({ title: item.title, artist: item.artist, album: item.album || '' });
+    navigator.mediaSession.metadata = new MediaMetadata({ title: item.title, artist, album: item.album || '' });
     navigator.mediaSession.setActionHandler('previoustrack', () => playerPrev());
     navigator.mediaSession.setActionHandler('nexttrack', () => playerNext());
   }
@@ -8748,7 +8749,7 @@ function fillNowPlaying(item, res) {
   setPlayerArtwork(res.cover || '');
   npResetSync();
   $('np-title').textContent = res.title || item.title;
-  $('np-artist').textContent = [res.artist || item.artist, res.album].filter(Boolean).join(' · ');
+  $('np-artist').textContent = [displayArtists(res.artist || item.artist), res.album].filter(Boolean).join(' · ');
   $('np-explicit').classList.toggle('hidden', !res.explicit);
   const cover = $('np-cover');
   cover.parentElement.classList.toggle('empty', !res.cover);
@@ -9275,6 +9276,20 @@ function togglePlayerSource() {
   }
 }
 
+// An artist tag as the player shows it. Files tagged with an artist
+// separator read "Doja Cat;SZA" (";" for Navidrome, "/" from ID3v2.3, NUL
+// between multi-value frames); the player shows "Doja Cat, SZA". The tag on
+// disk is left alone. A slash splits only a credit that has spaces in it,
+// so "AC/DC" stays one name.
+function displayArtists(value) {
+  return String(value || '')
+    .split(/\s*[;\u0000]\s*/)
+    .flatMap(part => (/\s/.test(part) ? part.split(/\s*\/\s*/) : [part]))
+    .map(part => part.trim())
+    .filter(Boolean)
+    .join(', ');
+}
+
 function libAccept(p) {
   if (lib.scan === null) { if (p.scan <= lib.lastScan) return false; lib.scan = p.scan; }
   return p.scan === lib.scan;
@@ -9282,7 +9297,11 @@ function libAccept(p) {
 
 window.app_library_scan_chunk = function(p) {
   if (!libAccept(p)) return;
-  lib.items.push(...p.items);
+  lib.items.push(...p.items.map(t => ({
+    ...t,
+    artist: displayArtists(t.artist),
+    album_artist: displayArtists(t.album_artist),
+  })));
   setPlayerStatus(`Scanning… ${p.done} / ${p.total}`);
   if (!lib.raf) lib.raf = requestAnimationFrame(() => { lib.raf = 0; filterPlayerLibrary(true); });
 };
