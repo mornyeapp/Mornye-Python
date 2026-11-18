@@ -5186,7 +5186,11 @@ async function retryFailedTracks(keys = null) {
     const config = await chooseProviderForBatch(buildConfig());
     if (!config) return;
     const res = await window.pywebview.api.retry_failed_tracks(config, keys);
-    if (!res?.queued) showToast('Nothing left to retry.', 'info');
+    if (!res?.queued) {
+      showToast(res?.already_queued
+        ? 'These tracks are already being retried.'
+        : 'Nothing left to retry.', 'info');
+    }
   } catch (e) {
     logMessage('Could not retry the missing tracks: ' + e, 'error');
   }

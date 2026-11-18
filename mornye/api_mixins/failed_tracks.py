@@ -31,16 +31,36 @@ class FailedTracksMixin:
     ) -> dict:
         """Downloads the listed failures again — all of them, or only `keys`.
 
-        One job per source collection (see failed_tracks.retry_groups). A row
+        One job per source collection (see failed_tracks.retry_batches). A row
         stays in the list until its track actually downloads: a retry that
         fails again only raises the attempt count, it does not lose the track.
         """
         from ..core import failed_tracks
 
         owner = getattr(self, "owner", "") or ""
-        groups = failed_tracks.retry_groups(owner, keys)
-        queued = 0
-        for source_url, playlist_name, tracks in groups:
+        busy = self._retry_keys_in_hand()
+        queued = already = 0
+        for (
+            source_url,
+            playlist_name,
+            tracks,
+            track_keys,
+        ) in failed_tracks.retry_batches(owner, keys):
+            # A track another retry already has queued or running is not
+            # queued again. Each click on Retry used to add a full copy of
+            # the list to the queue, which is persisted in --web mode: the
+            # copies outlived restarts and kept retrying the same tracks for
+            # hours (issue #284).
+            fresh = [
+                (track, key)
+                for track, key in zip(tracks, track_keys, strict=True)
+                if key not in busy
+            ]
+            already += len(tracks) - len(fresh)
+            if not fresh:
+                continue
+            tracks = [track for track, _ in fresh]
+            track_keys = [key for _, key in fresh]
             if not playlist_name and failed_tracks.is_playlist_url(source_url):
                 # Saved before failures kept their playlist (issue #277):
                 # ask the playlist its name once, and keep it on the rows.
@@ -54,16 +74,46 @@ class FailedTracksMixin:
                 # whole collection": the collection is what already ran.
                 "whole": False,
                 "config": dict(config or {}),
+                # Marks the job as a retry: run_download_job() drops the
+                # tracks cleared from the list meanwhile, and never adds a
+                # failure back to it (issue #284).
+                "retry_keys": track_keys,
             }
             if playlist_name:
                 # Back into the playlist's folder and onto its M3U, not
                 # loose in the download folder (issue #277).
                 payload["playlist_name"] = playlist_name
+            if getattr(self, "_download_queue", None) is None:
+                # No queue to read back from: remembered here until the
+                # job's thread is done with them (see run_download_job).
+                self._retries_in_flight().update(track_keys)
             self._start_download_job(payload)
             queued += len(tracks)
         if queued:
             self.log(f"Retrying {queued} failed track(s)…", "info")
-        return {"queued": queued}
+        return {"queued": queued, "already_queued": already}
+
+    def _retries_in_flight(self) -> set[str]:
+        """Failure keys a retry started without a queue is working on."""
+        keys = getattr(self, "_retry_keys_running", None)
+        if keys is None:
+            keys = set()
+            self._retry_keys_running = keys
+        return keys
+
+    def _retry_keys_in_hand(self) -> set[str]:
+        """Failure keys some retry has queued or is running right now."""
+        from ..core.job_queue import JobStatus
+
+        keys = set(self._retries_in_flight())
+        queue = getattr(self, "_download_queue", None)
+        list_for = getattr(queue, "list_for", None)
+        if callable(list_for):
+            owner = getattr(self, "owner", "") or ""
+            for job in list_for(owner):
+                if job.status in (JobStatus.QUEUED, JobStatus.RUNNING):
+                    keys.update(job.payload.get("retry_keys") or ())
+        return keys
 
     def _playlist_name_for(self, source_url: str) -> str:
         """The playlist's own name, as the tracklist fetch reads it, or ""
