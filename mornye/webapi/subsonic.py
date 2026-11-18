@@ -51,9 +51,9 @@ async def _params(request: Request) -> dict[str, list[str]]:
     if request.method == "POST":
         try:
             form = await request.form()
-            for key, value in form.multi_items():
-                if isinstance(value, str):
-                    out.setdefault(key, []).append(value)
+            for key, field in form.multi_items():
+                if isinstance(field, str):  # an uploaded file is not a parameter
+                    out.setdefault(key, []).append(field)
         except Exception:
             pass
     return out
@@ -539,8 +539,8 @@ def _lists(name: str, params: dict[str, list[str]], view: _View) -> Any:
             "albumList2": {"album": [view.album(a) for a in _album_list(params, view)]}
         }
     if name == "getAlbumList":
-        page = _album_list(params, view)
-        return {"albumList": {"album": [view.album(a, folder=True) for a in page]}}
+        listed = _album_list(params, view)
+        return {"albumList": {"album": [view.album(a, folder=True) for a in listed]}}
     if name == "getRandomSongs":
         genre = _one(params, "genre").lower()
         lo = _int(params, "fromYear", 0, 9999)
@@ -555,27 +555,27 @@ def _lists(name: str, params: dict[str, list[str]], view: _View) -> Any:
         return {"randomSongs": {"song": [view.song(s) for s in picked]}}
     if name == "getSongsByGenre":
         genre = _required(params, "genre").lower()
-        songs = [s for s in idx.songs.values() if s.genre.lower() == genre]
+        in_genre = [s for s in idx.songs.values() if s.genre.lower() == genre]
         offset = _int(params, "offset", 0, 10**9)
-        page = songs[offset : offset + _int(params, "count", 10)]
-        return {"songsByGenre": {"song": [view.song(s) for s in page]}}
+        shown = in_genre[offset : offset + _int(params, "count", 10)]
+        return {"songsByGenre": {"song": [view.song(s) for s in shown]}}
     if name in ("search2", "search3"):
         # An empty query lists everything: Symfonium syncs a library that way.
         query = _one(params, "query").strip().strip('"').strip("*")
 
-        def page(items: list, kind: str) -> list:
+        def paged(items: list, kind: str) -> list:
             offset = _int(params, f"{kind}Offset", 0, 10**9)
             return items[offset : offset + _int(params, f"{kind}Count", 20, 10**6)]
 
-        artists = [
+        found_artists = [
             a for a in idx.artists.values() if not query or _matches(query, a.name)
         ]
-        albums = [
+        found_albums = [
             a
             for a in idx.albums.values()
             if not query or _matches(query, a.name, a.artist)
         ]
-        songs = [
+        found_songs = [
             s
             for s in idx.songs.values()
             if not query or _matches(query, s.title, s.artist, s.album)
@@ -583,9 +583,11 @@ def _lists(name: str, params: dict[str, list[str]], view: _View) -> Any:
         folder = name == "search2"
         return {
             ("searchResult3" if name == "search3" else "searchResult2"): {
-                "artist": [view.artist(a) for a in page(artists, "artist")],
-                "album": [view.album(a, folder=folder) for a in page(albums, "album")],
-                "song": [view.song(s) for s in page(songs, "song")],
+                "artist": [view.artist(a) for a in paged(found_artists, "artist")],
+                "album": [
+                    view.album(a, folder=folder) for a in paged(found_albums, "album")
+                ],
+                "song": [view.song(s) for s in paged(found_songs, "song")],
             }
         }
     if name in ("getStarred", "getStarred2"):
@@ -674,7 +676,7 @@ def _annotate(name: str, params: dict[str, list[str]], view: _View) -> Any:
         saved = sub.play_queue(user)
         if not saved:
             return {}
-        songs = [view.idx.songs[i] for i in saved["songs"] if i in view.idx.songs]
+        queued = [view.idx.songs[i] for i in saved["songs"] if i in view.idx.songs]
         return {
             "playQueue": {
                 "current": saved["current"] or None,
@@ -682,7 +684,7 @@ def _annotate(name: str, params: dict[str, list[str]], view: _View) -> Any:
                 "username": user,
                 "changed": _iso(saved["changed"]),
                 "changedBy": saved["changed_by"],
-                "entry": [view.song(s) for s in songs],
+                "entry": [view.song(s) for s in queued],
             }
         }
     if name == "savePlayQueue":
@@ -739,7 +741,7 @@ def _lyrics(name: str, params: dict[str, list[str]], view: _View) -> Any:
     return None
 
 
-_EMPTY = {
+_EMPTY: dict[str, dict[str, Any]] = {
     "getPodcasts": {"podcasts": {"channel": []}},
     "getInternetRadioStations": {"internetRadioStations": {"internetRadioStation": []}},
     "getBookmarks": {"bookmarks": {"bookmark": []}},
