@@ -2244,7 +2244,11 @@ function tidyOwnerRow() {
   }
 }
 
+//: The collection on screen, for "Import playlist" (importFetchedPlaylist).
+let g_albumImport = { title: '', description: '', cover: '' };
+
 function setAlbumCard(title, artist, coverUrl, quality, description, followers, owner, ownerAvatar, source, artistListeners, artistRank, artistVerified, artistBiography, releaseDate, trackCount, artistUrl, artistsData) {
+  g_albumImport = { title: title || '', description: description || '', cover: coverUrl || '' };
   g_albumReleaseDate = releaseDate || '';
   g_albumTrackCount = trackCount || 0;
   g_albumArtistUrl = artistUrl || '';
@@ -2283,6 +2287,7 @@ function setAlbumCard(title, artist, coverUrl, quality, description, followers, 
     </button>
     ${CLI_BUTTON_HTML}
   `;
+  renderImportPlaylistButton();
   $('album-title').innerHTML = escHtml(title || '—') + (artistVerified
     ? ` <span class="artist-verified-badge" title="Verified Artist"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="12" fill="#1d9bf0"/><path d="M8 12.5l2.5 2.5 5.5-5.5" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`
     : '');
@@ -3925,7 +3930,7 @@ window.app_handle_provider_search_results = function(results) {
     if (item._kind === 'artist') {
       console.log('[Artist] Name:', name, 'cover_url:', item.cover_url, 'images:', item.images, 'cover:', item.cover, 'image:', item.image, 'full item:', item);
     }
-    return `
+    const row = `
       <div class="search-result-item" role="button" tabindex="0" data-activate data-url="${escHtml(url)}" data-name="${name}|${meta}">
         <div class="${thumbClass}">
           ${img ? `<img src="${escHtml(img)}" alt="" data-onerror="this.parentElement.innerHTML='${defaultIcon(item._kind)}'">` : defaultIcon(item._kind)}
@@ -3936,6 +3941,15 @@ window.app_handle_provider_search_results = function(results) {
           ${meta && typeLabel ? `<div class="search-result-meta">${meta}</div>` : meta ? `<div class="search-result-meta">${meta}</div>` : ''}
         </div>
         ${dur ? `<span class="sr-duration">${dur}</span>` : ''}
+      </div>`;
+    if (item._kind !== 'playlist' || !url) return row;
+    return `
+      <div class="search-result-playlist-row">
+        ${row}
+        <button type="button" class="act-btn secondary sr-import-playlist"
+                data-import-search-playlist data-url="${escHtml(url)}" data-name="${name}">
+          Import playlist
+        </button>
       </div>`;
   }
 
@@ -4005,6 +4019,13 @@ window.app_handle_provider_search_results = function(results) {
     contentArea.querySelectorAll('.search-result-item').forEach(el => {
       el.onclick = () => onSearchResultClick(el.dataset.url);
     });
+    contentArea.querySelectorAll('[data-import-search-playlist]').forEach(button => {
+      button.onclick = event => {
+        event.preventDefault();
+        event.stopPropagation();
+        importPlayerPlaylistSearchResult(button);
+      };
+    });
   }
 
   renderList();
@@ -4024,6 +4045,160 @@ function onSearchResultClick(url) {
   }
   $('urlInput').value = url;
   onFetch();
+}
+
+async function importPlayerPlaylistSearchResult(button) {
+  const url = button.dataset.url;
+  button.disabled = true;
+  try {
+    const result = await window.pywebview?.api?.fetch_player_playlist_search_import?.(url);
+    if (!result || result.status !== 'ok') {
+      toastMgr.error(result?.error || 'Could not fetch the playlist.');
+      return;
+    }
+    await importPlaylistCollection({
+      name: result.name || button.dataset.name || '',
+      description: result.description || '',
+      cover: result.cover || '',
+      tracks: result.tracks || [],
+    });
+  } catch (e) {
+    toastMgr.error(e?.message || 'Could not fetch the playlist.');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+// "Import playlist" beside Download All, on a playlist opened from a link
+// or a search: the Player gets the same name, description, cover and every
+// song. Songs not in the library are kept and labelled "Not downloaded".
+function renderImportPlaylistButton() {
+  document.getElementById('import-playlist-btn')?.remove();
+  const actions = $('album-actions');
+  if (!actions || detectUrlType(currentUrl) !== 'playlist') return;
+  const btn = document.createElement('button');
+  btn.id = 'import-playlist-btn';
+  btn.type = 'button';
+  btn.className = 'act-btn secondary';
+  btn.title = 'Copy this playlist into the Player: cover, description and every song';
+  btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15V6"/><path d="M18.5 18a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z"/><path d="M12 12H3"/><path d="M16 6H3"/><path d="M12 18H3"/></svg> Import playlist`;
+  btn.onclick = () => importFetchedPlaylist(btn);
+  const cli = actions.querySelector('[data-onclick*="CliCommand"], .cli-btn');
+  cli ? actions.insertBefore(btn, cli) : actions.appendChild(btn);
+}
+
+async function importFetchedPlaylist(button) {
+  if (!currentTracks.length) {
+    toastMgr.error('Wait for the playlist\u2019s tracks to load.');
+    return;
+  }
+  button.disabled = true;
+  try {
+    await importPlaylistCollection({
+      name: g_albumImport.title,
+      description: g_albumImport.description,
+      cover: g_albumImport.cover,
+      tracks: currentTracks.map(t => ({
+        title: t.title || t.name || '',
+        artists: t.artists || t.artist || '',
+        album: t.album || t.album_name || '',
+        duration_ms: t.duration_ms || 0,
+        isrc: t.isrc || '',
+        external_url: t.external_url || t.externalUrl || t.link || '',
+      })),
+    });
+  } finally {
+    button.disabled = false;
+  }
+}
+
+//: Casefolded title without "(feat. …)", for matching files to songs.
+function playlistMatchTitle(text) {
+  return String(text || '')
+    .replace(/\s*[([](?:feat|ft|with)\.?\s[^)\]]*[)\]]/gi, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Only the library files that could be one of `tracks` travel to the
+// server, which makes the final choice (core matching in
+// api_mixins/player_playlists.py).
+function playlistLibraryCandidates(tracks) {
+  const isrcs = new Set(tracks.map(t => String(t.isrc || '').toUpperCase()).filter(Boolean));
+  const titles = new Set(tracks.map(t => playlistMatchTitle(t.title)).filter(Boolean));
+  return lib.items
+    .filter(t => (t.isrc && isrcs.has(String(t.isrc).toUpperCase())) || titles.has(playlistMatchTitle(t.title)))
+    .map(t => ({ path: t.path, title: t.title, artist: t.artist, album: t.album, duration_s: t.duration_s, isrc: t.isrc || '' }));
+}
+
+async function importPlaylistCollection({ name, description, cover, tracks }) {
+  if (!tracks?.length) {
+    toastMgr.error('The playlist has no tracks to import.');
+    return;
+  }
+  const res = await window.pywebview?.api?.import_player_playlist_collection?.(
+    name || 'Imported playlist',
+    description || '',
+    cover || '',
+    tracks,
+    playlistLibraryCandidates(tracks),
+    ''
+  );
+  if (!res || res.status !== 'ok') {
+    toastMgr.error(res?.error || 'Could not import the playlist.');
+    return;
+  }
+  await refreshPlayerPlaylists(res.playlist.id);
+  const missing = res.not_downloaded
+    ? ` · ${res.not_downloaded} not downloaded`
+    : '';
+  toastMgr.success(`Imported "${res.playlist.name}": ${res.imported} tracks${missing}.`);
+}
+
+// Songs a playlist lists as "Not downloaded" that are now in the library
+// are pointed at their file: same ISRC, else same title and a shared artist.
+let playlistLinkBusy = false;
+async function linkPlaylistTracksToLibrary() {
+  if (playlistLinkBusy || !lib.items.length || !lib.playlists.length) return;
+  const remote = lib.playlists.flatMap(p => p.tracks.filter(t => t.downloaded === false));
+  if (!remote.length) return;
+  const byIsrc = new Map();
+  const byTitle = new Map();
+  for (const t of lib.items) {
+    if (t.isrc) byIsrc.set(String(t.isrc).toUpperCase(), t);
+    const key = playlistMatchTitle(t.title);
+    if (!byTitle.has(key)) byTitle.set(key, []);
+    byTitle.get(key).push(t);
+  }
+  const names = s => new Set(String(s || '').split(/\s*(?:,|&|;|\/|feat\.?|ft\.?)\s*/i).map(playlistMatchTitle).filter(Boolean));
+  const links = [];
+  const seen = new Set();
+  for (const t of remote) {
+    if (seen.has(t.path)) continue;
+    seen.add(t.path);
+    let hit = t.isrc ? byIsrc.get(String(t.isrc).toUpperCase()) : null;
+    if (!hit) {
+      const want = names(t.artist);
+      hit = (byTitle.get(playlistMatchTitle(t.title)) || []).find(c => {
+        const have = names(c.artist);
+        return (!want.size || [...want].some(n => have.has(n)))
+          && (!t.duration_s || !c.duration_s || Math.abs(c.duration_s - t.duration_s) <= 10);
+      });
+    }
+    if (hit) links.push({ key: t.path, track: { path: hit.path, title: hit.title, artist: hit.artist, album: hit.album, duration_s: hit.duration_s, isrc: hit.isrc || '' } });
+  }
+  if (!links.length) return;
+  playlistLinkBusy = true;
+  try {
+    const res = await window.pywebview?.api?.link_player_playlist_tracks?.(links);
+    if (res?.status === 'ok' && res.linked) await refreshPlayerPlaylists(lib.playlist || undefined);
+  } catch (e) {
+    console.warn('[playlists] could not link downloaded tracks:', e);
+  } finally {
+    playlistLinkBusy = false;
+  }
 }
 
 // ── Error states ─────────────────────────────────────────────────────────────
@@ -9258,7 +9433,7 @@ function npRenderQueue() {
 
 // ── Player: browse and play a folder ────────────────────────────────────────
 const lib = { items: [], view: [], scan: null, lastScan: 0, shown: 0, loading: false, started: false, raf: 0, thumbBusy: 0,
-  tab: 'songs', album: null, artist: null, folder: '', cards: 0 };
+  tab: 'songs', album: null, artist: null, playlist: null, playlists: [], folder: '', cards: 0 };
 const LIB_PAGE = 150;
 const LIB_FOLDERS_KEY = 'mornye-player-folders';
 //: The folders the library is made of, scanned together into one library.
@@ -9359,6 +9534,7 @@ function addPlayerFolderFromInput() {
 async function initPlayerView() {
   if (lib.started) { markPlayingRow(); return; }
   lib.started = true;
+  await refreshPlayerPlaylists();
   // A library saved before several folders were possible is its last folder.
   if (!libFolders().length) {
     let folder = libRecent()[0];
@@ -9487,6 +9663,7 @@ window.app_library_scan_finished = function(p) {
     showPlayerSource(true);
   }
   filterPlayerLibrary(true);
+  linkPlaylistTracksToLibrary();
 };
 
 // After a library stored from an earlier visit is shown, the server walks
@@ -9506,6 +9683,7 @@ window.app_library_scan_synced = function(p) {
   if (!libAccept(p)) return;
   setPlayerScanBusy(false);
   setPlayerStatus('');
+  linkPlaylistTracksToLibrary();
 };
 
 window.app_library_scan_error = function(p) {
@@ -9617,6 +9795,7 @@ function setPlayerTab(tab) {
   lib.tab = tab;
   lib.album = null;
   lib.artist = null;
+  lib.playlist = null;
   document.querySelectorAll('.player-tabs .seg-tab').forEach(b => {
     const on = b.dataset.tab === tab;
     b.classList.toggle('active', on);
@@ -9636,6 +9815,7 @@ function playerScrollTop() {
 function openPlayerAlbum(key) {
   lib.tab = 'albums';
   lib.album = key;
+  lib.playlist = null;
   document.querySelectorAll('.player-tabs .seg-tab').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === 'albums');
     b.setAttribute('aria-selected', b.dataset.tab === 'albums' ? 'true' : 'false');
@@ -9648,6 +9828,7 @@ function openPlayerArtist(key) {
   lib.tab = 'artists';
   lib.album = null;
   lib.artist = key;
+  lib.playlist = null;
   document.querySelectorAll('.player-tabs .seg-tab').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === 'artists');
     b.setAttribute('aria-selected', b.dataset.tab === 'artists' ? 'true' : 'false');
@@ -9658,7 +9839,8 @@ function openPlayerArtist(key) {
 
 // Back from an album page goes to the artist it was opened from, if any.
 function playerBack() {
-  if (lib.album && lib.artist) { lib.album = null; lib.tab = 'artists'; }
+  if (lib.playlist) { lib.playlist = null; }
+  else if (lib.album && lib.artist) { lib.album = null; lib.tab = 'artists'; }
   else if (lib.album) lib.album = null;
   else lib.artist = null;
   document.querySelectorAll('.player-tabs .seg-tab').forEach(b => {
@@ -9673,6 +9855,386 @@ function clearPlayerSearch() {
   $('player-search').value = '';
   filterPlayerLibrary();
   $('player-search').focus();
+}
+
+async function refreshPlayerPlaylists(selectedId) {
+  const res = await window.pywebview?.api?.get_player_playlists?.();
+  if (!res || res.status !== 'ok') {
+    toastMgr.error(res?.error || 'Could not load playlists.');
+    return false;
+  }
+  lib.playlists = res.playlists || [];
+  const select = $('player-add-playlist');
+  if (select) {
+    const current = selectedId || select.value;
+    select.innerHTML = '<option value="">Choose playlist</option>' + lib.playlists.map(p =>
+      `<option value="${escHtml(p.id)}">${escHtml(p.name)}</option>`).join('');
+    if (lib.playlists.some(p => p.id === current)) select.value = current;
+  }
+  $('ptab-count-playlists').textContent = lib.playlists.length.toLocaleString();
+  filterPlayerLibrary(true);
+  return true;
+}
+
+function openPlayerPlaylistEditor(id) {
+  const current = id ? lib.playlists.find(p => p.id === id) : null;
+  playerPlaylistEdit = {
+    id: current?.id || '',
+    cover: current?.cover || '',
+    mode: 'edit',
+  };
+  $('player-playlist-import-options').classList.add('hidden');
+  $('player-playlist-new-fields').classList.remove('hidden');
+  $('player-playlist-modal-title').textContent = current ? 'Edit playlist' : 'New playlist';
+  $('player-playlist-save').textContent = current ? 'Save changes' : 'Create playlist';
+  $('player-playlist-name').value = current?.name || '';
+  $('player-playlist-description').value = current?.description || '';
+  renderPlayerPlaylistCover();
+  $('player-playlist-modal').classList.remove('hidden');
+  $('player-playlist-name').focus();
+}
+
+function closePlayerPlaylistEditor() {
+  $('player-playlist-modal').classList.add('hidden');
+  playerPlaylistEdit = null;
+}
+
+function updatePlayerPlaylistImportTarget() {
+  const target = $('player-playlist-import-target').value;
+  $('player-playlist-new-fields').classList.toggle('hidden', !!target);
+  $('player-playlist-save').textContent = target ? 'Add tracks to playlist' : 'Create playlist';
+}
+
+function renderPlayerPlaylistCover() {
+  const img = $('player-playlist-cover-preview');
+  const empty = $('player-playlist-cover-placeholder');
+  img.src = playerPlaylistEdit?.cover || '';
+  img.classList.toggle('hidden', !playerPlaylistEdit?.cover);
+  empty.classList.toggle('hidden', !!playerPlaylistEdit?.cover);
+}
+
+function openPlayerPlaylistCoverPicker() { $('player-playlist-cover-file').click(); }
+function removePlayerPlaylistCover() {
+  if (!playerPlaylistEdit) return;
+  playerPlaylistEdit.cover = '';
+  renderPlayerPlaylistCover();
+}
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('Could not read the image.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function onPlayerPlaylistCoverChosen(input) {
+  const file = input?.files?.[0];
+  input.value = '';
+  if (!file || !playerPlaylistEdit) return;
+  if (file.size > 5_000_000) {
+    toastMgr.error('Cover image must be smaller than 5 MB.');
+    return;
+  }
+  try {
+    playerPlaylistEdit.cover = await readFileAsDataURL(file);
+    renderPlayerPlaylistCover();
+  } catch (e) {
+    toastMgr.error(e?.message || 'Could not read the cover image.');
+  }
+}
+
+async function savePlayerPlaylist() {
+  if (!playerPlaylistEdit) return;
+  const name = $('player-playlist-name').value.trim();
+  const description = $('player-playlist-description').value.trim();
+  if (!name) {
+    toastMgr.error('Enter a playlist name.');
+    $('player-playlist-name').focus();
+    return;
+  }
+  const button = $('player-playlist-save');
+  const mode = playerPlaylistEdit.mode;
+  const editing = !!playerPlaylistEdit.id;
+  if (mode === 'import' && !playerPlaylistEdit.preview.matched) {
+    toastMgr.error('No tracks from this file matched your local library.');
+    return;
+  }
+  button.disabled = true;
+  try {
+    const api = window.pywebview?.api;
+    let res;
+    if (mode === 'import') {
+      res = await api?.import_player_playlist?.(
+        playerPlaylistEdit.text,
+        playerPlaylistEdit.filename,
+        name,
+        description,
+        playerPlaylistEdit.cover,
+        playerPlaylistEdit.candidates,
+        $('player-playlist-import-target').value
+      );
+    } else if (playerPlaylistEdit.id) {
+      res = await api?.update_player_playlist?.(
+        playerPlaylistEdit.id, name, description, playerPlaylistEdit.cover
+      );
+    } else {
+      res = await api?.create_player_playlist?.(
+        name, description, playerPlaylistEdit.cover, []
+      );
+    }
+    if (!res || res.status !== 'ok') {
+      toastMgr.error(res?.error || 'Could not save the playlist.');
+      return;
+    }
+    const id = res.playlist.id;
+    closePlayerPlaylistEditor();
+    await refreshPlayerPlaylists(id);
+    openPlayerPlaylist(id);
+    if (mode === 'import') {
+      toastMgr.success(res.imported
+        ? `Imported ${res.imported} tracks.`
+        : 'No new tracks were added; they were already in the playlist.');
+    } else {
+      toastMgr.success(editing ? 'Playlist updated.' : 'Playlist created.');
+    }
+  } catch (e) {
+    toastMgr.error(e?.message || 'Could not save the playlist.');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function openPlayerPlaylistImport() {
+  if (!lib.items.length) {
+    toastMgr.error('Scan your music library before importing a playlist.');
+    return;
+  }
+  $('player-playlist-file').click();
+}
+
+function playerPlaylistImportCandidates(text) {
+  const basenames = new Set();
+  const metadata = new Set();
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (/^#EXTINF:/i.test(line)) {
+      const display = line.slice(line.indexOf(',') + 1).trim();
+      const split = display.indexOf(' - ');
+      if (split > 0) metadata.add(`${display.slice(0, split).trim().toLowerCase()}\u0000${display.slice(split + 3).trim().toLowerCase()}`);
+      else if (display) metadata.add(`\u0000${display.toLowerCase()}`);
+      continue;
+    }
+    if (line.startsWith('#') || /^(https?:|spotify:)/i.test(line)) continue;
+    let path = line.replace(/^file:\/\//i, '').split(/[?#]/, 1)[0];
+    try { path = decodeURIComponent(path); } catch {}
+    basenames.add(path.split(/[\\/]/).pop().toLowerCase());
+  }
+  return lib.items.filter(track => {
+    const basename = String(track.path || '').split(/[\\/]/).pop().toLowerCase();
+    const artist = String(track.artist || '').toLowerCase();
+    const title = String(track.title || '').toLowerCase();
+    return basenames.has(basename) || metadata.has(`${artist}\u0000${title}`) || metadata.has(`\u0000${title}`);
+  });
+}
+
+async function preparePlayerPlaylistImport(text, filename, name = '') {
+  if (!lib.items.length) {
+    toastMgr.error('Scan your music library before importing a playlist.');
+    return false;
+  }
+  const playlistName = name.trim() ||
+    filename.replace(/\.(m3u8?)$/i, '').trim() || 'Imported playlist';
+  const candidates = playerPlaylistImportCandidates(text);
+  const preview = await window.pywebview?.api?.preview_player_playlist_import?.(
+    text, filename, candidates
+  );
+  if (!preview || preview.status !== 'ok') {
+    toastMgr.error(preview?.error || 'Could not preview the playlist.');
+    return false;
+  }
+  await refreshPlayerPlaylists();
+  playerPlaylistEdit = {
+    id: '',
+    mode: 'import',
+    text,
+    filename,
+    name: playlistName,
+    description: '',
+    cover: '',
+    candidates,
+    preview,
+  };
+  $('player-playlist-modal-title').textContent = 'Import playlist';
+  $('player-playlist-save').textContent = 'Create playlist';
+  $('player-playlist-name').value = playlistName;
+  $('player-playlist-description').value = '';
+  $('player-playlist-import-target').innerHTML = '<option value="">Create a new playlist</option>' +
+    lib.playlists.map(p => `<option value="${escHtml(p.id)}">${escHtml(p.name)}</option>`).join('');
+  $('player-playlist-import-preview').textContent =
+    `${preview.matched} tracks found; ${preview.skipped} not found; ${preview.ambiguous} ambiguous.` +
+    (preview.missing_tracks?.length ? ` Missing: ${preview.missing_tracks.join(', ')}.` : '') +
+    (preview.ambiguous_tracks?.length ? ` Ambiguous: ${preview.ambiguous_tracks.join(', ')}.` : '');
+  $('player-playlist-import-options').classList.remove('hidden');
+  $('player-playlist-new-fields').classList.remove('hidden');
+  $('player-playlist-import-target').value = '';
+  renderPlayerPlaylistCover();
+  $('player-playlist-modal').classList.remove('hidden');
+  $('player-playlist-name').focus();
+  return true;
+}
+
+async function onPlayerPlaylistFileChosen(input) {
+  const file = input?.files?.[0];
+  input.value = '';
+  if (!file) return;
+  try {
+    const text = await readFileAsText(file);
+    await preparePlayerPlaylistImport(text, file.name);
+  } catch (e) {
+    toastMgr.error(e?.message || 'Could not read the playlist file.');
+  }
+}
+
+async function importPlayerPlaylistFromUrl() {
+  const input = $('player-playlist-url');
+  const url = input.value.trim();
+  if (!url) {
+    toastMgr.error('Paste a direct M3U/M3U8 link first.');
+    input.focus();
+    return;
+  }
+  if (!lib.items.length) {
+    toastMgr.error('Scan your music library before importing a playlist.');
+    return;
+  }
+  const button = $('player-playlist-url-import');
+  button.disabled = true;
+  try {
+    const result = await window.pywebview?.api?.fetch_player_playlist_import?.(url);
+    if (!result || result.status !== 'ok') {
+      toastMgr.error(result?.error || 'Could not download the playlist link.');
+      return;
+    }
+    await preparePlayerPlaylistImport(result.text, result.filename);
+  } catch (e) {
+    toastMgr.error(e?.message || 'Could not download the playlist link.');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function openPlayerPlaylist(id) {
+  const playlist = lib.playlists.find(p => p.id === id);
+  if (!playlist) return;
+  lib.tab = 'playlists';
+  lib.album = null;
+  lib.artist = null;
+  lib.playlist = playlist.id;
+  document.querySelectorAll('.player-tabs .seg-tab').forEach(b => {
+    const on = b.dataset.tab === 'playlists';
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  filterPlayerLibrary();
+  playerScrollTop();
+}
+
+async function addPlayerTrackToPlaylist(index) {
+  const id = $('player-add-playlist').value;
+  const track = lib.view[Number(index)];
+  if (!id) {
+    toastMgr.error('Choose a playlist in “Add to” first.');
+    return;
+  }
+  if (!track) return;
+  try {
+    const res = await window.pywebview?.api?.add_player_playlist_tracks?.(id, [track]);
+    if (!res || res.status !== 'ok') {
+      toastMgr.error(res?.error || 'Could not add the track.');
+      return;
+    }
+    await refreshPlayerPlaylists(id);
+    toastMgr.success('Track added to playlist.');
+  } catch (e) {
+    toastMgr.error(e?.message || 'Could not add the track.');
+  }
+}
+
+async function removePlayerPlaylistTrack(index) {
+  const playlist = lib.playlists.find(p => p.id === lib.playlist);
+  const track = lib.view[Number(index)];
+  if (!playlist || !track) return;
+  try {
+    const res = await window.pywebview?.api?.remove_player_playlist_track?.(playlist.id, track.path);
+    if (!res || res.status !== 'ok') {
+      toastMgr.error(res?.error || 'Could not remove the track.');
+      return;
+    }
+    await refreshPlayerPlaylists(playlist.id);
+    openPlayerPlaylist(playlist.id);
+  } catch (e) {
+    toastMgr.error(e?.message || 'Could not remove the track.');
+  }
+}
+
+async function deletePlayerPlaylist(id) {
+  const playlist = lib.playlists.find(p => p.id === id);
+  if (!playlist || !window.confirm(`Delete “${playlist.name}”?`)) return;
+  try {
+    const res = await window.pywebview?.api?.delete_player_playlist?.(id);
+    if (!res || res.status !== 'ok') {
+      toastMgr.error(res?.error || 'Could not delete the playlist.');
+      return;
+    }
+    lib.playlist = null;
+    await refreshPlayerPlaylists();
+    toastMgr.success('Playlist deleted.');
+  } catch (e) {
+    toastMgr.error(e?.message || 'Could not delete the playlist.');
+  }
+}
+
+async function reorderPlayerPlaylistTrack(index, delta) {
+  const playlist = lib.playlists.find(p => p.id === lib.playlist);
+  if (!playlist) return;
+  const ordered = playlist.tracks.map(track => track.path);
+  const from = Number(index);
+  const to = from + Number(delta);
+  if (!Number.isInteger(from) || to < 0 || to >= ordered.length) return;
+  [ordered[from], ordered[to]] = [ordered[to], ordered[from]];
+  try {
+    const res = await window.pywebview?.api?.reorder_player_playlist_tracks?.(playlist.id, ordered);
+    if (!res || res.status !== 'ok') {
+      toastMgr.error(res?.error || 'Could not reorder playlist tracks.');
+      return;
+    }
+    await refreshPlayerPlaylists(playlist.id);
+    openPlayerPlaylist(playlist.id);
+  } catch (e) {
+    toastMgr.error(e?.message || 'Could not reorder playlist tracks.');
+  }
+}
+
+async function exportPlayerPlaylist(id) {
+  try {
+    const res = await window.pywebview?.api?.export_player_playlist?.(id);
+    if (!res || res.status !== 'ok') {
+      toastMgr.error(res?.error || 'Could not export the playlist.');
+      return;
+    }
+    const url = URL.createObjectURL(new Blob([res.text], { type: 'audio/x-mpegurl;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${res.name}.m3u8`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toastMgr.success('Playlist exported as M3U8.');
+  } catch (e) {
+    toastMgr.error(e?.message || 'Could not export the playlist.');
+  }
 }
 
 function filterPlayerLibrary(keepScroll) {
@@ -9700,12 +10262,28 @@ function filterPlayerLibrary(keepScroll) {
   $('ptab-count-songs').textContent = lib.items.length.toLocaleString();
   $('ptab-count-albums').textContent = allAlbums.length.toLocaleString();
   $('ptab-count-artists').textContent = allArtists.length.toLocaleString();
-  $('player-toolbar').classList.toggle('hidden', lib.items.length === 0);
+  $('ptab-count-playlists').textContent = lib.playlists.length.toLocaleString();
+  $('player-toolbar').classList.toggle('hidden', lib.items.length === 0 && tab !== 'playlists');
+  const addSelect = $('player-add-select-wrap');
+  addSelect.classList.toggle('hidden', tab === 'playlists');
+  $('player-play-controls').classList.toggle('hidden', tab === 'playlists' && !lib.playlist);
+  $('player-search-wrap').classList.toggle('hidden', tab === 'playlists');
 
   const list = $('player-list'), grid = $('player-grid'), detail = $('player-detail');
   let rows = null, cards = null, header = '', count = '';
 
-  if (tab === 'albums' && lib.album) {
+  if (tab === 'playlists' && lib.playlist) {
+    const playlist = lib.playlists.find(p => p.id === lib.playlist);
+    if (!playlist) { lib.playlist = null; return filterPlayerLibrary(keepScroll); }
+    rows = playlist.tracks;
+    header = libPlaylistHeaderHtml(playlist);
+    count = plural(rows.length, 'track');
+  } else if (tab === 'playlists') {
+    cards = lib.playlists.length
+      ? lib.playlists.map(libPlaylistCardHtml)
+      : ['<div class="pl-playlist-empty">No playlists yet. Create one or import an M3U/M3U8 file.</div>'];
+    count = plural(lib.playlists.length, 'playlist');
+  } else if (tab === 'albums' && lib.album) {
     const album = allAlbums.find(a => a.key === lib.album);
     if (!album) { lib.album = null; return filterPlayerLibrary(keepScroll); }
     rows = album.tracks;
@@ -9770,6 +10348,8 @@ function filterPlayerLibrary(keepScroll) {
     } else if (tab === 'artists') {
       const shown = new Set(libArtists(matches).map(a => a.key));
       lib.playAll = allAlbums.flatMap(a => a.tracks).filter(t => libCredited(t).some(n => shown.has(n.toLowerCase())));
+    } else if (tab === 'playlists') {
+      lib.playAll = null;
     } else {
       lib.playAll = allAlbums.filter(a => libAlbums(matches).some(m => m.key === a.key)).flatMap(a => a.tracks);
     }
@@ -9783,6 +10363,7 @@ const LIB_PLAY_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="
 const LIB_SHUFFLE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>';
 const LIB_BACK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>';
 const LIB_NOTE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
+let playerPlaylistEdit = null;
 
 function libCoverHtml(path, size, extraClass = '') {
   return `<div class="pl-cover ${extraClass}" data-p="${escHtml(path || '')}" data-size="${size}">
@@ -9808,6 +10389,47 @@ function libArtistCardHtml(a, allAlbums) {
     <div class="pl-card-t">${escHtml(a.name)}</div>
     <div class="pl-card-a">${escHtml(meta)}</div>
   </div>`;
+}
+
+function libPlaylistCardHtml(playlist) {
+  const cover = playlist.cover
+    ? `<img src="${escHtml(playlist.cover)}" alt="" draggable="false">`
+    : `<span class="pl-cover-ph">${LIB_NOTE_SVG}</span>`;
+  const summary = playlist.description || plural(playlist.tracks.length, 'track');
+  return `<div class="pl-card pl-playlist-card" role="listitem" tabindex="0" data-activate data-player-playlist="${escHtml(playlist.id)}" title="${escHtml(playlist.name)}">
+    <div class="pl-card-art"><div class="pl-cover ${playlist.cover ? 'has-cover' : ''}">${cover}</div></div>
+    <div class="pl-card-t">${escHtml(playlist.name)}</div>
+    <div class="pl-card-a">${escHtml(summary)}</div>
+    <div class="pl-playlist-card-actions">
+      <button type="button" class="act-btn secondary" data-edit-player-playlist="${escHtml(playlist.id)}">Edit</button>
+      <button type="button" class="act-btn secondary" data-delete-player-playlist="${escHtml(playlist.id)}">Delete</button>
+    </div>
+  </div>`;
+}
+
+function libPlaylistHeaderHtml(playlist) {
+  const cover = playlist.cover
+    ? `<img src="${escHtml(playlist.cover)}" alt="" draggable="false">`
+    : `<span class="pl-cover-ph">${LIB_NOTE_SVG}</span>`;
+  const duration = playlist.tracks.reduce((sum, track) => sum + (track.duration_s || 0), 0);
+  const missing = playlist.tracks.filter(t => t.downloaded === false).length;
+  const meta = [plural(playlist.tracks.length, 'track'), missing ? `${missing} not downloaded` : '', libDuration(duration)].filter(Boolean);
+  return `<button type="button" class="pl-back" data-onclick="playerBack()">${LIB_BACK_SVG}Playlists</button>
+    <div class="pl-detail-head">
+      <div class="pl-cover ${playlist.cover ? 'has-cover' : ''} pl-detail-cover">${cover}</div>
+      <div class="pl-detail-info">
+        <span class="pl-detail-kind">Playlist</span>
+        <h2 class="pl-detail-title">${escHtml(playlist.name)}</h2>
+        ${playlist.description ? `<div class="pl-playlist-description">${escHtml(playlist.description)}</div>` : ''}
+        <div class="pl-detail-meta">${meta.map(escHtml).join('<span aria-hidden="true"> · </span>')}</div>
+        <div class="pl-detail-actions">
+          <button class="pt-btn primary" type="button" data-play-player-playlist="${escHtml(playlist.id)}">${LIB_PLAY_SVG}Play</button>
+          <button class="pt-btn" type="button" data-shuffle-player-playlist="${escHtml(playlist.id)}">${LIB_SHUFFLE_SVG}Shuffle</button>
+          <button class="pt-btn" type="button" data-edit-player-playlist="${escHtml(playlist.id)}">Edit</button>
+          <button class="pt-btn" type="button" data-export-player-playlist="${escHtml(playlist.id)}">Export M3U8</button>
+        </div>
+      </div>
+    </div>`;
 }
 
 function libDetailActions(kind, key) {
@@ -9857,10 +10479,19 @@ function libRowHtml(t, i) {
   const inAlbum = !!lib.album;
   const art = inAlbum ? (t.artist && t.artist !== libArtistOf(t) ? t.artist : '') : [t.artist, t.album].filter(Boolean).join(' — ');
   const num = inAlbum && t.track ? t.track : i + 1;
-  return `<div class="pl-row" role="listitem" tabindex="0" data-activate data-i="${i}" data-p="${escHtml(t.path)}" data-size="0">
+  const rowAction = lib.tab === 'playlists' && lib.playlist
+    ? `<span class="pl-row-actions">
+        <button type="button" class="pl-row-action" data-move-player-track="${i},-1" ${i === 0 ? 'disabled' : ''} aria-label="Move ${escHtml(t.title)} up" title="Move up">↑</button>
+        <button type="button" class="pl-row-action" data-move-player-track="${i},1" ${i === lib.view.length - 1 ? 'disabled' : ''} aria-label="Move ${escHtml(t.title)} down" title="Move down">↓</button>
+        <button type="button" class="pl-row-action" data-remove-player-track="${i}" aria-label="Remove ${escHtml(t.title)} from playlist" title="Remove from playlist">−</button>
+      </span>`
+    : `<button type="button" class="pl-row-action" data-add-player-track="${i}" aria-label="Add ${escHtml(t.title)} to playlist" title="Add to selected playlist">+</button>`;
+  const remote = t.downloaded === false;
+  const badge = remote ? '<span class="pl-not-downloaded" title="Not in your library yet: download it and it plays from here">Not downloaded</span>' : '';
+  return `<div class="pl-row ${remote ? 'is-remote' : ''}" role="listitem" tabindex="0" data-activate data-i="${i}" data-p="${remote ? '' : escHtml(t.path)}" data-size="0">
     <div class="pl-num"><span class="n">${num}</span><span class="pi" aria-hidden="true">${LIB_PLAY_SVG}</span><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span></div>
     <div class="pl-thumb"><img alt="" draggable="false"></div>
-    <div class="pl-main"><div class="pl-t">${escHtml(t.title)}</div>${art ? `<div class="pl-a">${escHtml(art)}</div>` : ''}</div>
+    <div class="pl-main"><div class="pl-main-info"><div class="pl-t">${escHtml(t.title)}${badge}</div>${art ? `<div class="pl-a">${escHtml(art)}</div>` : ''}</div>${rowAction}</div>
     <div class="pl-dur">${t.duration_s ? fmtTime(t.duration_s) : ''}</div>
     <div class="pl-fmt">${escHtml(t.format)}</div>
   </div>`;
@@ -9883,6 +10514,16 @@ function renderPlayerEmptyState() {
 
   const title = empty.querySelector('.player-empty-title');
   const copy = empty.querySelector('.player-empty-copy');
+  if (lib.tab === 'playlists' && lib.playlist) {
+    title.textContent = 'This playlist is empty';
+    copy.textContent = 'Add tracks from Songs, Albums or Artists.';
+    return;
+  }
+  if (lib.tab === 'playlists') {
+    title.textContent = 'No playlists yet';
+    copy.textContent = 'Create a playlist or import an M3U/M3U8 file above.';
+    return;
+  }
   const query = ($('player-search')?.value || '').trim();
   if (query && lib.items.length) {
     title.textContent = 'Nothing matches';
@@ -9969,7 +10610,16 @@ function libQueueItems(tracks) {
 
 function playFromLibrary(index, shuffle) {
   const tracks = lib.view.length ? lib.view : (lib.playAll || []);
-  if (tracks.length) startPlayback(libQueueItems(tracks), index, shuffle, false);
+  const chosen = tracks[index];
+  if (chosen && chosen.downloaded === false) {
+    toastMgr.info('This song is not downloaded yet.');
+    return;
+  }
+  // A playlist can list songs that are not downloaded: the queue skips
+  // them, so the clicked song's place is counted among the playable ones.
+  const playable = tracks.filter(t => t.downloaded !== false);
+  const at = Math.max(0, playable.indexOf(chosen));
+  if (playable.length) startPlayback(libQueueItems(playable), at, shuffle, false);
 }
 
 // An artist plays album by album, each in track order: their own albums
@@ -10001,13 +10651,55 @@ function markPlayingRow() {
   const list = $('player-list');
   if (!list) return;
   list.addEventListener('click', e => {
+    const move = e.target.closest('[data-move-player-track]');
+    if (move) {
+      e.preventDefault();
+      e.stopPropagation();
+      const [index, delta] = move.dataset.movePlayerTrack.split(',');
+      reorderPlayerPlaylistTrack(index, delta);
+      return;
+    }
+    const add = e.target.closest('[data-add-player-track]');
+    if (add) {
+      e.preventDefault();
+      e.stopPropagation();
+      addPlayerTrackToPlaylist(add.dataset.addPlayerTrack);
+      return;
+    }
+    const remove = e.target.closest('[data-remove-player-track]');
+    if (remove) {
+      e.preventDefault();
+      e.stopPropagation();
+      removePlayerPlaylistTrack(remove.dataset.removePlayerTrack);
+      return;
+    }
     const row = e.target.closest('.pl-row');
     if (row) playFromLibrary(Number(row.dataset.i));
   });
   const onGroupClick = e => {
-    const t = e.target.closest('[data-play-album],[data-play-artist],[data-shuffle-album],[data-shuffle-artist],[data-artist-link],.pl-card');
+    const t = e.target.closest('[data-play-album],[data-play-artist],[data-shuffle-album],[data-shuffle-artist],[data-artist-link],[data-player-playlist],[data-play-player-playlist],[data-shuffle-player-playlist],[data-edit-player-playlist],[data-delete-player-playlist],[data-export-player-playlist],.pl-card');
     if (!t) return;
     const d = t.dataset;
+    if (d.editPlayerPlaylist != null) { e.stopPropagation(); openPlayerPlaylistEditor(d.editPlayerPlaylist); return; }
+    if (d.deletePlayerPlaylist != null) { e.stopPropagation(); deletePlayerPlaylist(d.deletePlayerPlaylist); return; }
+    if (d.exportPlayerPlaylist != null) { e.stopPropagation(); exportPlayerPlaylist(d.exportPlayerPlaylist); return; }
+    if (d.playPlayerPlaylist != null) {
+      e.stopPropagation();
+      const playlist = lib.playlists.find(p => p.id === d.playPlayerPlaylist);
+      const playable = (playlist?.tracks || []).filter(t => t.downloaded !== false);
+      if (playable.length) startPlayback(libQueueItems(playable), 0, false, false);
+      else if (playlist) toastMgr.info('None of these songs is downloaded yet.');
+      return;
+    }
+    if (d.shufflePlayerPlaylist != null) {
+      e.stopPropagation();
+      const playlist = lib.playlists.find(p => p.id === d.shufflePlayerPlaylist);
+      const playable = (playlist?.tracks || []).filter(t => t.downloaded !== false);
+      if (playable.length) startPlayback(libQueueItems(playable), 0, true, false);
+      else if (playlist) toastMgr.info('None of these songs is downloaded yet.');
+      return;
+    }
+    if (d.playerPlaylist != null) { openPlayerPlaylist(d.playerPlaylist); return; }
     if (d.playAlbum != null) { e.stopPropagation(); playLibraryGroup('album', d.playAlbum, false); return; }
     if (d.playArtist != null) { e.stopPropagation(); playLibraryGroup('artist', d.playArtist, false); return; }
     if (d.shuffleAlbum != null) { playLibraryGroup('album', d.shuffleAlbum, true); return; }

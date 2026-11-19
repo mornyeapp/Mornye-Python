@@ -116,6 +116,7 @@ def sync(roots: Iterable[str]) -> dict[str, int]:
             known is not None
             and known.matches(st.st_mtime_ns, st.st_size)
             and "genre" in known.row
+            and "isrc" in known.row
         ):
             continue
         batch.append((str(path), st.st_mtime_ns, st.st_size, read_track_row(path)))

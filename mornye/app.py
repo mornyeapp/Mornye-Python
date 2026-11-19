@@ -32,6 +32,7 @@ from .api_mixins.extension_settings import ExtensionSettingsMixin
 from .api_mixins.failed_tracks import FailedTracksMixin
 from .api_mixins.library_tools import LibraryToolsMixin
 from .api_mixins.local_tagging import LocalTaggingMixin
+from .api_mixins.player_playlists import PlayerPlaylistsMixin
 from .api_mixins.music_extras import MusicExtrasMixin
 from .api_mixins.search import SearchMixin
 from .api_mixins.signed_sessions import SignedSessionsMixin
@@ -210,6 +211,7 @@ class MornyeAPI(
     SearchMixin,
     LocalTaggingMixin,
     LibraryToolsMixin,
+    PlayerPlaylistsMixin,
     MusicExtrasMixin,
     CoversLyricsMixin,
     DiscoveryMixin,

@@ -519,6 +519,18 @@
   cursor: pointer;
 }
 .search-result-item:last-child { border-bottom: none; }
+.search-result-playlist-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--rule);
+}
+.search-result-playlist-row .search-result-item {
+  flex: 1;
+  min-width: 0;
+  border-bottom: 0;
+}
+.sr-import-playlist { flex-shrink: 0; }
 
 .search-result-thumbnail {
   background: var(--selected);

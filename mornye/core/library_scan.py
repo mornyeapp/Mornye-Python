@@ -75,6 +75,9 @@ def read_track_row(path: Path) -> dict[str, Any]:
         # Not shown by the Player; read for the Stats page, which counts the
         # library's files from before Mornye too (core/stats.py).
         "genre": tags.get("GENRE", ""),
+        # Lets a playlist imported from a provider find the file it lists
+        # (api_mixins/player_playlists.py).
+        "isrc": tags.get("ISRC", "").strip().upper(),
         "duration_s": _duration_s(path),
         "format": path.suffix.lstrip(".").upper(),
     }
