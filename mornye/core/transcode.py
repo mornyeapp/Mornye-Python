@@ -618,6 +618,15 @@ def _probe_sample_rate(src: Path) -> int:
         return 0
 
 
+#: ffprobe's names for the Dolby codecs an Atmos stream comes in.
+_DOLBY_CODECS = frozenset({"eac3", "ac3", "ac4"})
+
+
+def is_dolby_source(src: Path | str) -> bool:
+    """Whether `src` carries Dolby (E-AC-3 / AC-3 / AC-4) audio."""
+    return _audio_codec(Path(src)) in _DOLBY_CODECS
+
+
 def _audio_codec(src: Path) -> str:
     """The first audio stream's codec, lower-cased; "" when unknown."""
     try:
@@ -799,6 +808,19 @@ async def transcode_file_async(
     """
     src = Path(source)
     spec = format_spec(fmt)
+
+    if await asyncio.to_thread(is_dolby_source, src):
+        # Dolby Atmos is the reason the file was fetched: decoding it to PCM
+        # for ALAC/FLAC/MP3 keeps at best the 5.1 bed of an E-AC-3 stream
+        # and drops the objects, and AC-4 (Amazon's Atmos) has no ffmpeg
+        # decoder at all. The download is kept as it arrived.
+        logger.info(
+            "[transcode] %s is Dolby (Atmos) audio: kept as is, not converted "
+            "to %s",
+            src.name,
+            spec.name.upper(),
+        )
+        return src
 
     dest = transcoded_path(src, spec.name)
     if _already_in_target_format(src, spec) and not await asyncio.to_thread(

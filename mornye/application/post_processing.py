@@ -99,6 +99,10 @@ async def _transcode_result(result: DownloadResult, options: Any) -> DownloadRes
             result.provider,
             f"Downloaded, but transcode to {target_format.upper()} failed: {exc}",
         )
+    if Path(destination) == Path(source):
+        # Kept as it arrived (Dolby Atmos, see transcode_file_async): it is
+        # not in the target format, so it is not labelled as being in it.
+        return result
     return DownloadResult.ok(
         result.provider,
         str(destination),

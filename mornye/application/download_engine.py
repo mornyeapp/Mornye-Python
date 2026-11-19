@@ -456,7 +456,7 @@ def _no_providers_error_message(services: list[str]) -> str:
 # Lossy formats never carry genuine ultrasonic content, so checking them for
 # a "fake Hi-Res" spectral cutoff would either be meaningless or flag the
 # format conversion itself rather than the source. Skip them outright.
-_HIRES_CHECK_SKIP_FORMATS = {"mp3", "aac", "ogg", "opus", "m4a-lossy"}
+_HIRES_CHECK_SKIP_FORMATS = {"mp3", "aac", "ogg", "opus", "m4a-lossy", "mp4"}
 
 #: The canonical qualities that actually *claim* Hi-Res. A LOSSLESS request
 #: answered with CD-range audio is not a fake — it is exactly what was asked
