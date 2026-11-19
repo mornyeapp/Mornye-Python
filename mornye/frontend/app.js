@@ -616,6 +616,9 @@ function applySettings(settings = {}) {
   if ($('config-transcode')) { $('config-transcode').value = cfg.transcode_to || 'none'; onTranscodeChange(); }
   if ($('config-transcode-bitrate')) $('config-transcode-bitrate').value = cfg.transcode_bitrate || '320k';
   if ($('config-transcode-keep')) $('config-transcode-keep').checked = cfg.transcode_keep_original;
+  if ($('config-dolby-ac3')) $('config-dolby-ac3').checked = cfg.dolby_to_ac3 !== false;
+  if ($('config-dolby-ac3-keep')) $('config-dolby-ac3-keep').checked = cfg.dolby_ac3_keep_original !== false;
+  onDolbyAc3Change();
   if ($('config-verify-hires')) $('config-verify-hires').checked = !!cfg.verify_hires || !!cfg.redownload_fake_hires;
   if ($('config-redownload-fake-hires')) $('config-redownload-fake-hires').checked = !!cfg.redownload_fake_hires;
   onVerifyHiresChange();
@@ -794,6 +797,13 @@ function onTranscodeChange() {
 // Replacing a fake Hi-Res file means first knowing it is one, so the
 // replace toggle only exists while the check is on. Hidden rather than
 // disabled: an off check makes the setting inapplicable, not unavailable.
+function onDolbyAc3Change() {
+  const on = $('config-dolby-ac3')?.checked === true;
+  document.querySelectorAll('.dolby-ac3-opt').forEach(row => {
+    row.style.display = on ? 'flex' : 'none';
+  });
+}
+
 function onVerifyHiresChange() {
   const on = $('config-verify-hires') ? $('config-verify-hires').checked : false;
   document.querySelectorAll('.verify-hires-opt').forEach(row => {
@@ -929,6 +939,8 @@ const DEFAULT_SETTINGS = {
   transcode_to: 'none',
   transcode_bitrate: '320k',
   transcode_keep_original: false,
+  dolby_to_ac3: true,
+  dolby_ac3_keep_original: true,
   verify_hires: false,
   redownload_fake_hires: false,
   // Per-service quality id from each extension's manifest qualityOptions,
@@ -5729,6 +5741,8 @@ function buildConfig() {
     transcode_to:           $('config-transcode')?.value || 'none',
     transcode_bitrate:      $('config-transcode-bitrate')?.value || '320k',
     transcode_keep_original: $('config-transcode-keep')?.checked || false,
+    dolby_to_ac3: $('config-dolby-ac3') ? $('config-dolby-ac3').checked : true,
+    dolby_ac3_keep_original: $('config-dolby-ac3-keep') ? $('config-dolby-ac3-keep').checked : true,
     verify_hires:           $('config-verify-hires')?.checked || false,
     redownload_fake_hires:  $('config-redownload-fake-hires')?.checked || false,
     track_max_retries:      parseInt($('config-retries').value) || 0,

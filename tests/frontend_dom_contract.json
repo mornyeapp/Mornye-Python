@@ -71,6 +71,8 @@
  "config-auto-rate-limit-cooldown",
  "config-concurrent",
  "config-density",
+ "config-dolby-ac3",
+ "config-dolby-ac3-keep",
  "config-enrich",
  "config-fallback",
  "config-filename",

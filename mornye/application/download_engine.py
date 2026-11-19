@@ -274,6 +274,12 @@ class DownloadOptions:
     # dither — even when it is already in the target format.
     transcode_max_sample_rate: int = 0
     transcode_max_bit_depth: int = 0
+    # On by default: a Dolby Digital (AC-3 5.1, 640 kb/s) copy of every Dolby Digital Plus
+    # download, for a receiver on S/PDIF (coaxial, or optical from a TV),
+    # which carries Dolby Digital but not Dolby Digital Plus. Only E-AC-3
+    # files are touched. The original stays beside it unless told otherwise.
+    dolby_to_ac3: bool = True
+    dolby_ac3_keep_original: bool = True
 
     track_max_retries: int = 0
     metadata_delay_min_s: float = 0.0

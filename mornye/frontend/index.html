@@ -1045,6 +1045,20 @@
                 <span class="toggle-sl"></span>
               </label>
             </div>
+            <div class="s-row">
+              <span class="s-label">Dolby Digital copy for S/PDIF<small>Converts Dolby Digital Plus (E-AC-3) downloads to Dolby Digital 5.1 at 640 kbps, for a receiver fed by a coaxial or optical cable, which cannot carry Dolby Digital Plus. Other files are left alone. Atmos height and object audio is not kept; AC-4 cannot be converted.</small></span>
+              <label class="toggle">
+                <input type="checkbox" id="config-dolby-ac3" data-onchange="onDolbyAc3Change()" checked>
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
+            <div class="s-row dolby-ac3-opt s-sub">
+              <span class="s-label">Keep the Dolby Digital Plus file<small>On = the AC-3 copy is saved beside it as "… (AC-3).m4a"; off = it replaces the original</small></span>
+              <label class="toggle">
+                <input type="checkbox" id="config-dolby-ac3-keep" checked>
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
           </div>
           <div class="s-section">
             <div class="s-title">Post-Download Action</div>

@@ -84,6 +84,7 @@ If you just want a GUI for personal use, with no code involved, the [Mobile](htt
 - **Versioned REST API** at `/api/v1`, with an OpenAPI document at `/docs`
 - **Subsonic / OpenSubsonic API** — play the library from Symfonium, Feishin, DSub and other Subsonic apps, with stars, playlists, play counts and a play queue that follows you between devices
 - **CSV and M3U input** — hand it a playlist export (Exportify, Soundiiz, an M3U/M3U8, a bare list of links) and it downloads what the file lists, matching rows that carry no link and reporting the ones it cannot
+- **Dolby Digital copy for home-theatre receivers** — Dolby Digital Plus (E-AC-3) downloads also get a Dolby Digital 5.1 (AC-3, 640 kbps) copy, the format a coaxial or optical S/PDIF link can carry, so a player that bitstreams it (MPC-HC/LAV, Kodi…) reaches the receiver in 5.1. On by default; only E-AC-3 files are touched
 - **Dashboard** — what you have actually downloaded, as numbers: top artists, genres, decades, providers, listening time, activity by weekday and streaks (`--stats`, or the Stats screen)
 - **Persistent staged download queue** (JSON) and **download log/history** (SQLite): queued work survives a restart, and completed downloads remain recorded
 - **Network destinations** — use OS-mounted folders, SMB2/SMB3, or WebDAV, with staged and verified remote delivery

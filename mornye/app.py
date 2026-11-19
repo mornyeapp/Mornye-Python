@@ -2250,6 +2250,10 @@ class MornyeAPI(
             transcode_to = normalize_transcode_format(config.get("transcode_to"))
             transcode_bitrate = config.get("transcode_bitrate") or "320k"
             transcode_keep_original = config.get("transcode_keep_original", False)
+            # On unless switched off with a real False; only a real False
+            # lets the copy replace the original (see the note below).
+            dolby_to_ac3 = config.get("dolby_to_ac3") is not False
+            dolby_ac3_keep_original = config.get("dolby_ac3_keep_original") is not False
             # `is True`, not bool(): in --web mode this dict is an HTTP
             # request body, so a setting can arrive as the *string* "false"
             # — which bool() reads as on, and which would switch on a
@@ -2491,6 +2495,8 @@ class MornyeAPI(
                 transcode_to=transcode_to,
                 transcode_bitrate=transcode_bitrate,
                 transcode_keep_original=transcode_keep_original,
+                dolby_to_ac3=dolby_to_ac3,
+                dolby_ac3_keep_original=dolby_ac3_keep_original,
                 track_max_retries=track_max_retries,
                 post_download_action=(
                     "none" if destination_id else post_download_action
