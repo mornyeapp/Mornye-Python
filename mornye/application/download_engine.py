@@ -1136,6 +1136,165 @@ async def _reject_wrong_recording_async(
     return DownloadResult.fail(provider_name, f"Wrong recording: {reason}")
 
 
+#: Ranks for the "is this at least what was asked for" check below.
+_TIER_RANK = {"ENCRYPTED": -1, "LOSSY": 0, "LOSSLESS": 1, "HI_RES": 2, "ATMOS": 3}
+_LOSSLESS_SUFFIXES = frozenset({".flac", ".wav", ".aif", ".aiff", ".alac"})
+_MP4_SUFFIXES = frozenset({".m4a", ".mp4", ".m4b"})
+#: Dolby codecs an Atmos stream arrives in: E-AC-3 + JOC (Tidal) or AC-4
+#: (Amazon), as mutagen spells the MP4 sample entries.
+_DOLBY_CODECS = ("ec-3", "ac-3", "ac-4")
+_DOLBY_SUFFIXES = frozenset({".ec3", ".eac3", ".ac3", ".ac4"})
+
+
+def _offers_atmos(provider: Any, opts: Any) -> bool:
+    """Whether a provider would be asked for an actual Dolby Atmos stream.
+
+    A JS extension answers through the quality options its manifest
+    declares (Tidal's ``DOLBY_ATMOS``, Amazon's ``ac4``); one with none
+    silently maps an Atmos request onto lossless stereo. A per-service
+    quality the user picked counts, so an Amazon override of ``best`` is
+    not Atmos (the caller keeps such a provider anyway, as a choice).
+    """
+    if hasattr(provider, "select_quality"):
+        from ..extensions.quality_options import is_atmos_option
+
+        chosen = str(
+            provider.select_quality(
+                "DOLBY_ATMOS", _extension_quality_override(provider, opts)
+            )
+        )
+        options = getattr(provider, "quality_options", None) or []
+        return any(
+            str(option.get("id")) == chosen and is_atmos_option(option)
+            for option in options
+            if isinstance(option, dict)
+        )
+    return quality_for_provider(provider.name, "DOLBY_ATMOS") == "DOLBY_ATMOS"
+
+
+def _strict_atmos_providers(providers: list[Any], opts: Any) -> list[Any]:
+    """With Dolby Atmos requested and quality fallback off, only the
+    providers that can serve Atmos; otherwise `providers` unchanged."""
+    if opts.allow_fallback or normalize_quality(opts.quality) != "DOLBY_ATMOS":
+        return providers
+    # A quality picked for one service (Amazon's Dolby Digital Plus, say) is
+    # the user's own choice for it, not a fallback: that provider stays.
+    kept = [
+        provider
+        for provider in providers
+        if _extension_quality_override(provider, opts) or _offers_atmos(provider, opts)
+    ]
+    skipped = [provider.name for provider in providers if provider not in kept]
+    if skipped:
+        logger.info(
+            "[quality] Dolby Atmos without fallback: skipping %s (no Atmos option)",
+            ", ".join(skipped),
+        )
+    return kept
+
+
+def _required_tier(quality: str) -> str | None:
+    """The minimum delivered tier a strict (no-fallback) run accepts, or
+    None when the request is not one the file itself can be checked
+    against: HIGH/LOW never asked for lossless."""
+    requested = normalize_quality(quality)
+    if requested == "DOLBY_ATMOS":
+        return "ATMOS"
+    if requested in ("HI_RES_LOSSLESS", "HI_RES"):
+        return "HI_RES"
+    if requested == "LOSSLESS":
+        return "LOSSLESS"
+    return None
+
+
+def _delivered_tier(path: str) -> tuple[str, str] | None:
+    """`(tier, description)` of a downloaded file, or None when it cannot
+    be read — an unreadable file is never rejected on a guess."""
+    try:
+        from mutagen import File as MutagenFile
+
+        src = Path(path)
+        info = getattr(MutagenFile(str(src)), "info", None)
+        if info is None:
+            return None
+        rate = int(getattr(info, "sample_rate", 0) or 0)
+        depth = int(getattr(info, "bits_per_sample", 0) or 0)
+        channels = int(getattr(info, "channels", 0) or 0)
+        suffix = src.suffix.lower()
+        codec = ""
+        if suffix in _MP4_SUFFIXES:
+            codec = str(getattr(info, "codec", "") or "").lower()
+            lossless = codec.startswith(("alac", "flac"))
+        else:
+            lossless = suffix in _LOSSLESS_SUFFIXES
+        dolby = codec.startswith(_DOLBY_CODECS) or suffix in _DOLBY_SUFFIXES
+    except Exception as exc:
+        logger.debug("[quality] could not probe %s: %s", path, exc)
+        return None
+    if codec.startswith(("enca", "encv")):
+        # A CENC sample entry: the key was never applied, so no player can
+        # read it whatever is inside.
+        return "ENCRYPTED", "a still-encrypted file"
+    if dolby:
+        return "ATMOS", f"Dolby {codec or suffix.lstrip('.')}"
+    if not rate:
+        return None
+    desc = f"{depth}-bit/{rate / 1000:g} kHz" if depth else f"{rate / 1000:g} kHz"
+    if channels > 2:
+        # Multichannel lossless (a 5.1 FLAC) is spatial, not a downgrade.
+        return "ATMOS", f"{channels}-channel {desc}"
+    if channels:
+        desc = f"{desc} {'stereo' if channels == 2 else 'mono'}"
+    if not lossless:
+        return "LOSSY", f"lossy {desc}"
+    if depth > 16 or rate > 48000:
+        return "HI_RES", desc
+    return "LOSSLESS", desc
+
+
+async def _reject_quality_downgrade_async(
+    result: DownloadResult,
+    opts: DownloadOptions,
+    provider: Any,
+) -> DownloadResult:
+    """`result` unchanged, or a failure when quality fallback is off and the
+    provider quietly served less than the requested quality.
+
+    Most services hand back their best available stream instead of refusing
+    a tier they lack — a 16-bit file for a Hi-Res request — so the
+    extension reports success either way. With fallback off the file is
+    deleted and the next provider gets the same request at the same
+    quality; the track fails only when none of them has it.
+    """
+    if opts.allow_fallback or not result.file_path:
+        return result
+    # A quality picked for this one service (Settings → per-extension
+    # quality) is the user's choice, not a fallback.
+    if _extension_quality_override(provider, opts):
+        return result
+    required = _required_tier(opts.quality)
+    if required is None:
+        return result
+    delivered = await asyncio.to_thread(_delivered_tier, result.file_path)
+    if delivered is None or _TIER_RANK[delivered[0]] >= _TIER_RANK[required]:
+        return result
+
+    wanted = normalize_quality(opts.quality)
+    logger.warning(
+        "[%s] Quality below requested (%s, wanted %s) and fallback is off",
+        provider.name,
+        delivered[1],
+        wanted,
+    )
+    with contextlib.suppress(OSError):
+        Path(result.file_path).unlink()
+    return DownloadResult.fail(
+        provider.name,
+        f"Quality below requested: got {delivered[1]}, wanted {wanted} "
+        "(quality fallback is off)",
+    )
+
+
 async def _record_provider_outcome(
     provider_name: str,
     success: bool,
@@ -1166,7 +1325,10 @@ _DEFINITIVE_FAILURE = re.compile(
     # same request returns the same file, which is downloaded only to be
     # removed again (issue #284). A *truncated* short track is not in here:
     # that one can be a dropped transfer.
-    r"\bWrong track:|\bWrong duration: file is",
+    r"\bWrong track:|\bWrong duration: file is|"
+    # Fallback off and the provider only has a lower tier: asking again
+    # returns the same lower-tier stream.
+    r"\bQuality below requested:",
     re.IGNORECASE,
 )
 
@@ -1199,6 +1361,12 @@ async def _download_one_pass_async(
 
     stop_event = asyncio.Event()
     DownloadManager()
+    providers = _strict_atmos_providers(providers, opts)
+    if not providers:
+        return DownloadResult.fail(
+            "none",
+            "No enabled provider offers Dolby Atmos (quality fallback is off)",
+        )
     errors: dict[str, str] = {}
     #: Providers that answered "not there" (see _definitive_failure).
     settled: set[str] = set()
@@ -1557,6 +1725,15 @@ async def _download_one_pass_async(
                     result,
                     provider.name,
                 )
+
+            if result.success and not result.skipped:
+                result = await _reject_quality_downgrade_async(
+                    result,
+                    opts,
+                    provider,
+                )
+                if not result.success:
+                    _restore_metadata(metadata, requested)
 
             if result.success and not result.skipped:
                 await _inject_provider_metadata_async(

@@ -594,9 +594,12 @@ def parse_args(profile_defaults: dict | None = None) -> argparse.Namespace:
         "--no-fallback",
         action="store_false",
         dest="allow_fallback",
-        help="Fail a track outright when the requested --quality is not "
-        "available, instead of accepting a lower tier. A Dolby Atmos HTTP "
-        "502 fails the track as unavailable.",
+        help="Never accept a lower tier than --quality: a provider that "
+        "serves less (e.g. 16-bit for a Hi-Res request) has its file "
+        "discarded and the next provider is tried at the same quality; the "
+        "track fails only when none has it. With DOLBY_ATMOS only providers "
+        "whose extension offers Atmos (e.g. Tidal, Amazon) are tried, and a "
+        "stereo file is rejected.",
     )
     parser.add_argument(
         "--use-track-numbers",
