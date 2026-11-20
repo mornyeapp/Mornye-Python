@@ -22,6 +22,20 @@ class MusicExtrasMixin:
         log: Any
         _is_approved_path: Any
 
+    # ── Artist page sections ────────────────────────────────────────────────
+
+    def get_artist_overview(self, url: str) -> dict:
+        """Popular tracks, discography, related artists and the rest of a
+        Spotify artist page (core/artist_overview.py)."""
+        from ..core.artist_overview import fetch_artist_overview_async
+
+        try:
+            data = run_sync(fetch_artist_overview_async(str(url or "")), timeout=60)
+        except Exception as e:
+            self.log(f"[artist] Could not load the artist page sections: {e}", "debug")
+            return {"status": "error", "error": str(e)}
+        return {"status": "ok", **data}
+
     # ── Weekly releases ─────────────────────────────────────────────────────
 
     def get_weekly_releases(self, days: int = 7, refresh: bool = False) -> dict:

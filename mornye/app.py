@@ -594,6 +594,7 @@ class MornyeAPI(
         artist_url="",
         artists_data=None,
         artist_concerts=None,
+        artist_avatar="",
     ) -> None:
         payload = {
             "title": title,
@@ -625,6 +626,8 @@ class MornyeAPI(
             payload["artist_biography"] = artist_biography
         if artist_concerts:
             payload["artist_concerts"] = artist_concerts
+        if artist_avatar:
+            payload["artist_avatar"] = artist_avatar
         if release_date:
             payload["release_date"] = release_date
         if track_count is not None:
@@ -1622,6 +1625,7 @@ class MornyeAPI(
                     artist_verified=collection_meta.get("verified", False),
                     artist_biography=collection_meta.get("biography", ""),
                     artist_concerts=collection_meta.get("concerts"),
+                    artist_avatar=collection_meta.get("avatar") or cover,
                 )
             else:
                 self.set_metadata(

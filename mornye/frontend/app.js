@@ -1834,7 +1834,8 @@ window.app_set_metadata = (data) => {
       d.release_date,
       d.track_count,
       d.artist_url,
-      d.artists_data
+      d.artists_data,
+      d.artist_avatar
     );
     g_artistConcerts = Array.isArray(d.artist_concerts) ? d.artist_concerts : [];
     renderConcertsButton(d.artist);
@@ -2255,7 +2256,7 @@ function tidyOwnerRow() {
 //: The collection on screen, for "Import playlist" (importFetchedPlaylist).
 let g_albumImport = { title: '', description: '', cover: '' };
 
-function setAlbumCard(title, artist, coverUrl, quality, description, followers, owner, ownerAvatar, source, artistListeners, artistRank, artistVerified, artistBiography, releaseDate, trackCount, artistUrl, artistsData) {
+function setAlbumCard(title, artist, coverUrl, quality, description, followers, owner, ownerAvatar, source, artistListeners, artistRank, artistVerified, artistBiography, releaseDate, trackCount, artistUrl, artistsData, artistAvatar) {
   g_albumImport = { title: title || '', description: description || '', cover: coverUrl || '' };
   g_albumReleaseDate = releaseDate || '';
   g_albumTrackCount = trackCount || 0;
@@ -2304,6 +2305,25 @@ function setAlbumCard(title, artist, coverUrl, quality, description, followers, 
   // For artists, show rank or listeners; for playlists, show quality
   const isArtistCard = !!(artistRank || artistListeners || artistVerified || artistBiography);
   setArtistHero(isArtistCard, coverUrl);
+  if (isArtistCard) {
+    // On the banner, Spotify-style: "Verified Artist" over the name, the
+    // monthly listeners under it.
+    const listenerCount = Number(artistListeners) || 0;
+    $('album-title').innerHTML = `
+      ${artistVerified ? `<span class="hero-verified"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#3d91f4"/><path d="M8 12.5l2.5 2.5 5.5-5.5" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Verified Artist</span>` : ''}
+      <span class="hero-name">${escHtml(title || '—')}</span>
+      ${listenerCount > 0 ? `<span class="hero-listeners">${listenerCount.toLocaleString('en-US')} monthly listeners</span>` : ''}`;
+  }
+  g_artistAbout = isArtistCard ? {
+    name: title || '',
+    avatar: artistAvatar || coverUrl || '',
+    rank: artistRank,
+    listeners: artistListeners,
+    followers,
+    bio: artistBiography || description || '',
+  } : null;
+  if (!isArtistCard) setArtistOverviewMode(false);
+  renderArtistAbout();
 
   if (isArtistCard) {
     const bio = artistBiography || description || '';
@@ -2693,6 +2713,7 @@ function showSingleTrackCard(t) {
 }
 
 function closeAlbumCard() {
+  setArtistOverviewMode(false);
   setFetchingState(false);
   stopCurrentPreview();
   $('album-card').classList.add('hidden');
@@ -2955,6 +2976,281 @@ function artistHighlightsEl(tracks, albumMap) {
   return wrap;
 }
 
+// "About", under Latest Release / Top Songs: the artist's picture with the
+// world rank, listeners and biography over it. The hero above keeps only the
+// name and the download controls, the way Spotify lays out an artist page.
+//
+// Called from setAlbumCard (metadata) and injectArtistTabs (tracks): the two
+// arrive on separate callbacks in either order, so whichever comes second
+// is the one that actually draws it.
+let g_artistAbout = null;
+function renderArtistAbout() {
+  const host = document.getElementById('artist-tabs-section');
+  document.getElementById('artist-about')?.remove();
+  const a = g_artistAbout;
+  if (!host || !a) return;
+  const num = v => (v === 0 || v) && Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : 0;
+  const listeners = num(a.listeners), followers = num(a.followers), rank = num(a.rank);
+  const albums = new Set(currentTracks.map(t => t.album_url || t.album || t.album_name || t.release).filter(Boolean)).size;
+  const tracks = currentTracks.length;
+  const facts = [];
+  if (followers) facts.push(`${followers.toLocaleString('en-US')} followers`);
+  if (albums) facts.push(`${albums} album${albums !== 1 ? 's' : ''}`);
+  if (tracks) facts.push(`${tracks} track${tracks !== 1 ? 's' : ''}`);
+  if (!listeners && !rank && !a.bio && !facts.length) return;
+
+  const sec = document.createElement('section');
+  sec.id = 'artist-about';
+  sec.className = 'artist-about';
+  const img = httpUrlOrNull(a.avatar);
+  sec.innerHTML = `<h3 class="ah-title">About</h3>
+    <div class="about-card${img ? '' : ' no-photo'}">
+      ${img ? `<img class="about-photo" src="${escHtml(img)}" alt="" loading="lazy">` : ''}
+      ${rank ? `<div class="about-rank"><strong>#${rank}</strong><span>in the world</span></div>` : ''}
+      <div class="about-text">
+        ${listeners ? `<p class="about-listeners">${listeners.toLocaleString('en-US')} monthly listeners</p>` : ''}
+        ${facts.length ? `<p class="about-facts">${facts.map(escHtml).join(' · ')}</p>` : ''}
+        <p class="about-bio"></p>
+        <button type="button" class="about-more" hidden aria-expanded="false">See more…</button>
+      </div>
+    </div>`;
+  // textContent: the bio is remote text (see setAlbumCard).
+  const bio = sec.querySelector('.about-bio');
+  // Providers send it with HTML entities left in ("World&#39;s"); decoded
+  // through an inert document, then set as text.
+  bio.textContent = a.bio.includes('&')
+    ? (new DOMParser().parseFromString(a.bio, 'text/html').documentElement.textContent || a.bio)
+    : a.bio;
+  if (!a.bio) bio.remove();
+  const more = sec.querySelector('.about-more');
+  more.onclick = () => {
+    const open = sec.classList.toggle('expanded');
+    more.textContent = open ? 'See less' : 'See more…';
+    more.setAttribute('aria-expanded', String(open));
+  };
+  // At the foot of the Spotify-style overview when there is one, otherwise
+  // after the highlights, ahead of the Albums/Tracks tabs.
+  const overview = host.querySelector('#artist-overview');
+  const highlights = host.querySelector('.artist-highlights');
+  if (overview) overview.appendChild(sec);
+  else if (highlights) highlights.after(sec);
+  else host.prepend(sec);
+  if (a.bio) requestAnimationFrame(() => {
+    more.hidden = !(bio.scrollHeight > bio.clientHeight + 1);
+  });
+}
+
+// ── Artist page overview ─────────────────────────────────────────────────
+// A Spotify artist link opens like Spotify's own page: Popular, the
+// artist's pick, Discography, the playlists that feature the artist, Fans
+// also like, Appears on and About (core/artist_overview.py sends the data).
+// The full track list — what selection and Download All work on — sits
+// behind Discography's "Show all", with a way back.
+//
+// Anything that can be opened opens in Mornye, like pasting its link; the
+// round button on a release's cover downloads it straight away, but only
+// for releases whose tracks are in this artist's list.
+let g_artistOverviewToken = 0;
+
+function artistCardEl(item, { round = false, sub = '', albumMap = null } = {}) {
+  const card = document.createElement('div');
+  card.className = 'ao-card' + (round ? ' round' : '');
+  card.setAttribute('role', 'listitem');
+  const img = httpUrlOrNull(round ? item.avatar : item.cover);
+  const album = albumMap && item.url ? albumMap.get(item.url) : null;
+  card.innerHTML = `
+    <div class="ao-card-img">${img ? `<img src="${escHtml(img)}" alt="" loading="lazy">` : '<span aria-hidden="true">🎵</span>'}
+      ${album ? `<button type="button" class="ao-card-dl" title="Download" aria-label="Download ${escHtml(item.name)}">${ARTIST_DL_SVG}</button>` : ''}
+    </div>
+    <span class="ao-card-name" title="${escHtml(item.name)}">${escHtml(item.name || '—')}</span>
+    ${sub ? `<span class="ao-card-sub">${escHtml(sub)}</span>` : ''}`;
+  if (item.url) {
+    makeActivatable(card);
+    card.onclick = () => goToUrl(item.url);
+  }
+  if (album) card.querySelector('.ao-card-dl').onclick = e => { e.stopPropagation(); downloadTrackIndices(album.indices); };
+  return card;
+}
+
+function artistShelfEl(title, items, opts = {}) {
+  if (!items?.length) return null;
+  const sec = document.createElement('section');
+  sec.className = 'ao-sec';
+  sec.innerHTML = `<div class="ao-head"><h3 class="ah-title">${escHtml(title)}</h3>
+      <button type="button" class="ao-showall" aria-expanded="false">Show all</button></div>
+    <div class="ao-row" role="list"></div>`;
+  const row = sec.querySelector('.ao-row');
+  items.forEach(it => row.appendChild(artistCardEl(it, { ...opts, sub: opts.subOf ? opts.subOf(it) : '' })));
+  // "Show all" lays the shelf out as a grid of every card; the row itself
+  // scrolls sideways with no scrollbar (trackpad / touch).
+  const all = sec.querySelector('.ao-showall');
+  all.onclick = () => {
+    const open = sec.classList.toggle('show-all');
+    all.textContent = open ? 'Show less' : 'Show all';
+    all.setAttribute('aria-expanded', String(open));
+    if (!open) sec.scrollIntoView({ block: 'nearest' });
+  };
+  return sec;
+}
+
+const RELEASE_KIND = { album: 'Album', single: 'Single', ep: 'EP', compilation: 'Compilation' };
+const releaseSub = r => [r.year, RELEASE_KIND[r.type] || ''].filter(Boolean).join(' · ');
+
+function artistPopularEl(top, tracks) {
+  if (!top.length) return null;
+  // By Spotify id first; a hit Spotify credits to another release of the
+  // same song (a single vs. the album) falls back to its title.
+  const byId = new Map(tracks.map((t, i) => [t.id, i]));
+  const key = v => String(v || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const byTitle = new Map();
+  tracks.forEach((t, i) => { const k = key(t.title || t.name); if (k && !byTitle.has(k)) byTitle.set(k, i); });
+  const sec = document.createElement('section');
+  sec.className = 'ao-sec ao-popular';
+  sec.innerHTML = `<h3 class="ah-title">Popular</h3><div class="ao-pop" role="list"></div>
+    ${top.length > 5 ? '<button type="button" class="ao-more" aria-expanded="false">Show more</button>' : ''}`;
+  const list = sec.querySelector('.ao-pop');
+  top.forEach((t, n) => {
+    const idx = byId.has(t.id) ? byId.get(t.id) : byTitle.get(key(t.name));
+    const row = document.createElement('div');
+    row.className = 'ao-pop-row' + (n >= 5 ? ' extra' : '');
+    row.setAttribute('role', 'listitem');
+    const cover = httpUrlOrNull(t.cover);
+    row.innerHTML = `
+      <span class="ao-pop-n">${n + 1}</span>
+      <div class="ah-top-cover">${cover ? `<img src="${escHtml(cover)}" alt="" loading="lazy">` : ''}</div>
+      <div class="ah-top-info">
+        <span class="ah-top-name">${escHtml(t.name)}</span>
+        <span class="ah-muted">${t.explicit ? '<span class="ao-explicit" title="Explicit">E</span> ' : ''}${escHtml((t.artists || []).join(', '))}</span>
+      </div>
+      <span class="ah-muted ah-num ao-pop-plays">${t.plays ? t.plays.toLocaleString('en-US') : ''}</span>
+      <span class="ah-muted ah-num">${t.duration_ms ? formatDuration(t.duration_ms) : ''}</span>
+      ${idx !== undefined ? `<button type="button" class="ah-dl" title="Download" aria-label="Download ${escHtml(t.name)}">${ARTIST_DL_SVG}</button>` : '<span></span>'}`;
+    if (idx !== undefined) row.querySelector('.ah-dl').onclick = e => { e.stopPropagation(); downloadTrackIndices([idx]); };
+    if (t.url) {
+      const name = row.querySelector('.ah-top-name');
+      name.classList.add('ao-link');
+      makeActivatable(name, 'link');
+      name.onclick = () => goToUrl(t.url);
+    }
+    list.appendChild(row);
+  });
+  const more = sec.querySelector('.ao-more');
+  if (more) more.onclick = () => {
+    const open = sec.classList.toggle('expanded');
+    more.textContent = open ? 'Show less' : 'Show more';
+    more.setAttribute('aria-expanded', String(open));
+  };
+  return sec;
+}
+
+function artistPickEl(pick) {
+  if (!pick?.url) return null;
+  const sec = document.createElement('section');
+  sec.className = 'ao-sec ao-pick';
+  const cover = httpUrlOrNull(pick.cover);
+  sec.innerHTML = `<h3 class="ah-title">Artist pick</h3>
+    <div class="ao-pick-card">
+      <div class="ao-pick-cover">${cover ? `<img src="${escHtml(cover)}" alt="" loading="lazy">` : ''}</div>
+      <div class="ao-pick-info">
+        ${pick.comment ? `<span class="ao-pick-note">${escHtml(pick.comment)}</span>` : ''}
+        <span class="ah-latest-name">${escHtml(pick.name)}</span>
+        <span class="ah-muted">${escHtml(RELEASE_KIND[pick.type] || (pick.type === 'playlist' ? 'Playlist' : ''))}</span>
+      </div>
+    </div>`;
+  const card = sec.querySelector('.ao-pick-card');
+  makeActivatable(card);
+  card.onclick = () => goToUrl(pick.url);
+  return sec;
+}
+
+function artistDiscographyEl(disc, albumMap, onShowAll) {
+  const groups = [
+    ['popular', 'Popular releases'],
+    ['albums', 'Albums'],
+    ['singles', 'Singles and EPs'],
+    ['compilations', 'Compilations'],
+  ].filter(([k]) => disc?.[k]?.length);
+  if (!groups.length) return null;
+  const sec = document.createElement('section');
+  sec.className = 'ao-sec';
+  sec.innerHTML = `<div class="ao-head"><h3 class="ah-title">Discography</h3>
+      <button type="button" class="ao-showall">Show all</button></div>
+    <div class="ao-chips" role="group" aria-label="Release type"></div>
+    <div class="ao-row" role="list"></div>`;
+  const chips = sec.querySelector('.ao-chips');
+  const row = sec.querySelector('.ao-row');
+  const show = key => {
+    chips.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.k === key)));
+    row.textContent = '';
+    row.scrollLeft = 0;
+    disc[key].forEach(r => row.appendChild(artistCardEl(r, { albumMap, sub: releaseSub(r) })));
+  };
+  groups.forEach(([k, label]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'ao-chip';
+    b.dataset.k = k;
+    b.textContent = label;
+    b.onclick = () => show(k);
+    chips.appendChild(b);
+  });
+  sec.querySelector('.ao-showall').onclick = onShowAll;
+  show(groups[0][0]);
+  return sec;
+}
+
+function setArtistOverviewMode(on) {
+  document.querySelector('.list-container')?.classList.toggle('artist-overview-mode', !!on);
+}
+
+async function loadArtistOverview(host, tracks, albumMap) {
+  const token = ++g_artistOverviewToken;
+  const url = currentUrl;
+  let data = null;
+  if (window.pywebview?.api?.get_artist_overview && /spotify(\.com\/(intl-[a-z-]+\/)?artist\/|:artist:)/i.test(url)) {
+    try { data = await window.pywebview.api.get_artist_overview(url); } catch (e) { data = null; }
+  }
+  if (token !== g_artistOverviewToken || !host.isConnected) return; // another artist opened meanwhile
+  host.querySelector('#artist-overview')?.remove();
+  if (!data || data.status !== 'ok') {
+    // No overview (another provider, or Spotify refused): the earlier
+    // layout — highlights over the full list — rather than an empty page.
+    setArtistOverviewMode(false);
+    const highlights = artistHighlightsEl(tracks, albumMap);
+    if (highlights) host.prepend(highlights);
+    renderArtistAbout();
+    return;
+  }
+  const byUrl = new Map([...albumMap.values()].filter(a => a.url).map(a => [a.url, a]));
+  const ov = document.createElement('div');
+  ov.id = 'artist-overview';
+  const top = document.createElement('div');
+  top.className = 'ao-top';
+  const pop = artistPopularEl(data.top_tracks || [], tracks);
+  const pick = artistPickEl(data.pick);
+  if (pop) top.appendChild(pop);
+  if (pick) top.appendChild(pick);
+  if (top.childElementCount) ov.appendChild(top);
+  const name = g_artistAbout?.name || 'the artist';
+  const showAll = () => {
+    setArtistOverviewMode(false);
+    switchArtistTab('albums');
+    host.querySelector('.artist-tabs-bar')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  const playlistSub = p => p.owner ? `By ${p.owner}` : '';
+  [
+    artistDiscographyEl(data.discography, byUrl, showAll),
+    artistShelfEl(`Featuring ${name}`, data.featuring, { subOf: p => p.description || playlistSub(p) }),
+    artistShelfEl('Artist playlists', data.playlists, { subOf: playlistSub }),
+    artistShelfEl('Discovered on', data.discovered_on, { subOf: p => p.description || playlistSub(p) }),
+    artistShelfEl('Fans also like', data.related_artists, { round: true, subOf: () => 'Artist' }),
+    artistShelfEl('Appears on', data.appears_on, { albumMap: byUrl, subOf: r => [r.year, (r.artists || []).join(', ')].filter(Boolean).join(' · ') }),
+  ].forEach(el => el && ov.appendChild(el));
+  host.prepend(ov);
+  setArtistOverviewMode(true);
+  renderArtistAbout();
+}
+
 function injectArtistTabs(tracks) {
   document.getElementById('artist-tabs-section')?.remove();
 
@@ -2980,8 +3276,8 @@ function injectArtistTabs(tracks) {
 
   const section = document.createElement('div');
   section.id = 'artist-tabs-section';
-  const highlights = artistHighlightsEl(tracks, albumMap);
-  if (highlights) section.appendChild(highlights);
+  // The overview (or, failing that, the highlights) is put in by
+  // loadArtistOverview once it arrives.
 
   // ── Tab bar ──
   const tabBar = document.createElement('div');
@@ -2998,6 +3294,15 @@ function injectArtistTabs(tracks) {
     btn.onclick = () => switchArtistTab(tab.id);
     tabBar.appendChild(btn);
   });
+  const back = document.createElement('button');
+  back.type = 'button';
+  back.className = 'artist-tab ao-back';
+  back.textContent = '← Overview';
+  back.onclick = () => {
+    setArtistOverviewMode(true);
+    $('artist-overview')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  tabBar.prepend(back);
   section.appendChild(tabBar);
 
   // ── Albums Panel ──
@@ -3057,6 +3362,18 @@ function injectArtistTabs(tracks) {
   // Insert before track-controls
   const listContainer = document.querySelector('.list-container');
   listContainer.insertBefore(section, $('track-controls'));
+  // Spotify links start on the overview; the list shows once it is asked for.
+  const spotifyArtist = /spotify(\.com\/(intl-[a-z-]+\/)?artist\/|:artist:)/i.test(currentUrl);
+  setArtistOverviewMode(spotifyArtist);
+  if (spotifyArtist) {
+    const loading = document.createElement('div');
+    loading.id = 'artist-overview';
+    loading.className = 'ao-loading';
+    loading.textContent = 'Loading the artist page…';
+    section.prepend(loading);
+  }
+  renderArtistAbout();
+  loadArtistOverview(section, tracks, albumMap);
 
   // Load gallery in background
   loadArtistGallery(galleryPanel);

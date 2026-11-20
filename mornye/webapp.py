@@ -125,6 +125,7 @@ ALLOWED_METHODS: set[str] = {
     "clear_download_history",
     "clear_fetch_history",
     "get_artist_images",
+    "get_artist_overview",
     "get_ffmpeg_status",
     "get_node_status",
     "save_settings",
