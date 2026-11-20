@@ -192,6 +192,7 @@ ALLOWED_METHODS: set[str] = {
     "get_library_default_folder",
     "scan_music_library",
     "cancel_music_library_scan",
+    "cancel_local_scan",
     "get_track_thumb",
     "get_player_playlists",
     "create_player_playlist",

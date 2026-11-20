@@ -238,3 +238,88 @@ def test_serialized_entries_carry_the_thumbnail_not_the_full_cover():
     row = MornyeAPI()._serialize_scan_entry(LocalScanEntry(info=info))
 
     assert len(row["old_cover_base64"]) < len(info.old_cover_base64) / 4
+
+
+def test_stop_during_the_listing_of_a_share(folder, work):
+    api = MornyeAPI()
+    rec = _Recorder()
+
+    def push(name, payload):
+        rec(name, payload)
+        if (
+            name == "app_local_scan_progress"
+            and payload["phase"] == "listing"
+            and payload["done"] == 1
+        ):
+            api.cancel_local_scan()
+
+    api._push = push
+    api._local_progress_interval = 0
+    api._local_scan_id += 1
+    scan_id = api._local_scan_id
+    api._scan_local_thread(scan_id, str(folder))
+
+    assert work == []
+    assert rec.of("app_local_scan_cancelled") == [{"scan": scan_id}]
+    assert rec.of("app_local_scan_done") == [] and rec.of("app_local_scan_error") == []
+
+
+def test_stop_keeps_the_batches_already_done(folder, work, monkeypatch):
+    """What was worked out before Stop is stored; the rest is done next time."""
+    api = MornyeAPI()
+    rec = _Recorder()
+
+    def push(name, payload):
+        rec(name, payload)
+        if name == "app_local_scan_chunk" and not payload["cached"]:
+            api.cancel_local_scan()  # right after the first batch
+
+    from mornye.core import local_processor as lp
+
+    real = lp.scan_and_match_files_async
+
+    async def small_batches(files, **kw):
+        kw["batch_size"] = 1
+        await real(files, **kw)
+
+    monkeypatch.setattr(lp, "scan_and_match_files_async", small_batches)
+    api._push = push
+    api._local_progress_interval = 0
+    api._local_scan_id += 1
+    api._scan_local_thread(api._local_scan_id, str(folder))
+
+    assert work == ["a.flac"]
+    assert [Path(p).name for p in local_scan_cache.stored(str(folder))] == ["a.flac"]
+    work.clear()
+    _scan(api, folder)
+    assert sorted(work) == ["b.flac", "c.flac"]
+
+
+def test_a_batch_cut_short_is_not_handed_on(work):
+    """Stopped while fingerprinting, a batch would be stored half settled."""
+    batches: list[int] = []
+    calls = {"n": 0}
+
+    def cancelled() -> bool:
+        calls["n"] += 1
+        return calls["n"] > 2  # true by the time the batch is matched
+
+    asyncio.run(
+        scan_and_match_files_async(
+            ["/m/a.flac", "/m/b.flac"],
+            on_batch=lambda entries: batches.append(len(entries)),
+            cancelled=cancelled,
+        )
+    )
+
+    assert batches == []
+
+
+def test_cancel_is_reachable_from_the_web_ui():
+    from mornye import webapp
+
+    shim = (Path(webapp.__file__).parent / "frontend" / "web-shim.js").read_text(
+        encoding="utf-8"
+    )
+    assert '"cancel_local_scan"' in Path(webapp.__file__).read_text(encoding="utf-8")
+    assert "'cancel_local_scan'" in shim

@@ -173,6 +173,7 @@
  "local-path-input",
  "local-results-wrap",
  "local-scan",
+ "local-scan-stop",
  "local-scan-text",
  "local-scan-track",
  "local-selected-count",

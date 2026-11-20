@@ -8048,6 +8048,31 @@ window.app_local_scan_progress = function(p) {
   paintScanBar('local-scan', p, localScan);
 };
 
+// Stops the scan in progress: what was worked out so far stays in the
+// list (and is stored, so scanning again picks up from there).
+async function cancelLocalScan() {
+  const stop = $('local-scan-stop');
+  if (stop) stop.disabled = true;
+  let res = null;
+  try {
+    res = await window.pywebview?.api?.cancel_local_scan?.();
+  } finally {
+    if (stop) stop.disabled = false;
+  }
+  if (!res || res.status !== 'ok') toastMgr.error('Could not stop the scan.');
+}
+
+window.app_local_scan_cancelled = function(p) {
+  if (localScan.id === null || p?.scan !== localScan.id) return;
+  if (localScan.raf) { cancelAnimationFrame(localScan.raf); localScan.raf = 0; }
+  const n = localScanData.length;
+  // Nothing found yet is not "no audio files in this folder".
+  if (n) renderLocalTracksKeepingChoices();
+  paintScanBar('local-scan', null, localScan);
+  setTaBtnState($('btn-scan-local'), 'default');
+  toastMgr.info(n ? `Scan stopped: ${n} file${n === 1 ? '' : 's'} shown.` : 'Scan stopped.');
+};
+
 window.app_local_scan_done = function(p) {
   if (!localScanAccept(p)) return;
   localScanData = mergeLocalResults(localScanData, [], p.removed);

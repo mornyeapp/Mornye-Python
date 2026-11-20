@@ -17,6 +17,10 @@ from typing import TYPE_CHECKING, Any
 from ..core.loop_runner import run_sync
 
 
+class _ScanCancelled(Exception):
+    """Stops the folder listing of a scan that was cancelled or replaced."""
+
+
 class LocalTaggingMixin:
     if TYPE_CHECKING:
         download_dir: str
@@ -107,6 +111,8 @@ class LocalTaggingMixin:
         last_progress = [0.0]
 
         def progress(phase: str, done: int, total: int, force: bool = False) -> None:
+            if not current():
+                raise _ScanCancelled  # also stops a long listing of a share
             now = time.monotonic()
             if not force and now - last_progress[0] < self._local_progress_interval:
                 return
@@ -143,6 +149,8 @@ class LocalTaggingMixin:
             todo: list[str] = []
             stats: dict[str, tuple[int, int]] = {}
             for f in files:
+                if not current():
+                    return
                 try:
                     st = f.stat()
                 except OSError:
@@ -192,11 +200,24 @@ class LocalTaggingMixin:
                     "removed": gone,
                 },
             )
+        except _ScanCancelled:
+            pass  # cancel_local_scan has told the page; what was done is stored
         except Exception as e:
             self.log(f"[local-tagger] scan failed: {e}", "error")
             self._push("app_local_scan_error", str(e))
         finally:
             db.close_thread_connection()
+
+    def cancel_local_scan(self) -> dict:
+        """Stops the Fix Local Files scan in progress: the folder listing at
+        the next file found, the matching before its next batch or
+        fingerprint. The results already worked out stay in the list and
+        are stored, so scanning again picks up from there. The page hears
+        'app_local_scan_cancelled'."""
+        scan_id = self._local_scan_id
+        self._local_scan_id += 1  # the running scan is no longer current
+        self._push("app_local_scan_cancelled", {"scan": scan_id})
+        return {"status": "ok", "scan": scan_id}
 
     def scan_local(self, path: str) -> dict:
         """Phase 5, Task 2: scans `path` (file or folder) and matches every

@@ -29,3 +29,15 @@ test('Fix Local Files follows the scan in parts, with the shared scan bar', () =
   assert.match(html, /class="scan-bar hidden" id="local-scan"/);
   assert.match(html, /class="scan-bar hidden" id="plb-scan"/);
 });
+
+test('a Fix Local Files scan can be stopped from its bar', () => {
+  const html = source('index.html');
+  assert.match(html, /id="local-scan-stop"[^>]*data-onclick="cancelLocalScan\(\)"/);
+  const app = source('app.js');
+  assert.match(app, /^async function cancelLocalScan\(\)/m);
+  assert.match(app, /cancel_local_scan/);
+  const start = app.indexOf('window.app_local_scan_cancelled = function');
+  const body = app.slice(start, app.indexOf('\n};\n', start));
+  assert.match(body, /paintScanBar\('local-scan', null/);
+  assert.match(body, /setTaBtnState\(\$\('btn-scan-local'\), 'default'\)/);
+});

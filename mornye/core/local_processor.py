@@ -141,7 +141,8 @@ async def scan_and_match_files_async(
     Each batch is read, matched and (for what its tags could not settle)
     identified by fingerprint, then handed to `on_batch`, so a long scan of
     a network share shows its results as it goes instead of all at the end.
-    Stops between batches once `cancelled()` is true.
+    Stops as soon as `cancelled()` is true: between batches, or within one
+    before its next fingerprint (that batch is then dropped, not handed on).
     """
     semaphore = asyncio.Semaphore(MATCH_CONCURRENCY)
 
@@ -175,12 +176,19 @@ async def scan_and_match_files_async(
                     "[local_processor] shared metadata client unavailable: %s", exc
                 )
         entries = list(await asyncio.gather(*(_match_one(i, client) for i in infos)))
+        if cancelled():
+            return
         entries = await _identify_unresolved_async(
             entries,
             client=client,
             candidates_per_file=candidates_per_file,
             acoustid_key=acoustid_key,
+            cancelled=cancelled,
         )
+        # A batch cut short is not handed on: half identified, it would be
+        # stored as if its files had been settled.
+        if cancelled():
+            return
         on_batch(entries)
 
 
@@ -207,12 +215,15 @@ async def _identify_unresolved_async(
     client,
     candidates_per_file: int,
     acoustid_key: str = "",
+    cancelled: Callable[[], bool] | None = None,
 ) -> list[LocalScanEntry]:
     """Second pass over the files text matching could not settle: identify
     them by sound, then re-match on the ISRC that comes back.
 
     Runs strictly on the leftovers. On a folder whose tags are in decent
     shape this does nothing at all and costs one availability check.
+    Stops before the next file once `cancelled()` is true (each one is a
+    fingerprint of the whole file, seconds on a network share).
     """
     from .acoustid_lookup import identify_isrc_async
     from .acoustid_lookup import is_available as acoustid_available
@@ -230,6 +241,8 @@ async def _identify_unresolved_async(
     # so concurrency here would only queue up inside the limiter, and fpcalc
     # is a subprocess per file.
     for index in pending:
+        if cancelled is not None and cancelled():
+            break
         entry = entries[index]
         try:
             isrc, acoustid_id = await identify_isrc_async(
