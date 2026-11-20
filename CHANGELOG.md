@@ -27,6 +27,7 @@
 
 ### Fixed
 
+- **A track with a long album title hid half its facts**: the facts column beside the cover sized its left half to the whole album title on one line, which pushed Released, ISRC and the UPC barcode out of the card. The left half is now capped and long values end in an ellipsis.
 - **Turning on bitstream while a song plays no longer stops it**: changing bitstream, exclusive mode or the output device mid-song made mpv rebuild the output in place, which on Windows often ended the file with an error. The song now reopens where it was, and an output that refuses bitstream falls back to PCM with a warning.
 - **Mornye logo on the Windows window and taskbar**: older pywebview WinForms backends ignored the icon and showed python.exe's. The window icon is now set directly (WM_SETICON) once the window is shown, at the monitor's DPI.
 - **Now Playing buttons no longer cut off on Windows**: on a shorter window (Windows at 125% scaling) the cover filled the column and pushed play, previous and next half off the bottom edge. The cover now shrinks to the window height.
