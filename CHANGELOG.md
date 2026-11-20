@@ -20,6 +20,7 @@
 
 ### Changed
 
+- **The sidebar slides when it folds**: Collapse and Expand now narrow and widen the sidebar in a short slide, with the names fading and the group headings folding away, instead of cutting from one layout to the other. The icons stay where they are. Reduced-motion settings keep it instant.
 - **New look: the "studio console"** across the GUI, the web app and the terminal UI. Graphite grounds, one amber signal colour for focus, selection and the one primary action of each screen, green and red only for state, JetBrains Mono throughout, square 2–3 px corners and flat surfaces. Rules and small-caps legends replace cards and shadows; the queue, the dock and Stats draw progress as segmented meters. Every view was rebuilt on a single set of design tokens (`mornye/branding_tokens.py`, generated into `frontend/css/tokens.css`) that the TUI themes are built from too. Phones keep their bottom bar and 44 px controls.
 - **Accent colours change only the signal.** Amber is the new default. Anyone still on the old default (teal, or green from before the 2026 rebrand) moves to amber once; a colour picked afterwards is kept, and now reaches every view rather than only the older ones.
 - **Terminal UI:** a one-line masthead replaces the block wordmark, badges are bracketed readouts (`[HI-RES]`) instead of filled pills, panels are ruled boxes, and the console dark/light themes are the default. The theme picked with `t` is now remembered between runs (`~/.mornye/tui-theme`). History, Extensions and the other panels fit an 80×24 terminal again.
