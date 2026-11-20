@@ -815,8 +815,7 @@ async def transcode_file_async(
         # and drops the objects, and AC-4 (Amazon's Atmos) has no ffmpeg
         # decoder at all. The download is kept as it arrived.
         logger.info(
-            "[transcode] %s is Dolby (Atmos) audio: kept as is, not converted "
-            "to %s",
+            "[transcode] %s is Dolby (Atmos) audio: kept as is, not converted " "to %s",
             src.name,
             spec.name.upper(),
         )

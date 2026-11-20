@@ -1401,7 +1401,9 @@ class MornyeAPI(
                 self.log("Attempting to fetch playcount…", "debug")
                 return sp_client.get_playlist_stats(playlist_match.group(1)) or {}
             if album_match := re.search(r"album[:/]([A-Za-z0-9]+)", url):
-                self.log("Attempting to fetch playcount for album (fast mode)…", "debug")
+                self.log(
+                    "Attempting to fetch playcount for album (fast mode)…", "debug"
+                )
                 return sp_client.get_album_stats(album_match.group(1)) or {}
             if track_match := re.search(r"track[:/]([a-zA-Z0-9]+)", url):
                 self.log("Attempting to fetch playcount…", "debug")
@@ -1499,8 +1501,10 @@ class MornyeAPI(
                     _quiet_log.debug("Playcount lookup failed", exc_info=True)
             # A track link's count is kept only when the link did give one
             # track (an artist link can contain "/track/" further along).
-            if len(tracks) != 1 and re.search(r"track[:/]", url) and not re.search(
-                r"(playlist|album)[:/]", url
+            if (
+                len(tracks) != 1
+                and re.search(r"track[:/]", url)
+                and not re.search(r"(playlist|album)[:/]", url)
             ):
                 playcount_map = {}
 

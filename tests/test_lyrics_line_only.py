@@ -72,8 +72,14 @@ def test_fetch_file_lyrics_searches_with_the_editor_fields(tmp_path, monkeypatch
     api.download_dir = str(tmp_path)
     api.load_settings = lambda: {"lyrics_providers": ["apple", "lrclib"]}
 
-    res = api.fetch_file_lyrics(str(song), {"TITLE": "Underneath the Stars", "ISRC": ""})
-    assert res == {"status": "ok", "lyrics": "[by:Apple Music]\n[00:01.00]Hi", "provider": "Apple Music"}
+    res = api.fetch_file_lyrics(
+        str(song), {"TITLE": "Underneath the Stars", "ISRC": ""}
+    )
+    assert res == {
+        "status": "ok",
+        "lyrics": "[by:Apple Music]\n[00:01.00]Hi",
+        "provider": "Apple Music",
+    }
     assert seen["track_name"] == "Underneath the Stars"
     assert seen["artist_name"] == "Mariah Carey"
     assert seen["providers"] == ["apple", "lrclib"]
@@ -89,7 +95,8 @@ def test_fetch_file_lyrics_can_ask_one_service(tmp_path, monkeypatch):
     song = tmp_path / "song.flac"
     song.write_bytes(b"")
     monkeypatch.setattr(
-        tag_editor, "read_file_tags",
+        tag_editor,
+        "read_file_tags",
         lambda p: SimpleNamespace(tags={"TITLE": "T", "ARTIST": "A"}),
     )
     seen = {}
@@ -105,5 +112,8 @@ def test_fetch_file_lyrics_can_ask_one_service(tmp_path, monkeypatch):
 
     res = api.fetch_file_lyrics(str(song), {}, "lrclib")
     assert seen["providers"] == ["lrclib"]
-    assert res == {"status": "error", "error": "No lyrics found on LRCLIB for this track."}
+    assert res == {
+        "status": "error",
+        "error": "No lyrics found on LRCLIB for this track.",
+    }
     assert api.fetch_file_lyrics(str(song), {}, "nope")["status"] == "error"

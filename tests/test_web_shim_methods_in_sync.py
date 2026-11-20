@@ -86,7 +86,9 @@ def test_every_pushed_event_is_dispatched_by_the_web_shim() -> None:
     about it. Three names had already drifted out this way — the fingerprint
     duplicate finder's two among them — before this test existed.
     """
-    missing = _pushed_event_names() - _allowed_push_fns_from_web_shim() - _DESKTOP_ONLY_PUSHES
+    missing = (
+        _pushed_event_names() - _allowed_push_fns_from_web_shim() - _DESKTOP_ONLY_PUSHES
+    )
     assert not missing, (
         "Events pushed by the backend but not dispatched by web-shim.js "
         f"(silently dropped in --web mode): {sorted(missing)}"

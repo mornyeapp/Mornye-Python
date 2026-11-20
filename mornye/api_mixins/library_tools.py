@@ -154,7 +154,10 @@ class LibraryToolsMixin:
             return {"status": "error", "error": str(e)}
         if not text:
             where = f" on {lyrics_provider_label(provider)}" if provider else ""
-            return {"status": "error", "error": f"No lyrics found{where} for this track."}
+            return {
+                "status": "error",
+                "error": f"No lyrics found{where} for this track.",
+            }
         return {
             "status": "ok",
             "lyrics": text,

@@ -31,8 +31,7 @@ def _runtime_reading(script: str) -> tuple[JSRuntime, list[dict]]:
 
 
 def test_a_multi_megabyte_reply_arrives_whole_and_fast() -> None:
-    runtime, seen = _runtime_reading(
-        """
+    runtime, seen = _runtime_reading("""
         import json, sys, time
         out = sys.stdout.buffer
         tracks = [{"title": f"Track {i}", "artists": "Artist " * 20} for i in range(20000)]
@@ -43,8 +42,7 @@ def test_a_multi_megabyte_reply_arrives_whole_and_fast() -> None:
         out.write(b'{"type": "ready"}\\n{"id": 2, "result": "x"}\\n\\n not json\\n')
         out.write(b'{"id": 3, "result": "last"}\\n')
         out.flush()
-        """
-    )
+        """)
     started = time.monotonic()
     runtime._read_loop()
     elapsed = time.monotonic() - started
@@ -56,12 +54,10 @@ def test_a_multi_megabyte_reply_arrives_whole_and_fast() -> None:
 
 
 def test_a_reply_without_a_final_newline_is_not_dispatched_half() -> None:
-    runtime, seen = _runtime_reading(
-        """
+    runtime, seen = _runtime_reading("""
         import sys
         sys.stdout.buffer.write(b'{"id": 1, "result": "ok"}\\n{"id": 2, "res')
-        """
-    )
+        """)
 
     runtime._read_loop()
 

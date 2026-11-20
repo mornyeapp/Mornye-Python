@@ -751,9 +751,9 @@ class PlayerPlaylistsMixin:
         return {
             "status": "ok",
             "linked": changed,
-            "playlists": player_playlists.list_playlists(self.owner)
-            if changed
-            else None,
+            "playlists": (
+                player_playlists.list_playlists(self.owner) if changed else None
+            ),
         }
 
     def import_player_playlist(

@@ -184,7 +184,7 @@ def collapse_line_only_word_tags(lrc_text: str) -> str:
             continue
         lead = _LEADING_LINE_TAGS.match(line)
         prefix = lead.group(0) if lead else ""
-        body = _ANY_WORD_TAG.sub("", line[len(prefix):])
+        body = _ANY_WORD_TAG.sub("", line[len(prefix) :])
         out.append(prefix + " ".join(body.split()))
     return "\n".join(out)
 

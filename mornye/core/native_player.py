@@ -139,9 +139,9 @@ class PlayerOptions:
         preset = str(raw.get("eq_preset", base.eq_preset))
         return cls(
             engine=pick("engine", ENGINES),
-            audio_device=device.strip()
-            if isinstance(device, str) and device.strip()
-            else "auto",
+            audio_device=(
+                device.strip() if isinstance(device, str) and device.strip() else "auto"
+            ),
             spdif=[c for c in SPDIF_CODECS if isinstance(spdif, list) and c in spdif],
             exclusive=flag("exclusive"),
             gapless=flag("gapless"),
@@ -225,9 +225,9 @@ def mpv_properties(options: PlayerOptions) -> dict[str, Any]:
         "replaygain-clip": options.replaygain_clip,
         "audio-delay": options.audio_delay_ms / 1000.0,
         "audio-pitch-correction": options.pitch_correction,
-        "audio-channels": "auto-safe"
-        if options.channels == "auto"
-        else options.channels,
+        "audio-channels": (
+            "auto-safe" if options.channels == "auto" else options.channels
+        ),
         "audio-normalize-downmix": True,
     }
 

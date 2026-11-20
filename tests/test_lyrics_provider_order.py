@@ -102,7 +102,9 @@ def test_reversing_the_order_reverses_the_winner(monkeypatch) -> None:
     assert _fetch(["lrclib", "apple"], word_by_word=False)[1] == "lrclib"
 
 
-def test_word_by_word_further_down_beats_a_line_synced_first_choice(monkeypatch) -> None:
+def test_word_by_word_further_down_beats_a_line_synced_first_choice(
+    monkeypatch,
+) -> None:
     _providers(
         monkeypatch,
         {"apple": (0.05, APPLE_LRC), "lrclib": (0.0, LRCLIB_LRC)},
@@ -116,16 +118,26 @@ def test_word_by_word_is_ranked_by_the_order_too(monkeypatch) -> None:
     other = "[00:02.64]<00:02.64>Damn <00:03.00>every <00:03.50>time"
     _providers(
         monkeypatch,
-        {"lrclib": (0.0, LRCLIB_LRC), "binilyrics": (0.0, other), "apple": (0.0, APPLE_LRC)},
+        {
+            "lrclib": (0.0, LRCLIB_LRC),
+            "binilyrics": (0.0, other),
+            "apple": (0.0, APPLE_LRC),
+        },
     )
     assert _fetch(["lrclib", "binilyrics", "apple"])[1] == "binilyrics"
 
 
-def test_no_word_timing_anywhere_falls_back_to_the_first_line_synced(monkeypatch) -> None:
+def test_no_word_timing_anywhere_falls_back_to_the_first_line_synced(
+    monkeypatch,
+) -> None:
     fake_wbw = "[00:02.64]<00:02.64>Damn, every time<00:04.00>"
     _providers(
         monkeypatch,
-        {"apple": (0.0, ""), "binilyrics": (0.0, fake_wbw), "lrclib": (0.0, LRCLIB_LRC)},
+        {
+            "apple": (0.0, ""),
+            "binilyrics": (0.0, fake_wbw),
+            "lrclib": (0.0, LRCLIB_LRC),
+        },
     )
     text, provider = _fetch(["apple", "binilyrics", "lrclib"])
     assert provider == "binilyrics"
