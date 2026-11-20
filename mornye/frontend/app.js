@@ -290,6 +290,7 @@ function switchTab(name, btn) {
   document.querySelectorAll('.tc').forEach(c => c.classList.remove('active'));
   btn.classList.add('active');
   $('tc-' + name).classList.add('active');
+  if (name === 'player') loadPlayerSettings();
   if (name === 'status' && !extensionStatusChecking) {
     // Lists the installed extensions' checks without running them; Check
     // runs them. Re-read each time: an extension may have been installed.
@@ -7342,6 +7343,7 @@ window.addEventListener('pywebviewready', async () => {
   // different capitalisations.
   loadHistoryAndProfiles();
   loadStaged();  // the sidebar's waiting-count badge
+  playerSetupEngine();  // the native engine in the desktop app, when libmpv is there
   checkAuthStatus();
   // The real download folder (MORNYE_DOWNLOAD_DIR in a container, the
   // account's own folder in multi-user mode), not the placeholder in the HTML.
@@ -8556,6 +8558,7 @@ function updatePlayerModes() {
     b.title = { off: 'Repeat: off', all: 'Repeat all', one: 'Repeat this track' }[playerRepeat];
   });
   try { localStorage.setItem('mornye-player-modes', JSON.stringify({ shuffle: playerShuffle, repeat: playerRepeat })); } catch (e) {}
+  playerRefreshNext();
 }
 
 function playerToggleShuffle() {
@@ -8593,44 +8596,361 @@ function playLocal(index) {
   startPlayback(items, index, undefined, true);
 }
 
-async function loadPlayerTrack(index) {
+// ── Playback engine ─────────────────────────────────────────────────────────
+// Everything the player asks of the audio goes through `playerEngine`: the
+// queue, the bars, the Now Playing view, the synced lyrics and the Media
+// Session never touch the <audio> element directly. The adapter keeps the
+// listeners itself and re-emits the events of whichever engine is active, so
+// the engine can be swapped without registering them again: the window's own
+// <audio>, or libmpv in the desktop app (docs/native-player-plan.md). The
+// surface is the part of HTMLMediaElement the player uses, plus `advanced`
+// (a gapless change to the queued track) and `output` (what reaches the
+// device), which only the native engine sends.
+const PLAYER_ENGINE_EVENTS = ['play', 'pause', 'timeupdate', 'ended', 'loadedmetadata', 'seeked', 'error'];
+
+function playerBrowserEngine(element) {
+  return {
+    kind: 'browser',
+    attach(emit) {
+      for (const type of PLAYER_ENGINE_EVENTS) element.addEventListener(type, () => emit(type));
+    },
+    get hasSource() { return !!element.getAttribute('src'); },
+    load(url) { element.src = url; },
+    clear() {
+      element.pause();
+      element.removeAttribute('src');
+      element.load();
+    },
+    play() { return element.play(); },
+    pause() { element.pause(); },
+    get paused() { return element.paused; },
+    get currentTime() { return element.currentTime; },
+    set currentTime(t) { element.currentTime = t; },
+    get duration() { return element.duration; },
+    get volume() { return element.volume; },
+    set volume(v) { element.volume = v; },
+    get muted() { return element.muted; },
+    set muted(v) { element.muted = v; },
+    get playbackRate() { return element.playbackRate; },
+    set playbackRate(r) { element.playbackRate = r; },
+  };
+}
+
+// The native engine: libmpv in the backend (core/native_player.py), driven
+// through the `native_player_*` API and heard back through
+// window.app_native_player_event, which hands each event to receive().
+// Calls are chained so they reach the backend in the order they were made
+// (pywebview runs each call on a thread of its own). The position arrives
+// about four times a second; between two updates it is extrapolated, since
+// the synced lyrics read it on every frame.
+function playerNativeEngine(api, clock = () => performance.now()) {
+  let emit = () => {};
+  let chain = Promise.resolve();
+  let src = '', paused = true, ended = false, time = 0, at = 0, duration = NaN;
+  let volume = 1, muted = false, rate = 1, seekUntil = 0, output = null;
+  const call = (name, ...args) => {
+    const run = chain.then(() => api[name](...args));
+    chain = run.catch(() => {});
+    return run.then(r => {
+      if (r && r.status && r.status !== 'ok') throw new Error(r.error || r.status);
+      return r;
+    });
+  };
+  const command = (name, value = null) => call('native_player_command', name, value)
+    .catch(e => emit('error', { message: e.message }));
+  const now = () => clock();
+  const position = () => {
+    if (paused || !src) return time;
+    const t = time + (now() - at) / 1000 * rate;
+    return Number.isFinite(duration) ? Math.min(duration, t) : t;
+  };
+  const settle = (t) => { if (typeof t === 'number' && Number.isFinite(t)) time = t; at = now(); };
+  const engine = {
+    kind: 'native',
+    attach(fn) { emit = fn; },
+    get output() { return output; },
+    get hasSource() { return !!src; },
+    // mpv starts playing as soon as it opens the file, so a load is a play.
+    load(path, next) {
+      const wasPaused = paused;
+      src = path; paused = false; ended = false; duration = NaN; output = null;
+      settle(0);
+      call('native_player_load', path, next || null)
+        .catch(e => { paused = true; emit('pause'); emit('error', { message: e.message }); });
+      // Set while nothing was loaded (mpv starts only on the first file).
+      if (volume !== 1) command('volume', volume);
+      if (muted) command('mute', true);
+      if (rate !== 1) command('speed', rate);
+      if (wasPaused) emit('play');
+    },
+    setNext(path) {
+      if (src) call('native_player_set_next', path || null).catch(() => {});
+    },
+    clear() {
+      src = ''; paused = true; ended = false; duration = NaN; output = null;
+      settle(0);
+      command('stop');
+    },
+    play() {
+      if (!src || !paused) return Promise.resolve();
+      if (ended) { // mpv is idle after the end: open the file again
+        const from = time >= (duration || Infinity) - 0.05 ? 0 : time;
+        engine.load(src, null);
+        if (from > 0) engine.currentTime = from;
+        return Promise.resolve();
+      }
+      settle(time);
+      paused = false;
+      command('play');
+      emit('play');
+      return Promise.resolve();
+    },
+    pause() {
+      if (paused) return;
+      settle(position());
+      paused = true;
+      if (src) command('pause');
+      emit('pause');
+    },
+    get paused() { return paused; },
+    get currentTime() { return position(); },
+    set currentTime(t) {
+      settle(Math.max(0, t));
+      if (!src) return;
+      if (ended) { ended = false; paused = true; engine.load(src, null); }
+      seekUntil = now() + 1500; // older positions still on their way are dropped
+      command('seek', time);
+    },
+    get duration() { return duration; },
+    get volume() { return volume; },
+    set volume(v) { volume = v; if (src) command('volume', v); },
+    get muted() { return muted; },
+    set muted(v) { muted = !!v; if (src) command('mute', muted); },
+    get playbackRate() { return rate; },
+    set playbackRate(r) { settle(position()); rate = r; if (src) command('speed', r); },
+    setAbLoop(a, b) { command('ab_loop', a == null || b == null ? null : [a, b]); },
+    receive(evt) {
+      switch (evt?.type) {
+        case 'timeupdate':
+          if (now() < seekUntil || paused) return;
+          settle(evt.time); emit('timeupdate'); return;
+        case 'play':
+          if (paused && !ended) { paused = false; settle(evt.time); emit('play'); }
+          return;
+        case 'pause':
+          if (!paused) { paused = true; settle(evt.time); emit('pause'); }
+          return;
+        case 'loadedmetadata':
+          if (Number.isFinite(evt.duration)) duration = evt.duration;
+          emit('loadedmetadata'); return;
+        case 'seeked':
+          seekUntil = 0; settle(evt.time); emit('seeked'); emit('timeupdate'); return;
+        case 'ended': // as <audio>: pause, then ended
+          settle(Number.isFinite(duration) ? duration : time);
+          ended = true;
+          if (!paused) { paused = true; emit('pause'); }
+          emit('ended'); return;
+        case 'advanced':
+          src = evt.path; ended = false; paused = false; duration = NaN; output = null;
+          settle(0);
+          emit('advanced', { path: evt.path }); return;
+        case 'output':
+          output = evt; emit('output', evt); return;
+        case 'error':
+          emit('error', { message: evt.message }); return;
+        case 'warning':
+          emit('warning', { message: evt.message }); return;
+      }
+    },
+  };
+  return engine;
+}
+
+function createPlayerEngine(initial) {
+  const listeners = new Map();
+  const attached = new Set();
+  let active = null;
+  const engine = {
+    get kind() { return active.kind; },
+    get active() { return active; },
+    addEventListener(type, fn) {
+      if (!listeners.has(type)) listeners.set(type, new Set());
+      listeners.get(type).add(fn);
+    },
+    removeEventListener(type, fn) { listeners.get(type)?.delete(fn); },
+    // Makes `next` the engine that plays. The old one is stopped and
+    // emptied; its late events are dropped. Volume, mute and speed carry over.
+    use(next) {
+      if (next === active) return;
+      if (active) {
+        const { volume, muted, playbackRate } = active;
+        if (active.hasSource) active.clear();
+        next.volume = volume;
+        next.muted = muted;
+        next.playbackRate = playbackRate;
+      }
+      active = next;
+      if (!attached.has(next)) {
+        attached.add(next);
+        next.attach((type, detail) => {
+          if (active !== next) return;
+          for (const fn of [...(listeners.get(type) || [])]) {
+            try { fn(detail); } catch (e) { console.error(e); }
+          }
+        });
+      }
+    },
+    get hasSource() { return active.hasSource; },
+    load(url, next) { active.load(url, next); },
+    setNext(path) { active.setNext?.(path); },
+    setAbLoop(a, b) { active.setAbLoop?.(a, b); },
+    get output() { return active.output || null; },
+    clear() { active.clear(); },
+    play() { return active.play(); },
+    pause() { active.pause(); },
+    get paused() { return active.paused; },
+    get currentTime() { return active.currentTime; },
+    set currentTime(t) { active.currentTime = t; },
+    get duration() { return active.duration; },
+    get volume() { return active.volume; },
+    set volume(v) { active.volume = v; },
+    get muted() { return active.muted; },
+    set muted(v) { active.muted = v; },
+    get playbackRate() { return active.playbackRate; },
+    set playbackRate(r) { active.playbackRate = r; },
+  };
+  engine.use(initial);
+  return engine;
+}
+
+const playerBrowser = playerBrowserEngine($('player-audio'));
+const playerEngine = createPlayerEngine(playerBrowser);
+let playerNative = null;          // the native engine, once the backend has one
+let playerNativeStatus = null;    // native_player_status(): availability and options
+let playerSourceQuality = '';     // the file's own quality label, from prepare_playback
+
+window.app_native_player_event = (evt) => playerNative?.receive(evt);
+
+// Desktop window only: the native engine when the setting asks for it (or
+// "auto") and libmpv is there; otherwise the window's own engine. A track
+// that is playing restarts on the new engine.
+async function playerSetupEngine() {
+  const api = window.pywebview?.api;
+  if (window.__mornyeWeb || !api?.native_player_status) return;
+  let status = null;
+  try { status = await api.native_player_status(); } catch (e) { status = null; }
+  playerNativeStatus = status;
+  const want = status?.options?.engine || 'auto';
+  const native = !!status?.available && want !== 'browser';
+  const target = native ? (playerNative ||= playerNativeEngine(api)) : playerBrowser;
+  if (want === 'native' && !status?.available) {
+    toastMgr.warning(`Native player unavailable: ${status?.reason || 'libmpv not found'}. Using the window's engine.`);
+  }
+  if (playerEngine.active === target) return;
+  const playing = playerIndex >= 0 && playerEngine.hasSource;
+  playerEngine.use(target);
+  playerMediaSessionActive(!native);
+  if (playing) loadPlayerTrack(playerIndex);
+}
+
+// The track that plays after the current one, or -1: what the native
+// engine opens in advance for a gapless change. Repeat-one queues the same
+// track; the wrap of a shuffled repeat-all reshuffles, so it is not queued.
+function playerUpcomingIndex() {
+  if (!playerOrder.length || playerIndex < 0) return -1;
+  if (playerRepeat === 'one') return playerIndex;
+  if (playerPos + 1 < playerOrder.length) return playerOrder[playerPos + 1];
+  if (playerRepeat === 'all' && !playerShuffle) return playerOrder[0];
+  return -1;
+}
+
+function playerUpcomingPath() {
+  const next = playerUpcomingIndex();
+  return next >= 0 ? (playerQueue[next]?.path || null) : null;
+}
+
+// Tells the native engine which file comes next, after anything that
+// changes the order (shuffle, repeat, a new queue).
+function playerRefreshNext() {
+  if (playerEngine.kind === 'native' && playerEngine.hasSource) playerEngine.setNext(playerUpcomingPath());
+}
+
+// The native engine went on to the queued file by itself: the page follows
+// without loading anything.
+function playerOnAdvanced(path) {
+  const expected = playerUpcomingIndex();
+  const index = expected >= 0 && playerQueue[expected]?.path === path
+    ? expected : playerQueue.findIndex(q => q.path === path);
+  if (index >= 0) loadPlayerTrack(index, { advanced: true });
+}
+
+function playerQualityText() {
+  const out = playerEngine.output;
+  if (out?.bitstream) return out.label;
+  return playerSourceQuality;
+}
+
+function playerShowQuality() {
+  const el = $('pl-quality');
+  if (!el || playerIndex < 0) return;
+  el.textContent = playerQualityText();
+  const out = playerEngine.output;
+  el.title = out?.label
+    ? `Output: ${out.label}${out.ao ? ` (${out.ao})` : ''}`
+    : 'Played exactly as stored. Formats the window cannot decode are played as a lossless FLAC copy. The operating system may still resample to your output device\'s rate.';
+}
+
+async function loadPlayerTrack(index, { advanced = false } = {}) {
   const item = playerQueue[index];
   if (!item) return;
   playerIndex = index;
   if (playerOrder.length !== playerQueue.length) playerBuildOrder(index);
   else playerPos = playerOrder.indexOf(index);
   const token = ++playerToken;
-  const audio = $('player-audio');
+  const audio = playerEngine;
+  const native = audio.kind === 'native';
   $('player-bar').classList.remove('hidden');
   document.body.classList.add('has-player');
   setPlayerArtwork('');
   const artist = displayArtists(item.artist);
   $('pl-title').textContent = artist ? `${item.title} — ${artist}` : item.title;
-  $('pl-quality').textContent = 'Preparing…';
+  if (!advanced) $('pl-quality').textContent = 'Preparing…';
   markPlayingRow();
-  audio.pause();
-  const res = await window.pywebview?.api?.prepare_playback?.(item.path, !window.__mornyeWeb);
+  playerAbReset();
+  if (!advanced) audio.pause();
+  const res = await window.pywebview?.api?.prepare_playback?.(item.path, !window.__mornyeWeb, native);
   if (token !== playerToken) return; // another track was chosen meanwhile
   if (!res || res.status !== 'ok') {
     $('pl-quality').textContent = 'Cannot play this file';
     toastMgr.error(res?.error || 'Could not play the file.');
     return;
   }
-  audio.src = res.url || ('/api/media?path=' + encodeURIComponent(res.path));
-  $('pl-quality').textContent = res.quality;
+  if (!advanced) {
+    audio.load(native ? res.path : (res.url || ('/api/media?path=' + encodeURIComponent(res.path))),
+      native ? playerUpcomingPath() : undefined);
+  } else {
+    playerRefreshNext();
+  }
+  playerSourceQuality = res.quality;
+  playerShowQuality();
   fillNowPlaying(item, res);
-  try { await audio.play(); } catch (e) { /* autoplay blocked: the play button works */ }
+  if (!advanced) {
+    try { await audio.play(); } catch (e) { /* autoplay blocked: the play button works */ }
+  }
   playerMediaMetadata(item, res, artist);
 }
 
 // ── Media keys and the system's "Now Playing" ───────────────────────────────
 // The Media Session is what the keyboard's play/pause/next keys, the macOS
 // Now Playing panel, the Windows media overlay and a Bluetooth headset talk
-// to, in the desktop window (WebView2, WebKit) as in a browser tab. Only
-// previous/next were wired: play, pause, stop and seeking were not, so the
-// play/pause key did nothing and the system showed no progress or cover.
+// to, in the desktop window (WebView2, WebKit) as in a browser tab. With the
+// native engine the window plays nothing, so the system talks to mpv instead
+// (its media-controls) and the page's handlers are taken off: both at once
+// would answer every key twice.
+let playerMediaSessionOn = true;
+
 function playerMediaMetadata(item, res, artist) {
-  if (!('mediaSession' in navigator)) return;
+  if (!('mediaSession' in navigator) || !playerMediaSessionOn) return;
   try {
     const cover = res?.cover || '';
     navigator.mediaSession.metadata = new MediaMetadata({
@@ -8643,9 +8963,10 @@ function playerMediaMetadata(item, res, artist) {
 }
 
 function playerMediaPosition() {
-  const audio = $('player-audio');
+  const audio = playerEngine;
+  if (!playerMediaSessionOn) return;
   if (!('mediaSession' in navigator) || !navigator.mediaSession.setPositionState) return;
-  if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) return;
+  if (!Number.isFinite(audio.duration) || audio.duration <= 0) return;
   try {
     navigator.mediaSession.setPositionState({
       duration: audio.duration,
@@ -8655,41 +8976,55 @@ function playerMediaPosition() {
   } catch (e) { /* position past the end while a track changes */ }
 }
 
-(function initMediaSession() {
-  const audio = $('player-audio');
-  if (!audio || !('mediaSession' in navigator)) return;
-  const session = navigator.mediaSession;
+function playerMediaHandlers() {
+  const audio = playerEngine;
   const seekBy = (offset) => {
-    if (!audio.src || !Number.isFinite(audio.duration)) return;
+    if (!audio.hasSource || !Number.isFinite(audio.duration)) return;
     audio.currentTime = Math.max(0, Math.min(audio.duration, audio.currentTime + offset));
     playerMediaPosition();
   };
-  const handlers = {
-    play: () => { if (audio.src) audio.play(); },
+  return {
+    play: () => { if (audio.hasSource) audio.play(); },
     pause: () => audio.pause(),
-    stop: () => { audio.pause(); if (audio.src) audio.currentTime = 0; },
+    stop: () => { audio.pause(); if (audio.hasSource) audio.currentTime = 0; },
     previoustrack: () => playerPrev(),
     nexttrack: () => playerNext(),
     seekbackward: (d) => seekBy(-(d?.seekOffset || 10)),
     seekforward: (d) => seekBy(d?.seekOffset || 10),
     seekto: (d) => {
-      if (!audio.src || d?.seekTime == null) return;
+      if (!audio.hasSource || d?.seekTime == null) return;
       audio.currentTime = d.seekTime;
       playerMediaPosition();
     },
   };
-  for (const [action, handler] of Object.entries(handlers)) {
-    try { session.setActionHandler(action, handler); } catch (e) { /* not supported here */ }
+}
+
+function playerMediaSessionActive(on) {
+  playerMediaSessionOn = on;
+  if (!('mediaSession' in navigator)) return;
+  const session = navigator.mediaSession;
+  for (const [action, handler] of Object.entries(playerMediaHandlers())) {
+    try { session.setActionHandler(action, on ? handler : null); } catch (e) { /* not supported here */ }
   }
-  audio.addEventListener('play', () => { session.playbackState = 'playing'; playerMediaPosition(); });
-  audio.addEventListener('pause', () => { session.playbackState = 'paused'; playerMediaPosition(); });
+  if (!on) {
+    try { session.metadata = null; session.playbackState = 'none'; } catch (e) { /* read-only here */ }
+  }
+}
+
+(function initMediaSession() {
+  const audio = playerEngine;
+  if (!('mediaSession' in navigator)) return;
+  const session = navigator.mediaSession;
+  playerMediaSessionActive(true);
+  audio.addEventListener('play', () => { if (playerMediaSessionOn) session.playbackState = 'playing'; playerMediaPosition(); });
+  audio.addEventListener('pause', () => { if (playerMediaSessionOn) session.playbackState = 'paused'; playerMediaPosition(); });
   audio.addEventListener('loadedmetadata', playerMediaPosition);
   audio.addEventListener('seeked', playerMediaPosition);
 })();
 
 function playerToggle() {
-  const audio = $('player-audio');
-  if (!audio.src) return;
+  const audio = playerEngine;
+  if (!audio.hasSource) return;
   audio.paused ? audio.play() : audio.pause();
 }
 
@@ -8704,12 +9039,12 @@ function playerNext(auto) {
   }
 }
 function playerEnded() {
-  const audio = $('player-audio');
+  const audio = playerEngine;
   if (playerRepeat === 'one') { audio.currentTime = 0; audio.play(); return; }
   playerNext(true);
 }
 function playerPrev() {
-  const audio = $('player-audio');
+  const audio = playerEngine;
   if (audio.currentTime > 3 || !playerOrder.length) { audio.currentTime = 0; return; }
   if (playerPos > 0) return loadPlayerTrack(playerOrder[playerPos - 1]);
   if (playerRepeat === 'all') return loadPlayerTrack(playerOrder[playerOrder.length - 1]);
@@ -8717,23 +9052,76 @@ function playerPrev() {
 }
 function closePlayer() {
   playerToken++;
-  const audio = $('player-audio');
-  audio.pause();
-  audio.removeAttribute('src');
-  audio.load();
+  const audio = playerEngine;
+  audio.clear();
+  playerAbReset();
   $('player-bar').classList.add('hidden');
   document.body.classList.remove('has-player');
   playerIndex = -1;
   markPlayingRow();
-  if ('mediaSession' in navigator) {
+  if ('mediaSession' in navigator && playerMediaSessionOn) {
     navigator.mediaSession.metadata = null;
     navigator.mediaSession.playbackState = 'none';
   }
 }
 
+// ── Speed and A-B repeat (both engines) ─────────────────────────────────────
+// Speed keeps the pitch (the browser's default; mpv's audio-pitch-correction
+// unless turned off in Settings → Player). A-B: the first press marks A, the
+// second B and starts the loop, the third clears it. mpv loops by itself; the
+// window's engine is sent back to A from timeupdate.
+const PLAYER_SPEED_MIN = 0.5, PLAYER_SPEED_MAX = 2;
+let playerAb = { a: null, b: null };
+
+function playerSpeedStep(current, delta) {
+  if (delta === 0) return 1;
+  const next = Math.round((current + delta) * 100) / 100;
+  return Math.min(PLAYER_SPEED_MAX, Math.max(PLAYER_SPEED_MIN, next));
+}
+
+function playerSetSpeed(delta) {
+  if (!playerEngine.hasSource) return;
+  const speed = playerSpeedStep(playerEngine.playbackRate || 1, delta);
+  playerEngine.playbackRate = speed;
+  toastMgr.info(`Speed ${speed.toFixed(2)}×`);
+}
+
+function playerAbNext(ab, time) {
+  if (ab.a == null) return { a: time, b: null };
+  if (ab.b == null) return time > ab.a + 0.2 ? { a: ab.a, b: time } : { a: null, b: null };
+  return { a: null, b: null };
+}
+
+function playerAbCycle() {
+  if (!playerEngine.hasSource) return;
+  playerAb = playerAbNext(playerAb, playerEngine.currentTime);
+  const { a, b } = playerAb;
+  playerEngine.setAbLoop(a, b);
+  // B is set where playback is now, so it would never be crossed: start the
+  // loop from A at once, as mpv's own ab-loop command does.
+  if (a != null && b != null) playerEngine.currentTime = a;
+  toastMgr.info(a == null ? 'A-B repeat off'
+    : b == null ? `A-B repeat: A at ${fmtTime(a)}, press again for B`
+      : `A-B repeat ${fmtTime(a)} – ${fmtTime(b)}`);
+}
+
+function playerAbReset() {
+  if (playerAb.a == null && playerAb.b == null) return;
+  playerAb = { a: null, b: null };
+  playerEngine.setAbLoop(null, null);
+}
+
+playerEngine.addEventListener('timeupdate', () => {
+  const { a, b } = playerAb;
+  if (playerEngine.kind !== 'browser' || a == null || b == null) return;
+  if (playerEngine.currentTime >= b) playerEngine.currentTime = a;
+});
+playerEngine.addEventListener('advanced', (d) => playerOnAdvanced(d?.path));
+playerEngine.addEventListener('output', playerShowQuality);
+playerEngine.addEventListener('warning', (d) => { if (d?.message) toastMgr.warning(d.message); });
+
 (function initPlayer() {
-  const audio = $('player-audio');
-  if (!audio) return;
+  const audio = playerEngine;
   const seek = $('pl-seek');
   audio.addEventListener('timeupdate', () => {
     $('pl-cur').textContent = fmtTime(audio.currentTime);
@@ -8748,8 +9136,10 @@ function closePlayer() {
   const PLAY = '<path d="M8 5v14l11-7z"/>', PAUSE = '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>';
   audio.addEventListener('play', () => { icon.innerHTML = PAUSE; });
   audio.addEventListener('pause', () => { icon.innerHTML = PLAY; });
-  audio.addEventListener('error', () => {
-    if (audio.getAttribute('src')) $('pl-quality').textContent = 'This window cannot decode the file';
+  audio.addEventListener('error', (d) => {
+    if (!audio.hasSource && !d?.message) return;
+    $('pl-quality').textContent = d?.message ? 'Cannot play this file' : 'This window cannot decode the file';
+    if (d?.message) toastMgr.error(d.message);
   });
   seek.addEventListener('input', () => {
     playerSeeking = true;
@@ -8809,6 +9199,253 @@ function closePlayer() {
   });
 })();
 
+// ── Settings → Player (the native engine's options) ─────────────────────────
+// Stored by the backend in player-audio.json and applied to mpv the moment
+// they change, so they stay out of the page's Save Changes.
+const NP_OPT_UNITS = { replaygain_preamp: ' dB', audio_delay_ms: ' ms' };
+let npOptSaveTimer = 0;
+let npOptPending = {};
+
+function npOptValue(el) {
+  if (el.type === 'checkbox') return el.checked;
+  if (el.type === 'range') return Number(el.value);
+  return el.value;
+}
+
+function npOptShowValue(name, value) {
+  const out = document.querySelector(`[data-np-value="${name}"]`);
+  if (out) out.textContent = `${value > 0 && name === 'replaygain_preamp' ? '+' : ''}${value}${NP_OPT_UNITS[name] || ''}`;
+}
+
+function npOptFill(options) {
+  if (!options) return;
+  document.querySelectorAll('#tc-player [data-np-opt]').forEach(el => {
+    const name = el.dataset.npOpt;
+    if (!(name in options)) return;
+    if (el.type === 'checkbox') el.checked = !!options[name];
+    else el.value = String(options[name]);
+    if (el.type === 'range') { amPaint(el); npOptShowValue(name, options[name]); }
+  });
+  document.querySelectorAll('#tc-player [data-np-spdif]').forEach(el => {
+    el.checked = (options.spdif || []).includes(el.dataset.npSpdif);
+  });
+  document.querySelectorAll('#np-eq .np-eq-slider').forEach(el => {
+    el.value = String(options.eq_gains?.[Number(el.dataset.band)] ?? 0);
+    amPaint(el);
+  });
+  npOptState(options);
+}
+
+// What can be set right now: without libmpv (or with the window's engine
+// chosen) the native-only sections are greyed out and say why.
+function npOptState(options) {
+  const st = playerNativeStatus;
+  const note = $('np-engine-note');
+  let message = '';
+  if (window.__mornyeWeb) message = 'In the web interface the browser plays the music on your device; these settings apply to the desktop app.';
+  else if (!st?.available) message = `Native engine unavailable: ${st?.reason || 'libmpv not found'}. Install libmpv to use the settings below (see the guide, "Player").`;
+  else if ((options?.engine || st.options?.engine) === 'browser') message = 'The window\'s own engine is selected: the settings below apply when the native engine plays.';
+  if (note) { note.textContent = message; note.classList.toggle('hidden', !message); }
+  const off = !!window.__mornyeWeb || !st?.available;
+  document.querySelectorAll('#tc-player .np-native-only').forEach(sec => {
+    sec.classList.toggle('np-disabled', off);
+    sec.querySelectorAll('input, select').forEach(el => { el.disabled = off; });
+  });
+  $('np-opt-engine').disabled = !!window.__mornyeWeb;
+}
+
+// A device's name in the menu. macOS lists each device under two drivers
+// (coreaudio/…, avfoundation/…) with the same description, Windows under
+// wasapi/… only: when a description repeats, the driver tells them apart.
+function npDeviceLabel(device, devices) {
+  if (device.name === 'auto') return 'System default';
+  const same = devices.filter(d => d.description === device.description).length;
+  return same > 1 ? `${device.description} (${device.name.split('/')[0]})` : device.description;
+}
+
+async function loadPlayerSettings() {
+  const api = window.pywebview?.api;
+  if (window.__mornyeWeb || !api?.native_player_status) { npOptState(null); return; }
+  try { playerNativeStatus = await api.native_player_status(); } catch (e) { playerNativeStatus = null; }
+  npOptFill(playerNativeStatus?.options);
+  if (!playerNativeStatus?.available) return;
+  try {
+    const res = await api.native_player_devices();
+    const select = $('np-opt-audio_device');
+    const current = playerNativeStatus.options.audio_device || 'auto';
+    const devices = res?.devices || [];
+    if (!devices.some(d => d.name === current)) devices.push({ name: current, description: `${current} (not connected)` });
+    select.innerHTML = devices.map(d => `<option value="${escHtml(d.name)}">${escHtml(npDeviceLabel(d, devices))}</option>`).join('');
+    select.value = current;
+  } catch (e) { /* the list stays at "System default" */ }
+}
+
+function npOptQueue(patch, delay) {
+  Object.assign(npOptPending, patch);
+  clearTimeout(npOptSaveTimer);
+  npOptSaveTimer = setTimeout(npOptFlush, delay);
+}
+
+async function npOptFlush() {
+  const patch = npOptPending;
+  npOptPending = {};
+  const api = window.pywebview?.api;
+  if (!api?.native_player_set_options || !Object.keys(patch).length) return;
+  let res;
+  try { res = await api.native_player_set_options(patch); } catch (e) { res = { status: 'error', error: String(e) }; }
+  if (res?.status !== 'ok') { toastMgr.error(res?.error || 'Could not save the player settings.'); return; }
+  if (playerNativeStatus) playerNativeStatus.options = res.options;
+  // A preset fills the sliders; a slider makes the preset "Custom".
+  if ('eq_preset' in patch || 'eq_gains' in patch) npOptFill(res.options);
+  if ('engine' in patch) { npOptState(res.options); playerSetupEngine(); }
+}
+
+(function initPlayerSettings() {
+  const pane = $('tc-player');
+  if (!pane) return;
+  const onChange = (e, live) => {
+    const el = e.target;
+    if (el.dataset.npOpt) {
+      const name = el.dataset.npOpt;
+      const value = npOptValue(el);
+      if (el.type === 'range') { amPaint(el); npOptShowValue(name, value); }
+      if (live && el.type !== 'range') return; // selects and toggles report on change
+      npOptQueue({ [name]: value }, el.type === 'range' ? 200 : 0);
+    } else if (el.dataset.npSpdif != null) {
+      if (live) return;
+      const spdif = [...pane.querySelectorAll('[data-np-spdif]')].filter(c => c.checked).map(c => c.dataset.npSpdif);
+      npOptQueue({ spdif }, 0);
+    } else if (el.classList.contains('np-eq-slider')) {
+      amPaint(el);
+      const eq_gains = [...pane.querySelectorAll('.np-eq-slider')].map(s => Number(s.value));
+      $('np-opt-eq_preset').value = 'custom';
+      npOptQueue({ eq_gains, eq_preset: 'custom' }, 200);
+    }
+  };
+  pane.addEventListener('input', e => onChange(e, true));
+  pane.addEventListener('change', e => onChange(e, false));
+})();
+
+// ── Playback statistics (I) ─────────────────────────────────────────────────
+function playerStatsRows(stats, engine) {
+  const rows = [['Engine', engine === 'native' ? 'Native (libmpv)' : 'Window (built-in)']];
+  if (!stats) return rows;
+  const p = stats.params || {}, o = stats.out_params || {};
+  const fmt = (v, unit = '') => (v == null || v === '' ? '—' : `${v}${unit}`);
+  rows.push(
+    ['File', stats.path ? stats.path.split(/[\\/]/).pop() : '—'],
+    ['Codec', stats.codec_desc ? `${stats.codec} (${stats.codec_desc})` : fmt(stats.codec)],
+    ['Source', [p.format, p.samplerate && `${p.samplerate / 1000} kHz`, p['hr-channels'] || p.channels].filter(Boolean).join(' · ') || '—'],
+    ['Bitrate', stats.bitrate ? `${Math.round(stats.bitrate / 1000)} kbps` : '—'],
+    ['Output', stats.output || '—'],
+    ['Output format', [o.format, o.samplerate && `${o.samplerate / 1000} kHz`, o['hr-channels'] || o.channels].filter(Boolean).join(' · ') || '—'],
+    ['Bitstream', stats.bitstream ? 'Yes' : 'No'],
+    ['Audio output', `${fmt(stats.ao)} · ${fmt(stats.device)}`],
+    ['Buffer', stats.cache_s != null ? `${Number(stats.cache_s).toFixed(1)} s${stats.cache_bytes ? ` · ${Math.round(stats.cache_bytes / 1024)} KB` : ''}` : '—'],
+    ['Speed', stats.speed != null ? `${Number(stats.speed).toFixed(2)}×` : '—'],
+    ['Audio delay', `${stats.delay_ms || 0} ms`],
+    ['A-B repeat', (stats.ab_loop || []).every(v => typeof v === 'number') ? stats.ab_loop.map(fmtTime).join(' – ') : 'Off'],
+    ['ReplayGain', stats.replaygain === 'no' ? 'Off' : stats.replaygain],
+    ['Filters', stats.filters?.length ? `${stats.filters.length} active` : 'None'],
+  );
+  return rows;
+}
+
+let playerStatsTimer = 0;
+
+async function renderPlayerStats() {
+  const list = $('player-stats-list');
+  if (!list) return;
+  let stats = null;
+  const engine = playerEngine.kind;
+  if (engine === 'native') {
+    try { stats = (await window.pywebview.api.native_player_stats())?.stats || null; } catch (e) { stats = null; }
+  } else if (playerEngine.hasSource) {
+    stats = {
+      path: playerQueue[playerIndex]?.path || '',
+      codec: playerSourceQuality,
+      output: 'PCM to the system mixer',
+      speed: playerEngine.playbackRate,
+      ab_loop: [playerAb.a, playerAb.b],
+      replaygain: 'no',
+    };
+  }
+  list.innerHTML = playerStatsRows(stats, engine)
+    .map(([k, v]) => `<dt>${escHtml(k)}</dt><dd>${escHtml(String(v))}</dd>`).join('');
+}
+
+function openPlayerStats() {
+  $('player-stats-modal').classList.remove('hidden');
+  renderPlayerStats();
+  clearInterval(playerStatsTimer);
+  playerStatsTimer = setInterval(renderPlayerStats, 1000);
+}
+
+function closePlayerStats() {
+  $('player-stats-modal').classList.add('hidden');
+  clearInterval(playerStatsTimer);
+}
+
+// ── Keyboard, as in MPC-HC ──────────────────────────────────────────────────
+// Only while something is loaded, and never while typing in a field or
+// with a dialog other than the full-screen player open.
+function playerShortcutAction(e) {
+  if (e.metaKey || e.ctrlKey || e.altKey) return null;
+  const k = e.key;
+  if (k === ' ') return 'toggle';
+  if (k === 'ArrowRight') return e.shiftKey ? 'fwd30' : 'fwd5';
+  if (k === 'ArrowLeft') return e.shiftKey ? 'back30' : 'back5';
+  if (k === '+' || k === '=') return 'volup';
+  if (k === '-' || k === '_') return 'voldown';
+  if (k === 'm' || k === 'M') return 'mute';
+  if (k === ']') return 'faster';
+  if (k === '[') return 'slower';
+  if (k === 'Backspace') return 'speed1';
+  if (k === 'l' || k === 'L') return 'ab';
+  if (k === 'i' || k === 'I') return 'stats';
+  return null;
+}
+
+function playerSetVolumePercent(value) {
+  const v = Math.max(0, Math.min(100, Math.round(value)));
+  playerEngine.volume = v / 100;
+  ['pl-vol', 'np-vol'].forEach(id => { const el = $(id); if (el) { el.value = v; amPaint(el); } });
+}
+
+document.addEventListener('keydown', (e) => {
+  if (!playerEngine.hasSource || e.defaultPrevented) return;
+  const t = e.target;
+  if (t instanceof Element && (t.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]')
+    || (t.closest('button, [data-activate]') && (e.key === ' ' || e.key === 'Enter')))) return;
+  if (document.querySelector('.modal:not(.hidden):not(#player-stats-modal)')) return;
+  const action = playerShortcutAction(e);
+  if (!action) return;
+  e.preventDefault();
+  const audio = playerEngine;
+  const seekBy = s => {
+    if (!Number.isFinite(audio.duration)) return;
+    audio.currentTime = Math.max(0, Math.min(audio.duration - 0.5, audio.currentTime + s));
+  };
+  switch (action) {
+    case 'toggle': playerToggle(); break;
+    case 'fwd5': seekBy(5); break;
+    case 'back5': seekBy(-5); break;
+    case 'fwd30': seekBy(30); break;
+    case 'back30': seekBy(-30); break;
+    case 'volup': playerSetVolumePercent(audio.volume * 100 + 5); break;
+    case 'voldown': playerSetVolumePercent(audio.volume * 100 - 5); break;
+    case 'mute': audio.muted = !audio.muted; toastMgr.info(audio.muted ? 'Muted' : 'Sound on'); break;
+    case 'faster': playerSetSpeed(0.1); break;
+    case 'slower': playerSetSpeed(-0.1); break;
+    case 'speed1': playerSetSpeed(0); break;
+    case 'ab': playerAbCycle(); break;
+    case 'stats': $('player-stats-modal').classList.contains('hidden') ? openPlayerStats() : closePlayerStats(); break;
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('player-stats-modal')?.classList.contains('hidden')) closePlayerStats();
+});
+
 // The filled share of an Apple Music slider (.am-range), drawn from --p.
 function amPaint(el) {
   if (!el) return;
@@ -8851,7 +9488,7 @@ function npSetSync(kind, rawValue) {
     return;
   }
   NP.focus = -2;
-  npUpdate(npLyricsTime($('player-audio').currentTime), true);
+  npUpdate(npLyricsTime(playerEngine.currentTime), true);
 }
 
 function npResetSync() {
@@ -8866,7 +9503,7 @@ function npResetSync() {
 function openNowPlaying() {
   $('np-view').classList.remove('hidden');
   npStartTick();
-  if (npLines.length) { npLayoutLyrics(); NP.focus = -2; NP.first = true; npUpdate(npLyricsTime($('player-audio').currentTime), true); }
+  if (npLines.length) { npLayoutLyrics(); NP.focus = -2; NP.first = true; npUpdate(npLyricsTime(playerEngine.currentTime), true); }
 }
 function closeNowPlaying() { $('np-view').classList.add('hidden'); }
 
@@ -9149,12 +9786,12 @@ function fillNowPlaying(item, res) {
     }).join('');
     box.querySelectorAll('.np-line').forEach(el => el.addEventListener('click', () => {
       const l = npLines[parseInt(el.dataset.i)];
-      if (npSynced && l && l.t != null) { $('player-audio').currentTime = npAudioTimeForLyrics(l.t); $('player-audio').play(); }
+      if (npSynced && l && l.t != null) { playerEngine.currentTime = npAudioTimeForLyrics(l.t); playerEngine.play(); }
     }));
     npLayoutLyrics();
   }
   if (!$('np-queue').classList.contains('hidden')) npRenderQueue();
-  if (npSynced) npUpdate(npLyricsTime($('player-audio').currentTime), true);
+  if (npSynced) npUpdate(npLyricsTime(playerEngine.currentTime), true);
 }
 
 // How long a pause between two lines has to be before the intro's three
@@ -9407,7 +10044,7 @@ function npUpdate(time, force) {
     NP.userTimer = setTimeout(() => {
       NP.userScrolling = false;
       NP.focus = -2;                       // follow again, with the spring
-      npUpdate(npLyricsTime($('player-audio').currentTime), true);
+      npUpdate(npLyricsTime(playerEngine.currentTime), true);
     }, 4000);
   };
   box.addEventListener('wheel', hold, { passive: true });
@@ -9418,8 +10055,8 @@ function npUpdate(time, force) {
 let npRaf = 0;
 function npTick() {
   npRaf = 0;
-  const audio = $('player-audio');
-  if (!audio || audio.paused || $('np-view').classList.contains('hidden')) return;
+  const audio = playerEngine;
+  if (audio.paused || $('np-view').classList.contains('hidden')) return;
   npUpdate(npLyricsTime(audio.currentTime));
   npRaf = requestAnimationFrame(npTick);
 }
@@ -10727,7 +11364,7 @@ function markPlayingRow() {
     if (top > 40 && box.scrollHeight - box.clientHeight > 160) view.classList.add('player-compact');
     else if (top < 8) view.classList.remove('player-compact');
   }, { passive: true });
-  const audio = $('player-audio');
+  const audio = playerEngine;
   audio.addEventListener('play', () => $('player-list').classList.remove('paused'));
   audio.addEventListener('pause', () => $('player-list').classList.add('paused'));
 })();

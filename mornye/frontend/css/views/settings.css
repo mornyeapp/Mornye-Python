@@ -860,3 +860,95 @@ input[type="password"].full { width: 100%; }
 @media (max-width: 700px) {
   #services-list .service-sort-item { grid-template-columns: 22px 12px 30px minmax(0, 1fr) auto; }
 }
+
+/* ── Settings → Player: the native engine's options ─────────────────────── */
+.np-engine-note {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-1);
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+.np-native-only.np-disabled { opacity: .55; }
+.np-spdif {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  justify-content: flex-end;
+  font-size: var(--text-sm);
+}
+.np-spdif label { display: inline-flex; align-items: center; gap: var(--space-2); cursor: pointer; }
+.np-spdif em { font-style: normal; font-size: var(--text-xs); color: var(--text-muted); }
+.np-eq {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: var(--space-2);
+  padding: var(--space-3) 0 var(--space-2);
+}
+.np-eq-band {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+/* A horizontal range turned upright in a box of its own size: the band's
+   gain goes up and down. (writing-mode on a styled range draws nothing in
+   WebKit.) */
+.np-eq-track {
+  position: relative;
+  width: 24px;
+  height: 128px;
+}
+.np-eq-slider {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 120px;
+  margin: 0;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  accent-color: var(--signal);
+  cursor: pointer;
+}
+@media (max-width: 640px) {
+  .np-eq { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+
+/* ── Playback statistics ─────────────────────────────────────────────────── */
+/* Same frame as the playlist editor's (views/player.css). */
+#player-stats-modal {
+  position: fixed; inset: 0; z-index: var(--z-modal); display: flex;
+  align-items: center; justify-content: center; padding: var(--space-5);
+  background: var(--scrim);
+}
+#player-stats-modal.hidden { display: none; }
+.player-stats {
+  width: min(520px, 100%); max-height: 90vh; overflow: auto;
+  padding: var(--space-5);
+  background: var(--surface); border: 1px solid var(--rule); color: var(--text);
+}
+.player-stats .modal-header {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+}
+.player-stats .modal-header h2 { margin: 0; font-size: var(--text-lg); }
+.player-stats .modal-close {
+  width: 34px; height: 34px; border: 0; background: transparent;
+  color: var(--text-muted); font: inherit; font-size: 22px; cursor: pointer;
+}
+.player-stats-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-2) var(--space-4);
+  margin: var(--space-3) 0;
+  font-size: var(--text-sm);
+}
+.player-stats-list dt { color: var(--text-muted); }
+.player-stats-list dd { margin: 0; color: var(--text); overflow-wrap: anywhere; }
+.player-stats-keys {
+  margin: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--rule);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}

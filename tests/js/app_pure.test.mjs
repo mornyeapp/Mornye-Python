@@ -183,7 +183,8 @@ test('changing lyric speed immediately recalculates the current lyric position',
   const globals = {
     NP_SYNC: sync,
     NP: { focus: 0 },
-    $: (id) => id === 'player-audio' ? { currentTime: 100 } : output,
+    $: () => output,
+    playerEngine: { currentTime: 100 },
     npUpdate: (time) => { updatedTime = time; },
   };
   const f = pick(['npSetSync', 'npLyricsTime'], globals);
