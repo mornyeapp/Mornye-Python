@@ -26,6 +26,7 @@
 
 ### Fixed
 
+- **Mornye logo on the Windows window and taskbar**: older pywebview WinForms backends ignored the icon and showed python.exe's. The window icon is now set directly (WM_SETICON) once the window is shown, at the monitor's DPI.
 - **Now Playing buttons no longer cut off on Windows**: on a shorter window (Windows at 125% scaling) the cover filled the column and pushed play, previous and next half off the bottom edge. The cover now shrinks to the window height.
 - **Dolby Atmos without fallback goes straight to the next provider**: with quality fallback off, a TIDAL track without Atmos used to download a stereo Hi-Res file that was then deleted, and an Atmos HTTP 502 failed the whole track before Amazon was tried. Extensions now receive `allowFallback` (tidal-web 1.2.15 stops at Atmos), and a 502 fails only that provider. A quality chosen for a single extension still steps down as before.
 - **Apple Music, Tidal, YouTube and other links are accepted again**: the download pipeline only let Spotify links and known catalogue URLs through, rejecting every other link as "source not supported" before any provider was tried, although the engine reads them all. It now accepts any link the engine can read, including those an installed extension's `urlHandler` claims. Deezer playlist links are recognised, and Tidal playlist ids (UUIDs) are no longer cut down to their leading digits.

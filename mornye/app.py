@@ -3020,6 +3020,10 @@ def run_gui() -> None:
     if window is not None:
         window.events.loaded += api._on_loaded
         window.events.shown += _activate_macos_app
+        if sys.platform == "win32":
+            from .desktop_branding import apply_windows_window_icon
+
+            window.events.shown += lambda: apply_windows_window_icon(window)
 
     # Two defaults conspired to make the theme picker look broken in the
     # desktop window, both of them about *where* the page's localStorage
