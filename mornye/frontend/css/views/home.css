@@ -1513,6 +1513,9 @@ body:has(#album-card:not(.hidden)) #fetchBtn {
   }
   .track-table-header > :nth-child(1), .track-row > .tr-check,
   .track-table-header > :nth-child(2), .track-row > .tr-num { grid-column: 1; grid-row: 1; justify-self: center; }
+  /* The number shares the checkbox's cell and comes after it, so even at
+     opacity 0 it sat on top and swallowed the click on "select all". */
+  .track-table-header > :nth-child(2), .track-row > .tr-num { pointer-events: none; }
   .track-table-header > :nth-child(3), .track-row > .tr-title-cell { grid-column: 2; }
   .track-table-header > div:nth-child(4), .track-row > .tr-playcount { grid-column: 3; text-align: left; padding-left: 0; }
   .track-table-header > :nth-child(5), .track-row > .tr-dur { grid-column: 4; }
