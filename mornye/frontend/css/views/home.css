@@ -1638,8 +1638,8 @@ body:has(#album-card:not(.hidden)) #fetchBtn {
   flex-direction: column; flex-wrap: nowrap; align-items: center; justify-content: center;
   min-height: 340px; padding: var(--space-6) var(--space-5) var(--space-5);
   border: 0; border-radius: var(--radius-2);
-  background: linear-gradient(160deg, #2c2a2e, #121114);
-  color: #fff; text-align: center;
+  background: linear-gradient(160deg, var(--media-tint-to), var(--media-bg));
+  color: var(--media-ink); text-align: center;
 }
 #album-card > .artist-hero-bg { display: none; }
 #album-card.artist-mode > .artist-hero-bg {
@@ -1654,8 +1654,8 @@ body:has(#album-card:not(.hidden)) #fetchBtn {
 .artist-hero-bg::after {
   content: ""; position: absolute; inset: 0;
   background:
-    radial-gradient(ellipse 60% 55% at 50% 55%, rgba(0,0,0,.45), rgba(0,0,0,0) 75%),
-    linear-gradient(180deg, rgba(0,0,0,.15) 0%, rgba(0,0,0,.25) 50%, rgba(0,0,0,.65) 100%);
+    radial-gradient(ellipse 60% 55% at 50% 55%, rgba(var(--shade-rgb), .45), rgba(var(--shade-rgb), 0) 75%),
+    linear-gradient(180deg, rgba(var(--shade-rgb), .15) 0%, rgba(var(--shade-rgb), .25) 50%, rgba(var(--shade-rgb), .65) 100%);
 }
 #album-card.artist-mode #album-cover,
 #album-card.artist-mode #album-tech,
@@ -1665,19 +1665,19 @@ body:has(#album-card:not(.hidden)) #fetchBtn {
   align-self: center; align-items: center; width: 100%; max-width: 920px; padding-top: 0; gap: var(--space-2);
 }
 #album-card.artist-mode #album-title {
-  color: #fff; font-size: clamp(32px, 5vw, 64px); line-height: 1.05; font-weight: 800;
-  text-shadow: 0 2px 18px rgba(0,0,0,.4); overflow-wrap: anywhere;
+  color: var(--media-ink); font-size: clamp(32px, 5vw, 64px); line-height: 1.05; font-weight: 800;
+  text-shadow: 0 2px 18px rgba(var(--shade-rgb), .4); overflow-wrap: anywhere;
 }
 #album-card.artist-mode #album-meta-details,
-#album-card.artist-mode #artist-stats-row { justify-content: center; flex-wrap: wrap; row-gap: 2px; color: rgba(255,255,255,.8); }
+#album-card.artist-mode #artist-stats-row { justify-content: center; flex-wrap: wrap; row-gap: 2px; color: rgba(var(--media-ink-rgb), .8); }
 #album-card.artist-mode #artist-stats-row > span { white-space: nowrap; }
-#album-card.artist-mode .dot-sep { color: rgba(255,255,255,.45); }
+#album-card.artist-mode .dot-sep { color: rgba(var(--media-ink-rgb), .45); }
 #album-card.artist-mode #album-subtitle.artist-bio {
-  color: rgba(255,255,255,.78); text-align: center; max-width: 72ch;
+  color: rgba(var(--media-ink-rgb), .78); text-align: center; max-width: 72ch;
   -webkit-line-clamp: 2; line-clamp: 2;
 }
 #album-card.artist-mode #album-subtitle.artist-bio.expanded { -webkit-line-clamp: unset; line-clamp: unset; }
-#album-card.artist-mode .artist-bio-toggle { align-self: center; color: #fff; }
+#album-card.artist-mode .artist-bio-toggle { align-self: center; color: var(--media-ink); }
 #album-card.artist-mode #album-actions {
   justify-content: center; align-items: center; gap: var(--space-4);
   margin-top: var(--space-3); padding-top: 0;
@@ -1687,22 +1687,22 @@ body:has(#album-card:not(.hidden)) #fetchBtn {
   order: 3; width: 52px; height: 52px; min-width: 0; padding: 0;
   display: inline-flex; align-items: center; justify-content: center; font-size: 0; gap: 0;
   border: 0; border-radius: 50%;
-  background: rgba(255,255,255,.16); color: #fff; backdrop-filter: blur(10px);
+  background: rgba(var(--media-ink-rgb), .16); color: var(--media-ink); backdrop-filter: blur(10px);
   transition: transform .15s ease, background .15s ease;
 }
 #album-card.artist-mode #album-actions .act-btn svg { width: 20px; height: 20px; }
-#album-card.artist-mode #album-actions .act-btn:hover { background: rgba(255,255,255,.26); transform: scale(1.05); }
+#album-card.artist-mode #album-actions .act-btn:hover { background: rgba(var(--media-ink-rgb), .26); transform: scale(1.05); }
 #album-card.artist-mode #album-actions #save-all-covers-btn,
 #album-card.artist-mode #album-actions #dl-selected-btn { order: 1; }
 #album-card.artist-mode #album-actions .act-btn.primary {
   order: 2; width: 84px; height: 84px;
-  background: var(--signal); color: var(--signal-ink); box-shadow: 0 8px 26px rgba(0,0,0,.35);
+  background: var(--signal); color: var(--signal-ink); box-shadow: 0 8px 26px rgba(var(--shade-rgb), .35);
 }
 #album-card.artist-mode #album-actions .act-btn.primary svg { width: 32px; height: 32px; }
-#album-card.artist-mode #album-actions .act-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+#album-card.artist-mode #album-actions .act-btn:focus-visible { outline: 2px solid var(--media-ink); outline-offset: 2px; }
 #album-card.artist-mode > button[data-onclick="closeAlbumCard()"] {
-  position: absolute; z-index: 2; color: #fff;
-  width: 36px; height: 36px; border-radius: 50%; background: rgba(0,0,0,.35);
+  position: absolute; z-index: 2; color: var(--media-ink);
+  width: 36px; height: 36px; border-radius: 50%; background: rgba(var(--shade-rgb), .35);
   display: grid; place-items: center; top: 14px; right: 14px;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1726,7 +1726,7 @@ body:has(#album-card:not(.hidden)) #fetchBtn {
 .ah-latest:focus-visible { outline: 2px solid var(--signal-strong); }
 .ah-latest-cover {
   width: 180px; aspect-ratio: 1; display: grid; place-items: center; overflow: hidden;
-  background: var(--raised); border-radius: var(--radius-1); box-shadow: 0 8px 24px rgba(0,0,0,.22);
+  background: var(--raised); border-radius: var(--radius-1); box-shadow: 0 8px 24px rgba(var(--shade-rgb), .22);
 }
 .ah-latest-cover img { width: 100%; height: 100%; object-fit: cover; }
 .ah-latest-info { display: grid; gap: 4px; justify-items: start; min-width: 0; }
