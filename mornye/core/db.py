@@ -430,6 +430,24 @@ _MIGRATIONS: tuple[tuple[str, ...], ...] = (
         "ALTER TABLE player_playlist_tracks "
         "ADD COLUMN source_url TEXT NOT NULL DEFAULT ''",
     ),
+    # v15 — Fix Local Files results, kept between scans.
+    #
+    # Every scan of a folder read every file again and asked Spotify about
+    # each one: on a NAS share, the same long wait each time. One row per
+    # file (core/local_scan_cache.py): the result the list shows, and the
+    # size and modification time it was worked out for, so the next scan
+    # shows it at once and redoes only what changed (or what is too old).
+    (
+        """
+        CREATE TABLE IF NOT EXISTS local_scan_cache (
+            path       TEXT PRIMARY KEY,
+            mtime_ns   INTEGER NOT NULL,
+            size       INTEGER NOT NULL,
+            entry      TEXT NOT NULL,
+            scanned_at REAL NOT NULL
+        )
+        """,
+    ),
 )
 
 

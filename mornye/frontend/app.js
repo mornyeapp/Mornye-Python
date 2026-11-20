@@ -7956,6 +7956,10 @@ async function startLocalScan() {
     setTaBtnState($('btn-scan-local'), 'loading');
     $('local-results-wrap').classList.add('hidden');
     $('local-footer').classList.add('hidden');
+    localScanData = [];
+    localScan.id = null;
+    localScan.path = path;
+    paintScanBar('local-scan', { phase: 'listing', done: 0, total: 0 }, localScan);
 
     try {
         if (window.pywebview?.api && typeof window.pywebview.api.scan_local === 'function') {
@@ -7963,6 +7967,7 @@ async function startLocalScan() {
             if (result && result.status === 'error') {
                 throw new Error(result.error || 'Scan failed');
             }
+            localScanAdopt(result?.scan);
         } else {
             const response = await fetch('/api/scan_local', {
                 method: 'POST',
@@ -7976,9 +7981,10 @@ async function startLocalScan() {
             if (data?.result?.status === 'error') {
                 throw new Error(data.result.error || 'Scan failed');
             }
+            localScanAdopt(data?.result?.scan);
         }
-        toastMgr.info("Scanning local files... this may take a moment.");
     } catch (err) {
+        paintScanBar('local-scan', null, localScan);
         console.error('[LocalScan] start failed:', err);
         setTaBtnState($('btn-scan-local'), 'error');
         setTimeout(() => setTaBtnState($('btn-scan-local'), 'default'), 2500);
@@ -7986,19 +7992,79 @@ async function startLocalScan() {
     }
 }
 
-// Called by backend when scanning finishes
-window.app_local_scan_results = function(payload) {
-    setTaBtnState($('btn-scan-local'), 'default');
-    localScanData = payload.files || [];
-    renderLocalTracks();
-    $('local-results-wrap').classList.remove('hidden');
-    $('local-footer').classList.remove('hidden');
-    updateLocalSelection();
-    toastMgr.success(`Scan complete: found ${localScanData.length} files.`);
+// The scan whose events the list follows: a newer scan of the same page
+// replaces it, and events of an older one are dropped.
+const localScan = { id: null, last: 0, path: '', raf: 0, scanSamples: [] };
+
+function localScanAdopt(id) {
+  if (typeof id !== 'number') return;
+  localScan.last = Math.max(localScan.last, id);
+  if (localScan.id === null) localScan.id = id;
+}
+
+function localScanAccept(p) {
+  if (localScan.id === null) {
+    if (typeof p?.scan !== 'number' || p.scan < localScan.last) return false;
+    localScan.id = p.scan;
+    localScan.last = p.scan;
+  }
+  return p?.scan === localScan.id;
+}
+
+// Results by file: a later one for the same file (it changed on disk, or
+// its stored result had grown old) replaces the earlier one in place.
+function mergeLocalResults(current, incoming, removed = []) {
+  const gone = new Set(removed);
+  const byPath = new Map(current.filter(e => !gone.has(e.file_path)).map(e => [e.file_path, e]));
+  for (const e of incoming || []) if (!gone.has(e.file_path)) byPath.set(e.file_path, e);
+  return [...byPath.values()].sort((a, b) => String(a.file_path).localeCompare(String(b.file_path)));
+}
+
+// Re-renders the list, keeping the boxes the user ticked or unticked
+// while results were still coming in.
+function renderLocalTracksKeepingChoices() {
+  const picked = new Map([...document.querySelectorAll('#local-track-rows .local-cb')]
+    .map(cb => [cb.dataset.filePath, cb.checked]));
+  renderLocalTracks();
+  for (const cb of document.querySelectorAll('#local-track-rows .local-cb')) {
+    if (!cb.disabled && picked.has(cb.dataset.filePath)) cb.checked = picked.get(cb.dataset.filePath);
+  }
+  $('local-results-wrap').classList.remove('hidden');
+  $('local-footer').classList.remove('hidden');
+  updateLocalSelection();
+}
+
+// Results arrive in parts: those stored by an earlier scan of the folder
+// at once (cached), then the files that were new or changed as they are
+// matched.
+window.app_local_scan_chunk = function(p) {
+  if (!localScanAccept(p)) return;
+  localScanData = mergeLocalResults(localScanData, p.files);
+  if (!localScan.raf) localScan.raf = requestAnimationFrame(() => { localScan.raf = 0; renderLocalTracksKeepingChoices(); });
+};
+
+window.app_local_scan_progress = function(p) {
+  if (!localScanAccept(p)) return;
+  paintScanBar('local-scan', p, localScan);
+};
+
+window.app_local_scan_done = function(p) {
+  if (!localScanAccept(p)) return;
+  localScanData = mergeLocalResults(localScanData, [], p.removed);
+  if (localScan.raf) { cancelAnimationFrame(localScan.raf); localScan.raf = 0; }
+  renderLocalTracksKeepingChoices();
+  paintScanBar('local-scan', null, localScan);
+  setTaBtnState($('btn-scan-local'), 'default');
+  const n = localScanData.length;
+  const checked = Number(p.checked) || 0;
+  toastMgr.success(checked < n
+    ? `Scan complete: ${n} files, ${checked} new or changed.`
+    : `Scan complete: found ${n} files.`);
 };
 
 // Called by backend on scan error
 window.app_local_scan_error = function(err) {
+    paintScanBar('local-scan', null, localScan);
     setTaBtnState($('btn-scan-local'), 'error');
     setTimeout(() => setTaBtnState($('btn-scan-local'), 'default'), 2500);
     toastMgr.error("Scan failed: " + err);
@@ -10480,27 +10546,35 @@ function libScanEtaText(seconds) {
 
 // The bar under the library summary; null hides it.
 function setPlayerScanProgress(p) {
-  const box = $('plb-scan');
+  if (!$('plb-scan')) return;
+  paintScanBar('plb-scan', p, lib);
+  syncPlayerLibbar();
+}
+
+// Paints a scan bar (#<id>, #<id>-track, #<id>-text, styled in
+// feedback.css) for a scan progress payload; null hides it. `state` keeps
+// the pace samples the time left is worked out from.
+function paintScanBar(id, p, state) {
+  const box = $(id);
   if (!box) return;
   box.classList.toggle('hidden', !p);
-  syncPlayerLibbar();
-  if (!p) { lib.scanSamples = []; return; }
+  if (!p) { state.scanSamples = []; return; }
   let eta = null;
   if (p.phase === 'reading' && p.total) {
-    const samples = (lib.scanSamples ||= []);
+    const samples = (state.scanSamples ||= []);
     samples.push({ t: Date.now(), done: Number(p.done) || 0 });
     while (samples.length > 2 && samples[samples.length - 1].t - samples[1].t > 30000) samples.shift();
     eta = libScanRemaining(samples, Number(p.done) || 0, Number(p.total));
   } else {
-    lib.scanSamples = [];
+    state.scanSamples = [];
   }
   const { pct, text } = libScanProgress(p, eta);
-  const track = $('plb-scan-track');
+  const track = $(`${id}-track`);
   box.classList.toggle('indeterminate', pct === null);
-  box.style.setProperty('--plb-scan-pct', `${pct || 0}%`);
+  box.style.setProperty('--scan-pct', `${pct || 0}%`);
   if (pct === null) track.removeAttribute('aria-valuenow');
   else track.setAttribute('aria-valuenow', String(pct));
-  $('plb-scan-text').textContent = text;
+  $(`${id}-text`).textContent = text;
 }
 
 // One folder by its name; several as "Music, NAS +1".

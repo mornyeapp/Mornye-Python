@@ -106,9 +106,12 @@ def test_scan_local_accepts_a_mounted_share(
     api.download_dir = str(tmp_path / "downloads")
     started = []
     monkeypatch.setattr(
-        api, "_scan_local_thread", lambda p: started.append(p), raising=False
+        api,
+        "_scan_local_thread",
+        lambda scan_id, p: started.append(p),
+        raising=False,
     )
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "home"))
 
     result = api.scan_local("smb://nas.local/Music/Albums")
-    assert result == {"status": "started"}
+    assert result == {"status": "started", "scan": 1}

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -233,6 +234,33 @@ def scan_file(path: str | Path) -> LocalFileInfo:
     return info
 
 
+def list_audio_files(
+    path: str | Path,
+    *,
+    recursive: bool = True,
+    on_found: Callable[[int], None] | None = None,
+) -> list[Path]:
+    """The files scan_path would read under `path`, sorted, without reading
+    them: `[path]` itself when it is a file (scan_file reports one it cannot
+    read), [] when it is neither a file nor a folder.
+
+    On a network share the listing alone can take a while, so `on_found`,
+    when given, is called with the count of audio files found so far.
+    """
+    p = Path(path)
+    if p.is_file():
+        return [p]
+    if not p.is_dir():
+        return []
+    found: list[Path] = []
+    for f in p.glob("**/*" if recursive else "*"):
+        if f.suffix.lower() in SUPPORTED_EXTENSIONS and f.is_file():
+            found.append(f)
+            if on_found is not None:
+                on_found(len(found))
+    return sorted(found)
+
+
 def scan_path(path: str | Path, *, recursive: bool = True) -> list[LocalFileInfo]:
     """Scans a single file or every supported audio file under a directory.
 
@@ -246,13 +274,7 @@ def scan_path(path: str | Path, *, recursive: bool = True) -> list[LocalFileInfo
         return [scan_file(p)]
 
     if p.is_dir():
-        pattern = "**/*" if recursive else "*"
-        files = sorted(
-            f
-            for f in p.glob(pattern)
-            if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS
-        )
-        return [scan_file(f) for f in files]
+        return [scan_file(f) for f in list_audio_files(p, recursive=recursive)]
 
     # Path doesn't exist or is neither file nor directory
     if not p.exists():

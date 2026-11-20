@@ -22,13 +22,14 @@ import asyncio
 import contextlib
 import logging
 import shutil
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .isrc_utils import normalize_isrc
 from .local_matcher import MatchCandidate, match_local_file
-from .local_scanner import LocalFileInfo, scan_path
+from .local_scanner import LocalFileInfo, scan_file, scan_path
 from .tagger import EmbedOptions, embed_metadata_async
 
 if TYPE_CHECKING:
@@ -119,6 +120,68 @@ async def scan_and_match_async(
         candidates_per_file=candidates_per_file,
         acoustid_key=acoustid_key,
     )
+
+
+#: Files read and matched together by scan_and_match_files_async before
+#: their results are handed on: small enough for the list to fill in steadily.
+MATCH_BATCH = 20
+
+
+async def scan_and_match_files_async(
+    files: Sequence[str | Path],
+    *,
+    on_batch: Callable[[list[LocalScanEntry]], None],
+    candidates_per_file: int = 5,
+    acoustid_key: str = "",
+    batch_size: int = MATCH_BATCH,
+    cancelled: Callable[[], bool] = lambda: False,
+) -> None:
+    """scan_and_match_async for a given list of files, in batches.
+
+    Each batch is read, matched and (for what its tags could not settle)
+    identified by fingerprint, then handed to `on_batch`, so a long scan of
+    a network share shows its results as it goes instead of all at the end.
+    Stops between batches once `cancelled()` is true.
+    """
+    semaphore = asyncio.Semaphore(MATCH_CONCURRENCY)
+
+    async def _match_one(info: LocalFileInfo, client) -> LocalScanEntry:
+        if info.error:
+            return LocalScanEntry(info=info, candidates=[])
+        async with semaphore:
+            candidates = await match_local_file(
+                info, limit=candidates_per_file, client=client
+            )
+        return LocalScanEntry(info=info, candidates=candidates)
+
+    def _read(chunk: list[str | Path]) -> list[LocalFileInfo]:
+        return [scan_file(f) for f in chunk]
+
+    client = None
+    client_tried = False
+    step = max(1, batch_size)
+    for start in range(0, len(files), step):
+        if cancelled():
+            return
+        infos = await asyncio.to_thread(_read, list(files[start : start + step]))
+        if not client_tried and any(not i.error for i in infos):
+            client_tried = True
+            try:
+                from .spotify_metadata import SpotifyMetadataClient
+
+                client = await asyncio.to_thread(SpotifyMetadataClient)
+            except Exception as exc:  # the slower per-file client still works
+                logger.warning(
+                    "[local_processor] shared metadata client unavailable: %s", exc
+                )
+        entries = list(await asyncio.gather(*(_match_one(i, client) for i in infos)))
+        entries = await _identify_unresolved_async(
+            entries,
+            client=client,
+            candidates_per_file=candidates_per_file,
+            acoustid_key=acoustid_key,
+        )
+        on_batch(entries)
 
 
 def _needs_identifying(entry: LocalScanEntry) -> bool:

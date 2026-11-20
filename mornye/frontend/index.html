@@ -383,12 +383,12 @@
           <div class="plb-main">
             <strong id="plb-name"></strong>
             <span id="plb-stats" class="plb-stats"></span>
-            <div class="plb-scan hidden" id="plb-scan">
-              <div class="plb-scan-track" id="plb-scan-track" role="progressbar" aria-label="Library scan"
-                   aria-valuemin="0" aria-valuemax="100"><span class="plb-scan-fill"></span></div>
-              <div class="plb-scan-line">
-                <span class="plb-scan-text" id="plb-scan-text" aria-live="polite"></span>
-                <button class="plb-scan-stop" type="button" id="plb-scan-stop" data-onclick="cancelPlayerScan()">Stop</button>
+            <div class="scan-bar hidden" id="plb-scan">
+              <div class="scan-bar-track" id="plb-scan-track" role="progressbar" aria-label="Library scan"
+                   aria-valuemin="0" aria-valuemax="100"><span class="scan-bar-fill"></span></div>
+              <div class="scan-bar-line">
+                <span class="scan-bar-text" id="plb-scan-text" aria-live="polite"></span>
+                <button class="scan-bar-stop" type="button" id="plb-scan-stop" data-onclick="cancelPlayerScan()">Stop</button>
               </div>
             </div>
           </div>
@@ -561,6 +561,14 @@
               Mornye scans the files, finds the right metadata and lets you compare before anything is written.
             </p>
           </details>
+        </div>
+
+        <div class="scan-bar hidden" id="local-scan">
+          <div class="scan-bar-track" id="local-scan-track" role="progressbar" aria-label="Scan of the folder"
+               aria-valuemin="0" aria-valuemax="100"><span class="scan-bar-fill"></span></div>
+          <div class="scan-bar-line">
+            <span class="scan-bar-text" id="local-scan-text" aria-live="polite"></span>
+          </div>
         </div>
 
         <div class="local-empty" id="local-empty" role="status">
