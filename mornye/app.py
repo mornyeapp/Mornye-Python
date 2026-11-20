@@ -34,6 +34,7 @@ from .api_mixins.library_tools import LibraryToolsMixin
 from .api_mixins.local_tagging import LocalTaggingMixin
 from .api_mixins.player_playlists import PlayerPlaylistsMixin
 from .api_mixins.music_extras import MusicExtrasMixin
+from .api_mixins.native_player import NativePlayerMixin
 from .api_mixins.search import SearchMixin
 from .api_mixins.signed_sessions import SignedSessionsMixin
 from .api_mixins.stats import StatsMixin
@@ -225,6 +226,7 @@ class MornyeAPI(
     FailedTracksMixin,
     SignedSessionsMixin,
     QueueHistoryMixin,
+    NativePlayerMixin,
 ):
     """pywebview/`--web` bridge — every method here (plus the two mixins
     above) becomes a callable the frontend invokes as `pywebview.api.<name>`
@@ -3004,13 +3006,16 @@ def run_gui() -> None:
     with contextlib.suppress(Exception):
         Path(storage_path).mkdir(parents=True, exist_ok=True)
 
-    webview.start(
-        http_server=True,
-        http_port=_pick_gui_port(),
-        private_mode=False,
-        storage_path=storage_path,
-        icon=window_icon,
-    )
+    try:
+        webview.start(
+            http_server=True,
+            http_port=_pick_gui_port(),
+            private_mode=False,
+            storage_path=storage_path,
+            icon=window_icon,
+        )
+    finally:
+        api._close_native_player()
 
 
 if __name__ == "__main__":

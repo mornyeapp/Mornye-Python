@@ -131,6 +131,13 @@ dev = [
 visual = [
     "playwright>=1.48",
 ]
+# The Player's native audio engine (bitstream to S/PDIF/HDMI, output device,
+# exclusive mode, gapless, ReplayGain, equalizer). Pure ctypes; it also needs
+# libmpv itself (Homebrew `mpv` on macOS, libmpv-2.dll on Windows): see the
+# Player section of the guide. Without it the window's own engine plays.
+player = [
+    "python-mpv>=1.0.8",
+]
 # `web`, `hires` and `dedup` used to live here. Everything they installed is
 # part of the base install now, and pip treats a request for an extra that no
 # longer exists as a warning rather than an error, so an old

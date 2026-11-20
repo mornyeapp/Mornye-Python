@@ -311,6 +311,13 @@ EXTENSION_SETTINGS_ADMIN_METHODS = {
 #
 #   choose_folder and the window-chrome methods
 #       See the note above the allowlist — those are native-window only.
+#
+#   native_player_* (api_mixins/native_player.py)
+#       The native audio engine plays on the machine running Mornye. In
+#       --web the music must come out of the listener's device, and over
+#       HTTP these would let anyone who reaches the port play files on the
+#       server's speakers and list its audio devices. The web UI always
+#       uses the browser engine.
 
 
 class LoginRateLimiter:

@@ -208,7 +208,9 @@ class LibraryToolsMixin:
             return False
         return self._is_approved_path(str(candidate))
 
-    def prepare_playback(self, path: str, local_url: bool = True) -> dict:
+    def prepare_playback(
+        self, path: str, local_url: bool = True, native: bool = False
+    ) -> dict:
         """Gets `path` ready to play without lowering its quality.
 
         Files the engine can decode are streamed untouched; the rest are
@@ -216,6 +218,10 @@ class LibraryToolsMixin:
         the file to stream, a label saying what is being heard, and — for the
         desktop window, which has no route to the file — a URL on the local
         media server. The web UI streams `path` through /api/media instead.
+
+        `native`: the desktop's native engine (libmpv) plays the file, which
+        decodes everything ffmpeg does, so no copy is made and no URL is
+        needed; only the label and the Now Playing data are prepared.
         """
         from ..core.audio_analysis import probe_audio
         from ..core.media_server import get_media_server
@@ -224,13 +230,16 @@ class LibraryToolsMixin:
         if not self._is_approved_path(path):
             return {"status": "error", "error": "Path is outside approved directories"}
         try:
-            served, mode = run_sync(playable_file_async(path), timeout=900)
+            if native:
+                served, mode = Path(path), "original"
+            else:
+                served, mode = run_sync(playable_file_async(path), timeout=900)
             info = probe_audio(path)
             label = quality_label(info, mode, Path(path).suffix)
         except Exception as e:
             return {"status": "error", "error": str(e)}
         url = ""
-        if local_url:
+        if local_url and not native:
             url = get_media_server(self._is_media_path).url_for(served)
         return {
             "status": "ok",
