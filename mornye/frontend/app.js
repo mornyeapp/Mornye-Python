@@ -2280,11 +2280,11 @@ function setAlbumCard(title, artist, coverUrl, quality, description, followers, 
   // separate, not-strictly-ordered backend callbacks).
 
   $('album-actions').innerHTML = `
-    <button class="act-btn primary" data-onclick="downloadAll()" title="Download all">
+    <button class="act-btn primary" data-onclick="downloadAll()" data-tip="Download all" aria-label="Download all">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       Download All
     </button>
-    <button class="act-btn secondary" data-onclick="downloadSelected()" id="dl-selected-btn" style="display:none;" title="Download selected">
+    <button class="act-btn secondary" data-onclick="downloadSelected()" id="dl-selected-btn" style="display:none;" data-tip="Download selected" aria-label="Download selected">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="9 12 11 14 15 10"/></svg>
       Download Selected
     </button>
@@ -4563,7 +4563,10 @@ function renderImportPlaylistButton() {
   btn.id = 'import-playlist-btn';
   btn.type = 'button';
   btn.className = 'act-btn secondary';
-  btn.title = 'Copy this playlist into the Player: cover, description and every song';
+  // data-tip is the hover bubble (the round header buttons have no visible
+  // label); the longer wording stays as the accessible name.
+  btn.setAttribute('aria-label', 'Copy this playlist into the Player: cover, description and every song');
+  btn.dataset.tip = 'Import into the Player';
   btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15V6"/><path d="M18.5 18a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z"/><path d="M12 12H3"/><path d="M16 6H3"/><path d="M12 18H3"/></svg> Import playlist`;
   btn.onclick = () => importFetchedPlaylist(btn);
   const cli = actions.querySelector('[data-onclick*="CliCommand"], .cli-btn');
