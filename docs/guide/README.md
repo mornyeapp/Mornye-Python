@@ -20,6 +20,7 @@ usefully. The text is unchanged by the split.
 | [Automation & Operations](automation.md) | JSON output, post-download hooks, notifications, M3U, existing library folders, library rescan, cache maintenance, running the web server, tracks still missing |
 | [Following Artists](subscriptions.md) | Subscriptions, new-release checks, and the library-upgrade pass |
 | [REST API](rest-api.md) | The versioned `/api/v1` surface, quotas and the admin endpoints |
+| [The Player](player.md) | The built-in player and its native engine: bitstream to S/PDIF and HDMI, output device, exclusive mode, gapless, ReplayGain, equalizer, keyboard |
 | [Subsonic](subsonic.md) | Playing the library from Symfonium, Feishin, DSub and other Subsonic apps |
 | [Docker](docker.md) | Headless and NAS setups |
 | [CLI](cli.md) | The standalone executables |

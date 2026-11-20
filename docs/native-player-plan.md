@@ -22,13 +22,70 @@ DVD, shader, filtri DirectShow). È un player musicale.
 
 | Fase | Stato |
 | --- | --- |
-| 0 · Adattatore `playerEngine` con il solo motore browser | da fare |
-| 1 · Motore mpv + bitstream, dispositivo, esclusiva | da fare |
-| 2 · Gapless, ReplayGain, ritardo, velocità, A-B | da fare |
-| 3 · Equalizzatore, canali di uscita, downmix, normalizzazione | da fare |
-| 4 · Statistiche e scorciatoie in stile MPC-HC | da fare |
+| 0 · Adattatore `playerEngine` con il solo motore browser | fatto |
+| 1 · Motore mpv + bitstream, dispositivo, esclusiva | fatto (manca la prova sull'impianto) |
+| 2 · Gapless, ReplayGain, ritardo, velocità, A-B | fatto |
+| 3 · Equalizzatore, canali di uscita, downmix, normalizzazione | fatto |
+| 4 · Statistiche e scorciatoie in stile MPC-HC | fatto |
 
 ---
+
+## Com'è stato fatto (fasi 1–4)
+
+Documentazione per l'utente: [docs/guide/player.md](guide/player.md).
+
+- **Backend** `mornye/core/native_player.py`: `load_mpv()` (trova libmpv
+  anche dove `ctypes.util.find_library` non guarda: Homebrew, accanto
+  all'eseguibile, `MORNYE_LIBMPV`), `PlayerOptions` (validate, salvate in
+  `~/.mornye/player-audio.json`), `mpv_properties` / `filter_chain` (opzioni
+  → proprietà e filtri `lavfi`), `output_label`, e `NativePlayer`: un'istanza
+  `mpv.MPV` creata al primo uso, eventi verso la pagina da un thread di invio
+  suo (mai dal thread di mpv), `time-pos` limitato a 4/s con l'ultimo valore
+  sempre consegnato.
+- **API** `mornye/api_mixins/native_player.py`: `native_player_status`,
+  `_load`, `_set_next`, `_command`, `_devices`, `_set_options`, `_stats`.
+  Ogni percorso passa da `_is_approved_path`. `prepare_playback(…, native=True)`
+  non fa la copia FLAC. mpv si chiude dopo `webview.start()`.
+- **Pagina** (`app.js`): `playerNativeEngine(api)` accanto a
+  `playerBrowserEngine`; `playerSetupEngine()` sceglie il motore a
+  `pywebviewready`; `currentTime` estrapolato tra un aggiornamento e l'altro;
+  gapless con `playerUpcomingIndex()` / `playerRefreshNext()` e l'evento
+  `advanced`; Media Session spenta col motore nativo
+  (`playerMediaSessionActive`). Impostazioni → Player, finestra Statistiche
+  (tasto I o ⓘ), scorciatoie (`playerShortcutAction`).
+- **Velocità e A-B** funzionano con entrambi i motori (A-B del motore
+  browser via `timeupdate`).
+- **Test**: `tests/test_native_player.py` (finto mpv + libmpv reale con
+  `ao=null` quando c'è), `tests/js/player_engine.test.mjs`.
+
+### Differenze rispetto al piano iniziale
+
+- I metodi `native_player_*` **non** sono in `ALLOWED_METHODS` né in
+  `web-shim.js`: in `--web` suonerebbero sugli altoparlanti del server e ne
+  elencherebbero i dispositivi. Annotato in `webapp.py`.
+- `media-controls` in libmpv è **spento** di default (lo accende solo il
+  player mpv da riga di comando): va passato `media_controls="yes"`.
+- In python-mpv `player["nome"]` legge l'**opzione** (`options/nome`), non la
+  proprietà: le proprietà di runtime si leggono come attributi
+  (`player.audio_codec_name`). Anche `path` letto dal thread degli eventi
+  torna vuoto: il cambio gapless si riconosce da `end-file eof` con una
+  traccia in coda seguito da `file-loaded`.
+- B dell'A-B si fissa dove si sta ascoltando, quindi mpv non lo
+  attraverserebbe: dopo B si torna subito ad A, come fa il comando
+  `ab-loop` di mpv.
+- Con il bitstream attivo per il codec in riproduzione la catena `af` si
+  svuota (`audio-codec-name` osservato), altrimenti mpv decodificherebbe
+  in PCM.
+
+### Ancora da provare sull'hardware
+
+- Windows con la Xonar (192.168.1.72): AC-3 in bitstream sul coassiale →
+  l'impianto deve mostrare Dolby Digital 5.1; poi HDMI → TV → ottico.
+- Modalità esclusiva (WASAPI) e scelta del dispositivo su Windows.
+- Tasti multimediali via `media-controls` di mpv nella finestra pywebview
+  (macOS e Windows): qui provati solo con `ao=null`, senza finestra.
+- Distribuzione di `libmpv-2.dll` con l'eseguibile Windows (ora va messa a
+  mano accanto all'exe).
 
 ## Perché serve un motore nativo
 
@@ -137,6 +194,28 @@ per farla arrivare all'impianto oggi serve MPC-HC.
   del lavoro su `app.js`.
 - Test: contratto JS dell'adattatore (eventi e proprietà come `<audio>`);
   tutta la suite del frontend deve restare verde.
+
+**Fatto.** In `app.js`, sopra `loadPlayerTrack`:
+
+- `playerBrowserEngine(element)` avvolge l'`<audio>`; `createPlayerEngine(engine)`
+  è l'adattatore; `const playerEngine` è l'unico punto che legge
+  `$('player-audio')`.
+- Interfaccia di un motore (quella che il motore mpv dovrà offrire):
+  `kind`, `attach(emit)` (chiama `emit(tipo)` per `play`, `pause`,
+  `timeupdate`, `ended`, `loadedmetadata`, `seeked`, `error`),
+  `hasSource`, `load(url)`, `clear()`, `play()` (Promise), `pause()`,
+  `paused`, `currentTime` get/set, `duration`, `volume`, `muted`,
+  `playbackRate`.
+- `playerEngine.use(motore)` cambia motore: svuota il precedente, ne scarta
+  gli eventi tardivi, porta con sé volume e muto; gli ascoltatori registrati
+  restano.
+- `audio.src` → `load(url)` / `hasSource`; `removeAttribute('src')` +
+  `load()` → `clear()`.
+- Test: `tests/js/player_engine.test.mjs`.
+- Da ricordare per la Fase 1: `npTick` legge `currentTime` a ogni frame
+  (testi sincronizzati parola per parola), quindi il motore mpv deve
+  **interpolare** `currentTime` tra un aggiornamento di `time-pos` e l'altro
+  (ultimo valore + tempo trascorso × velocità, se non in pausa).
 
 ### Fase 1 — motore mpv e funzioni per l'impianto
 
