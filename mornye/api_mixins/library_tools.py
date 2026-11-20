@@ -92,6 +92,75 @@ class LibraryToolsMixin:
             "cover": cover,
         }
 
+    def fetch_file_lyrics(
+        self, path: str, tags: dict | None = None, provider: str = ""
+    ) -> dict:
+        """Lyrics for the file at `path`, looked up again: on `provider` alone
+        when one is named, else with the lyrics services set in Settings, in
+        their order. `tags` are the editor's current fields
+        (TITLE, ARTIST, ALBUM, ISRC) so a corrected title is searched as
+        typed; anything missing comes from the file. Nothing is written:
+        the editor shows the text and Save puts it in the file."""
+        from ..core.lyrics import (
+            LYRICS_PROVIDER_LABELS,
+            fetch_lyrics_async,
+            lyrics_provider_label,
+        )
+        from ..core.tag_editor import read_file_tags
+
+        if not self._is_approved_path(path):
+            return {"status": "error", "error": "Path is outside approved directories"}
+        try:
+            stored = read_file_tags(path).tags
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+        fields = {**stored, **{k: v for k, v in (tags or {}).items() if v}}
+        title = (fields.get("TITLE") or "").strip()
+        artist = (fields.get("ARTIST") or fields.get("ALBUMARTIST") or "").strip()
+        if not title or not artist:
+            return {
+                "status": "error",
+                "error": "The file needs a title and an artist to search lyrics.",
+            }
+        try:
+            import mutagen
+
+            audio = mutagen.File(path)
+            duration_s = int(audio.info.length) if audio and audio.info else 0
+        except Exception:
+            duration_s = 0
+        load_settings = getattr(self, "load_settings", None)
+        settings = (load_settings() if callable(load_settings) else None) or {}
+        provider = (provider or "").strip()
+        if provider and not (
+            provider.startswith("ext:") or provider in LYRICS_PROVIDER_LABELS
+        ):
+            return {"status": "error", "error": f"Unknown lyrics service: {provider}"}
+        providers = [provider] if provider else settings.get("lyrics_providers") or None
+        try:
+            text, found_on = run_sync(
+                fetch_lyrics_async(
+                    track_name=title,
+                    artist_name=artist,
+                    album_name=(fields.get("ALBUM") or "").strip(),
+                    duration_s=duration_s,
+                    isrc=(fields.get("ISRC") or "").strip(),
+                    providers=providers,
+                    apple_word_by_word=settings.get("apple_lyrics_word_by_word", True),
+                ),
+                timeout=120,
+            )
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+        if not text:
+            where = f" on {lyrics_provider_label(provider)}" if provider else ""
+            return {"status": "error", "error": f"No lyrics found{where} for this track."}
+        return {
+            "status": "ok",
+            "lyrics": text,
+            "provider": lyrics_provider_label(found_on),
+        }
+
     def save_file_tags(
         self,
         path: str,

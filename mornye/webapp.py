@@ -179,6 +179,7 @@ ALLOWED_METHODS: set[str] = {
     "get_convert_formats",
     "convert_local_files",
     "read_file_tags",
+    "fetch_file_lyrics",
     "save_file_tags",
     "analyze_audio_file",
     "probe_audio_quality",

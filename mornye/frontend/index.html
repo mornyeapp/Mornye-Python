@@ -1338,7 +1338,7 @@
               <div class="s-title u-mt-8">Lyrics Providers</div>
               <div id="lyrics-list" class="sort-list"></div>
               <div class="s-row u-mt-8">
-                <span class="s-label">Word-by-word sync (Apple, BiniLyrics, Unison)<small>(off = line-by-line sync)</small></span>
+                <span class="s-label">Word-by-word sync<small>(on = every service above is tried for word-by-word lyrics first, in order, then line-by-line; off = line-by-line, first service that has lyrics)</small></span>
                 <label class="toggle">
                   <input type="checkbox" id="config-apple-wbw" checked>
                   <span class="toggle-sl"></span>
@@ -1868,7 +1868,15 @@
           </div>
         </div>
         <div class="u-cols-1fr-1fr u-gap-10" id="tagedit-fields" style="display:grid;"></div>
-        <label class="u-fs-12 u-c-muted u-mt-12" for="tagedit-lyrics" style="display:block;">Lyrics</label>
+        <div class="u-items-center u-mt-12 u-gap-8" style="display:flex;justify-content:space-between;">
+          <label class="u-fs-12 u-c-muted" for="tagedit-lyrics">Lyrics <span id="tagedit-lyrics-source"></span></label>
+          <div class="u-gap-8 u-items-center" style="display:flex;">
+            <select class="u-maxw-150" id="tagedit-lyrics-provider" aria-label="Search lyrics on" title="Where to look the lyrics up">
+              <option value="">Settings order</option>
+            </select>
+            <button class="act-btn secondary" type="button" data-onclick="fetchTagEditorLyrics()" id="tagedit-fetch-lyrics-btn" title="Look the lyrics up again. Save writes them to the file.">Fetch again</button>
+          </div>
+        </div>
         <textarea class="u-w-100pct u-mt-4 u-ff-font-mono u-fs-12" id="tagedit-lyrics" rows="6"></textarea>
         <div class="u-gap-8 u-items-center u-mt-8 u-wrap-wrap" style="display:flex;">
           <select class="u-maxw-150" id="tagedit-lang" aria-label="Translate to"></select>

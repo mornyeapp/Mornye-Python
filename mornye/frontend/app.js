@@ -8266,6 +8266,8 @@ async function previewReorganize() {
     `<div${m.status === 'conflict' ? ' data-tone="error"' : ''}>${escHtml(rel(m.src))} → ${escHtml(rel(m.dest))}</div>`).join('');
   $('reorg-apply-btn').disabled = count('move') === 0;
 }
+  $('tagedit-lyrics-source').textContent = '';
+  fillTagEditorLyricsProviders();
 
 async function applyReorganize() {
   if (!reorgPlan) return;
@@ -8586,6 +8588,42 @@ function startPlayback(items, index, shuffle, openView) {
   if (openView) openNowPlaying();
   loadPlayerTrack(first);
 }
+// The lyrics in the editor, looked up again from the lyrics services. Only
+// the text box changes; Save writes it to the file like a hand edit.
+// "Settings order" first (every service ticked in Settings, ranked), then
+// each lyrics service on its own: the built-in ones and any extension.
+async function fillTagEditorLyricsProviders() {
+  const sel = $('tagedit-lyrics-provider');
+  if (!sel) return;
+  const keep = sel.value;
+  let exts = [];
+  try { exts = (await window.pywebview?.api?.get_lyrics_extensions?.())?.extensions || []; } catch (e) { exts = []; }
+  const opts = [{ id: '', label: 'Settings order' }, ...ALL_LYRICS, ...exts];
+  sel.innerHTML = opts.map(o => `<option value="${escHtml(o.id)}">${escHtml(o.label)}</option>`).join('');
+  if ([...sel.options].some(o => o.value === keep)) sel.value = keep;
+}
+
+async function fetchTagEditorLyrics() {
+  if (!tagEditState) return;
+  const path = tagEditState.path;
+  const tags = {};
+  document.querySelectorAll('#tagedit-fields [data-tag]').forEach(el => {
+    if (['TITLE', 'ARTIST', 'ALBUMARTIST', 'ALBUM', 'ISRC'].includes(el.dataset.tag)) tags[el.dataset.tag] = el.value.trim();
+  });
+  const btn = $('tagedit-fetch-lyrics-btn');
+  btn.disabled = true;
+  btn.textContent = 'Searching…';
+  const provider = $('tagedit-lyrics-provider')?.value || '';
+  const res = await window.pywebview?.api?.fetch_file_lyrics?.(path, tags, provider);
+  btn.disabled = false;
+  btn.textContent = 'Fetch again';
+  if (!tagEditState || tagEditState.path !== path) return;
+  if (!res || res.status !== 'ok') { toastMgr.error(res?.error || 'Could not fetch the lyrics.'); return; }
+  $('tagedit-lyrics').value = res.lyrics;
+  $('tagedit-lyrics-source').textContent = res.provider ? `· from ${res.provider}, not saved yet` : '· not saved yet';
+  toastMgr.info(`Lyrics found${res.provider ? ' on ' + res.provider : ''}. Press Save to write them to the file.`);
+}
+
 
 function playLocal(index) {
   const items = localScanData.map(e => ({
@@ -9735,6 +9773,12 @@ function fillNowPlaying(item, res) {
   }
   npLines = parsed.lines;
   npSynced = parsed.synced;
+  // `[t]<t>Whole line<t_end>` on every line is line-synced lyrics written in
+  // the enhanced form: with no line split into two timed pieces there is no
+  // word timing to show, so it is shown line by line.
+  if (synced.length && !synced.some(l => l.words && l.words.length > 1)) {
+    synced.forEach(l => { l.words = null; });
+  }
   npWordSynced = parsed.wordSynced;
   npActive = -1;
   NP.set = new Set(); NP.focus = -2; NP.first = true; NP.lastTime = 0;
