@@ -93,6 +93,24 @@ def _post_command_allowed() -> bool:
     )
 
 
+#: "builtin" makes the desktop app's Choose Folder use the folder picker in
+#: the page instead of the operating system's dialog.
+FOLDER_DIALOG_ENV = "MORNYE_FOLDER_DIALOG"
+
+
+def folder_dialog_is_builtin() -> bool:
+    """Whether Choose Folder should open the picker drawn in the page.
+
+    The native dialog is a second window, and some setups cannot show one:
+    a kiosk compositor such as cage gives the screen to a single window, so
+    the GTK dialog opened behind the app while the app, waiting on it, stopped
+    answering. The page's own picker (the one the web build always uses)
+    needs no second window. Off unless the environment asks for it, so the
+    desktop app keeps its native dialog everywhere else.
+    """
+    return (env_value(FOLDER_DIALOG_ENV, "") or "").strip().lower() == "builtin"
+
+
 #: Console formats launcher.py uses for the same records (see its
 #: --log-level/--verbose plumbing). Reused verbatim so a GUI started from a
 #: terminal reads exactly like `mornye <url>` does.
@@ -1215,6 +1233,11 @@ class MornyeAPI(
         folder browser instead, since a browser cannot open a native dialog
         that returns a real filesystem path on the server.
         """
+        if self._window and folder_dialog_is_builtin():
+            # Opened in the page, the same picker the web build uses, which
+            # ends in set_download_dir(). See folder_dialog_is_builtin().
+            self._push("openDownloadFolderBrowser")
+            return
         if self._window:
             dialog_type = getattr(webview, "FileDialog", None)
             if dialog_type is None:

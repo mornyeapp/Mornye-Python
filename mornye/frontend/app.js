@@ -1844,6 +1844,9 @@ window.app_set_metadata = (data) => {
 window.updateFolderLabel = (path) => {
   $('folder-path').textContent = path; $('folder-path').title = path;
 };
+// Sent by choose_folder() when the native dialog is switched off
+// (MORNYE_FOLDER_DIALOG=builtin): the download folder is picked in the page.
+window.openDownloadFolderBrowser = () => openFolderBrowser('download');
     let currentDownloadToastId = null;
     let downloadToastMuted = false;
     // Hidden quietly: no "closed by the user" mute when the app removes it.
@@ -8185,7 +8188,7 @@ function goFolderBrowserBack() {
 }
 
 async function openFolderBrowser(target) {
-    folderBrowserTarget = target === 'player' ? 'player' : 'local';
+    folderBrowserTarget = ['player', 'download'].includes(target) ? target : 'local';
     const modal = $('folder-browser-modal');
     modal.classList.remove('hidden');
     modal.focus();
@@ -8200,7 +8203,10 @@ async function openFolderBrowser(target) {
     modal.dataset.escapeAttached = 'true';
 
     currentFolderBrowserParent = null;
-    const currentPath = $(folderBrowserTarget === 'player' ? 'player-path-input' : 'local-path-input').value.trim() || null;
+    const currentPath = (folderBrowserTarget === 'download'
+        ? $('folder-path').textContent
+        : $(folderBrowserTarget === 'player' ? 'player-path-input' : 'local-path-input').value
+    ).trim() || null;
 
     if (window.pywebview?.api) {
         const api = window.pywebview.api;
@@ -8334,9 +8340,20 @@ function setFolderPath() {
     if (currentFolderBrowserPath) applyFolderBrowserChoice(currentFolderBrowserPath);
 }
 
-// The folder picker is shared: Fix Local Files and the Player both open it.
+// The folder picker is shared: Fix Local Files and the Player open it, and
+// so does Settings' Choose Folder when the desktop app is told to use it
+// instead of the native dialog (MORNYE_FOLDER_DIALOG=builtin, see app.py).
 function applyFolderBrowserChoice(path) {
     closeFolderBrowser();
+    if (folderBrowserTarget === 'download') {
+        window.pywebview?.api?.set_download_dir?.(path)
+            .then((res) => {
+                if (res?.ok) toastMgr.success(`Download folder: ${res.download_dir}`);
+                else toastMgr.error(res?.error || 'Could not use that folder.');
+            })
+            .catch((err) => toastMgr.error(`Could not use that folder: ${err}`));
+        return;
+    }
     if (folderBrowserTarget === 'player') {
         $('player-path-input').value = path;
         scanPlayerLibrary();

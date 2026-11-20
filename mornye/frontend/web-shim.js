@@ -370,6 +370,9 @@
     'showNodeWarning',
     'showTracklist',
     'subscriptionsChecked',
+    // Desktop-only in practice (choose_folder() is replaced above here),
+    // listed so every event the backend can push has a dispatcher.
+    'openDownloadFolderBrowser',
     'updateFolderLabel',
     'updateHealthResults',
   ]);
