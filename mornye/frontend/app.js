@@ -65,6 +65,12 @@ function showSkeletonTracks(count = 5) {
   // Hide the table header until the real data arrives
   const header = document.querySelector('.track-table-header');
   if (header) header.style.display = 'none';
+
+  // ...and the previous result's page bar: it stayed under the placeholders
+  // ("Page 1 of 39" from a playlist while an artist loads), and its Next
+  // button put the old playlist back on screen. renderTracks() shows it
+  // again when the new result has more than one page.
+  updatePaginationControls(0);
 }
 
 // Initialize state after loaded settings
