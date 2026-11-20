@@ -288,9 +288,9 @@
 
             <div id="track-controls" class="hidden">
               <div id="track-search-wrap">
-                <span class="ts-icon">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
-                </span>
+                <label class="ts-icon" for="trackSearch" title="Search tracks">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+                </label>
                 <input id="trackSearch" type="text" placeholder="Search tracks…" data-oninput="filterTracks()">
               </div>
               <div class="sort-wrap">
@@ -313,10 +313,10 @@
             <div id="track-table-wrap" class="hidden">
               <div class="track-table-header">
                 <div><input id="check-all" type="checkbox" title="Select all tracks" data-onchange="toggleAll(this)"></div>
-                <div>#</div>
+                <div class="th-num">#</div>
                 <div>Title</div>
                 <div>Playcount</div>
-                <div>Duration</div>
+                <div class="th-dur" title="Duration"><span class="th-sr">Duration</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg></div>
                 <div>Actions</div>
               </div>
               <div id="track-rows"></div>

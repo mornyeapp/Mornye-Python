@@ -1480,6 +1480,89 @@ body:has(#album-card:not(.hidden)) #fetchBtn {
 /* The margin:0 above glued the search bar to the card's bottom border. */
 #album-card:not(.hidden) ~ #track-controls { margin-top: var(--space-4); }
 
+/* ── Track list: Spotify-style ────────────────────────────────────────────
+   Rows without rules between them, larger rounded covers, a quiet
+   sentence-case header with a clock over the durations. The row number and
+   its checkbox share the first column: the number shows, the checkbox takes
+   its place on hover, on keyboard focus, or while the track is deselected —
+   so selection still works and still reads at a glance. Search folds into a
+   magnifier beside the sort menu and opens when clicked or typed into. The
+   narrow-container rules above (column collapse) keep working: the shared
+   first column only applies where every column is on screen. */
+.track-table-header {
+  border-bottom: 1px solid var(--rule);
+  text-transform: none; letter-spacing: 0; font-size: var(--text-sm); font-weight: 400;
+  margin-bottom: var(--space-2);
+}
+.th-dur { display: flex; justify-content: flex-end; padding-right: 22px; }
+.th-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.track-row {
+  min-height: 56px; border-bottom: 0; border-radius: var(--radius-1);
+}
+.track-row:hover, .track-row:focus-within { background: var(--raised); }
+.track-row:focus-within:not(.done):not(.failed):not(.skipped):not(.dl-active) { box-shadow: none; }
+.tr-thumb { width: 40px; height: 40px; border-radius: 4px; overflow: hidden; flex: none; }
+.tr-thumb img { border-radius: 4px; }
+.tr-name { font-size: var(--text-md); font-weight: 500; }
+.tr-num { text-align: center; padding: 0; color: var(--text-muted); font-size: var(--text-md); }
+.tr-playcount { color: var(--text-muted); }
+
+@container tracktable (min-width: 799px) {
+  .track-table-header, .track-row {
+    grid-template-columns: 40px minmax(0, 1.7fr) minmax(0, 1fr) 72px 150px;
+  }
+  .track-table-header > :nth-child(1), .track-row > .tr-check,
+  .track-table-header > :nth-child(2), .track-row > .tr-num { grid-column: 1; grid-row: 1; justify-self: center; }
+  .track-table-header > :nth-child(3), .track-row > .tr-title-cell { grid-column: 2; }
+  .track-table-header > div:nth-child(4), .track-row > .tr-playcount { grid-column: 3; text-align: left; padding-left: 0; }
+  .track-table-header > :nth-child(5), .track-row > .tr-dur { grid-column: 4; }
+  .track-table-header > :nth-child(6), .track-row > .tr-actions { grid-column: 5; }
+  /* Block, not the centred flex box of the base rule: a long album name
+     was clipped on both sides instead of trailing off on the right. */
+  .track-row > .tr-playcount {
+    display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    padding-right: var(--space-3);
+  }
+
+  .track-row > .tr-check, .track-table-header > :nth-child(1) { opacity: 0; }
+  .track-row:hover > .tr-check,
+  .track-row:focus-within > .tr-check,
+  .track-row:has(.track-cb:not(:checked)) > .tr-check,
+  .track-table-header:hover > :nth-child(1),
+  .track-table-header:focus-within > :nth-child(1),
+  .track-table-header:has(#check-all:not(:checked)) > :nth-child(1) { opacity: 1; }
+  .track-row:hover > .tr-num,
+  .track-row:focus-within > .tr-num,
+  .track-row:has(.track-cb:not(:checked)) > .tr-num,
+  .track-table-header:hover > :nth-child(2),
+  .track-table-header:focus-within > :nth-child(2),
+  .track-table-header:has(#check-all:not(:checked)) > :nth-child(2) { opacity: 0; }
+  .tr-check input, .track-table-header input { width: 15px; height: 15px; }
+}
+
+#track-controls { justify-content: flex-end; gap: var(--space-3); }
+#track-search-wrap { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; }
+#track-search-wrap .ts-icon {
+  flex: none; position: static; transform: none; pointer-events: auto; cursor: pointer;
+  display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%;
+  color: var(--text-muted);
+}
+#track-search-wrap .ts-icon:hover { color: var(--text); background: var(--raised); }
+#track-search-wrap #trackSearch {
+  width: 0; padding: 0; border-color: transparent; background: transparent; opacity: 0;
+  transition: width var(--motion) var(--ease), padding var(--motion) var(--ease), opacity var(--motion) var(--ease);
+}
+#track-search-wrap:focus-within #trackSearch,
+#track-search-wrap #trackSearch:not(:placeholder-shown) {
+  /* Shrinks rather than pushing past the edge when the row is narrow. */
+  width: 240px; flex: 0 1 240px; min-width: 0; padding: 6px 10px; opacity: 1;
+  border-color: var(--rule); background: var(--raised);
+}
+#track-controls .sort-wrap { flex: none; }
+#track-controls #sort-select { width: auto; border-color: transparent; background-color: transparent; color: var(--text-muted); }
+#track-controls #sort-select:hover, #track-controls #sort-select:focus-visible { color: var(--text); background-color: var(--raised); }
+@media (prefers-reduced-motion: reduce) { #track-search-wrap #trackSearch { transition: none; } }
+
 /* ── Album card: compact layout ─────────────────────────────────────────
    The facts column was a 200px single file of six label/value pairs, so it
    ran ~300px tall, wrapped every label and copyright line, and set the card
