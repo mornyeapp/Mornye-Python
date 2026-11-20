@@ -12163,13 +12163,17 @@ function libObserve(root) {
 // for covers it has already sent.
 const libThumbCache = new Map();
 const libThumbQueue = [];
+let libThumbPumpQueued = false;
 function libLoadThumb(el) {
   el.dataset.th = '1';
   if (!el.dataset.p) return;
   const key = `${el.dataset.p}\u0000${el.dataset.size || 0}`;
   if (libThumbCache.has(key)) { libShowThumb(el, libThumbCache.get(key)); return; }
   libThumbQueue.push(el);
-  libPumpThumbs();
+  if (!libThumbPumpQueued) {
+    libThumbPumpQueued = true;
+    setTimeout(() => { libThumbPumpQueued = false; libPumpThumbs(); }, 0);
+  }
 }
 function libShowThumb(el, url) {
   const img = el.querySelector('img');
@@ -12177,17 +12181,42 @@ function libShowThumb(el, url) {
   img.src = url;
   el.classList.add('has-cover');
 }
+// Covers are asked for in batches the backend reads side by side, the rows
+// seen last first: scrolling fast through a long list should not leave the
+// screen waiting on covers for rows already scrolled past.
+function libThumbNear(el) {
+  if (!el.isConnected) return false;
+  const r = el.getBoundingClientRect();
+  return r.bottom > -600 && r.top < innerHeight + 600;
+}
 async function libPumpThumbs() {
-  while (lib.thumbBusy < 4 && libThumbQueue.length) {
-    const el = libThumbQueue.shift();
-    if (!el.isConnected) continue;
+  const api = window.pywebview?.api;
+  while (lib.thumbBusy < 2 && libThumbQueue.length) {
+    const batch = [];
+    while (batch.length < 24 && libThumbQueue.length) {
+      const el = libThumbQueue.pop();
+      if (libThumbNear(el)) batch.push(el);
+      else if (el.isConnected) { delete el.dataset.th; libIO?.observe(el); } // ask again when it comes back
+    }
+    if (!batch.length) break;
     lib.thumbBusy++;
     (async () => {
-      const key = `${el.dataset.p}\u0000${el.dataset.size || 0}`;
+      const size = Number(batch[0].dataset.size) || 0;
+      const sameSize = batch.every(el => (Number(el.dataset.size) || 0) === size);
       try {
-        const url = await window.pywebview?.api?.get_track_thumb?.(el.dataset.p, Number(el.dataset.size) || 0);
-        libThumbCache.set(key, url || '');
-        if (el.isConnected) libShowThumb(el, url);
+        let urls = {};
+        if (sameSize && api?.get_track_thumbs) {
+          urls = (await api.get_track_thumbs([...new Set(batch.map(el => el.dataset.p))], size)) || {};
+        } else {
+          await Promise.all(batch.map(async el => {
+            urls[el.dataset.p] = await api?.get_track_thumb?.(el.dataset.p, Number(el.dataset.size) || 0);
+          }));
+        }
+        batch.forEach(el => {
+          const url = urls[el.dataset.p] || '';
+          libThumbCache.set(`${el.dataset.p}\u0000${el.dataset.size || 0}`, url);
+          if (el.isConnected) libShowThumb(el, url);
+        });
       } catch (e) { /* a missing cover is fine */ }
       lib.thumbBusy--;
       libPumpThumbs();

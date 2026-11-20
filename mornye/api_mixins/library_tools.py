@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
+import os
 import threading
 import time
 from pathlib import Path
@@ -40,6 +42,54 @@ def _network_roots_cached() -> list[Path]:
                 roots = []
             _network_roots_state.update(at=time.monotonic(), roots=roots)
         return list(_network_roots_state["roots"])
+
+
+#: Covers already shrunk for the Player, kept between launches: reading one
+#: from a network share costs a round trip or more, so a library on a NAS
+#: would otherwise be read again on every start.
+_THUMB_DIR_NAME = "thumbs"
+
+
+def _thumb_cache_file(path: str, px: int) -> Path | None:
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    from ..core.paths import data_path
+
+    digest = hashlib.sha1(
+        f"{path}\0{st.st_mtime_ns}\0{st.st_size}\0{px}".encode("utf-8", "surrogatepass")
+    ).hexdigest()
+    return data_path(_THUMB_DIR_NAME, digest[:2], digest + ".jpg")
+
+
+def _cached_thumbnail(path: str, px: int) -> bytes | None:
+    """The shrunk cover of `path`, from disk when it was made before.
+
+    An empty file records "no cover", so a file without one is not read
+    again either. Editing the file changes its mtime/size and so the key.
+    """
+    from ..core.library_scan import thumbnail_jpeg
+
+    target = _thumb_cache_file(path, px)
+    if target is not None:
+        try:
+            return target.read_bytes() or None
+        except OSError:
+            pass
+    try:
+        raw = thumbnail_jpeg(path, px)
+    except Exception:
+        raw = None
+    if target is not None:
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            tmp = target.with_suffix(f".{threading.get_ident()}.tmp")
+            tmp.write_bytes(raw or b"")
+            os.replace(tmp, target)
+        except OSError:
+            pass
+    return raw
 
 
 class LibraryToolsMixin:
@@ -590,7 +640,7 @@ class LibraryToolsMixin:
         `size` is the longest side in pixels: 0 keeps the small list
         thumbnail; the album grid asks for a larger one, clamped to 32–512.
         """
-        from ..core.library_scan import THUMB_PX, thumbnail_jpeg
+        from ..core.library_scan import THUMB_PX
 
         if not self._is_approved_path(path):
             return ""
@@ -603,10 +653,7 @@ class LibraryToolsMixin:
         cache = self._library_thumb_cache
         if key in cache:
             return cache[key]
-        try:
-            raw = thumbnail_jpeg(path, px)
-        except Exception:
-            raw = None
+        raw = _cached_thumbnail(path, px)
         url = (
             "data:image/jpeg;base64," + base64.b64encode(raw).decode("ascii")
             if raw
@@ -616,3 +663,19 @@ class LibraryToolsMixin:
             cache.clear()
         cache[key] = url
         return url
+
+    def get_track_thumbs(self, paths: list, size: int = 0) -> dict:
+        """Several Player covers in one call, read side by side.
+
+        A cover on a network share takes a round trip or more to read, so
+        the rows on screen are fetched together rather than one bridge call
+        each. Returns {path: data URL or ""}.
+        """
+        wanted = [p for p in dict.fromkeys(paths or []) if isinstance(p, str) and p][:64]
+        if not wanted:
+            return {}
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=min(8, len(wanted))) as pool:
+            urls = list(pool.map(lambda p: self.get_track_thumb(p, size), wanted))
+        return dict(zip(wanted, urls))
