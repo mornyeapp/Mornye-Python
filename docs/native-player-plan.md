@@ -234,8 +234,8 @@ per farla arrivare all'impianto oggi serve MPC-HC.
   - **Modalità esclusiva** → `audio-exclusive`.
 - Etichetta di qualità con ciò che esce davvero: "Bitstream AC-3 5.1"
   quando `audio-out-params` è spdif, altrimenti "PCM 24-bit / 96 kHz 5.1".
-- `python-mpv` come extra opzionale in `pyproject.toml` (es. `[player]`);
-  documentare l'installazione di libmpv in `docs/guide/` e nel README.
+- `python-mpv` tra le dipendenze di base in `pyproject.toml` (all'inizio
+  era l'extra `[player]`); documentare l'installazione di libmpv in `docs/guide/` e nel README.
 - Test:
   - unità con un finto modulo `mpv` (comandi, eventi, throttling, fallback
     quando l'import fallisce);

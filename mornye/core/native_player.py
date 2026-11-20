@@ -331,7 +331,7 @@ def load_mpv() -> Any:
             _mpv_module = mpv
             return mpv
         except ImportError:
-            _mpv_error = "python-mpv is not installed (pip install 'mornye[player]')."
+            _mpv_error = "python-mpv is not installed (pip install python-mpv)."
             raise NativePlayerUnavailable(_mpv_error) from None
         except OSError:
             sys.modules.pop("mpv", None)

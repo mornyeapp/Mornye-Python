@@ -195,11 +195,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install pyinstaller certifi requests mutagen
-        # `player` brings python-mpv, the Player's native audio engine.
-        # It is pure Python and loads libmpv only when the engine starts,
-        # so it is harmless where no libmpv is bundled (macOS finds
-        # Homebrew's, Linux the distro's).
-        pip install ".[player]"
+        pip install .
 
     # libmpv for the Player's native engine (bitstream to the receiver,
     # output device, exclusive mode). Windows has no system libmpv, so the
@@ -302,7 +298,7 @@ jobs:
           bash -c "
             pip install --upgrade pip && \
             pip install pyinstaller certifi requests mutagen && \
-            pip install '.[player]' && \
+            pip install . && \
             pyinstaller --onefile --name '${{ matrix.build_name }}' \
               --collect-all mornye \
               --add-data 'mornye/frontend:mornye/frontend' \
