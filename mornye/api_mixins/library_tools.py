@@ -449,18 +449,16 @@ class LibraryToolsMixin:
             # folder sits inside another.
             progress("listing", 0, 0, force=True)
             listed: list = []
+            offset = 0  # files listed in the folders before this one
+
+            def found(n: int) -> None:
+                progress("listing", offset + n, 0)
+
             for root in roots:
                 if not current():
                     return
                 offset = len(listed)
-                listed.extend(
-                    iter_audio_files(
-                        root,
-                        on_found=lambda n, offset=offset: progress(
-                            "listing", offset + n, 0
-                        ),
-                    )
-                )
+                listed.extend(iter_audio_files(root, on_found=found))
             files = list(dict.fromkeys(listed))
             total = len(files)
             progress("reading", 0, total, force=True)
