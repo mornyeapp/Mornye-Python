@@ -836,14 +836,19 @@ body.web-mode #np-view > .np-drag { display: none; }
    so each icon stays where it was (16px in, which on a 52px rail is its
    centre) — and only the width moves. The labels are squeezed by it and
    fade; the headings fold to zero height. Below 901px the window folds
-   the rail on its own (layout above) and none of this applies;
-   prefers-reduced-motion (base.css) still makes it instant. */
+   the rail on its own (layout above) and none of this applies.
+   It also runs under prefers-reduced-motion, which base.css otherwise
+   honours by zeroing every transition: see the block after this one. */
 @media (min-width: 901px) {
   #sidebar {
     --fold: 240ms;
     transition: width var(--fold) var(--ease);
   }
-  #queue-dock { transition: left var(--fold, 240ms) var(--ease); }
+  /* body: the plain #queue-dock rule further down sets its own transition
+     (background) and would win over an equal selector. */
+  body #queue-dock {
+    transition: background var(--motion-fast) var(--ease), left 240ms var(--ease);
+  }
 
   body.sidebar-collapsed #sidebar { padding: var(--space-3) var(--space-2); align-items: stretch; }
   body.sidebar-collapsed .nav-btn {
@@ -880,6 +885,21 @@ body.web-mode #np-view > .np-drag { display: none; }
   body.sidebar-collapsed .sb-group {
     display: block; max-height: 0; padding-top: 0; padding-bottom: 0; opacity: 0;
   }
+}
+/* Folding the sidebar is the one transition kept under Reduce Motion
+   (base.css zeroes the rest): it is the user's own click on a control,
+   and the slide is what shows where the labels went — macOS animates its
+   own sidebars with the setting on, too. Only the elements the fold moves
+   are named, so their hover and focus transitions stay off. The selectors
+   outrank base.css's `*`, both being !important. */
+@media (min-width: 901px) and (prefers-reduced-motion: reduce) {
+  #sidebar,
+  #sidebar .nav-label,
+  #sidebar .sb-brand,
+  #sidebar .sb-name,
+  #sidebar .sb-version,
+  #sidebar .sb-group { transition-duration: 240ms !important; }
+  body #queue-dock { transition: left 240ms var(--ease) !important; }
 }
 /* A narrow desktop window folds the rail on its own (layout above); same
    shape as the folded rail. */
