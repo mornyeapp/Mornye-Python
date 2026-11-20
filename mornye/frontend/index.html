@@ -320,7 +320,13 @@
               <div id="track-rows"></div>
               <div id="pagetion-controls" class="hidden">
                 <button id="page-prev" class="page-btn" data-onclick="previousPage()">← Previous</button>
-                <span id="page-info">Page 1 of 1</span>
+                <span id="page-info">
+                  <label for="page-jump">Page</label>
+                  <input type="number" id="page-jump" class="page-jump" min="1" value="1" inputmode="numeric"
+                         aria-label="Go to page" title="Type a page number and press Enter"
+                         data-onchange="goToPage(this.value)" data-onfocus="this.select()">
+                  <span id="page-total">of 1</span>
+                </span>
                 <button id="page-next" class="page-btn" data-onclick="nextPage()">Next →</button>
               </div>
             </div>

@@ -607,7 +607,20 @@
   gap: var(--space-2); padding: var(--space-4) var(--space-2);
   margin: 0 auto; max-width: 100%; font-size: var(--text-md);
 }
-#page-info { color: var(--text-muted); min-width: 120px; text-align: center; font-family: var(--font); }
+#page-info {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  color: var(--text-muted); min-width: 120px; text-align: center; font-family: var(--font);
+}
+/* The page number is a field: type one and press Enter to go there. */
+#page-info .page-jump {
+  width: 6ch; padding: 2px var(--space-1); text-align: center;
+  border: 1px solid var(--rule); border-radius: var(--radius-1);
+  background: var(--ground); color: var(--text);
+  font: inherit; font-variant-numeric: tabular-nums; -moz-appearance: textfield;
+}
+#page-info .page-jump::-webkit-outer-spin-button,
+#page-info .page-jump::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+#page-info .page-jump:focus-visible { outline: none; border-color: var(--signal-strong); }
 /* Per-row download progress — app.js's syncTrackRowsWithQueue() mirrors
    each queue item onto its row (matched by data-spotify-id, so it
    survives a re-sort) whenever the queue re-renders, setting

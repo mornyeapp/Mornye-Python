@@ -3290,8 +3290,12 @@ function updatePaginationControls(totalPages) {
     pagetionDiv.classList.remove('hidden');
     pagetionDiv.style.display = 'flex';
     
-    const pageInfo = $('page-info');
-    pageInfo.textContent = `Page ${currentPage} of ${totalPages} (${TRACKS_PER_PAGE} per page)`;
+    const jump = $('page-jump');
+    if (jump) {
+      jump.max = String(totalPages);
+      if (document.activeElement !== jump) jump.value = String(currentPage);
+    }
+    $('page-total').textContent = `of ${totalPages} (${TRACKS_PER_PAGE} per page)`;
     
     $('page-prev').disabled = currentPage === 1;
     $('page-next').disabled = currentPage === totalPages;
@@ -3301,22 +3305,33 @@ function updatePaginationControls(totalPages) {
   }
 }
 
-function previousPage() {
-  if (currentPage > 1) {
-    currentPage--;
-    renderTracks(currentTracks, currentPage);
-    $('track-table-wrap').scrollTop = 0;
-  }
+// The page a typed value asks for, kept within 1..total; null when it is
+// not a number at all.
+function clampPage(value, total) {
+  const n = Math.round(Number(String(value ?? '').trim()));
+  if (!String(value ?? '').trim() || !Number.isFinite(n)) return null;
+  return Math.min(Math.max(1, n), Math.max(1, total));
 }
 
-function nextPage() {
-  const totalPages = Math.ceil(currentTracks.length / TRACKS_PER_PAGE);
-  if (currentPage < totalPages) {
-    currentPage++;
-    renderTracks(currentTracks, currentPage);
-    $('track-table-wrap').scrollTop = 0;
+// Shows page `value` of the track list (typed in the page field, or from
+// Previous / Next). Something that is not a page puts the field back.
+function goToPage(value) {
+  const totalPages = Math.max(1, Math.ceil(currentTracks.length / TRACKS_PER_PAGE));
+  const page = clampPage(value, totalPages);
+  const jump = $('page-jump');
+  if (page === null || page === currentPage) {
+    if (jump) jump.value = String(currentPage);
+    return;
   }
+  currentPage = page;
+  renderTracks(currentTracks, currentPage);
+  $('track-table-wrap').scrollTop = 0;
+  if (jump) jump.value = String(currentPage);
 }
+
+function previousPage() { goToPage(currentPage - 1); }
+
+function nextPage() { goToPage(currentPage + 1); }
 
 // ── Action button feedback helper ─────────────────────────────────────────────
 const _SPIN_SVG  = `<svg class="ta-spin" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="9" stroke-opacity=".25"/><path d="M12 3a9 9 0 0 1 9 9"/></svg>`;
