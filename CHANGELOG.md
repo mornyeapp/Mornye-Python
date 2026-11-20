@@ -26,6 +26,7 @@
 
 ### Fixed
 
+- **Turning on bitstream while a song plays no longer stops it**: changing bitstream, exclusive mode or the output device mid-song made mpv rebuild the output in place, which on Windows often ended the file with an error. The song now reopens where it was, and an output that refuses bitstream falls back to PCM with a warning.
 - **Mornye logo on the Windows window and taskbar**: older pywebview WinForms backends ignored the icon and showed python.exe's. The window icon is now set directly (WM_SETICON) once the window is shown, at the monitor's DPI.
 - **Now Playing buttons no longer cut off on Windows**: on a shorter window (Windows at 125% scaling) the cover filled the column and pushed play, previous and next half off the bottom edge. The cover now shrinks to the window height.
 - **Dolby Atmos without fallback goes straight to the next provider**: with quality fallback off, a TIDAL track without Atmos used to download a stereo Hi-Res file that was then deleted, and an Atmos HTTP 502 failed the whole track before Amazon was tried. Extensions now receive `allowFallback` (tidal-web 1.2.15 stops at Atmos), and a 502 fails only that provider. A quality chosen for a single extension still steps down as before.

@@ -26,7 +26,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -385,6 +385,10 @@ _OBSERVED = (
 )
 
 
+#: Properties fixed when mpv opens the audio output (see NativePlayer._reopen).
+_OUTPUT_PROPERTIES = ("audio-spdif", "audio-exclusive", "audio-device")
+
+
 class NativePlayer:
     """One mpv instance, created on first use, and its events to the page.
 
@@ -417,6 +421,10 @@ class NativePlayer:
         self._paused = True
         self._advancing = False
         self._closed = False
+        # (position, paused) to restore once a reopened file has loaded.
+        self._resume: tuple[float, bool] | None = None
+        # The output refused bitstream: play PCM until the setting changes.
+        self._spdif_failed = False
 
     # ── lifecycle ──
 
@@ -564,6 +572,7 @@ class NativePlayer:
             self._current = path
             self._next = None
             self._advancing = False
+            self._resume = None
             for key in ("time-pos", "duration"):
                 self._state.pop(key, None)
             player.command("loadfile", path, "replace")
@@ -627,15 +636,77 @@ class NativePlayer:
             merged["eq_gains"] = list(EQ_PRESETS[raw["eq_preset"]])
         options = PlayerOptions.from_dict(merged)
         save_options(options)
+        if options.spdif != self._options.spdif:
+            self._spdif_failed = False  # a new choice deserves a new try
+        before = self._output_properties(self._options)
         self._options = options
         with self._lock:
             player = self._mpv
         if player is not None:
             self._apply(player, options, codec=self._state.get("audio-codec-name"))
+            if self._output_properties(options) != before:
+                self._reopen()
         return options
 
+    def _effective(self, options: PlayerOptions) -> PlayerOptions:
+        return replace(options, spdif=[]) if self._spdif_failed else options
+
+    def _output_properties(self, options: PlayerOptions) -> tuple:
+        props = mpv_properties(self._effective(options))
+        return tuple(props[k] for k in _OUTPUT_PROPERTIES)
+
+    def _reopen(self) -> None:
+        """Reloads the playing file where it was, on the new output.
+
+        Bitstream, exclusive mode and the device are fixed when mpv opens
+        the audio output. Switched under a playing file, mpv tears the
+        decoder and output down in place, and on Windows (WASAPI) that
+        often ends the file with an error: the song stopped and the page
+        showed "error". Opening the file again sets them up from scratch.
+        """
+        with self._lock:
+            player, path = self._mpv, self._current
+            if player is None or path is None:
+                return
+            nxt = self._next
+            self._next = None
+            self._advancing = False
+            self._resume = (self._time(), self._paused)
+            # Held silently while it reloads: the page keeps its state, and
+            # the play that follows is one it already shows.
+            self._paused = True
+            player.pause = True
+            player.command("loadfile", path, "replace")
+        self.set_next(nxt)
+
+    def _finish_resume(self, position: float, paused: bool) -> None:
+        with self._lock:
+            player = self._mpv
+        if player is None:
+            return
+        try:
+            if position > 0.5:
+                player.command("seek", position, "absolute", "exact")
+            player.pause = paused
+        except Exception:
+            logger.debug("Could not resume after reopening", exc_info=True)
+
+    def _fall_back_to_pcm(self) -> None:
+        with self._lock:
+            player = self._mpv
+        if player is None:
+            return
+        try:
+            player["audio-spdif"] = ""
+            self._apply_filters(
+                player, self._options, self._state.get("audio-codec-name")
+            )
+            self._reopen()
+        except Exception:
+            logger.warning("Could not reopen the file as PCM", exc_info=True)
+
     def _apply(self, player: Any, options: PlayerOptions, codec: str | None) -> None:
-        for name, value in mpv_properties(options).items():
+        for name, value in mpv_properties(self._effective(options)).items():
             try:
                 player[name] = value
             except Exception as exc:
@@ -647,7 +718,8 @@ class NativePlayer:
     ) -> None:
         # A compressed stream cannot be filtered: with bitstream on for
         # this codec the chain stays empty, or mpv would decode it to PCM.
-        chain = [] if is_bitstreamed(codec, options.spdif) else filter_chain(options)
+        spdif = self._effective(options).spdif
+        chain = [] if is_bitstreamed(codec, spdif) else filter_chain(options)
         try:
             player["af"] = ",".join(chain)
         except Exception as exc:
@@ -724,11 +796,35 @@ class NativePlayer:
                 if advanced:
                     self._current, self._next = self._next, None
                 current = self._current
+                resume, self._resume = self._resume, None
             if advanced:
                 self._post({"type": "advanced", "path": current})
+            elif resume is not None:
+                # Off mpv's event thread: a seek from here would wait on it.
+                threading.Thread(
+                    target=self._finish_resume, args=resume, daemon=True
+                ).start()
         elif kind == "end-file":
             reason = data.get("reason")
-            if reason == "error":
+            if (
+                reason == "error"
+                and self._options.spdif
+                and not self._spdif_failed
+                and self._current is not None
+            ):
+                # The output would not take the compressed stream (a device
+                # without passthrough, a shared-mode WASAPI endpoint): carry
+                # on as PCM rather than stopping the song.
+                self._spdif_failed = True
+                self._post(
+                    {
+                        "type": "warning",
+                        "message": "This output does not accept bitstream; "
+                        "playing as PCM instead.",
+                    }
+                )
+                threading.Thread(target=self._fall_back_to_pcm, daemon=True).start()
+            elif reason == "error":
                 message = data.get("file_error") or "mpv could not play the file."
                 self._post({"type": "error", "message": str(message)})
             elif reason == "eof":

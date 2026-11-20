@@ -390,6 +390,66 @@ def test_set_options_saves_applies_and_loads_presets():
     player.close()
 
 
+def test_switching_bitstream_mid_song_reopens_the_file_where_it_was():
+    player, events, fakes = make_player()
+    player.load("/m/a.ac3", "/m/b.flac")
+    fake = fakes[0]
+    fake.change("time-pos", 42.0)
+    fake.commands.clear()
+    player.set_options({"spdif": ["ac3"]})
+    assert fake.props["audio-spdif"] == "ac3"
+    assert fake.commands == [
+        ("loadfile", "/m/a.ac3", "replace"),
+        ("playlist-clear",),
+        ("loadfile", "/m/b.flac", "append"),
+    ]
+    assert fake.pause is True  # held while it reopens
+    fake.commands.clear()
+    fake.event(event="file-loaded")
+    end = time.monotonic() + 2
+    while time.monotonic() < end and fake.pause:
+        time.sleep(0.01)
+    assert fake.commands == [("seek", 42.0, "absolute", "exact")]
+    assert fake.pause is False
+    assert not wait_for(events, "advanced", 0.2)
+    assert not [e for e in events if e["type"] in ("pause", "error")]
+    player.close()
+
+
+def test_options_that_keep_the_output_do_not_reopen():
+    player, _events, fakes = make_player()
+    player.load("/m/a.flac")
+    fake = fakes[0]
+    fake.commands.clear()
+    player.set_options({"replaygain": "album", "eq_enabled": True})
+    assert not [c for c in fake.commands if c[0] == "loadfile"]
+    player.close()
+
+
+def test_a_refused_bitstream_falls_back_to_pcm_instead_of_stopping():
+    player, events, fakes = make_player(PlayerOptions(spdif=["ac3"]))
+    player.load("/m/a.ac3")
+    fake = fakes[0]
+    fake.change("time-pos", 10.0)
+    fake.commands.clear()
+    fake.event(event="end-file", reason="error", file_error="audio output failed")
+    warning = wait_for(events, "warning")
+    assert warning and "PCM" in warning[0]["message"]
+    end = time.monotonic() + 2
+    while time.monotonic() < end and not fake.commands:
+        time.sleep(0.01)
+    assert fake.props["audio-spdif"] == ""
+    assert fake.commands[0] == ("loadfile", "/m/a.ac3", "replace")
+    assert not [e for e in events if e["type"] == "error"]
+    # A second failure is a real error.
+    fake.event(event="end-file", reason="error", file_error="still broken")
+    assert wait_for(events, "error")[0]["message"] == "still broken"
+    # Choosing bitstream again tries it again.
+    player.set_options({"spdif": ["ac3", "eac3"]})
+    assert fake.props["audio-spdif"] == "ac3,eac3"
+    player.close()
+
+
 def test_set_options_without_mpv_only_stores():
     player, _events, fakes = make_player()
     player.set_options({"engine": "browser"})
