@@ -286,16 +286,21 @@ function filterSettings(query) {
 function switchTab(name, btn) {
   const search = $('settings-search');
   if (search && search.value) { search.value = ''; filterSettings(''); }
+  // A caller outside the tab strip may not have the button: find it, and stop
+  // before clearing the active tab if there is nothing to switch to.
+  btn = btn || document.querySelector(`.stab[data-onclick*="'${name}'"]`);
+  const panel = $('tc-' + name);
+  if (!btn || !panel) return;
   document.querySelectorAll('.stab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tc').forEach(c => c.classList.remove('active'));
   btn.classList.add('active');
-  $('tc-' + name).classList.add('active');
-  if (name === 'player') loadPlayerSettings();
+  panel.classList.add('active');
   if (name === 'status' && !extensionStatusChecking) {
     // Lists the installed extensions' checks without running them; Check
     // runs them. Re-read each time: an extension may have been installed.
     loadExtensionStatusList();
   }
+  if (name === 'player') loadPlayerSettings();
   if (name === 'extensions') {
     loadRegistries();
     loadDirectories();
@@ -676,6 +681,8 @@ function applyListState(id, values = []) {
   items.forEach(item => {
     const cb = item.querySelector('input[type="checkbox"]');
     if (cb) cb.checked = values.includes(item.dataset.value);
+    // The row was drawn with the default's on/off look; it follows the tick.
+    item.classList.toggle('inactive', !(cb && cb.checked));
   });
   if (values.length) {
     values.forEach(value => {
@@ -1204,12 +1211,6 @@ function showServicesPlaceholder(message, withLink = false) {
     ? ` <a href="#" data-onclick="openExtensionsSettings(); return false;">Settings → Extensions</a>.`
     : '';
   el.innerHTML = `<div class="s-label u-fs-11_5 u-p-6-2">${escHtml(message)}${link}</div>`;
-}
-
-function openExtensionsSettings() {
-  switchView('settings');
-  const tab = document.querySelector('.stab[data-onclick*="extensions"]');
-  if (tab) switchTab('extensions', tab);
 }
 
 showServicesPlaceholder('Reading the installed extensions…');
@@ -2278,11 +2279,11 @@ function setAlbumCard(title, artist, coverUrl, quality, description, followers, 
   // separate, not-strictly-ordered backend callbacks).
 
   $('album-actions').innerHTML = `
-    <button class="act-btn primary" data-onclick="downloadAll()">
+    <button class="act-btn primary" data-onclick="downloadAll()" title="Download all">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       Download All
     </button>
-    <button class="act-btn secondary" data-onclick="downloadSelected()" id="dl-selected-btn" style="display:none;">
+    <button class="act-btn secondary" data-onclick="downloadSelected()" id="dl-selected-btn" style="display:none;" title="Download selected">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="9 12 11 14 15 10"/></svg>
       Download Selected
     </button>
@@ -2302,6 +2303,7 @@ function setAlbumCard(title, artist, coverUrl, quality, description, followers, 
   
   // For artists, show rank or listeners; for playlists, show quality
   const isArtistCard = !!(artistRank || artistListeners || artistVerified || artistBiography);
+  setArtistHero(isArtistCard, coverUrl);
 
   if (isArtistCard) {
     const bio = artistBiography || description || '';
@@ -2462,6 +2464,27 @@ function setAlbumCard(title, artist, coverUrl, quality, description, followers, 
   $('album-card').classList.remove('hidden');
   $('text-search-container')?.classList.add('hidden');
 }
+// An artist page opens on a hero: the artist's picture, blurred, behind the
+// name and the round download controls (css/views/home.css, .artist-mode).
+function setArtistHero(on, coverUrl) {
+  const card = $('album-card');
+  if (!card) return;
+  card.classList.toggle('artist-mode', !!on);
+  let bg = card.querySelector('.artist-hero-bg');
+  const safe = httpUrlOrNull(coverUrl);
+  if (!on || !safe) { bg?.remove(); return; }
+  if (!bg) {
+    bg = document.createElement('div');
+    bg.className = 'artist-hero-bg';
+    bg.setAttribute('aria-hidden', 'true');
+    bg.appendChild(document.createElement('img'));
+    card.prepend(bg);
+  }
+  const img = bg.querySelector('img');
+  img.alt = '';
+  img.src = safe;
+}
+
 function updateAlbumMeta(trackCount) {
   const searchMode = $('searchMode')?.value === 'search';
   const url = currentUrl.toLowerCase();
@@ -2478,6 +2501,7 @@ function updateAlbumMeta(trackCount) {
   }
 
   currentItemType = badgeType;
+  $('album-card')?.classList.toggle('artist-mode', badgeType === 'ARTIST');
   $('album-type-badge').textContent = badgeType;
 
   // Hide "Save all covers" button for albums since they only have one cover
@@ -2495,8 +2519,10 @@ function updateAlbumMeta(trackCount) {
       const ac = albumSet.size;
       const albumTrackText = `${ac} album${ac !== 1 ? 's' : ''} · ${trackCount} track${trackCount !== 1 ? 's' : ''}`;
       
-      // Append the album/track part to the existing row
-      artistStatsRow.innerHTML += `<span class="dot-sep"> · </span><span>${escHtml(albumTrackText)}</span>`;
+      // Append the album/track part to the existing row — once: this runs
+      // again on every re-sort, and used to add the same segment each time.
+      artistStatsRow.querySelectorAll('.stats-albumtrack').forEach(el => el.remove());
+      artistStatsRow.insertAdjacentHTML('beforeend', `<span class="dot-sep stats-albumtrack"> · </span><span class="stats-albumtrack">${escHtml(albumTrackText)}</span>`);
     }
   }
   
@@ -2844,6 +2870,91 @@ function retailBarcodeSvg(value) {
     `preserveAspectRatio="none" aria-hidden="true"><path d="${path}"/></svg>`;
 }
 
+const ARTIST_DL_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+
+function downloadTrackIndices(indices) {
+  addToQueue(indices);
+  startDownloadQueue();
+  $('queue-drawer').classList.add('open');
+}
+
+// "Latest Release" beside "Top Songs", above the artist's tabs: the newest
+// album (by release date) and the five most played tracks.
+function artistHighlightsEl(tracks, albumMap) {
+  const albums = [...albumMap.values()];
+  const dateOf = a => {
+    const t = tracks[a.indices[0]] || {};
+    return String(t.release_date || a.year || '').split('T')[0];
+  };
+  const latest = albums.slice().sort((x, y) => dateOf(y).localeCompare(dateOf(x)))[0];
+  const plays = t => Number(t.plays ?? t.playcount ?? t.playCount ?? t.plays_count ?? 0) || 0;
+  // The same song on several releases (single, album, deluxe) shows once.
+  const seenTitles = new Set();
+  const top = tracks.map((t, i) => ({ t, i })).filter(x => plays(x.t) > 0)
+    .sort((x, y) => plays(y.t) - plays(x.t))
+    .filter(({ t }) => {
+      const k = String(t.title || t.name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+      if (seenTitles.has(k)) return false;
+      seenTitles.add(k);
+      return true;
+    }).slice(0, 5);
+  if (!latest && !top.length) return null;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'artist-highlights';
+
+  if (latest) {
+    const sec = document.createElement('section');
+    sec.className = 'ah-sec';
+    const cover = httpUrlOrNull(latest.cover);
+    const date = dateOf(latest);
+    sec.innerHTML = `<h3 class="ah-title">Latest Release</h3>
+      <div class="ah-latest" title="${escHtml(latest.name)}">
+        <div class="ah-latest-cover">${cover ? `<img src="${escHtml(cover)}" alt="" loading="lazy">` : '🎵'}</div>
+        <div class="ah-latest-info">
+          ${date ? `<span class="ah-muted">${escHtml(date)}</span>` : ''}
+          <span class="ah-latest-name">${escHtml(latest.name)}</span>
+          <span class="ah-muted">${latest.indices.length} track${latest.indices.length !== 1 ? 's' : ''}</span>
+          <button type="button" class="ah-dl" title="Download this release" aria-label="Download ${escHtml(latest.name)}">${ARTIST_DL_SVG}</button>
+        </div>
+      </div>`;
+    const card = sec.querySelector('.ah-latest');
+    makeActivatable(card);
+    card.onclick = () => {
+      if (latest.url) { goToUrl(latest.url); return; }
+      switchArtistTab('tracks');
+      selectOnlyTracks(latest.indices);
+    };
+    sec.querySelector('.ah-dl').onclick = e => { e.stopPropagation(); downloadTrackIndices(latest.indices); };
+    wrap.appendChild(sec);
+  }
+
+  if (top.length) {
+    const sec = document.createElement('section');
+    sec.className = 'ah-sec';
+    sec.innerHTML = `<h3 class="ah-title">Top Songs</h3><div class="ah-top" role="list"></div>`;
+    const list = sec.querySelector('.ah-top');
+    top.forEach(({ t, i }) => {
+      const row = document.createElement('div');
+      row.className = 'ah-top-row';
+      row.setAttribute('role', 'listitem');
+      const cover = httpUrlOrNull(t.cover_url || t.cover || t.image);
+      row.innerHTML = `
+        <div class="ah-top-cover">${cover ? `<img src="${escHtml(cover)}" alt="" loading="lazy">` : ''}</div>
+        <div class="ah-top-info">
+          <span class="ah-top-name">${escHtml(t.title || t.name || '—')}</span>
+          <span class="ah-muted">${escHtml(t.artists || t.artist || '')}</span>
+        </div>
+        <span class="ah-muted ah-num">${plays(t).toLocaleString('en-US')}</span>
+        <button type="button" class="ah-dl" title="Download" aria-label="Download ${escHtml(t.title || t.name || '')}">${ARTIST_DL_SVG}</button>`;
+      row.querySelector('.ah-dl').onclick = () => downloadTrackIndices([i]);
+      list.appendChild(row);
+    });
+    wrap.appendChild(sec);
+  }
+  return wrap;
+}
+
 function injectArtistTabs(tracks) {
   document.getElementById('artist-tabs-section')?.remove();
 
@@ -2869,6 +2980,8 @@ function injectArtistTabs(tracks) {
 
   const section = document.createElement('div');
   section.id = 'artist-tabs-section';
+  const highlights = artistHighlightsEl(tracks, albumMap);
+  if (highlights) section.appendChild(highlights);
 
   // ── Tab bar ──
   const tabBar = document.createElement('div');
@@ -3016,13 +3129,19 @@ function renderTracks(tracks, page = 1) {
   const pageTrackS = tracks.slice(startIdx, endIdx);
   
   const container = $('track-rows');
+  // Keep the table's height while it refills, so a re-sort or page change
+  // doesn't collapse the page under the scroll position.
+  if (container.offsetHeight) container.style.minHeight = container.offsetHeight + 'px';
   container.innerHTML = '';
   const header = document.querySelector('.track-table-header');
   if (header) header.style.display = '';
   const renderToken = ++trackRenderToken;
   const batchSize = 40;
   let index = 0;
-  setTrackRenderStatus(`Rendering 0/${pageTrackS.length} tracks…`, pageTrackS.length > 0);
+  // A re-sort redraws one page in a blink: the "Rendering…" line would
+  // only push the table down and pull it back up under the pointer.
+  const quietRender = !!g_sortAnchor;
+  setTrackRenderStatus(`Rendering 0/${pageTrackS.length} tracks…`, pageTrackS.length > 0 && !quietRender);
 
   // Detect if current view is a playlist so we can show album instead of playcount
   const searchMode = $('searchMode')?.value === 'search';
@@ -3116,7 +3235,7 @@ function renderTracks(tracks, page = 1) {
     }
 
     container.appendChild(fragment);
-    setTrackRenderStatus(`Rendering ${Math.min(index, pageTrackS.length)}/${pageTrackS.length} tracks…`, index < pageTrackS.length);
+    setTrackRenderStatus(`Rendering ${Math.min(index, pageTrackS.length)}/${pageTrackS.length} tracks…`, index < pageTrackS.length && !quietRender);
 
     if (index < pageTrackS.length) {
       if (window.requestIdleCallback) {
@@ -3126,6 +3245,7 @@ function renderTracks(tracks, page = 1) {
       }
     } else {
       setTrackRenderStatus('', false);
+      container.style.minHeight = '';
       updateAlbumMeta(tracks.length);
       // If this is an artist page, inject the album section above the tracks
       const urlLower = (currentUrl || '').toLowerCase();
@@ -3155,6 +3275,7 @@ function renderTracks(tracks, page = 1) {
       
       // Show/hide pagination
       updatePaginationControls(totalPages);
+      restoreSortAnchor();
     }
   };
 
@@ -4313,7 +4434,32 @@ function reverseTracks() {
   const c = $('track-rows'); const rows = [...c.children];
   rows.reverse().forEach(r => c.appendChild(r));
 }
+// The nearest ancestor that actually scrolls (the view, or the page).
+function scrollParentOf(el) {
+  for (let n = el?.parentElement; n; n = n.parentElement) {
+    const oy = getComputedStyle(n).overflowY;
+    if ((oy === 'auto' || oy === 'scroll') && n.scrollHeight > n.clientHeight) return n;
+  }
+  return document.scrollingElement || document.documentElement;
+}
+
+// Re-sorting rebuilds the table and the artist section above it. Without
+// this the page shrinks for a moment, the browser clamps the scroll, and
+// the list jumps: the sort box is put back where it was on screen.
+let g_sortAnchor = null;
 function sortTracks() {
+  const box = $('sort-select');
+  g_sortAnchor = box ? { el: box, top: box.getBoundingClientRect().top, scroller: scrollParentOf(box) } : null;
+  _sortTracks();
+}
+function restoreSortAnchor() {
+  const a = g_sortAnchor;
+  g_sortAnchor = null;
+  if (!a || !a.el.isConnected) return;
+  const delta = a.el.getBoundingClientRect().top - a.top;
+  if (Math.abs(delta) > 0.5) a.scroller.scrollTop += delta;
+}
+function _sortTracks() {
   const val = $('sort-select').value;
   const sorted = [...currentTracks]; // Always works on a copy
   
@@ -8120,6 +8266,8 @@ async function openTagEditor(index) {
       <input class="u-w-100pct u-mt-3" type="text" id="tagedit-${f}" data-tag="${f}" value="${escHtml(res.tags[f] || '')}">
     </div>`).join('');
   $('tagedit-lyrics').value = res.lyrics || '';
+  $('tagedit-lyrics-source').textContent = '';
+  fillTagEditorLyricsProviders();
   $('tagedit-translation-wrap').classList.add('hidden');
   $('tagedit-translation').value = '';
   await ensureTranslationLanguages();
@@ -8266,8 +8414,6 @@ async function previewReorganize() {
     `<div${m.status === 'conflict' ? ' data-tone="error"' : ''}>${escHtml(rel(m.src))} → ${escHtml(rel(m.dest))}</div>`).join('');
   $('reorg-apply-btn').disabled = count('move') === 0;
 }
-  $('tagedit-lyrics-source').textContent = '';
-  fillTagEditorLyricsProviders();
 
 async function applyReorganize() {
   if (!reorgPlan) return;
@@ -8442,6 +8588,42 @@ async function ensureTranslationLanguages() {
   if ([...sel.options].some(o => o.value === prefer)) sel.value = prefer;
 }
 
+// The lyrics in the editor, looked up again from the lyrics services. Only
+// the text box changes; Save writes it to the file like a hand edit.
+// "Settings order" first (every service ticked in Settings, ranked), then
+// each lyrics service on its own: the built-in ones and any extension.
+async function fillTagEditorLyricsProviders() {
+  const sel = $('tagedit-lyrics-provider');
+  if (!sel) return;
+  const keep = sel.value;
+  let exts = [];
+  try { exts = (await window.pywebview?.api?.get_lyrics_extensions?.())?.extensions || []; } catch (e) { exts = []; }
+  const opts = [{ id: '', label: 'Settings order' }, ...ALL_LYRICS, ...exts];
+  sel.innerHTML = opts.map(o => `<option value="${escHtml(o.id)}">${escHtml(o.label)}</option>`).join('');
+  if ([...sel.options].some(o => o.value === keep)) sel.value = keep;
+}
+
+async function fetchTagEditorLyrics() {
+  if (!tagEditState) return;
+  const path = tagEditState.path;
+  const tags = {};
+  document.querySelectorAll('#tagedit-fields [data-tag]').forEach(el => {
+    if (['TITLE', 'ARTIST', 'ALBUMARTIST', 'ALBUM', 'ISRC'].includes(el.dataset.tag)) tags[el.dataset.tag] = el.value.trim();
+  });
+  const btn = $('tagedit-fetch-lyrics-btn');
+  btn.disabled = true;
+  btn.textContent = 'Searching…';
+  const provider = $('tagedit-lyrics-provider')?.value || '';
+  const res = await window.pywebview?.api?.fetch_file_lyrics?.(path, tags, provider);
+  btn.disabled = false;
+  btn.textContent = 'Fetch again';
+  if (!tagEditState || tagEditState.path !== path) return;
+  if (!res || res.status !== 'ok') { toastMgr.error(res?.error || 'Could not fetch the lyrics.'); return; }
+  $('tagedit-lyrics').value = res.lyrics;
+  $('tagedit-lyrics-source').textContent = res.provider ? `· from ${res.provider}, not saved yet` : '· not saved yet';
+  toastMgr.info(`Lyrics found${res.provider ? ' on ' + res.provider : ''}. Press Save to write them to the file.`);
+}
+
 async function translateTagEditorLyrics() {
   const lyrics = $('tagedit-lyrics').value;
   if (!lyrics.trim()) { toastMgr.info('There are no lyrics to translate.'); return; }
@@ -8588,42 +8770,6 @@ function startPlayback(items, index, shuffle, openView) {
   if (openView) openNowPlaying();
   loadPlayerTrack(first);
 }
-// The lyrics in the editor, looked up again from the lyrics services. Only
-// the text box changes; Save writes it to the file like a hand edit.
-// "Settings order" first (every service ticked in Settings, ranked), then
-// each lyrics service on its own: the built-in ones and any extension.
-async function fillTagEditorLyricsProviders() {
-  const sel = $('tagedit-lyrics-provider');
-  if (!sel) return;
-  const keep = sel.value;
-  let exts = [];
-  try { exts = (await window.pywebview?.api?.get_lyrics_extensions?.())?.extensions || []; } catch (e) { exts = []; }
-  const opts = [{ id: '', label: 'Settings order' }, ...ALL_LYRICS, ...exts];
-  sel.innerHTML = opts.map(o => `<option value="${escHtml(o.id)}">${escHtml(o.label)}</option>`).join('');
-  if ([...sel.options].some(o => o.value === keep)) sel.value = keep;
-}
-
-async function fetchTagEditorLyrics() {
-  if (!tagEditState) return;
-  const path = tagEditState.path;
-  const tags = {};
-  document.querySelectorAll('#tagedit-fields [data-tag]').forEach(el => {
-    if (['TITLE', 'ARTIST', 'ALBUMARTIST', 'ALBUM', 'ISRC'].includes(el.dataset.tag)) tags[el.dataset.tag] = el.value.trim();
-  });
-  const btn = $('tagedit-fetch-lyrics-btn');
-  btn.disabled = true;
-  btn.textContent = 'Searching…';
-  const provider = $('tagedit-lyrics-provider')?.value || '';
-  const res = await window.pywebview?.api?.fetch_file_lyrics?.(path, tags, provider);
-  btn.disabled = false;
-  btn.textContent = 'Fetch again';
-  if (!tagEditState || tagEditState.path !== path) return;
-  if (!res || res.status !== 'ok') { toastMgr.error(res?.error || 'Could not fetch the lyrics.'); return; }
-  $('tagedit-lyrics').value = res.lyrics;
-  $('tagedit-lyrics-source').textContent = res.provider ? `· from ${res.provider}, not saved yet` : '· not saved yet';
-  toastMgr.info(`Lyrics found${res.provider ? ' on ' + res.provider : ''}. Press Save to write them to the file.`);
-}
-
 
 function playLocal(index) {
   const items = localScanData.map(e => ({
@@ -9627,6 +9773,12 @@ function parseLyrics(text) {
       last = entry;
     }
   }
+  // `[t]<t>Whole line<t_end>` on every line is line-synced lyrics written in
+  // the enhanced form: with no line split into two timed pieces there is no
+  // word timing to show, so it is shown line by line.
+  if (synced.length && !synced.some(l => l.words && l.words.length > 1)) {
+    synced.forEach(l => { l.words = null; });
+  }
   if (synced.length) {
     supplements.forEach(sup => {
       const target = synced[sup.idx];
@@ -9773,12 +9925,6 @@ function fillNowPlaying(item, res) {
   }
   npLines = parsed.lines;
   npSynced = parsed.synced;
-  // `[t]<t>Whole line<t_end>` on every line is line-synced lyrics written in
-  // the enhanced form: with no line split into two timed pieces there is no
-  // word timing to show, so it is shown line by line.
-  if (synced.length && !synced.some(l => l.words && l.words.length > 1)) {
-    synced.forEach(l => { l.words = null; });
-  }
   npWordSynced = parsed.wordSynced;
   npActive = -1;
   NP.set = new Set(); NP.focus = -2; NP.first = true; NP.lastTime = 0;
@@ -10980,7 +11126,7 @@ function filterPlayerLibrary(keepScroll) {
     const artist = allArtists.find(a => a.key === lib.artist);
     if (!artist) { lib.artist = null; return filterPlayerLibrary(keepScroll); }
     const { own, guest } = libAlbumsOf(allAlbums, artist.key);
-    cards = own.map(libAlbumCardHtml);
+    cards = own.length ? [`<h3 class="pl-sec-title pl-grid-sec">Albums</h3>`, ...own.map(libAlbumCardHtml)] : [];
     if (guest.length) {
       cards.push(`<h3 class="pl-grid-head">Appears on</h3>`, ...guest.map(libAlbumCardHtml));
     }
@@ -11148,18 +11294,68 @@ function libAlbumHeaderHtml(a) {
     </div>`;
 }
 
+const LIB_PLAYS = t => parseInt(t.plays ?? t.playcount ?? t.playCount ?? t.plays_count ?? '0', 10) || 0;
+
+// The artist's newest release: their own albums first, a guest spot only
+// when they have none.
+function libLatestAlbum(albums) {
+  const newest = list => list.slice().sort((x, y) => String(y.year || '').localeCompare(String(x.year || '')))[0];
+  return newest(albums.filter(al => libAlbumIsBy(al, lib.artist))) || newest(albums);
+}
+
+// Top songs by play count when the files carry one; otherwise the newest
+// release's tracks lead, in album order.
+function libArtistTopSongs(key, albums) {
+  const tracks = libArtistTracks(key).filter(t => t.downloaded !== false);
+  if (tracks.some(t => LIB_PLAYS(t) > 0)) {
+    return { ranked: true, tracks: tracks.slice().sort((x, y) => LIB_PLAYS(y) - LIB_PLAYS(x)).slice(0, 5) };
+  }
+  const order = albums.slice().sort((x, y) => String(y.year || '').localeCompare(String(x.year || '')));
+  const rank = new Map(order.map((al, i) => [al.key, i]));
+  const sorted = tracks.slice().sort((x, y) => (rank.get(libAlbumKey(x)) ?? 99) - (rank.get(libAlbumKey(y)) ?? 99));
+  return { ranked: false, tracks: sorted.slice(0, 5) };
+}
+
 function libArtistHeaderHtml(a, albums) {
   const meta = [plural(albums.length, 'album'), plural(a.tracks.length, 'track'), libDuration(a.duration)].filter(Boolean);
-  return `<button type="button" class="pl-back" data-onclick="playerBack()">${LIB_BACK_SVG}Artists</button>
-    <div class="pl-detail-head">
-      ${libCoverHtml((albums[0]?.tracks[0] || a.tracks[0])?.path, 400, 'pl-detail-cover')}
-      <div class="pl-detail-info">
-        <span class="pl-detail-kind">Artist</span>
-        <h2 class="pl-detail-title">${escHtml(a.name)}</h2>
-        <div class="pl-detail-meta">${meta.map(escHtml).join('<span aria-hidden="true"> · </span>')}</div>
-        ${libDetailActions('artist', a.key)}
+  const heroPath = (albums[0]?.tracks[0] || a.tracks[0])?.path;
+  const latest = libLatestAlbum(albums);
+  const top = libArtistTopSongs(a.key, albums);
+  lib.artistTop = top.tracks;
+  const latestHtml = latest ? `<section class="pl-artist-sec">
+      <h3 class="pl-sec-title">Latest Release</h3>
+      <div class="pl-latest" role="button" tabindex="0" data-activate data-album="${escHtml(latest.key)}" title="${escHtml(latest.title)}">
+        ${libCoverHtml(latest.tracks[0]?.path, 400, 'pl-latest-cover')}
+        <div class="pl-latest-info">
+          ${latest.year ? `<span class="pl-latest-date">${escHtml(String(latest.year))}</span>` : ''}
+          <span class="pl-latest-title">${escHtml(latest.title)}</span>
+          <span class="pl-latest-meta">${escHtml(plural(latest.tracks.length, 'track'))}</span>
+        </div>
       </div>
-    </div>`;
+    </section>` : '';
+  const topHtml = top.tracks.length ? `<section class="pl-artist-sec">
+      <h3 class="pl-sec-title">${top.ranked ? 'Top Songs' : 'Songs'}</h3>
+      <div class="pl-top-list" role="list">${top.tracks.map((t, i) => `
+        <div class="pl-top-row" role="listitem" tabindex="0" data-activate data-artist-top="${i}" title="Play ${escHtml(t.title)}">
+          ${libCoverHtml(t.path, 120, 'pl-top-cover')}
+          <div class="pl-top-info"><span class="pl-top-t">${escHtml(t.title)}</span><span class="pl-top-a">${escHtml(t.album || '')}</span></div>
+          <span class="pl-top-dur">${t.duration_s ? fmtTime(t.duration_s) : ''}</span>
+        </div>`).join('')}
+      </div>
+    </section>` : '';
+  return `<div class="pl-artist-hero">
+      ${libCoverHtml(heroPath, 400, 'pl-artist-hero-bg')}
+      <button type="button" class="pl-hero-back" data-onclick="playerBack()" aria-label="Back to artists" title="Artists">${LIB_BACK_SVG}</button>
+      <div class="pl-artist-hero-body">
+        <h2 class="pl-artist-name">${escHtml(a.name)}</h2>
+        <div class="pl-artist-meta">${meta.map(escHtml).join('<span aria-hidden="true"> · </span>')}</div>
+        <div class="pl-artist-actions">
+          <button type="button" class="pl-round" data-shuffle-artist="${escHtml(a.key)}" aria-label="Shuffle ${escHtml(a.name)}" title="Shuffle">${LIB_SHUFFLE_SVG}</button>
+          <button type="button" class="pl-round primary" data-play-artist="${escHtml(a.key)}" aria-label="Play ${escHtml(a.name)}" title="Play">${LIB_PLAY_SVG}</button>
+        </div>
+      </div>
+    </div>
+    ${latestHtml || topHtml ? `<div class="pl-artist-cols">${latestHtml}${topHtml}</div>` : ''}`;
 }
 
 function libRowHtml(t, i) {
@@ -11309,6 +11505,15 @@ function playFromLibrary(index, shuffle) {
   if (playable.length) startPlayback(libQueueItems(playable), at, shuffle, false);
 }
 
+// The toolbar's "Play all" / "Shuffle": every playable song on the page,
+// skipping the ones not downloaded wherever they sit in the list.
+function playAllFromLibrary(shuffle) {
+  const tracks = lib.view.length ? lib.view : (lib.playAll || []);
+  const playable = tracks.filter(t => t.downloaded !== false);
+  if (playable.length) startPlayback(libQueueItems(playable), 0, !!shuffle, false);
+  else if (tracks.length) toastMgr.info('None of these songs is downloaded yet.');
+}
+
 // An artist plays album by album, each in track order: their own albums
 // whole, then the tracks they appear on elsewhere.
 function libArtistTracks(key) {
@@ -11364,7 +11569,7 @@ function markPlayingRow() {
     if (row) playFromLibrary(Number(row.dataset.i));
   });
   const onGroupClick = e => {
-    const t = e.target.closest('[data-play-album],[data-play-artist],[data-shuffle-album],[data-shuffle-artist],[data-artist-link],[data-player-playlist],[data-play-player-playlist],[data-shuffle-player-playlist],[data-edit-player-playlist],[data-delete-player-playlist],[data-export-player-playlist],.pl-card');
+    const t = e.target.closest('[data-artist-top],[data-play-album],[data-play-artist],[data-shuffle-album],[data-shuffle-artist],[data-artist-link],[data-player-playlist],[data-play-player-playlist],[data-shuffle-player-playlist],[data-edit-player-playlist],[data-delete-player-playlist],[data-export-player-playlist],.pl-card,.pl-latest');
     if (!t) return;
     const d = t.dataset;
     if (d.editPlayerPlaylist != null) { e.stopPropagation(); openPlayerPlaylistEditor(d.editPlayerPlaylist); return; }
@@ -11384,6 +11589,11 @@ function markPlayingRow() {
       const playable = (playlist?.tracks || []).filter(t => t.downloaded !== false);
       if (playable.length) startPlayback(libQueueItems(playable), 0, true, false);
       else if (playlist) toastMgr.info('None of these songs is downloaded yet.');
+      return;
+    }
+    if (d.artistTop != null) {
+      const top = lib.artistTop || [];
+      if (top.length) startPlayback(libQueueItems(top), Number(d.artistTop) || 0, false, false);
       return;
     }
     if (d.playerPlaylist != null) { openPlayerPlaylist(d.playerPlaylist); return; }

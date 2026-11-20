@@ -436,9 +436,9 @@
           </div>
           <div class="pt-row">
             <div class="pt-group" id="player-play-controls" role="group" aria-label="Playback">
-              <button class="pt-btn primary" type="button" data-onclick="playFromLibrary(0, false)">
+              <button class="pt-btn primary" type="button" data-onclick="playAllFromLibrary(false)">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Play all</button>
-              <button class="pt-btn" type="button" data-onclick="playFromLibrary(0, true)">
+              <button class="pt-btn" type="button" data-onclick="playAllFromLibrary(true)">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>Shuffle</button>
             </div>
             <label class="player-add-select" id="player-add-select-wrap">
@@ -979,7 +979,7 @@
             <div class="s-title">Auth & APIs</div>
             <div class="s-row">
               <span class="s-label">Provider APIs<small>The APIs each download service uses (Tidal's download API, Deezer's resolver, Qobuz app ID, country codes…) are set in that extension's own settings</small></span>
-              <button class="act-btn secondary u-p-5-12 u-fs-11_5" type="button" data-onclick="switchTab('extensions', document.querySelector('.stab[onclick*=&quot;extensions&quot;]'))">Extension Settings</button>
+              <button class="act-btn secondary u-p-5-12 u-fs-11_5" type="button" data-onclick="openExtensionsSettings()">Extension Settings</button>
             </div>
             <div class="s-row">
               <span class="s-label">AcoustID API key<small>Optional. Identifying untagged files uses a key shared by all users, capped at 3 lookups/second between everyone; your own key gets its own budget. Free from acoustid.org/new-application</small></span>
