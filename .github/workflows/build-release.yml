@@ -195,13 +195,70 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install pyinstaller certifi requests mutagen
-        pip install .
+        # `player` brings python-mpv, the Player's native audio engine.
+        # It is pure Python and loads libmpv only when the engine starts,
+        # so it is harmless where no libmpv is bundled (macOS finds
+        # Homebrew's, Linux the distro's).
+        pip install ".[player]"
+
+    # libmpv for the Player's native engine (bitstream to the receiver,
+    # output device, exclusive mode). Windows has no system libmpv, so the
+    # build ships one: shinchiro's mpv-winbuild-cmake, a self-contained
+    # libmpv-2.dll. The build is pinned by name and by SHA-256. GitHub keeps
+    # only about a month of those nightlies, so the same weekly build is
+    # fetched from the project's SourceForge archive once GitHub has dropped
+    # it (both serve byte-identical files). To update: pick a build that
+    # SourceForge lists under mpv-player-windows/libmpv and set the three
+    # values below.
+    - name: Fetch libmpv (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      env:
+        LIBMPV_RELEASE: '20261108'
+        LIBMPV_BUILD: 'mpv-dev-x86_64-20261108-git-55d3feb45c.7z'
+        LIBMPV_SHA256: '7c147cb7ceaba717414e782ef4398de728f679db6e86daaa8aeb175670cb7994'
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $archive = Join-Path $env:RUNNER_TEMP $env:LIBMPV_BUILD
+        $sources = @(
+          "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/$($env:LIBMPV_RELEASE)/$($env:LIBMPV_BUILD)",
+          "https://downloads.sourceforge.net/project/mpv-player-windows/libmpv/$($env:LIBMPV_BUILD)"
+        )
+        $fetched = $false
+        foreach ($url in $sources) {
+          try {
+            Write-Host "Downloading $url"
+            # SourceForge answers browsers with an HTML page; a plain
+            # downloader user agent gets the redirect to a mirror.
+            Invoke-WebRequest -Uri $url -OutFile $archive -UserAgent 'Wget/1.21' -MaximumRedirection 10
+            $hash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLower()
+            if ($hash -eq $env:LIBMPV_SHA256) { $fetched = $true; break }
+            Write-Warning "SHA-256 mismatch from ${url}: got $hash"
+          } catch {
+            Write-Warning "Download failed from ${url}: $_"
+          }
+        }
+        if (-not $fetched) {
+          throw "No source served $($env:LIBMPV_BUILD) with the pinned SHA-256."
+        }
+        New-Item -ItemType Directory -Force build/libmpv | Out-Null
+        7z e $archive -obuild/libmpv libmpv-2.dll -y
+        if ($LASTEXITCODE -ne 0) { throw "7z could not extract libmpv-2.dll" }
+        Get-Item build/libmpv/libmpv-2.dll
 
     - name: Build Mornye (x86_64 / macOS / Linux)
       if: matrix.arch == 'x86_64'
       shell: bash
       run: |
-        if [ "$RUNNER_OS" == "Windows" ]; then SEP=";"; else SEP=":"; fi
+        EXTRA=()
+        if [ "$RUNNER_OS" == "Windows" ]; then
+          SEP=";"
+          # Unpacked into sys._MEIPASS at start, the first place
+          # native_player._libmpv_candidates looks.
+          EXTRA+=(--add-binary "build/libmpv/libmpv-2.dll;.")
+        else
+          SEP=":"
+        fi
         pyinstaller --onefile --name "${{ matrix.build_name }}" \
           --collect-all mornye \
           --add-data "mornye/frontend${SEP}mornye/frontend" \
@@ -210,7 +267,24 @@ jobs:
           --hidden-import mornye.core.signed_session_desktop \
           --hidden-import mornye.core.signed_session_mobile \
           --hidden-import mornye.core.signed_session_mono \
+          --hidden-import mpv \
+          "${EXTRA[@]}" \
           --console launcher.py
+
+    # A build that silently lost the engine would only show up on a user's
+    # machine, as the Player falling back to the browser engine.
+    - name: Check the native engine is bundled (Windows)
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        LISTING="$(pyi-archive_viewer -r -b "dist/${{ matrix.artifact_name }}" | tr -d '\r' | sed 's/^ *//; s/ *$//')"
+        for entry in libmpv-2.dll mpv; do
+          if ! grep -qxF "$entry" <<<"$LISTING"; then
+            echo "::error::$entry is missing from dist/${{ matrix.artifact_name }}"
+            exit 1
+          fi
+        done
+        echo "libmpv-2.dll and python-mpv are in the bundle."
 
     - name: Setup QEMU for ARM64
       if: matrix.arch == 'arm64'
@@ -228,7 +302,7 @@ jobs:
           bash -c "
             pip install --upgrade pip && \
             pip install pyinstaller certifi requests mutagen && \
-            pip install . && \
+            pip install '.[player]' && \
             pyinstaller --onefile --name '${{ matrix.build_name }}' \
               --collect-all mornye \
               --add-data 'mornye/frontend:mornye/frontend' \
@@ -237,6 +311,7 @@ jobs:
               --hidden-import mornye.core.signed_session_desktop \
               --hidden-import mornye.core.signed_session_mobile \
               --hidden-import mornye.core.signed_session_mono \
+              --hidden-import mpv \
               --console launcher.py
           "
 

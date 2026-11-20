@@ -84,8 +84,10 @@ Documentazione per l'utente: [docs/guide/player.md](guide/player.md).
 - Modalità esclusiva (WASAPI) e scelta del dispositivo su Windows.
 - Tasti multimediali via `media-controls` di mpv nella finestra pywebview
   (macOS e Windows): qui provati solo con `ao=null`, senza finestra.
-- Distribuzione di `libmpv-2.dll` con l'eseguibile Windows (ora va messa a
-  mano accanto all'exe).
+- Il motore nativo dentro `Mornye-Windows.exe` della release: la build
+  (`.github/workflows/build-release.yml`) include `libmpv-2.dll` e
+  python-mpv e controlla che siano nell'archivio, ma l'avvio del motore
+  dall'exe non è ancora stato provato su un PC Windows.
 
 ## Perché serve un motore nativo
 
@@ -135,8 +137,11 @@ per farla arrivare all'impianto oggi serve MPC-HC.
 
 - macOS: `brew install mpv` fornisce `/opt/homebrew/lib/libmpv.2.dylib`
   (mpv 0.41.0 provato).
-- Windows: `libmpv-2.dll` (build ufficiali di mpv / shinchiro) accanto
-  all'eseguibile o nel PATH.
+- Windows: `libmpv-2.dll` (build di shinchiro, `mpv-dev-x86_64-*.7z`),
+  inclusa in `Mornye-Windows.exe` dalla build di release: versione e
+  SHA-256 fissati in `.github/workflows/build-release.yml`, scaricata da
+  GitHub o, quando GitHub non ha più quella nightly, dall'archivio
+  SourceForge del progetto. Da PyPI: nel PATH o con `MORNYE_LIBMPV`.
 - Binding Python: [`python-mpv`](https://pypi.org/project/python-mpv/) 1.0.8,
   ctypes puro, nessuna compilazione.
 - Opzioni presenti in 0.41 e necessarie al piano: `audio-device`
@@ -270,8 +275,9 @@ per farla arrivare all'impianto oggi serve MPC-HC.
 
 - **Windows reale**: bitstream ed esclusiva vanno provati sul PC con la
   Xonar (192.168.1.72, lo stesso usato nella diagnosi del 5.1).
-- **Distribuzione di libmpv su Windows**: fornire la DLL con Mornye o
-  chiederne l'installazione.
+- **Distribuzione di libmpv su Windows**: risolta, la DLL è dentro l'exe
+  di release. Resta da aggiornare a mano la build fissata nel workflow
+  quando serve una libmpv più recente.
 - **Doppi comandi multimediali** tra `media-controls` di mpv e la Media
   Session della WebView: verificarlo su entrambi i sistemi.
 - **Ampiezza della modifica in `app.js`**: per questo la Fase 0 viene prima

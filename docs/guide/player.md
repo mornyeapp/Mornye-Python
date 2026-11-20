@@ -21,17 +21,20 @@ out of the listener's device, not the server's.
 
 ## Installing the native engine
 
-It needs libmpv and its Python binding:
+It needs libmpv and its Python binding. The released executables carry
+python-mpv already; installed from PyPI, add it with:
 
 ```bash
 pip install 'mornye[player]'
 ```
 
+- **Windows**: nothing to do with `Mornye-Windows.exe`: it ships
+  `libmpv-2.dll` inside it. Installed from PyPI instead, download a libmpv
+  build (`mpv-dev-x86_64-….7z` from shinchiro's mpv builds) and put
+  `libmpv-2.dll` in a folder on the `PATH`, or name it with
+  `MORNYE_LIBMPV` (below).
 - **macOS**: `brew install mpv`. Mornye finds Homebrew's libmpv in
   `/opt/homebrew/lib` (Apple silicon) or `/usr/local/lib` (Intel).
-- **Windows**: download a libmpv build (`mpv-dev-x86_64-….7z` from the mpv
-  project's builds, e.g. shinchiro's) and put `libmpv-2.dll` next to the
-  Mornye executable or in a folder on the `PATH`.
 - **Linux**: install the `libmpv2` (Debian, Ubuntu) or `mpv-libs` (Fedora)
   package.
 
