@@ -1384,6 +1384,34 @@ class MornyeAPI(
             daemon=True,
         ).start()
 
+    def _spotify_playcounts(self, url: str) -> dict:
+        """Play counts for a Spotify link, by track id; {} when unavailable.
+
+        Runs in a worker thread, alongside the metadata fetch.
+        """
+        try:
+            from .core.spotfetch import SpotifyWebClient
+
+            sp_client = SpotifyWebClient()
+            sp_client.initialize()
+            lower_url = url.lower()
+            if "/artist/" in lower_url or "spotify:artist:" in lower_url:
+                return {}
+            if playlist_match := re.search(r"playlist[:/]([a-zA-Z0-9]+)", url):
+                self.log("Attempting to fetch playcount…", "debug")
+                return sp_client.get_playlist_stats(playlist_match.group(1)) or {}
+            if album_match := re.search(r"album[:/]([A-Za-z0-9]+)", url):
+                self.log("Attempting to fetch playcount for album (fast mode)…", "debug")
+                return sp_client.get_album_stats(album_match.group(1)) or {}
+            if track_match := re.search(r"track[:/]([a-zA-Z0-9]+)", url):
+                self.log("Attempting to fetch playcount…", "debug")
+                track_id = track_match.group(1)
+                stats = sp_client.get_track_stats(track_id)
+                return {track_id: stats["playcount"]} if stats.get("playcount") else {}
+        except Exception as exc:
+            self.log(f"Playcount unavailable: {type(exc).__name__}", "debug")
+        return {}
+
     async def _fetch_metadata_task(self, url) -> None:
         try:
             self.set_progress("Retrieving metadata…")
@@ -1420,9 +1448,23 @@ class MornyeAPI(
             # Returns (name, tracks) OR (name, tracks, cover) OR (name, tracks, cover, meta).
             from .core.metadata_fallback import get_url_with_fallback
 
-            result = await get_url_with_fallback(
-                stripped, lambda: metadata_client_for(url)
+            # Spotify play counts need only the link, so they are fetched
+            # while the metadata loads instead of after it: a separate
+            # client with its own session, close to a second of waiting
+            # that used to come on top of the metadata.
+            playcount_task = (
+                asyncio.ensure_future(asyncio.to_thread(self._spotify_playcounts, url))
+                if url_host_matches(url, "spotify.com")
+                else None
             )
+            try:
+                result = await get_url_with_fallback(
+                    stripped, lambda: metadata_client_for(url)
+                )
+            except BaseException:
+                if playcount_task is not None:
+                    playcount_task.cancel()
+                raise
             collection_name = result[0]
             tracks = result[1]
             collection_cover = result[2] if len(result) > 2 else ""
@@ -1439,6 +1481,8 @@ class MornyeAPI(
                 cover = getattr(tracks[0], "cover_url", "") or ""
 
             if not tracks:
+                if playcount_task is not None:
+                    playcount_task.cancel()
                 self.log("No tracks found at this URL.", "error")
                 return
 
@@ -1447,57 +1491,18 @@ class MornyeAPI(
             list_id = self._remember_tracklist(tracks, url, self.current_playlist_name)
             track_data = []
 
-            # Retrieve playcount from Spotify if applicable (non-blocking)
-            playcount_map = {}
-            if url_host_matches(url, "spotify.com"):
+            playcount_map: dict = {}
+            if playcount_task is not None:
                 try:
-                    from .core.spotfetch import SpotifyWebClient
-
-                    sp_client = SpotifyWebClient()
-
-                    try:
-                        # Initialize with timeout (5 seconds)
-                        sp_client.initialize()
-
-                        # Try to extract playlist / track / artist info from URL
-
-                        playlist_match = re.search(r"playlist[:/]([a-zA-Z0-9]+)", url)
-                        track_match = re.search(r"track[:/]([a-zA-Z0-9]+)", url)
-                        album_match = re.search(r"album[:/]([A-Za-z0-9]+)", url)
-                        lower_url = url.lower()
-                        is_artist = (
-                            "/artist/" in lower_url or "spotify:artist:" in lower_url
-                        )
-
-                        if playlist_match:
-                            self.log("Attempting to fetch playcount…", "debug")
-                            playlist_id = playlist_match.group(1)
-                            playcount_map = sp_client.get_playlist_stats(playlist_id)
-                        elif track_match and len(tracks) == 1 and not is_artist:
-                            self.log("Attempting to fetch playcount…", "debug")
-                            track_id = track_match.group(1)
-                            stats = sp_client.get_track_stats(track_id)
-                            if stats.get("playcount"):
-                                playcount_map[track_id] = stats.get("playcount")
-                        elif album_match:
-                            self.log(
-                                "Attempting to fetch playcount for album (fast mode)…",
-                                "debug",
-                            )
-                            album_id = album_match.group(1)
-                            playcount_map = sp_client.get_album_stats(album_id)
-                        elif is_artist:
-                            playcount_map = {}
-                        else:
-                            pass
-                    except Exception as auth_err:
-                        self.log(
-                            f"Playcount unavailable: {type(auth_err).__name__}",
-                            "debug",
-                        )
-
+                    playcount_map = await playcount_task or {}
                 except Exception:
                     _quiet_log.debug("Playcount lookup failed", exc_info=True)
+            # A track link's count is kept only when the link did give one
+            # track (an artist link can contain "/track/" further along).
+            if len(tracks) != 1 and re.search(r"track[:/]", url) and not re.search(
+                r"(playlist|album)[:/]", url
+            ):
+                playcount_map = {}
 
             # ── Enhanced metadata-extraction loop ──
             for i, t in enumerate(tracks):
