@@ -1341,6 +1341,27 @@ def _register_frontend(app: FastAPI) -> None:
     app.mount("/", StaticFiles(directory=str(FRONTEND_DIR)), name="frontend")
 
 
+def queued_url_config(queue_config: dict, download_dir: str):
+    """The config a queued POST /api/v1/downloads job runs with.
+
+    The job starts from the account's own download folder. MornyeConfig()
+    alone defaults it to ./Downloads, relative to the working directory, so
+    in the Docker image (WORKDIR /app) every REST download of a multi-user
+    account landed in a shared /app/Downloads instead of the account's folder
+    the Web UI uses (issue #288). The route already drops a request's
+    output_dir in multi-user mode; one that does reach here wins.
+    """
+    from .core.config import MornyeConfig
+
+    config = MornyeConfig()
+    config.output.directory = Path(download_dir).expanduser()
+    if "quality" in queue_config:
+        config.download.quality = queue_config["quality"]
+    if "output_dir" in queue_config:
+        config.output.directory = Path(queue_config["output_dir"]).expanduser()
+    return config
+
+
 def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
     """`multiuser=True` gives every account its own MornyeAPI instance,
     download folder and event stream — see the note on SESSION_COOKIE above
@@ -1411,16 +1432,11 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
                     payload.get("list_id"),
                 )
             else:
-                from .core.config import DownloadRequest, MornyeConfig
+                from .core.config import DownloadRequest
 
-                config = MornyeConfig()
-                queue_config = payload.get("config") or {}
-                if "quality" in queue_config:
-                    config.download.quality = queue_config["quality"]
-                if "output_dir" in queue_config:
-                    config.output.directory = Path(
-                        queue_config["output_dir"]
-                    ).expanduser()
+                config = queued_url_config(
+                    payload.get("config") or {}, owner_api.download_dir
+                )
                 request = DownloadRequest(
                     sources=[payload["url"]],
                     config=config,
