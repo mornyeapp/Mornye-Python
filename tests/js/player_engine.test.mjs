@@ -208,6 +208,51 @@ test('native engine: position is extrapolated between updates, at the speed', ()
   assert.equal(eng.currentTime, 100, 'never past the end');
 });
 
+test('native engine: a late update never moves the position back a little', () => {
+  // On a network share the update reaches the page behind the extrapolated
+  // position; the synced lyrics read it every frame and used to step back.
+  const { eng, tick } = nativeRig();
+  eng.load('/Volumes/share/a.flac');
+  eng.receive({ type: 'loadedmetadata', duration: 100 });
+  eng.receive({ type: 'timeupdate', time: 10 });
+  tick(250);
+  assert.equal(eng.currentTime, 10.25);
+  eng.receive({ type: 'timeupdate', time: 10.1 }); // late: mpv said 10.1
+  assert.equal(eng.currentTime, 10.25, 'held, not back to 10.1');
+  tick(100);
+  assert.equal(eng.currentTime, 10.25, 'holds until mpv catches up');
+  tick(100);
+  assert.ok(Math.abs(eng.currentTime - 10.3) < 1e-9, 'then follows mpv again');
+  let last = eng.currentTime;
+  for (let i = 0; i < 40; i++) { // jittery updates, always a bit behind
+    tick(250);
+    eng.receive({ type: 'timeupdate', time: last + 0.25 - (i % 3) * 0.08 });
+    tick(16);
+    assert.ok(eng.currentTime >= last, `step ${i}: ${eng.currentTime} < ${last}`);
+    last = eng.currentTime;
+  }
+});
+
+test('native engine: a real gap, a seek or a pause still sets the position', () => {
+  const { eng, tick } = nativeRig();
+  eng.load('/m/a.flac');
+  eng.receive({ type: 'loadedmetadata', duration: 100 });
+  eng.receive({ type: 'timeupdate', time: 10 });
+  tick(3000); // mpv stalled while the page went on to 13
+  eng.receive({ type: 'timeupdate', time: 10.5 });
+  assert.equal(eng.currentTime, 10.5, 'over a second behind: follow mpv');
+  tick(250);
+  eng.receive({ type: 'timeupdate', time: 10.6 });
+  eng.currentTime = 5;
+  assert.equal(eng.currentTime, 5, 'a seek back is not held');
+  eng.receive({ type: 'seeked', time: 5 });
+  tick(250);
+  eng.receive({ type: 'timeupdate', time: 5.2 });
+  eng.pause();
+  tick(1000);
+  assert.equal(eng.currentTime, 5.25, 'paused where it was shown');
+});
+
 test('native engine: old positions after a seek are dropped until it lands', () => {
   const { eng, events, tick } = nativeRig();
   eng.load('/m/a.flac');

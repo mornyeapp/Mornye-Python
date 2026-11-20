@@ -8826,12 +8826,18 @@ function playerBrowserEngine(element) {
 // Calls are chained so they reach the backend in the order they were made
 // (pywebview runs each call on a thread of its own). The position arrives
 // about four times a second; between two updates it is extrapolated, since
-// the synced lyrics read it on every frame.
+// the synced lyrics read it on every frame. An update reaches the page a
+// little after mpv took it (more so on a network share, where mpv also runs
+// in uneven steps), so it is often behind the extrapolated position: a small
+// step back like that is not shown; the position holds until mpv catches up.
+// Only a real gap (over a second) moves it back.
 function playerNativeEngine(api, clock = () => performance.now()) {
   let emit = () => {};
   let chain = Promise.resolve();
   let src = '', paused = true, ended = false, time = 0, at = 0, duration = NaN;
   let volume = 1, muted = false, rate = 1, seekUntil = 0, output = null;
+  let floor = 0; // the position never shows less than this until the next settle
+  const DRIFT_MAX_S = 1;
   const call = (name, ...args) => {
     const run = chain.then(() => api[name](...args));
     chain = run.catch(() => {});
@@ -8845,10 +8851,10 @@ function playerNativeEngine(api, clock = () => performance.now()) {
   const now = () => clock();
   const position = () => {
     if (paused || !src) return time;
-    const t = time + (now() - at) / 1000 * rate;
+    const t = Math.max(floor, time + (now() - at) / 1000 * rate);
     return Number.isFinite(duration) ? Math.min(duration, t) : t;
   };
-  const settle = (t) => { if (typeof t === 'number' && Number.isFinite(t)) time = t; at = now(); };
+  const settle = (t) => { if (typeof t === 'number' && Number.isFinite(t)) time = t; at = now(); floor = 0; };
   const engine = {
     kind: 'native',
     attach(fn) { emit = fn; },
@@ -8917,7 +8923,12 @@ function playerNativeEngine(api, clock = () => performance.now()) {
       switch (evt?.type) {
         case 'timeupdate':
           if (now() < seekUntil || paused) return;
-          settle(evt.time); emit('timeupdate'); return;
+          {
+            const shown = position();
+            settle(evt.time);
+            if (shown > time && shown - time < DRIFT_MAX_S) floor = shown;
+          }
+          emit('timeupdate'); return;
         case 'play':
           if (paused && !ended) { paused = false; settle(evt.time); emit('play'); }
           return;
