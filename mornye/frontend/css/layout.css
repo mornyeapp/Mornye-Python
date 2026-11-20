@@ -796,6 +796,42 @@ body.web-mode #np-view > .np-drag { display: none; }
   body.sidebar-collapsed .nav-btn { height: var(--row); padding: 0; justify-content: center; }
   body.sidebar-collapsed .sb-brand { padding: 0 0 var(--space-3); }
   body.sidebar-collapsed .nav-badge { top: 2px; right: 6px; }
+
+  /* ── Polish ────────────────────────────────────────────────────────────
+     Rows are inset, rounded pills rather than edge-to-edge strips; the
+     current view is a tinted pill with its icon in the signal colour. The
+     2px left bar this replaces sat apart from the highlight once the rail
+     folded, and read as a stray line. Icons go from 14px to 18px so the
+     folded rail is legible on its own, and a hairline sets the two utility
+     rows (Collapse, Report a Bug) apart from the destinations. */
+  #sidebar { padding: var(--space-3) var(--space-2); }
+  .sb-brand { padding: var(--space-1) var(--space-2) var(--space-4); gap: var(--space-3); }
+  .sb-logo { width: 28px; height: 28px; padding: 3px; border-radius: 8px; }
+  .sb-name { letter-spacing: .2em; }
+  .sb-group { padding: var(--space-4) var(--space-3) var(--space-2); }
+  .sb-brand + .sb-group { padding-top: var(--space-1); }
+  .nav-btn {
+    height: 40px; margin: 1px 0; padding: 0 var(--space-2); gap: 10px;
+    border-left: 0; border-radius: 8px;
+  }
+  .nav-btn svg { width: 18px; height: 18px; }
+  .nav-btn:hover { background: var(--raised); }
+  .nav-btn.active { background: var(--selected); color: var(--text); font-weight: var(--weight-bold); }
+  .nav-btn.active svg { color: var(--signal-text); }
+  .nav-spacer { border-bottom: 1px solid var(--rule); margin: 0 var(--space-2) var(--space-2); }
+  .sb-collapse, .sb-collapse ~ .nav-btn { color: var(--text-muted); font-size: var(--text-sm); }
+
+  body.sidebar-collapsed #sidebar { padding: var(--space-3) 0; align-items: center; }
+  body.sidebar-collapsed .sb-brand { padding: var(--space-1) 0 var(--space-4); }
+  body.sidebar-collapsed .nav-btn { width: 40px; height: 40px; margin: 2px auto; }
+  body.sidebar-collapsed .nav-spacer { width: 24px; margin: 0 auto var(--space-2); }
+}
+/* A narrow desktop window folds the rail on its own (layout above); same
+   shape as the folded rail. */
+@media (min-width: 701px) and (max-width: 900px) {
+  body:not(.web-mode) #sidebar { padding-left: 0; padding-right: 0; align-items: center; }
+  body:not(.web-mode) .nav-btn { width: 40px; height: 40px; margin: 2px auto; padding: 0; }
+  body:not(.web-mode) .nav-spacer { width: 24px; margin: 0 auto var(--space-2); }
 }
 
 /* ── Download dock ────────────────────────────────────────────────────
