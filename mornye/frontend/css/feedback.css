@@ -246,9 +246,12 @@
 
 /* Posizionamenti */
 .toast-container.bottom-right { bottom: 24px; right: 24px; }
-.toast-container.bottom-left { bottom: 24px; left: 24px; }
+/* Measured from the nav rail's edge, not the window's: at `left: 24px` the
+   toast sat over the rail and across its border line. --rail-w follows the
+   rail as it collapses (layout.css); phones reset `left` below. */
+.toast-container.bottom-left { bottom: 24px; left: calc(var(--rail-w, 0px) + 24px); }
 .toast-container.top-right { top: 24px; right: 24px; flex-direction: column-reverse; }
-.toast-container.top-left { top: 24px; left: 24px; flex-direction: column-reverse; }
+.toast-container.top-left { top: 24px; left: calc(var(--rail-w, 0px) + 24px); flex-direction: column-reverse; }
 .toast-container.top-center { top: 24px; left: 50%; transform: translateX(-50%); flex-direction: column-reverse; }
 .toast-container.bottom-center { bottom: 24px; left: 50%; transform: translateX(-50%); }
 
