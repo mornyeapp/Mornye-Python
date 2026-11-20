@@ -191,6 +191,7 @@ ALLOWED_METHODS: set[str] = {
     "prepare_playback",
     "get_library_default_folder",
     "scan_music_library",
+    "cancel_music_library_scan",
     "get_track_thumb",
     "get_player_playlists",
     "create_player_playlist",

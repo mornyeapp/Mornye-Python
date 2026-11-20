@@ -368,6 +368,9 @@ class LibraryToolsMixin:
 
     _library_scan_id = 0
     _library_thumb_cache: dict = {}
+    #: Seconds between two "app_library_scan_progress" events: often enough
+    #: for the bar to move, rarely enough not to flood the window or socket.
+    _library_progress_interval = 0.25
 
     def get_library_default_folder(self) -> dict:
         """Where the Player starts: the download folder."""
@@ -389,6 +392,29 @@ class LibraryToolsMixin:
         def current() -> bool:
             return scan_id == self._library_scan_id  # a newer scan replaces this
 
+        class Cancelled(Exception):
+            """Stops the folder listing, which has no loop of its own here."""
+
+        last_progress = [0.0]
+
+        def progress(phase: str, done: int, total: int, force: bool = False) -> None:
+            """Where the walk is, for the bar under the library summary:
+            "listing" counts the audio files found so far (the total is not
+            known yet: an indeterminate bar), "reading" is `done` of
+            `total` files checked. Sent at most every
+            _library_progress_interval seconds unless `force`."""
+            if not current():
+                raise Cancelled
+            now = time.monotonic()
+            if not force and now - last_progress[0] < self._library_progress_interval:
+                return
+            last_progress[0] = now
+            self._push(
+                "app_library_scan_progress",
+                {"scan": scan_id, "phase": phase, "done": done, "total": total},
+            )
+
+        to_store: list = []
         try:
             stored = player_library.stored_rows(roots)
             if stored:
@@ -421,17 +447,31 @@ class LibraryToolsMixin:
 
             # Every folder of the library, a file listed once even when one
             # folder sits inside another.
-            files = list(
-                dict.fromkeys(path for root in roots for path in iter_audio_files(root))
-            )
-            total = len(files)
-            batch: list = []
-            to_store: list = []
-            done = 0
-            for path in files:
+            progress("listing", 0, 0, force=True)
+            listed: list = []
+            for root in roots:
                 if not current():
                     return
+                offset = len(listed)
+                listed.extend(
+                    iter_audio_files(
+                        root,
+                        on_found=lambda n, offset=offset: progress(
+                            "listing", offset + n, 0
+                        ),
+                    )
+                )
+            files = list(dict.fromkeys(listed))
+            total = len(files)
+            progress("reading", 0, total, force=True)
+            batch: list = []
+            to_store = []
+            done = 0
+            for path in files:
                 done += 1
+                progress("reading", done, total)
+                if not current():
+                    raise Cancelled
                 try:
                     st = path.stat()
                 except OSError:
@@ -463,6 +503,7 @@ class LibraryToolsMixin:
             player_library.store(to_store)
             if not current():
                 return
+            progress("reading", done, total, force=True)
             # A walk that found nothing at all is a share that stopped
             # answering, not a library emptied: the stored rows stay.
             gone = sorted(set(stored) - {str(p) for p in files}) if files else []
@@ -487,6 +528,11 @@ class LibraryToolsMixin:
                         "folders": roots,
                     },
                 )
+        except Cancelled:
+            # cancel_music_library_scan has already told the Player; what was
+            # read so far stays stored, so the next scan starts from there.
+            if to_store:
+                player_library.store(to_store)
         except Exception as e:
             self.log(f"[player] scan failed: {e}", "error")
             self._push("app_library_scan_error", {"scan": scan_id, "error": str(e)})
@@ -529,6 +575,16 @@ class LibraryToolsMixin:
             daemon=True,
         ).start()
         return {"status": "started", "scan": scan_id, "folders": roots}
+
+    def cancel_music_library_scan(self) -> dict:
+        """Stops the Player's scan in progress, even mid-listing of a slow
+        network share (it stops at the next file found). Rows read so far
+        stay stored and shown; the Player hears 'app_library_scan_cancelled'.
+        """
+        scan_id = self._library_scan_id
+        self._library_scan_id += 1  # the running scan is no longer current
+        self._push("app_library_scan_cancelled", {"scan": scan_id})
+        return {"status": "ok", "scan": scan_id}
 
     def get_track_thumb(self, path: str, size: int = 0) -> str:
         """A cover for the Player as a data URL, "" if none.

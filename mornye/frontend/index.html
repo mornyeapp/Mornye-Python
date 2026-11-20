@@ -383,6 +383,14 @@
           <div class="plb-main">
             <strong id="plb-name"></strong>
             <span id="plb-stats" class="plb-stats"></span>
+            <div class="plb-scan hidden" id="plb-scan">
+              <div class="plb-scan-track" id="plb-scan-track" role="progressbar" aria-label="Library scan"
+                   aria-valuemin="0" aria-valuemax="100"><span class="plb-scan-fill"></span></div>
+              <div class="plb-scan-line">
+                <span class="plb-scan-text" id="plb-scan-text" aria-live="polite"></span>
+                <button class="plb-scan-stop" type="button" id="plb-scan-stop" data-onclick="cancelPlayerScan()">Stop</button>
+              </div>
+            </div>
           </div>
           <div class="plb-actions">
             <button class="act-btn secondary" type="button" data-onclick="togglePlayerSource()">Folders</button>

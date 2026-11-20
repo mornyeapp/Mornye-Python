@@ -10265,7 +10265,7 @@ function npRenderQueue() {
 }
 
 // ── Player: browse and play a folder ────────────────────────────────────────
-const lib = { items: [], view: [], scan: null, lastScan: 0, shown: 0, loading: false, started: false, raf: 0, thumbBusy: 0,
+const lib = { items: [], view: [], scan: null, lastScan: 0, shown: 0, loading: false, scanning: false, started: false, raf: 0, thumbBusy: 0,
   tab: 'songs', album: null, artist: null, playlist: null, playlists: [], folder: '', cards: 0 };
 const LIB_PAGE = 150;
 const LIB_FOLDERS_KEY = 'mornye-player-folders';
@@ -10398,6 +10398,10 @@ async function scanPlayerLibrary() {
   $('player-toolbar').classList.add('hidden');
   setPlayerStatus('Scanning…');
   renderPlayerEmptyState();
+  // The library bar carries the scan's progress, from the first scan on.
+  $('plb-name').textContent = libFoldersLabel(folders);
+  $('plb-name').title = folders.join('\n');
+  $('plb-stats').textContent = '';
   setPlayerScanBusy(true);
   const res = await window.pywebview?.api?.scan_music_library?.(folders);
   if (!res || res.status !== 'started') {
@@ -10416,6 +10420,54 @@ function setPlayerScanBusy(busy) {
   $('player-scan-btn').disabled = busy;
   const rescan = $('plb-rescan');
   if (rescan) { rescan.disabled = busy; rescan.textContent = busy ? 'Scanning…' : 'Rescan'; }
+  lib.scanning = !!busy;
+  setPlayerScanProgress(busy ? { phase: 'listing', done: 0, total: 0 } : null);
+}
+
+// What the scan bar shows for an app_library_scan_progress payload: a
+// percentage once the total is known, null (a sliding bar) while the
+// folders are still being listed — on a network share that can take long.
+function libScanProgress(p) {
+  const done = Math.max(0, Number(p?.done) || 0);
+  const total = Math.max(0, Number(p?.total) || 0);
+  if (p?.phase !== 'reading' || !total) {
+    return { pct: null, text: done ? `Looking for music… ${done.toLocaleString()} files found` : 'Looking for music…' };
+  }
+  const shown = Math.min(done, total);
+  return {
+    pct: Math.round((shown / total) * 100),
+    text: `${shown.toLocaleString()} / ${total.toLocaleString()} files scanned`,
+  };
+}
+
+// The bar under the library summary; null hides it.
+function setPlayerScanProgress(p) {
+  const box = $('plb-scan');
+  if (!box) return;
+  box.classList.toggle('hidden', !p);
+  syncPlayerLibbar();
+  if (!p) return;
+  const { pct, text } = libScanProgress(p);
+  const track = $('plb-scan-track');
+  box.classList.toggle('indeterminate', pct === null);
+  box.style.setProperty('--plb-scan-pct', `${pct || 0}%`);
+  if (pct === null) track.removeAttribute('aria-valuenow');
+  else track.setAttribute('aria-valuenow', String(pct));
+  $('plb-scan-text').textContent = text;
+}
+
+// One folder by its name; several as "Music, NAS +1".
+function libFoldersLabel(folders) {
+  const names = folders.map(libFolderName);
+  return !names.length ? 'Library'
+    : names.length <= 2 ? names.join(', ')
+    : `${names.slice(0, 2).join(', ')} +${names.length - 2}`;
+}
+
+// The library bar shows once there is a library, and during any scan (its
+// progress bar lives there), even the first one.
+function syncPlayerLibbar() {
+  $('player-libbar')?.classList.toggle('hidden', !lib.scanning && (lib.items.length === 0 || lib.loading));
 }
 
 function setPlayerStatus(text) {
@@ -10478,6 +10530,37 @@ window.app_library_scan_chunk = function(p) {
   lib.items.push(...p.items.map(libItem));
   setPlayerStatus(`Scanning… ${p.done} / ${p.total}`);
   if (!lib.raf) lib.raf = requestAnimationFrame(() => { lib.raf = 0; filterPlayerLibrary(true); });
+};
+
+// Stops the scan in progress (a slow network share can take very long):
+// what was read so far stays in the library, and Rescan picks up from there.
+async function cancelPlayerScan() {
+  const stop = $('plb-scan-stop');
+  if (stop) stop.disabled = true;
+  const res = await window.pywebview?.api?.cancel_music_library_scan?.();
+  if (stop) stop.disabled = false;
+  if (!res || res.status !== 'ok') toastMgr.error('Could not stop the scan.');
+}
+
+window.app_library_scan_cancelled = function(p) {
+  if (lib.scan === null || p?.scan !== lib.scan) return;
+  lib.loading = false;
+  setPlayerScanBusy(false);
+  setPlayerStatus(lib.items.length ? '' : 'Scan stopped.');
+  if (lib.items.length) {
+    lib.folder = libFolders()[0] || '';
+    lib.folders = libFolders();
+    showPlayerSource(false);
+  } else {
+    showPlayerSource(true);
+  }
+  filterPlayerLibrary(true);
+  renderPlayerEmptyState();
+};
+
+window.app_library_scan_progress = function(p) {
+  if (!libAccept(p) || !lib.scanning) return;
+  setPlayerScanProgress(p);
 };
 
 window.app_library_scan_finished = function(p) {
@@ -11082,16 +11165,12 @@ function filterPlayerLibrary(keepScroll) {
 
   // Library bar and tab counts describe the whole library, not the search.
   const total = lib.items.reduce((s, t) => s + (t.duration_s || 0), 0);
-  // One folder by its name; several as "Music, NAS +1".
   const folders = (lib.folders && lib.folders.length) ? lib.folders : [lib.folder].filter(Boolean);
-  const names = folders.map(libFolderName);
-  $('plb-name').textContent = !names.length ? 'Library'
-    : names.length <= 2 ? names.join(', ')
-    : `${names.slice(0, 2).join(', ')} +${names.length - 2}`;
+  $('plb-name').textContent = libFoldersLabel(folders);
   $('plb-name').title = folders.join('\n');
   $('plb-stats').textContent = [plural(lib.items.length, 'track'), plural(allAlbums.length, 'album'),
     plural(allArtists.length, 'artist'), libDuration(total)].filter(Boolean).join(' · ');
-  $('player-libbar').classList.toggle('hidden', lib.items.length === 0 || lib.loading);
+  syncPlayerLibbar();
   $('ptab-count-songs').textContent = lib.items.length.toLocaleString();
   $('ptab-count-albums').textContent = allAlbums.length.toLocaleString();
   $('ptab-count-artists').textContent = allArtists.length.toLocaleString();

@@ -704,6 +704,37 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .plb-stats { color: var(--text-muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+/* Scan progress under the summary: a filled bar while the files are read
+   (app.js sets --plb-scan-pct), a sliding one while a slow folder (a network
+   share) is still being listed and the total is not known. */
+.plb-scan { display: grid; gap: 4px; margin-top: 4px; }
+.plb-scan-track {
+  position: relative; height: 4px; overflow: hidden;
+  border-radius: 99px; background: var(--rule);
+}
+.plb-scan-fill {
+  position: absolute; inset: 0 auto 0 0; width: var(--plb-scan-pct, 0%);
+  border-radius: inherit; background: var(--signal-strong);
+  transition: width var(--motion) var(--ease);
+}
+.plb-scan.indeterminate .plb-scan-fill { width: 30%; animation: plb-scan-slide 1.2s ease-in-out infinite; }
+@keyframes plb-scan-slide { from { left: -30%; } to { left: 100%; } }
+.plb-scan-line { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; }
+.plb-scan-text {
+  color: var(--text-muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.plb-scan-stop {
+  flex: 0 0 auto; padding: 0; border: 0; background: none; cursor: pointer;
+  color: var(--signal-text); font: inherit; font-size: var(--text-xs);
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.plb-scan-stop:hover { color: var(--text); }
+.plb-scan-stop:disabled { color: var(--text-muted); cursor: default; text-decoration: none; }
+@media (prefers-reduced-motion: reduce) {
+  .plb-scan-fill { transition: none; }
+  .plb-scan.indeterminate .plb-scan-fill { animation: none; left: 0; width: 100%; opacity: .5; }
+}
 .plb-actions { display: flex; gap: var(--space-2); flex: 0 0 auto; }
 #view-player .plb-actions .act-btn { padding-inline: 14px; }
 
