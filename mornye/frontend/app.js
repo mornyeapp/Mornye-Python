@@ -7957,6 +7957,9 @@ async function startLocalScan() {
     $('local-results-wrap').classList.add('hidden');
     $('local-footer').classList.add('hidden');
     localScanData = [];
+    localScan.pending.clear();
+    if (localScan.raf) { cancelAnimationFrame(localScan.raf); localScan.raf = 0; }
+    $('local-track-rows').innerHTML = '';
     localScan.id = null;
     localScan.path = path;
     paintScanBar('local-scan', { phase: 'listing', done: 0, total: 0 }, localScan);
@@ -7994,7 +7997,7 @@ async function startLocalScan() {
 
 // The scan whose events the list follows: a newer scan of the same page
 // replaces it, and events of an older one are dropped.
-const localScan = { id: null, last: 0, path: '', raf: 0, scanSamples: [] };
+const localScan = { id: null, last: 0, path: '', raf: 0, pending: new Set(), scanSamples: [] };
 
 function localScanAdopt(id) {
   if (typeof id !== 'number') return;
@@ -8011,20 +8014,32 @@ function localScanAccept(p) {
   return p?.scan === localScan.id;
 }
 
-// Results by file: a later one for the same file (it changed on disk, or
-// its stored result had grown old) replaces the earlier one in place.
-function mergeLocalResults(current, incoming, removed = []) {
-  const gone = new Set(removed);
-  const byPath = new Map(current.filter(e => !gone.has(e.file_path)).map(e => [e.file_path, e]));
-  for (const e of incoming || []) if (!gone.has(e.file_path)) byPath.set(e.file_path, e);
-  return [...byPath.values()].sort((a, b) => String(a.file_path).localeCompare(String(b.file_path)));
+// Results by file, in the order they first came: a later result for the
+// same file (it changed on disk, or its stored result had grown old)
+// replaces it in place and a new file goes at the end, so the rows already
+// on screen keep their index. `touched` is the indices that changed.
+function mergeLocalResults(current, incoming) {
+  const items = current.slice();
+  const at = new Map(items.map((e, i) => [e.file_path, i]));
+  const touched = [];
+  for (const e of incoming || []) {
+    let i = at.get(e.file_path);
+    if (i === undefined) { i = items.length; at.set(e.file_path, i); items.push(e); }
+    else items[i] = e;
+    touched.push(i);
+  }
+  return { items, touched };
 }
 
-// Re-renders the list, keeping the boxes the user ticked or unticked
-// while results were still coming in.
+// Re-renders the whole list, keeping the boxes the user ticked or
+// unticked while results were still coming in. Only for a list that
+// shrank (files gone from the folder): new results are painted row by
+// row (paintLocalRows), since rebuilding thousands of rows with their
+// covers for every batch is what made the window stutter.
 function renderLocalTracksKeepingChoices() {
   const picked = new Map([...document.querySelectorAll('#local-track-rows .local-cb')]
     .map(cb => [cb.dataset.filePath, cb.checked]));
+  localScan.pending.clear();
   renderLocalTracks();
   for (const cb of document.querySelectorAll('#local-track-rows .local-cb')) {
     if (!cb.disabled && picked.has(cb.dataset.filePath)) cb.checked = picked.get(cb.dataset.filePath);
@@ -8034,13 +8049,55 @@ function renderLocalTracksKeepingChoices() {
   updateLocalSelection();
 }
 
+//: Rows built per animation frame while results come in.
+const LOCAL_ROWS_PER_FRAME = 150;
+
+function scheduleLocalRows() {
+  if (!localScan.raf) localScan.raf = requestAnimationFrame(paintLocalRows);
+}
+
+// Paints the rows of the results that came in since the last frame: a
+// changed one replaces its row (keeping its box as the user left it), a
+// new one is appended. At most LOCAL_ROWS_PER_FRAME a frame, the rest next.
+function paintLocalRows() {
+  localScan.raf = 0;
+  const container = $('local-track-rows');
+  if (!container) return;
+  if (!container.querySelector(':scope > [data-index]')) container.innerHTML = '';  // the "no files" note
+  const order = [...localScan.pending].sort((a, b) => a - b).slice(0, LOCAL_ROWS_PER_FRAME);
+  const added = document.createDocumentFragment();
+  for (const i of order) {
+    localScan.pending.delete(i);
+    const item = localScanData[i];
+    if (!item) continue;
+    const row = localRowElement(item, i);
+    const old = container.children[i];
+    if (old && old.dataset.index === String(i)) {
+      const was = old.querySelector('.local-cb');
+      const cb = row.querySelector('.local-cb');
+      if (was && cb && !cb.disabled && was.dataset.filePath === cb.dataset.filePath) cb.checked = was.checked;
+      old.replaceWith(row);
+    } else {
+      added.appendChild(row);
+    }
+  }
+  container.appendChild(added);
+  $('local-results-wrap').classList.remove('hidden');
+  $('local-footer').classList.remove('hidden');
+  renderLocalSummary();
+  updateLocalSelection();
+  if (localScan.pending.size) scheduleLocalRows();
+}
+
 // Results arrive in parts: those stored by an earlier scan of the folder
 // at once (cached), then the files that were new or changed as they are
 // matched.
 window.app_local_scan_chunk = function(p) {
   if (!localScanAccept(p)) return;
-  localScanData = mergeLocalResults(localScanData, p.files);
-  if (!localScan.raf) localScan.raf = requestAnimationFrame(() => { localScan.raf = 0; renderLocalTracksKeepingChoices(); });
+  const { items, touched } = mergeLocalResults(localScanData, p.files);
+  localScanData = items;
+  touched.forEach(i => localScan.pending.add(i));
+  scheduleLocalRows();
 };
 
 window.app_local_scan_progress = function(p) {
@@ -8064,10 +8121,9 @@ async function cancelLocalScan() {
 
 window.app_local_scan_cancelled = function(p) {
   if (localScan.id === null || p?.scan !== localScan.id) return;
-  if (localScan.raf) { cancelAnimationFrame(localScan.raf); localScan.raf = 0; }
   const n = localScanData.length;
-  // Nothing found yet is not "no audio files in this folder".
-  if (n) renderLocalTracksKeepingChoices();
+  // Nothing found yet is not "no audio files in this folder"; the rows
+  // still to paint are painted as usual.
   paintScanBar('local-scan', null, localScan);
   setTaBtnState($('btn-scan-local'), 'default');
   toastMgr.info(n ? `Scan stopped: ${n} file${n === 1 ? '' : 's'} shown.` : 'Scan stopped.');
@@ -8075,9 +8131,13 @@ window.app_local_scan_cancelled = function(p) {
 
 window.app_local_scan_done = function(p) {
   if (!localScanAccept(p)) return;
-  localScanData = mergeLocalResults(localScanData, [], p.removed);
-  if (localScan.raf) { cancelAnimationFrame(localScan.raf); localScan.raf = 0; }
-  renderLocalTracksKeepingChoices();
+  const gone = new Set(p.removed || []);
+  if (gone.size || !localScanData.length) {
+    // Rows leave the list: indices shift, so it is drawn again whole.
+    localScanData = localScanData.filter(e => !gone.has(e.file_path));
+    if (localScan.raf) { cancelAnimationFrame(localScan.raf); localScan.raf = 0; }
+    renderLocalTracksKeepingChoices();
+  }
   paintScanBar('local-scan', null, localScan);
   setTaBtnState($('btn-scan-local'), 'default');
   const n = localScanData.length;
@@ -8104,7 +8164,13 @@ function renderLocalTracks() {
         return;
     }
     
-    localScanData.forEach((item, i) => {
+    localScanData.forEach((item, i) => container.appendChild(localRowElement(item, i)));
+    renderLocalSummary();
+}
+
+// One row of the Fix Local Files list; `i` is the item's index in
+// localScanData, which its checkbox and buttons carry.
+function localRowElement(item, i) {
         const best = item.candidates && item.candidates[0];
         const hasMatch = !!best;
         const isSafe = hasMatch && best.is_safe;
@@ -8192,9 +8258,8 @@ function renderLocalTracks() {
         // What the summary above the list counts and filters by.
         row.dataset.state = item.error && !hasMatch ? 'error'
             : !hasMatch ? 'none' : isSafe ? 'matched' : 'review';
-        container.appendChild(row);
-    });
-    renderLocalSummary();
+        row.dataset.index = String(i);
+        return row;
 }
 
 //: Which rows the list shows: '' for all, else one row state.

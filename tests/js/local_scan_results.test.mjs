@@ -6,16 +6,23 @@ const { mergeLocalResults } = pick(['mergeLocalResults']);
 const row = (path, title = '') => ({ file_path: path, old_title: title });
 const paths = list => [...list].map(e => e.file_path);
 
-test('stored results and fresh ones merge by file, sorted by path', () => {
+test('a result for a file already listed replaces it in place; a new file goes last', () => {
   const cached = [row('/m/b.flac', 'old b'), row('/m/a.flac', 'a')];
-  const merged = mergeLocalResults(cached, [row('/m/b.flac', 'new b'), row('/m/c.flac')]);
-  assert.deepEqual(paths(merged), ['/m/a.flac', '/m/b.flac', '/m/c.flac']);
-  assert.equal(merged[1].old_title, 'new b', 'a file that changed replaces its stored result');
+  const { items, touched } = mergeLocalResults(cached, [row('/m/b.flac', 'new b'), row('/m/c.flac')]);
+  assert.deepEqual(paths(items), ['/m/b.flac', '/m/a.flac', '/m/c.flac'], 'rows on screen keep their index');
+  assert.equal(items[0].old_title, 'new b');
+  assert.deepEqual([...touched], [0, 2]);
+  assert.equal(cached[0].old_title, 'old b', 'the list it was given is left alone');
 });
 
-test('files gone from disk leave the list', () => {
-  const merged = mergeLocalResults([row('/m/a.flac'), row('/m/b.flac')], [], ['/m/a.flac']);
-  assert.deepEqual(paths(merged), ['/m/b.flac']);
+test('new results are painted row by row, not by rebuilding the whole list', () => {
+  const app = source('app.js');
+  const start = app.indexOf('window.app_local_scan_chunk = function');
+  const body = app.slice(start, app.indexOf('\n};\n', start));
+  assert.match(body, /scheduleLocalRows\(\)/);
+  assert.doesNotMatch(body, /renderLocalTracks/);
+  assert.match(app, /^function paintLocalRows\(\)/m);
+  assert.match(app, /^function localRowElement\(item, i\)/m);
 });
 
 test('Fix Local Files follows the scan in parts, with the shared scan bar', () => {
