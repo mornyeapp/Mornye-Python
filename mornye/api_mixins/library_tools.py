@@ -680,4 +680,4 @@ class LibraryToolsMixin:
 
         with ThreadPoolExecutor(max_workers=min(8, len(wanted))) as pool:
             urls = list(pool.map(lambda p: self.get_track_thumb(p, size), wanted))
-        return dict(zip(wanted, urls))
+        return dict(zip(wanted, urls, strict=True))
