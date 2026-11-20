@@ -1609,10 +1609,13 @@ class MornyeAPI(
                 display_artists_data = (tracks[0].artists_data if tracks else []) or []
 
             if is_artist:
+                # The hero is a wide banner, so it takes the artist's header
+                # image like Spotify's own page does; the square avatar stays
+                # the cover everywhere else (the fetch history thumbnail).
                 self.set_metadata(
                     display_title,
                     display_artist,
-                    cover,
+                    collection_meta.get("header") or cover,
                     badge,
                     artist_listeners=collection_meta.get("listeners"),
                     artist_rank=collection_meta.get("rank"),
