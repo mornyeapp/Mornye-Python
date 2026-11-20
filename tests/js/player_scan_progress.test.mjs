@@ -74,3 +74,16 @@ test('stopping a scan still links playlist songs to what was read', () => {
   const body = app.slice(app.indexOf('window.app_library_scan_cancelled'), app.indexOf('window.app_library_scan_progress'));
   assert.match(body, /linkPlaylistTracksToLibrary\(\)/);
 });
+
+test('playlist songs are linked while the scan reads, at most every 20 s', () => {
+  const { libLinkDue } = pick(['libLinkDue'], { LIB_LINK_EVERY: 20000 });
+  assert.equal(libLinkDue(0, 1_000_000), true);
+  assert.equal(libLinkDue(1_000_000, 1_019_999), false);
+  assert.equal(libLinkDue(1_000_000, 1_020_000), true);
+  const app = source('app.js');
+  for (const handler of ['app_library_scan_chunk', 'app_library_scan_delta']) {
+    const start = app.indexOf(`window.${handler} = function`);
+    const body = app.slice(start, app.indexOf('\n};\n', start));
+    assert.match(body, /linkPlaylistsDuringScan\(\)/, handler);
+  }
+});

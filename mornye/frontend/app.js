@@ -10265,7 +10265,7 @@ function npRenderQueue() {
 }
 
 // ── Player: browse and play a folder ────────────────────────────────────────
-const lib = { items: [], view: [], scan: null, lastScan: 0, shown: 0, loading: false, scanning: false, scanSamples: [], started: false, raf: 0, thumbBusy: 0,
+const lib = { items: [], view: [], scan: null, lastScan: 0, shown: 0, loading: false, scanning: false, scanSamples: [], lastLink: 0, started: false, raf: 0, thumbBusy: 0,
   tab: 'songs', album: null, artist: null, playlist: null, playlists: [], folder: '', cards: 0 };
 const LIB_PAGE = 150;
 const LIB_FOLDERS_KEY = 'mornye-player-folders';
@@ -10420,6 +10420,7 @@ function setPlayerScanBusy(busy) {
   $('player-scan-btn').disabled = busy;
   const rescan = $('plb-rescan');
   if (rescan) { rescan.disabled = busy; rescan.textContent = busy ? 'Scanning…' : 'Rescan'; }
+  if (busy && !lib.scanning) lib.lastLink = Date.now();  // the first link waits for some rows
   lib.scanning = !!busy;
   setPlayerScanProgress(busy ? { phase: 'listing', done: 0, total: 0 } : null);
 }
@@ -10560,11 +10561,26 @@ function libItem(t) {
   };
 }
 
+// While a long scan reads files (a network share can take an hour), the
+// songs of the playlists are linked to what has been read so far, every
+// LIB_LINK_EVERY ms, not only once the scan is over.
+const LIB_LINK_EVERY = 20000;
+function libLinkDue(last, now) {
+  return !(now - (last || 0) < LIB_LINK_EVERY);
+}
+function linkPlaylistsDuringScan() {
+  const now = Date.now();
+  if (!lib.scanning || !libLinkDue(lib.lastLink, now)) return;
+  lib.lastLink = now;
+  linkPlaylistTracksToLibrary();
+}
+
 window.app_library_scan_chunk = function(p) {
   if (!libAccept(p)) return;
   lib.items.push(...p.items.map(libItem));
   setPlayerStatus(`Scanning… ${p.done} / ${p.total}`);
   if (!lib.raf) lib.raf = requestAnimationFrame(() => { lib.raf = 0; filterPlayerLibrary(true); });
+  linkPlaylistsDuringScan();
 };
 
 // Stops the scan in progress (a slow network share can take very long):
@@ -10629,6 +10645,7 @@ window.app_library_scan_delta = function(p) {
   lib.items = lib.items.filter(t => !removed.has(t.path) && !fresh.has(t.path));
   lib.items.push(...fresh.values());
   if (!lib.raf) lib.raf = requestAnimationFrame(() => { lib.raf = 0; filterPlayerLibrary(true); });
+  linkPlaylistsDuringScan();
 };
 
 window.app_library_scan_synced = function(p) {
