@@ -99,6 +99,10 @@ If you just want a GUI for personal use, with no code involved, the [Mobile](htt
 
 ## Installation
 
+**Desktop app** — from the [latest release](https://github.com/mornyeapp/Mornye-Python/releases/latest): `Mornye-Windows-Setup.exe` (Windows installer), `Mornye-macOS.dmg` (Apple Silicon) or `Mornye-Linux-x86_64.AppImage`. They open the GUI on a double-click; the release notes cover the first-launch prompts of the unsigned builds.
+
+**Python package** — for the command line, the web interface, the terminal UI and scripts:
+
 ```bash
 pip install mornye
 ```

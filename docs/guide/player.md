@@ -24,8 +24,8 @@ out of the listener's device, not the server's.
 It needs libmpv. Its Python binding, python-mpv, comes with every Mornye
 install and loads nothing until the engine starts.
 
-- **Windows**: nothing to do with `Mornye-Windows.exe`: it ships
-  `libmpv-2.dll` inside it. Installed from PyPI instead, download a libmpv
+- **Windows**: nothing to do with `Mornye-Windows.exe` or the app from
+  `Mornye-Windows-Setup.exe`: both ship `libmpv-2.dll` inside them. Installed from PyPI instead, download a libmpv
   build (`mpv-dev-x86_64-….7z` from shinchiro's mpv builds) and put
   `libmpv-2.dll` in a folder on the `PATH`, or name it with
   `MORNYE_LIBMPV` (below).

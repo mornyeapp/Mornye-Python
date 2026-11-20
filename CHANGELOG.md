@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Desktop app downloads**: every release now also ships the GUI packaged as an application — `Mornye-macOS.dmg` (Mornye.app, Apple Silicon), `Mornye-Windows-Setup.exe` (a per-user installer with a Start menu entry and an uninstaller) and `Mornye-Linux-x86_64.AppImage`. They open the window on a double-click, where the command-line binaries, which are still published, print their help. Run from a terminal with arguments, the app's binary is the normal command line. Without a console, start-up output and errors go to `~/.mornye/.cache/desktop.log`. The builds are not code-signed yet, so macOS and Windows ask to confirm the first launch.
 - **Subsonic / OpenSubsonic API** for `--web`, under `/rest`: Symfonium, Feishin, DSub and other Subsonic apps browse, search and stream the library, with stars, play counts, playlists and a saved play queue kept on the server. Off until `MORNYE_SUBSONIC_PASSWORD` (or `MORNYE_SUBSONIC_API_KEY`) is set. See [Subsonic](docs/guide/subsonic.md).
 - **The Player keeps its library between visits**: the page opens with the stored library at once and then reads only the files that are new or changed.
 - **Stats count the music from before Mornye**: files in the Player's library that Mornye did not download count in the totals and rankings, as the source "Before Mornye".

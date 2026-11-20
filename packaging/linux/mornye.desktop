@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Mornye
+Comment=Download and play lossless music
+Exec=Mornye
+Icon=mornye
+Terminal=false
+Categories=AudioVideo;Audio;Player;
+StartupWMClass=Mornye

@@ -1,0 +1,14 @@
+#!/bin/sh
+# AppImage entry point: runs the one-folder build in usr/lib/mornye.
+#
+# pywebview picks GTK first when it can import it; the AppImage carries Qt
+# and QtWebEngine instead (see packaging/mornye-desktop.spec), so it is told
+# which one to use rather than trying the host's GTK bindings.
+HERE="$(dirname "$(readlink -f "$0")")"
+export PYWEBVIEW_GUI="${PYWEBVIEW_GUI:-qt}"
+# QtWebEngine's Chromium sandbox needs unprivileged user namespaces, which
+# Ubuntu 24.04 and later deny to binaries outside their AppArmor profiles —
+# an AppImage among them — and the window would close at once. The page it
+# shows is Mornye's own UI from 127.0.0.1.
+export QTWEBENGINE_DISABLE_SANDBOX="${QTWEBENGINE_DISABLE_SANDBOX:-1}"
+exec "$HERE/usr/lib/mornye/Mornye" "$@"
