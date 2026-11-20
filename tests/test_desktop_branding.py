@@ -129,3 +129,30 @@ def test_applies_name_and_icon_on_macos(monkeypatch):
     assert info["CFBundleName"] == localized["CFBundleName"] == "Mornye"
     assert len(applied_icons) == 1
     assert applied_icons[0].path == str(db.app_icon_path())
+
+
+def test_window_icon_noop_off_windows():
+    assert db.apply_windows_window_icon(object(), platform="darwin") is False
+
+
+def test_window_icon_never_raises_without_a_handle():
+    # No `.native.Handle` (or no Win32 at all on this host): a quiet False.
+    assert db.apply_windows_window_icon(object(), platform="win32") is False
+
+
+class _Handle:
+    def ToInt64(self):
+        return 4242
+
+
+class _Native:
+    Handle = _Handle()
+
+
+class _Window:
+    native = _Native()
+
+
+def test_native_hwnd_reads_winforms_handle():
+    assert db._native_hwnd(_Window()) == 4242
+    assert db._native_hwnd(object()) == 0

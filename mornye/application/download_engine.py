@@ -1490,7 +1490,6 @@ async def _download_one_pass_async(
                 with contextlib.suppress(Exception):
                     provider.set_stop_event_async(stop_event)
 
-            stop_after_atmos_error = False
             try:
                 await download_rate_limiter.wait(
                     "provider",
@@ -1573,7 +1572,9 @@ async def _download_one_pass_async(
                     and _is_http_502(result.error)
                 ):
                     if not opts.allow_fallback:
-                        stop_after_atmos_error = True
+                        # This provider has no Atmos for the track; the next
+                        # one may (TIDAL down, Amazon serving E-AC-3 JOC), so
+                        # the track goes on to it rather than failing here.
                         result = DownloadResult.fail(
                             provider.name,
                             "Dolby Atmos is unavailable (HTTP 502 Bad Gateway)",
@@ -1824,8 +1825,6 @@ async def _download_one_pass_async(
                 file=sys.stderr,
             )
             logger.debug("[%s] ✗ %s", provider.name, result.error)
-            if stop_after_atmos_error:
-                return result
 
     attempts_str = f"{attempts_made} attempt(s)"
     summary = "; ".join(f"{k}: {v}" for k, v in errors.items())

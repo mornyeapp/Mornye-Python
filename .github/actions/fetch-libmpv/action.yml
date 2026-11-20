@@ -1,0 +1,52 @@
+name: Fetch libmpv (Windows)
+description: >-
+  Downloads the pinned libmpv-2.dll the Windows builds ship for the Player's
+  native engine into build/libmpv/.
+
+# libmpv for the Player's native engine (bitstream to the receiver,
+# output device, exclusive mode). Windows has no system libmpv, so the
+# builds ship one: shinchiro's mpv-winbuild-cmake, a self-contained
+# libmpv-2.dll. The build is pinned by name and by SHA-256. GitHub keeps
+# only about a month of those nightlies, so the same weekly build is
+# fetched from the project's SourceForge archive once GitHub has dropped
+# it (both serve byte-identical files). To update: pick a build that
+# SourceForge lists under mpv-player-windows/libmpv and set the three
+# values below. Used by both the CLI and the desktop build.
+
+runs:
+  using: composite
+  steps:
+    - name: Fetch libmpv
+      shell: pwsh
+      env:
+        LIBMPV_RELEASE: '20261108'
+        LIBMPV_BUILD: 'mpv-dev-x86_64-20261108-git-55d3feb45c.7z'
+        LIBMPV_SHA256: '7c147cb7ceaba717414e782ef4398de728f679db6e86daaa8aeb175670cb7994'
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $archive = Join-Path $env:RUNNER_TEMP $env:LIBMPV_BUILD
+        $sources = @(
+          "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/$($env:LIBMPV_RELEASE)/$($env:LIBMPV_BUILD)",
+          "https://downloads.sourceforge.net/project/mpv-player-windows/libmpv/$($env:LIBMPV_BUILD)"
+        )
+        $fetched = $false
+        foreach ($url in $sources) {
+          try {
+            Write-Host "Downloading $url"
+            # SourceForge answers browsers with an HTML page; a plain
+            # downloader user agent gets the redirect to a mirror.
+            Invoke-WebRequest -Uri $url -OutFile $archive -UserAgent 'Wget/1.21' -MaximumRedirection 10
+            $hash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLower()
+            if ($hash -eq $env:LIBMPV_SHA256) { $fetched = $true; break }
+            Write-Warning "SHA-256 mismatch from ${url}: got $hash"
+          } catch {
+            Write-Warning "Download failed from ${url}: $_"
+          }
+        }
+        if (-not $fetched) {
+          throw "No source served $($env:LIBMPV_BUILD) with the pinned SHA-256."
+        }
+        New-Item -ItemType Directory -Force build/libmpv | Out-Null
+        7z e $archive -obuild/libmpv libmpv-2.dll -y
+        if ($LASTEXITCODE -ne 0) { throw "7z could not extract libmpv-2.dll" }
+        Get-Item build/libmpv/libmpv-2.dll

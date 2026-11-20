@@ -1580,8 +1580,12 @@ body:has(#album-card:not(.hidden)) #fetchBtn {
   align-self: flex-start;
   display: grid;
   /* Left column as wide as its longest value (the release date line),
-     the rest to the right one — two equal halves wrapped both. */
-  grid-template-columns: max-content minmax(0, 1fr);
+     the rest to the right one — two equal halves wrapped both. Capped at
+     60%: a track's Album value is its whole title, and as max-content a
+     long one ("… (feat. A, B, C & D)") made the column wider than the
+     sheet, pushing the right column out of the card, where overflow:hidden
+     cut it off with Released, ISRC and the UPC in it. */
+  grid-template-columns: fit-content(60%) minmax(0, 1fr);
   column-gap: var(--space-4);
   row-gap: var(--space-3);
   align-content: start;

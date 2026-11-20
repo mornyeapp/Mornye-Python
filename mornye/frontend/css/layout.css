@@ -826,6 +826,81 @@ body.web-mode #np-view > .np-drag { display: none; }
   body.sidebar-collapsed .nav-btn { width: 40px; height: 40px; margin: 2px auto; }
   body.sidebar-collapsed .nav-spacer { width: 24px; margin: 0 auto var(--space-2); }
 }
+
+/* ── Folding the sidebar: a slide, not a cut ──────────────────────────
+   Collapse/Expand used to swap two layouts at once: labels, group
+   headings and the name went display:none, every row re-centred and the
+   destinations jumped up by the height of the headings, while the width
+   alone ran a 120ms transition nobody could see under all that. Folded,
+   the rail now keeps the open layout — same padding, rows left-aligned,
+   so each icon stays where it was (16px in, which on a 52px rail is its
+   centre) — and only the width moves. The labels are squeezed by it and
+   fade; the headings fold to zero height. Below 901px the window folds
+   the rail on its own (layout above) and none of this applies.
+   It also runs under prefers-reduced-motion, which base.css otherwise
+   honours by zeroing every transition: see the block after this one. */
+@media (min-width: 901px) {
+  #sidebar {
+    --fold: 240ms;
+    transition: width var(--fold) var(--ease);
+  }
+  /* body: the plain #queue-dock rule further down sets its own transition
+     (background) and would win over an equal selector. */
+  body #queue-dock {
+    transition: background var(--motion-fast) var(--ease), left 240ms var(--ease);
+  }
+
+  body.sidebar-collapsed #sidebar { padding: var(--space-3) var(--space-2); align-items: stretch; }
+  body.sidebar-collapsed .nav-btn {
+    width: 100%; height: 40px; margin: 1px 0;
+    padding: 0 var(--space-2); justify-content: flex-start;
+  }
+  body.sidebar-collapsed .nav-spacer { width: auto; margin: 0 var(--space-2) var(--space-2); }
+
+  /* Labels: kept in the row, squeezed to nothing by the narrowing rail
+     (min-width 0) and faded; clipped rather than ellipsised on the way. */
+  .nav-label { min-width: 0; text-overflow: clip; transition: opacity var(--fold) var(--ease); }
+  body.sidebar-collapsed .nav-label { display: block; opacity: 0; }
+
+  /* Brand: the logo slides from 16px to the rail's centre (12px); the name
+     and the version fold away beside it. */
+  .sb-brand { overflow: hidden; transition: padding var(--fold) var(--ease); }
+  .sb-name, .sb-version {
+    min-width: 0; overflow: hidden;
+    transition: opacity var(--fold) var(--ease);
+  }
+  body.sidebar-collapsed .sb-brand {
+    justify-content: flex-start;
+    padding: var(--space-1) var(--space-2) var(--space-4) var(--space-1);
+  }
+  body.sidebar-collapsed .sb-name,
+  body.sidebar-collapsed .sb-version { display: block; opacity: 0; }
+
+  /* Group headings fold to zero height instead of vanishing, so the rows
+     under them glide up rather than jump. */
+  .sb-group {
+    overflow: hidden; max-height: 48px;
+    transition: max-height var(--fold) var(--ease), padding var(--fold) var(--ease), opacity var(--fold) var(--ease);
+  }
+  body.sidebar-collapsed .sb-group {
+    display: block; max-height: 0; padding-top: 0; padding-bottom: 0; opacity: 0;
+  }
+}
+/* Folding the sidebar is the one transition kept under Reduce Motion
+   (base.css zeroes the rest): it is the user's own click on a control,
+   and the slide is what shows where the labels went — macOS animates its
+   own sidebars with the setting on, too. Only the elements the fold moves
+   are named, so their hover and focus transitions stay off. The selectors
+   outrank base.css's `*`, both being !important. */
+@media (min-width: 901px) and (prefers-reduced-motion: reduce) {
+  #sidebar,
+  #sidebar .nav-label,
+  #sidebar .sb-brand,
+  #sidebar .sb-name,
+  #sidebar .sb-version,
+  #sidebar .sb-group { transition-duration: 240ms !important; }
+  body #queue-dock { transition: left 240ms var(--ease) !important; }
+}
 /* A narrow desktop window folds the rail on its own (layout above); same
    shape as the folded rail. */
 @media (min-width: 701px) and (max-width: 900px) {

@@ -83,7 +83,7 @@ def test_atmos_502_falls_through_successive_lossless_tiers(
     ]
 
 
-def test_atmos_502_without_fallback_fails_the_track_explicitly(
+def test_atmos_502_without_fallback_moves_on_to_the_next_provider(
     tmp_path, monkeypatch
 ) -> None:
     _isolate_download(monkeypatch)
@@ -111,7 +111,30 @@ def test_atmos_502_without_fallback_fails_the_track_explicitly(
         )
     )
 
+    assert result.success
+    assert provider.qualities == ["DOLBY_ATMOS"]
+    assert next_provider.qualities == ["DOLBY_ATMOS"]
+
+
+def test_atmos_502_without_fallback_on_every_provider_fails_the_track(
+    tmp_path, monkeypatch
+) -> None:
+    _isolate_download(monkeypatch)
+    providers = [
+        _Provider(tmp_path / f"{i}.flac", [DownloadResult.fail("tidal", "HTTP 502")])
+        for i in range(2)
+    ]
+    opts = dl.DownloadOptions(
+        output_dir=str(tmp_path),
+        quality="DOLBY_ATMOS",
+        allow_fallback=False,
+        embed_lyrics=False,
+    )
+
+    result = asyncio.run(
+        dl.download_one_async(_track(), str(tmp_path), providers, opts)
+    )
+
     assert not result.success
     assert "Dolby Atmos is unavailable" in (result.error or "")
-    assert provider.qualities == ["DOLBY_ATMOS"]
-    assert next_provider.qualities == []
+    assert [p.qualities for p in providers] == [["DOLBY_ATMOS"], ["DOLBY_ATMOS"]]

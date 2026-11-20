@@ -197,50 +197,10 @@ jobs:
         pip install pyinstaller certifi requests mutagen
         pip install .
 
-    # libmpv for the Player's native engine (bitstream to the receiver,
-    # output device, exclusive mode). Windows has no system libmpv, so the
-    # build ships one: shinchiro's mpv-winbuild-cmake, a self-contained
-    # libmpv-2.dll. The build is pinned by name and by SHA-256. GitHub keeps
-    # only about a month of those nightlies, so the same weekly build is
-    # fetched from the project's SourceForge archive once GitHub has dropped
-    # it (both serve byte-identical files). To update: pick a build that
-    # SourceForge lists under mpv-player-windows/libmpv and set the three
-    # values below.
+    # libmpv for the Player's native engine; see the action for the pinning.
     - name: Fetch libmpv (Windows)
       if: runner.os == 'Windows'
-      shell: pwsh
-      env:
-        LIBMPV_RELEASE: '20261108'
-        LIBMPV_BUILD: 'mpv-dev-x86_64-20261108-git-55d3feb45c.7z'
-        LIBMPV_SHA256: '7c147cb7ceaba717414e782ef4398de728f679db6e86daaa8aeb175670cb7994'
-      run: |
-        $ErrorActionPreference = 'Stop'
-        $archive = Join-Path $env:RUNNER_TEMP $env:LIBMPV_BUILD
-        $sources = @(
-          "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/$($env:LIBMPV_RELEASE)/$($env:LIBMPV_BUILD)",
-          "https://downloads.sourceforge.net/project/mpv-player-windows/libmpv/$($env:LIBMPV_BUILD)"
-        )
-        $fetched = $false
-        foreach ($url in $sources) {
-          try {
-            Write-Host "Downloading $url"
-            # SourceForge answers browsers with an HTML page; a plain
-            # downloader user agent gets the redirect to a mirror.
-            Invoke-WebRequest -Uri $url -OutFile $archive -UserAgent 'Wget/1.21' -MaximumRedirection 10
-            $hash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLower()
-            if ($hash -eq $env:LIBMPV_SHA256) { $fetched = $true; break }
-            Write-Warning "SHA-256 mismatch from ${url}: got $hash"
-          } catch {
-            Write-Warning "Download failed from ${url}: $_"
-          }
-        }
-        if (-not $fetched) {
-          throw "No source served $($env:LIBMPV_BUILD) with the pinned SHA-256."
-        }
-        New-Item -ItemType Directory -Force build/libmpv | Out-Null
-        7z e $archive -obuild/libmpv libmpv-2.dll -y
-        if ($LASTEXITCODE -ne 0) { throw "7z could not extract libmpv-2.dll" }
-        Get-Item build/libmpv/libmpv-2.dll
+      uses: ./.github/actions/fetch-libmpv
 
     - name: Build Mornye (x86_64 / macOS / Linux)
       if: matrix.arch == 'x86_64'
@@ -318,8 +278,145 @@ jobs:
         path: dist/${{ matrix.artifact_name }}
         retention-days: 7
 
+  # The GUI packaged as an application, next to the command-line binaries
+  # above: a .dmg with Mornye.app, a Windows installer and an AppImage. They
+  # open the GUI on a double-click (desktop_launcher.py) where the CLI
+  # binaries print their help. See packaging/mornye-desktop.spec.
+  build-desktop:
+    needs: lint-and-bump
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            artifact_name: Mornye-macOS.dmg
+          - os: windows-latest
+            artifact_name: Mornye-Windows-Setup.exe
+          # The oldest supported Ubuntu runner: an AppImage runs on systems
+          # with this glibc or a newer one.
+          - os: ubuntu-22.04
+            artifact_name: Mornye-Linux-x86_64.AppImage
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v5
+      with:
+        ref: refs/tags/${{ needs.lint-and-bump.outputs.release_tag }}
+
+    - name: Setup Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.12'
+
+    - name: Install Qt build libraries (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        # Present at build time so PyInstaller copies them into the
+        # AppImage: Qt's xcb platform plugin needs them and not every
+        # desktop has them installed.
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          libegl1 libgl1 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
+          libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
+          libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 libnss3 libxcomposite1 \
+          libxdamage1 libxrandr2 libxtst6 libasound2
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller certifi requests mutagen
+        pip install .
+        if [ "$RUNNER_OS" == "Linux" ]; then
+          pip install "pywebview[qt]"
+        fi
+
+    - name: Fetch libmpv (Windows)
+      if: runner.os == 'Windows'
+      uses: ./.github/actions/fetch-libmpv
+
+    - name: Build the app
+      shell: bash
+      run: |
+        python packaging/make_icons.py
+        pyinstaller --noconfirm packaging/mornye-desktop.spec
+
+    # Arguments go to the normal command line, so --help exercises the
+    # bundled imports without opening a window.
+    - name: Smoke test the bundle
+      shell: bash
+      run: |
+        case "$RUNNER_OS" in
+          macOS)   BIN="dist/Mornye.app/Contents/MacOS/Mornye" ;;
+          Windows) BIN="dist/Mornye/Mornye.exe" ;;
+          *)       BIN="dist/Mornye/Mornye" ;;
+        esac
+        "$BIN" --help > /dev/null
+        echo "$BIN starts."
+
+    - name: Check the native engine is bundled (Windows)
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        test -f dist/Mornye/_internal/libmpv-2.dll
+        echo "libmpv-2.dll is in the bundle."
+
+    # Unsigned and not notarized: macOS asks to confirm the first launch
+    # (System Settings > Privacy & Security > Open Anyway).
+    - name: Package .dmg (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        mkdir -p build/dmg
+        cp -R dist/Mornye.app build/dmg/
+        ln -s /Applications build/dmg/Applications
+        hdiutil create -volname Mornye -srcfolder build/dmg -ov -format UDZO \
+          "dist/${{ matrix.artifact_name }}"
+
+    - name: Package installer (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+        if (-not (Test-Path $iscc)) {
+          choco install innosetup --no-progress -y
+          if ($LASTEXITCODE -ne 0) { throw "Could not install Inno Setup" }
+        }
+        $version = "${{ needs.lint-and-bump.outputs.release_tag }}".TrimStart('v')
+        & $iscc "/DAppVersion=$version" packaging\windows\mornye.iss
+        if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
+
+    - name: Package AppImage (Linux)
+      if: runner.os == 'Linux'
+      env:
+        APPIMAGETOOL_URL: https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+        APPIMAGETOOL_SHA256: ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
+      run: |
+        mkdir -p build/AppDir/usr/lib
+        cp -a dist/Mornye build/AppDir/usr/lib/mornye
+        cp packaging/linux/AppRun packaging/linux/mornye.desktop build/AppDir/
+        cp build/icons/mornye.png build/AppDir/mornye.png
+        cp build/icons/mornye.png build/AppDir/.DirIcon
+        chmod +x build/AppDir/AppRun
+
+        curl -fsSL -o "$RUNNER_TEMP/appimagetool" "$APPIMAGETOOL_URL"
+        echo "$APPIMAGETOOL_SHA256  $RUNNER_TEMP/appimagetool" | sha256sum -c -
+        chmod +x "$RUNNER_TEMP/appimagetool"
+        # No FUSE on the runner: let the tool unpack itself instead.
+        APPIMAGE_EXTRACT_AND_RUN=1 ARCH=x86_64 \
+          "$RUNNER_TEMP/appimagetool" build/AppDir "dist/${{ matrix.artifact_name }}"
+
+    - name: Upload build artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: bin-desktop-${{ runner.os }}
+        path: dist/${{ matrix.artifact_name }}
+        retention-days: 7
+
   release:
-      needs: [lint-and-bump, build]
+      needs: [lint-and-bump, build, build-desktop]
       runs-on: ubuntu-latest
       if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
       
@@ -417,10 +514,29 @@ jobs:
 
             ## Downloads
             
-            [![Windows](https://img.shields.io/badge/Windows-Mornye-0078D6?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiB2aWV3Qm94PSIwIDAgMjAgMjAiPjxwYXRoIGZpbGw9IiNmZmZmZmYiIGZpbGwtcnVsZT0iZXZlbm9kZCIgZD0iTTIwIDEwLjg3M1YyMEw4LjQ3OSAxOC41MzdsLjAwMS03LjY2NEgyMFptLTEzLjEyIDBsLS4wMDEgNy40NjFMMCAxNy40NjF2LTYuNTg4aDYuODhaTTIwIDkuMjczSDguNDhsLS4wMDEtNy44MUwyMCAwdjkuMjczWk02Ljg3OSAxLjY2NmwuMDAxIDcuNjA3SDBWMi41MzlsNi44NzktLjg3M1oiLz48L3N2Zz4=)](https://github.com/${{ github.repository }}/releases/download/${{ needs.lint-and-bump.outputs.release_tag }}/Mornye-Windows.exe) [![macOS](https://img.shields.io/badge/macOS-Mornye-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/${{ github.repository }}/releases/download/${{ needs.lint-and-bump.outputs.release_tag }}/Mornye-macOS) [![Linux](https://img.shields.io/badge/Linux-Mornye-FFB300?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/${{ github.repository }}/releases/download/${{ needs.lint-and-bump.outputs.release_tag }}/Mornye-Linux-x86_64)
+            [![Windows](https://img.shields.io/badge/Windows-Mornye-0078D6?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiB2aWV3Qm94PSIwIDAgMjAgMjAiPjxwYXRoIGZpbGw9IiNmZmZmZmYiIGZpbGwtcnVsZT0iZXZlbm9kZCIgZD0iTTIwIDEwLjg3M1YyMEw4LjQ3OSAxOC41MzdsLjAwMS03LjY2NEgyMFptLTEzLjEyIDBsLS4wMDEgNy40NjFMMCAxNy40NjF2LTYuNTg4aDYuODhaTTIwIDkuMjczSDguNDhsLS4wMDEtNy44MUwyMCAwdjkuMjczWk02Ljg3OSAxLjY2NmwuMDAxIDcuNjA3SDBWMi41MzlsNi44NzktLjg3M1oiLz48L3N2Zz4=)](https://github.com/${{ github.repository }}/releases/download/${{ needs.lint-and-bump.outputs.release_tag }}/Mornye-Windows-Setup.exe) [![macOS](https://img.shields.io/badge/macOS-Mornye-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/${{ github.repository }}/releases/download/${{ needs.lint-and-bump.outputs.release_tag }}/Mornye-macOS.dmg) [![Linux](https://img.shields.io/badge/Linux-Mornye-FFB300?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/${{ github.repository }}/releases/download/${{ needs.lint-and-bump.outputs.release_tag }}/Mornye-Linux-x86_64.AppImage)
 
             <details>
-            <summary><b>💻 Usage Instructions</b></summary>
+            <summary><b>📦 Installing the app</b></summary>
+            
+            ### Windows
+            Run `Mornye-Windows-Setup.exe`. It installs for your user only (no administrator prompt) and adds Mornye to the Start menu. The installer is not code-signed, so SmartScreen may show *Windows protected your PC*: choose **More info → Run anyway**.
+            
+            ### 🍏 macOS (Apple Silicon)
+            Open `Mornye-macOS.dmg` and drag **Mornye** to **Applications**. The app is not notarized, so the first launch is blocked: open **System Settings → Privacy & Security** and click **Open Anyway** (or run `xattr -dr com.apple.quarantine /Applications/Mornye.app`).
+            
+            ### 🐧 Linux (x86_64)
+            ```bash
+            chmod +x Mornye-Linux-x86_64.AppImage
+            ./Mornye-Linux-x86_64.AppImage
+            ```
+            *(AppImages need FUSE 2: `sudo apt install libfuse2` on Ubuntu/Debian if it does not start.)*
+            </details>
+
+            <details>
+            <summary><b>💻 Command-line binaries</b></summary>
+            
+            For scripts, servers and the terminal UI: `Mornye-Windows.exe`, `Mornye-macOS`, `Mornye-Linux-x86_64` and `Mornye-Linux-arm64`.
             
             ### Windows (PowerShell or CMD)
             ```cmd

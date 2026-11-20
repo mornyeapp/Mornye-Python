@@ -42,6 +42,7 @@ from __future__ import annotations
 import logging
 import sys
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +101,85 @@ def apply_windows_app_id(platform: str | None = None) -> bool:
         return result == 0  # S_OK
     except Exception:
         logger.debug("Could not set the AppUserModelID", exc_info=True)
+        return False
+
+
+#: Icon handles set on the window. Kept alive for the process lifetime: the
+#: window only borrows them, and destroying one blanks its taskbar button.
+_WINDOW_ICON_HANDLES: list[int] = []
+
+
+def _native_hwnd(window: Any) -> int:
+    """The Win32 handle of a pywebview window (WinForms ``Form.Handle``), or 0."""
+    handle = getattr(getattr(window, "native", None), "Handle", None)
+    if handle is None:
+        return 0
+    for attr in ("ToInt64", "ToInt32"):
+        if hasattr(handle, attr):
+            return int(getattr(handle, attr)())
+    try:
+        return int(handle)
+    except (TypeError, ValueError):
+        return 0
+
+
+def apply_windows_window_icon(window: Any, platform: str | None = None) -> bool:
+    """Puts logo.ico on the window and its taskbar button on Windows.
+
+    ``webview.start(icon=...)`` is enough on recent pywebview, but older
+    WinForms backends (the dependency allows pywebview 5.0) ignore it and
+    copy python.exe's icon onto the form, so the window opened with
+    Python's logo. Setting WM_SETICON ourselves once the window is shown
+    works on every version, and loads each size from the .ico at the
+    monitor's DPI instead of WinForms' downscaled 32 px one. Never raises.
+    """
+    if (platform or sys.platform) != "win32":
+        return False
+    path = windows_icon_path()
+    if not path.is_file():
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        hwnd = _native_hwnd(window)
+        if not hwnd:
+            return False
+        windll = getattr(ctypes, "windll")
+        user32 = windll.user32
+        user32.LoadImageW.argtypes = [
+            wintypes.HINSTANCE,
+            wintypes.LPCWSTR,
+            wintypes.UINT,
+            ctypes.c_int,
+            ctypes.c_int,
+            wintypes.UINT,
+        ]
+        user32.LoadImageW.restype = wintypes.HANDLE
+        user32.SendMessageW.argtypes = [
+            wintypes.HWND,
+            wintypes.UINT,
+            wintypes.WPARAM,
+            wintypes.LPARAM,
+        ]
+        user32.SendMessageW.restype = wintypes.LPARAM
+
+        image_icon, lr_loadfromfile, wm_seticon = 1, 0x10, 0x0080
+        applied = False
+        # (ICON_SMALL, SM_CXSMICON), (ICON_BIG, SM_CXICON)
+        for which, metric in ((0, 49), (1, 11)):
+            size = int(user32.GetSystemMetrics(metric)) or (16 if which == 0 else 32)
+            hicon = user32.LoadImageW(
+                None, str(path), image_icon, size, size, lr_loadfromfile
+            )
+            if not hicon:
+                continue
+            _WINDOW_ICON_HANDLES.append(int(hicon))
+            user32.SendMessageW(hwnd, wm_seticon, which, hicon)
+            applied = True
+        return applied
+    except Exception:
+        logger.debug("Could not set the window icon", exc_info=True)
         return False
 
 
