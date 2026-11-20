@@ -2323,6 +2323,7 @@ function setAlbumCard(title, artist, coverUrl, quality, description, followers, 
     bio: artistBiography || description || '',
   } : null;
   if (!isArtistCard) setArtistOverviewMode(false);
+  $('album-card').classList.toggle('playlist-mode', !isArtistCard && /\/playlist\/|spotify:playlist:/i.test(currentUrl || ''));
   renderArtistAbout();
 
   if (isArtistCard) {
@@ -2455,8 +2456,17 @@ function setAlbumCard(title, artist, coverUrl, quality, description, followers, 
     const img = document.createElement('img');
     img.alt = 'cover';
     img.className = 'cover-loading'; // blur-up: css/views/home.css clears it once decode() resolves
+    // Asked for with CORS so applyAlbumGlow can read its colour (Spotify's
+    // image host allows it); a host that refuses gets one retry without,
+    // which shows the cover and simply leaves the card untinted.
+    img.crossOrigin = 'anonymous';
     img.src = safeCover;
     img.addEventListener('error', () => {
+      if (img.crossOrigin) {
+        img.removeAttribute('crossorigin');
+        img.src = safeCover;
+        return;
+      }
       coverEl.textContent = '🎵';
       $('album-card')?.style.removeProperty('--album-glow');
     });
@@ -2580,6 +2590,15 @@ function updateAlbumMeta(trackCount) {
   if (trackCountEl) {
     trackCountEl.textContent = `${trackCount} track${trackCount !== 1 ? 's' : ''}`;
   }
+  // A playlist opens like Spotify's: cover beside a big title, then one
+  // line of owner · tracks · total time · followers, the buttons under it.
+  const isPlaylist = badgeType === 'PLAYLIST';
+  $('album-card')?.classList.toggle('playlist-mode', isPlaylist);
+  const durationEl = $('album-duration');
+  if (durationEl) {
+    const totalMs = currentTracks.reduce((s, t) => s + (Number(t.duration_ms) || 0), 0);
+    durationEl.textContent = isPlaylist && totalMs > 0 ? formatLongDuration(totalMs) : '';
+  }
   tidyOwnerRow();
   // For an album the subtitle already reads "<artist> · <date> · <n> tracks";
   // the standalone artist line right under it was the same word again.
@@ -2588,7 +2607,11 @@ function updateAlbumMeta(trackCount) {
   // Technical sheet (right column of the card). Per-track fields are shared
   // across an album, so the first track stands in for the release; ISRC is
   // genuinely per-track and stays out of an album-level sheet.
-  if (badgeType === 'ALBUM' || badgeType === 'PLAYLIST') {
+  if (badgeType === 'PLAYLIST') {
+    // Track count and runtime are on the owner line; the rest of the sheet
+    // (label, UPC, ℗) would only describe whichever track came first.
+    renderAlbumTech([]);
+  } else if (badgeType === 'ALBUM') {
     const t0 = currentTracks[0] || {};
     const totalMs = currentTracks.reduce((s, t) => s + (Number(t.duration_ms) || 0), 0);
     const released = g_albumReleaseDate

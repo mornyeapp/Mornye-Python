@@ -1737,6 +1737,57 @@ body:has(#album-card:not(.hidden)) #fetchBtn {
   :is(#album-card.artist-mode, #album-card.playlist-mode) #album-actions .act-btn:hover { transform: none; }
 }
 
+/* ── Playlist header ──────────────────────────────────────────────────────
+   Laid out like Spotify's: the cover beside a large title, the description
+   and one line of owner · tracks · total time · followers under it, all
+   sitting on the cover's own colour (--album-glow, sampled in app.js); the
+   round download controls on a row of their own beneath. #album-info is
+   display: contents so its children — the buttons included — become cells
+   of the card's grid without moving them in the markup. */
+#album-card.playlist-mode {
+  display: grid; align-items: end;
+  grid-template-columns: clamp(132px, 22vw, 232px) minmax(0, 1fr);
+  column-gap: var(--space-5); row-gap: 0;
+  padding: var(--space-5) var(--space-5) var(--space-4);
+  border: 0; border-radius: var(--radius-2);
+  background:
+    linear-gradient(180deg, var(--album-glow, rgba(var(--shade-rgb), .08)) 0%, rgba(var(--shade-rgb), 0) 100%),
+    var(--surface);
+}
+#album-card.playlist-mode #album-info { display: contents; }
+#album-card.playlist-mode #album-cover {
+  grid-column: 1; grid-row: 1 / span 6; align-self: end;
+  width: 100%; height: auto; aspect-ratio: 1; box-shadow: 0 8px 28px rgba(var(--shade-rgb), .35);
+}
+#album-card.playlist-mode #album-info > * { grid-column: 2; min-width: 0; }
+#album-card.playlist-mode #album-type-badge { grid-row: 2; margin: 0 0 var(--space-1); font-size: var(--text-sm); color: var(--text); }
+#album-card.playlist-mode #album-title {
+  grid-row: 3; margin: 0 0 var(--space-3);
+  font-size: clamp(30px, 5.5vw, 84px); line-height: 1; font-weight: 800; letter-spacing: -0.03em;
+  overflow-wrap: anywhere;
+}
+#album-card.playlist-mode #album-subtitle { grid-row: 4; margin: 0 0 var(--space-2); color: var(--text-muted); }
+#album-card.playlist-mode #album-meta { grid-row: 5; }
+#album-card.playlist-mode #album-meta-details { grid-row: 6; color: var(--text-muted); }
+#album-card.playlist-mode #album-owner { color: var(--text); font-weight: 700; }
+#album-card.playlist-mode #album-description { grid-row: 4; }
+#album-card.playlist-mode #album-tech { display: none !important; }
+#album-card.playlist-mode #album-actions {
+  grid-column: 1 / -1; grid-row: 7;
+  justify-content: flex-start; align-items: center; flex-wrap: wrap; gap: var(--space-3);
+  margin: 0; padding: var(--space-5) 0 0;
+}
+@media (max-width: 720px) {
+  #album-card.playlist-mode { grid-template-columns: minmax(0, 1fr); padding: var(--space-4); }
+  #album-card.playlist-mode #album-cover { grid-row: 1; width: min(60%, 232px); justify-self: center; margin-bottom: var(--space-4); }
+  #album-card.playlist-mode #album-info > * { grid-column: 1; }
+  #album-card.playlist-mode #album-type-badge { grid-row: 2; }
+  /* Six controls on one row at phone width. */
+  .list-container #album-card.playlist-mode #album-actions { gap: var(--space-2); }
+  .list-container #album-card.playlist-mode #album-actions .act-btn { width: 40px; height: 40px; }
+  .list-container #album-card.playlist-mode #album-actions .act-btn.primary { width: 52px; height: 52px; margin-right: 0; }
+}
+
 /* ── Artist page: About ───────────────────────────────────────────────── */
 .artist-about { display: grid; gap: var(--space-3); padding: var(--space-2) 0 var(--space-5); }
 .about-card {
