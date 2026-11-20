@@ -902,6 +902,11 @@ class JSExtensionProvider(BaseProvider):
             extension=ext_hint,
             native_id=str(track_id),
         )
+        existing_atmos: Path | None = None
+        if _is_atmos_quality(quality):
+            output_path, existing_atmos = await _resolve_atmos_target(
+                output_path, self._file_exists
+            )
 
         # Everything below writes to output_path, so one download of a
         # given destination happens at a time. Two tracks can resolve to
@@ -923,7 +928,13 @@ class JSExtensionProvider(BaseProvider):
             except Exception:
                 pass
 
-            if self._file_exists(output_path):
+            if existing_atmos is not None:
+                return DownloadResult.skipped_result(
+                    self.name,
+                    str(existing_atmos),
+                    fmt=cast(Any, _ext_to_fmt(existing_atmos.suffix)),
+                )
+            if not _is_atmos_quality(quality) and self._file_exists(output_path):
                 return DownloadResult.skipped_result(
                     self.name,
                     str(output_path),
@@ -1589,8 +1600,57 @@ class JSExtensionProvider(BaseProvider):
 # ─────────────────────────────────────────────────────────────
 
 
+#: What a Dolby Atmos download is once it is on disk: E-AC-3 (with JOC) from
+#: TIDAL in an .m4a, AC-4 from Amazon in an .mp4. Only a file holding one of
+#: these codecs answers an Atmos request; see _resolve_atmos_target().
+_ATMOS_CODECS = frozenset({"eac3", "ac4"})
+_ATMOS_CONTAINERS = (".m4a", ".mp4")
+#: Added to the filename when its plain .m4a is already taken by a stereo
+#: file (an ALAC or AAC download of the same track).
+_ATMOS_NAME_SUFFIX = " (Dolby Atmos)"
+
+
+def _is_atmos_quality(quality: str) -> bool:
+    """True for the Atmos tier under any of the names it travels by.
+
+    core/quality.py accepts DOLBY_ATMOS, ATMOS, DOLBY, EAC3, EC3 and EAC3_JOC
+    for it, and extensions may report it as plain "atmos".
+    """
+    q = (quality or "").lower()
+    return "atmos" in q or q in {"dolby", "eac3", "ec3", "eac3_joc"}
+
+
+async def _resolve_atmos_target(
+    output_path: Path, file_exists: Callable[[Path], bool]
+) -> tuple[Path, Path | None]:
+    """Where an Atmos download goes, and the Atmos file already there, if any.
+
+    The "already downloaded" check used to look for output_path as built from
+    the quality, and _quality_to_ext() had no Atmos case, so it fell back to
+    .flac: asking for a track in Atmos found its Hi-Res FLAC under the same
+    name and skipped the download. A stereo .m4a (ALAC or AAC) of the same
+    track would have done the same once the extension was right. So a file
+    counts as the Atmos download only when ffprobe says it is E-AC-3 or AC-4,
+    and when the plain .m4a name is taken by something else the download gets
+    a name of its own instead of overwriting it.
+    """
+    names = (output_path.stem, output_path.stem + _ATMOS_NAME_SUFFIX)
+    for stem in names:
+        for suffix in _ATMOS_CONTAINERS:
+            candidate = output_path.with_name(stem + suffix)
+            if file_exists(candidate) and (
+                await _get_codec_async(str(candidate)) in _ATMOS_CODECS
+            ):
+                return candidate, candidate
+    if file_exists(output_path.with_suffix(".m4a")):
+        return output_path.with_name(names[1] + ".m4a"), None
+    return output_path.with_suffix(".m4a"), None
+
+
 def _quality_to_ext(quality: str) -> str:
     q = quality.lower()
+    if _is_atmos_quality(q):
+        return ".m4a"
     if "flac" in q:
         return ".flac"
     if "mp3" in q:

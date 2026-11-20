@@ -844,6 +844,13 @@ def transcode_target_path(
     """
     if not opts.transcode_to:
         return None
+    # Dolby audio is never transcoded (core/transcode.py keeps it as it
+    # arrives), so an Atmos download has no transcoded file to look for.
+    # Looked for anyway, the ALAC .m4a of the same track's Hi-Res download
+    # answered "already downloaded as ALAC" and the Atmos request was skipped
+    # before any provider was asked.
+    if normalize_quality(opts.quality) == "DOLBY_ATMOS":
+        return None
 
     extension = extension_for(opts.transcode_to)
     if opts.output_path:
