@@ -70,6 +70,8 @@ class ProfileConfig(BaseModel):
     transcode_to: str | None = None
     transcode_bitrate: str = "320k"
     transcode_keep_original: bool = False
+    dolby_to_ac3: bool = True
+    dolby_ac3_keep_original: bool = True
     transcode_max_sample_rate: int = 0
     transcode_max_bit_depth: int = 0
     m3u_format: str = "m3u8"

@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
+import os
 import threading
 import time
 from pathlib import Path
@@ -40,6 +42,54 @@ def _network_roots_cached() -> list[Path]:
                 roots = []
             _network_roots_state.update(at=time.monotonic(), roots=roots)
         return list(_network_roots_state["roots"])
+
+
+#: Covers already shrunk for the Player, kept between launches: reading one
+#: from a network share costs a round trip or more, so a library on a NAS
+#: would otherwise be read again on every start.
+_THUMB_DIR_NAME = "thumbs"
+
+
+def _thumb_cache_file(path: str, px: int) -> Path | None:
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    from ..core.paths import data_path
+
+    digest = hashlib.sha1(
+        f"{path}\0{st.st_mtime_ns}\0{st.st_size}\0{px}".encode("utf-8", "surrogatepass")
+    ).hexdigest()
+    return data_path(_THUMB_DIR_NAME, digest[:2], digest + ".jpg")
+
+
+def _cached_thumbnail(path: str, px: int) -> bytes | None:
+    """The shrunk cover of `path`, from disk when it was made before.
+
+    An empty file records "no cover", so a file without one is not read
+    again either. Editing the file changes its mtime/size and so the key.
+    """
+    from ..core.library_scan import thumbnail_jpeg
+
+    target = _thumb_cache_file(path, px)
+    if target is not None:
+        try:
+            return target.read_bytes() or None
+        except OSError:
+            pass
+    try:
+        raw = thumbnail_jpeg(path, px)
+    except Exception:
+        raw = None
+    if target is not None:
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            tmp = target.with_suffix(f".{threading.get_ident()}.tmp")
+            tmp.write_bytes(raw or b"")
+            os.replace(tmp, target)
+        except OSError:
+            pass
+    return raw
 
 
 class LibraryToolsMixin:
@@ -90,6 +140,78 @@ class LibraryToolsMixin:
             "tags": data.tags,
             "lyrics": data.lyrics,
             "cover": cover,
+        }
+
+    def fetch_file_lyrics(
+        self, path: str, tags: dict | None = None, provider: str = ""
+    ) -> dict:
+        """Lyrics for the file at `path`, looked up again: on `provider` alone
+        when one is named, else with the lyrics services set in Settings, in
+        their order. `tags` are the editor's current fields
+        (TITLE, ARTIST, ALBUM, ISRC) so a corrected title is searched as
+        typed; anything missing comes from the file. Nothing is written:
+        the editor shows the text and Save puts it in the file."""
+        from ..core.lyrics import (
+            LYRICS_PROVIDER_LABELS,
+            fetch_lyrics_async,
+            lyrics_provider_label,
+        )
+        from ..core.tag_editor import read_file_tags
+
+        if not self._is_approved_path(path):
+            return {"status": "error", "error": "Path is outside approved directories"}
+        try:
+            stored = read_file_tags(path).tags
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+        fields = {**stored, **{k: v for k, v in (tags or {}).items() if v}}
+        title = (fields.get("TITLE") or "").strip()
+        artist = (fields.get("ARTIST") or fields.get("ALBUMARTIST") or "").strip()
+        if not title or not artist:
+            return {
+                "status": "error",
+                "error": "The file needs a title and an artist to search lyrics.",
+            }
+        try:
+            import mutagen
+
+            audio = mutagen.File(path)
+            duration_s = int(audio.info.length) if audio and audio.info else 0
+        except Exception:
+            duration_s = 0
+        load_settings = getattr(self, "load_settings", None)
+        settings = (load_settings() if callable(load_settings) else None) or {}
+        provider = (provider or "").strip()
+        if provider and not (
+            provider.startswith("ext:") or provider in LYRICS_PROVIDER_LABELS
+        ):
+            return {"status": "error", "error": f"Unknown lyrics service: {provider}"}
+        providers = [provider] if provider else settings.get("lyrics_providers") or None
+        try:
+            text, found_on = run_sync(
+                fetch_lyrics_async(
+                    track_name=title,
+                    artist_name=artist,
+                    album_name=(fields.get("ALBUM") or "").strip(),
+                    duration_s=duration_s,
+                    isrc=(fields.get("ISRC") or "").strip(),
+                    providers=providers,
+                    apple_word_by_word=settings.get("apple_lyrics_word_by_word", True),
+                ),
+                timeout=120,
+            )
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+        if not text:
+            where = f" on {lyrics_provider_label(provider)}" if provider else ""
+            return {
+                "status": "error",
+                "error": f"No lyrics found{where} for this track.",
+            }
+        return {
+            "status": "ok",
+            "lyrics": text,
+            "provider": lyrics_provider_label(found_on),
         }
 
     def save_file_tags(
@@ -208,7 +330,9 @@ class LibraryToolsMixin:
             return False
         return self._is_approved_path(str(candidate))
 
-    def prepare_playback(self, path: str, local_url: bool = True) -> dict:
+    def prepare_playback(
+        self, path: str, local_url: bool = True, native: bool = False
+    ) -> dict:
         """Gets `path` ready to play without lowering its quality.
 
         Files the engine can decode are streamed untouched; the rest are
@@ -216,6 +340,10 @@ class LibraryToolsMixin:
         the file to stream, a label saying what is being heard, and — for the
         desktop window, which has no route to the file — a URL on the local
         media server. The web UI streams `path` through /api/media instead.
+
+        `native`: the desktop's native engine (libmpv) plays the file, which
+        decodes everything ffmpeg does, so no copy is made and no URL is
+        needed; only the label and the Now Playing data are prepared.
         """
         from ..core.audio_analysis import probe_audio
         from ..core.media_server import get_media_server
@@ -224,13 +352,16 @@ class LibraryToolsMixin:
         if not self._is_approved_path(path):
             return {"status": "error", "error": "Path is outside approved directories"}
         try:
-            served, mode = run_sync(playable_file_async(path), timeout=900)
+            if native:
+                served, mode = Path(path), "original"
+            else:
+                served, mode = run_sync(playable_file_async(path), timeout=900)
             info = probe_audio(path)
             label = quality_label(info, mode, Path(path).suffix)
         except Exception as e:
             return {"status": "error", "error": str(e)}
         url = ""
-        if local_url:
+        if local_url and not native:
             url = get_media_server(self._is_media_path).url_for(served)
         return {
             "status": "ok",
@@ -287,6 +418,9 @@ class LibraryToolsMixin:
 
     _library_scan_id = 0
     _library_thumb_cache: dict = {}
+    #: Seconds between two "app_library_scan_progress" events: often enough
+    #: for the bar to move, rarely enough not to flood the window or socket.
+    _library_progress_interval = 0.25
 
     def get_library_default_folder(self) -> dict:
         """Where the Player starts: the download folder."""
@@ -308,6 +442,29 @@ class LibraryToolsMixin:
         def current() -> bool:
             return scan_id == self._library_scan_id  # a newer scan replaces this
 
+        class Cancelled(Exception):
+            """Stops the folder listing, which has no loop of its own here."""
+
+        last_progress = [0.0]
+
+        def progress(phase: str, done: int, total: int, force: bool = False) -> None:
+            """Where the walk is, for the bar under the library summary:
+            "listing" counts the audio files found so far (the total is not
+            known yet: an indeterminate bar), "reading" is `done` of
+            `total` files checked. Sent at most every
+            _library_progress_interval seconds unless `force`."""
+            if not current():
+                raise Cancelled
+            now = time.monotonic()
+            if not force and now - last_progress[0] < self._library_progress_interval:
+                return
+            last_progress[0] = now
+            self._push(
+                "app_library_scan_progress",
+                {"scan": scan_id, "phase": phase, "done": done, "total": total},
+            )
+
+        to_store: list = []
         try:
             stored = player_library.stored_rows(roots)
             if stored:
@@ -340,17 +497,29 @@ class LibraryToolsMixin:
 
             # Every folder of the library, a file listed once even when one
             # folder sits inside another.
-            files = list(
-                dict.fromkeys(path for root in roots for path in iter_audio_files(root))
-            )
-            total = len(files)
-            batch: list = []
-            to_store: list = []
-            done = 0
-            for path in files:
+            progress("listing", 0, 0, force=True)
+            listed: list = []
+            offset = 0  # files listed in the folders before this one
+
+            def found(n: int) -> None:
+                progress("listing", offset + n, 0)
+
+            for root in roots:
                 if not current():
                     return
+                offset = len(listed)
+                listed.extend(iter_audio_files(root, on_found=found))
+            files = list(dict.fromkeys(listed))
+            total = len(files)
+            progress("reading", 0, total, force=True)
+            batch: list = []
+            to_store = []
+            done = 0
+            for path in files:
                 done += 1
+                progress("reading", done, total)
+                if not current():
+                    raise Cancelled
                 try:
                     st = path.stat()
                 except OSError:
@@ -382,6 +551,7 @@ class LibraryToolsMixin:
             player_library.store(to_store)
             if not current():
                 return
+            progress("reading", done, total, force=True)
             # A walk that found nothing at all is a share that stopped
             # answering, not a library emptied: the stored rows stay.
             gone = sorted(set(stored) - {str(p) for p in files}) if files else []
@@ -406,6 +576,11 @@ class LibraryToolsMixin:
                         "folders": roots,
                     },
                 )
+        except Cancelled:
+            # cancel_music_library_scan has already told the Player; what was
+            # read so far stays stored, so the next scan starts from there.
+            if to_store:
+                player_library.store(to_store)
         except Exception as e:
             self.log(f"[player] scan failed: {e}", "error")
             self._push("app_library_scan_error", {"scan": scan_id, "error": str(e)})
@@ -449,13 +624,23 @@ class LibraryToolsMixin:
         ).start()
         return {"status": "started", "scan": scan_id, "folders": roots}
 
+    def cancel_music_library_scan(self) -> dict:
+        """Stops the Player's scan in progress, even mid-listing of a slow
+        network share (it stops at the next file found). Rows read so far
+        stay stored and shown; the Player hears 'app_library_scan_cancelled'.
+        """
+        scan_id = self._library_scan_id
+        self._library_scan_id += 1  # the running scan is no longer current
+        self._push("app_library_scan_cancelled", {"scan": scan_id})
+        return {"status": "ok", "scan": scan_id}
+
     def get_track_thumb(self, path: str, size: int = 0) -> str:
         """A cover for the Player as a data URL, "" if none.
 
         `size` is the longest side in pixels: 0 keeps the small list
         thumbnail; the album grid asks for a larger one, clamped to 32–512.
         """
-        from ..core.library_scan import THUMB_PX, thumbnail_jpeg
+        from ..core.library_scan import THUMB_PX
 
         if not self._is_approved_path(path):
             return ""
@@ -468,10 +653,7 @@ class LibraryToolsMixin:
         cache = self._library_thumb_cache
         if key in cache:
             return cache[key]
-        try:
-            raw = thumbnail_jpeg(path, px)
-        except Exception:
-            raw = None
+        raw = _cached_thumbnail(path, px)
         url = (
             "data:image/jpeg;base64," + base64.b64encode(raw).decode("ascii")
             if raw
@@ -481,3 +663,21 @@ class LibraryToolsMixin:
             cache.clear()
         cache[key] = url
         return url
+
+    def get_track_thumbs(self, paths: list, size: int = 0) -> dict:
+        """Several Player covers in one call, read side by side.
+
+        A cover on a network share takes a round trip or more to read, so
+        the rows on screen are fetched together rather than one bridge call
+        each. Returns {path: data URL or ""}.
+        """
+        wanted = [p for p in dict.fromkeys(paths or []) if isinstance(p, str) and p][
+            :64
+        ]
+        if not wanted:
+            return {}
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=min(8, len(wanted))) as pool:
+            urls = list(pool.map(lambda p: self.get_track_thumb(p, size), wanted))
+        return dict(zip(wanted, urls, strict=True))

@@ -594,9 +594,12 @@ def parse_args(profile_defaults: dict | None = None) -> argparse.Namespace:
         "--no-fallback",
         action="store_false",
         dest="allow_fallback",
-        help="Fail a track outright when the requested --quality is not "
-        "available, instead of accepting a lower tier. A Dolby Atmos HTTP "
-        "502 fails the track as unavailable.",
+        help="Never accept a lower tier than --quality: a provider that "
+        "serves less (e.g. 16-bit for a Hi-Res request) has its file "
+        "discarded and the next provider is tried at the same quality; the "
+        "track fails only when none has it. With DOLBY_ATMOS only providers "
+        "whose extension offers Atmos (e.g. Tidal, Amazon) are tried, and a "
+        "stereo file is rejected.",
     )
     parser.add_argument(
         "--use-track-numbers",
@@ -1042,6 +1045,32 @@ def parse_args(profile_defaults: dict | None = None) -> argparse.Namespace:
         default=pd.get("transcode_keep_original", False),
         help="Keep the original downloaded file next to the transcoded one "
         "(default: the source is deleted after a successful conversion)",
+    )
+    transcode_grp.add_argument(
+        "--dolby-ac3",
+        action="store_true",
+        dest="dolby_to_ac3",
+        default=pd.get("dolby_to_ac3", True),
+        help="Also save Dolby Digital Plus (E-AC-3) downloads as Dolby Digital "
+        "5.1 (AC-3, 640k), for a receiver on a coaxial or optical S/PDIF "
+        "link. Only E-AC-3 files are touched; Atmos heights and objects are "
+        "not kept. Saved beside the original as '… (AC-3).m4a'. "
+        "On by default; see --no-dolby-ac3.",
+    )
+    transcode_grp.add_argument(
+        "--no-dolby-ac3",
+        action="store_false",
+        dest="dolby_to_ac3",
+        help="Do not make the Dolby Digital (AC-3) copy of Dolby Digital Plus "
+        "downloads.",
+    )
+    transcode_grp.add_argument(
+        "--dolby-ac3-replace",
+        action="store_false",
+        dest="dolby_ac3_keep_original",
+        default=pd.get("dolby_ac3_keep_original", True),
+        help="With --dolby-ac3, replace the E-AC-3 original with the AC-3 "
+        "copy instead of keeping both.",
     )
     transcode_grp.add_argument(
         "--transcode-max-rate",
@@ -1584,6 +1613,8 @@ def _subscription_downloader(profile_defaults: dict, output_dir_override: str | 
             transcode_to=pd.get("transcode_to"),
             transcode_bitrate=pd.get("transcode_bitrate", "320k"),
             transcode_keep_original=pd.get("transcode_keep_original", False),
+            dolby_to_ac3=pd.get("dolby_to_ac3", True),
+            dolby_ac3_keep_original=pd.get("dolby_ac3_keep_original", True),
             transcode_max_sample_rate=pd.get("transcode_max_sample_rate", 0),
             transcode_max_bit_depth=pd.get("transcode_max_bit_depth", 0),
             max_concurrent_downloads=pd.get("max_concurrent_downloads", 2),
@@ -1857,6 +1888,8 @@ async def _run_download_async(
     transcode_to: str | None = None,
     transcode_bitrate: str = "320k",
     transcode_keep_original: bool = False,
+    dolby_to_ac3: bool = True,
+    dolby_ac3_keep_original: bool = True,
     transcode_max_sample_rate: int = 0,
     transcode_max_bit_depth: int = 0,
     playlist_urls: list[str] | None = None,
@@ -2025,6 +2058,8 @@ async def _run_download_async(
         transcode_to=transcode_to,
         transcode_bitrate=transcode_bitrate,
         transcode_keep_original=transcode_keep_original,
+        dolby_to_ac3=dolby_to_ac3,
+        dolby_ac3_keep_original=dolby_ac3_keep_original,
         transcode_max_sample_rate=transcode_max_sample_rate,
         transcode_max_bit_depth=transcode_max_bit_depth,
         max_concurrent_downloads=max(1, max_concurrent_downloads),
@@ -2289,6 +2324,8 @@ async def run_download_from_cfg(
             transcode_to=cfg.get("transcode_to"),
             transcode_bitrate=cfg.get("transcode_bitrate", "320k"),
             transcode_keep_original=cfg.get("transcode_keep_original", False),
+            dolby_to_ac3=cfg.get("dolby_to_ac3", True),
+            dolby_ac3_keep_original=cfg.get("dolby_ac3_keep_original", True),
             transcode_max_sample_rate=cfg.get("transcode_max_sample_rate", 0),
             transcode_max_bit_depth=cfg.get("transcode_max_bit_depth", 0),
             max_concurrent_downloads=cfg.get("max_concurrent_downloads", 2),
@@ -3386,6 +3423,8 @@ async def amain() -> None:
             transcode_to=args.transcode_to,
             transcode_bitrate=args.transcode_bitrate,
             transcode_keep_original=args.transcode_keep_original,
+            dolby_to_ac3=args.dolby_to_ac3,
+            dolby_ac3_keep_original=args.dolby_ac3_keep_original,
             transcode_max_sample_rate=args.transcode_max_sample_rate or 0,
             transcode_max_bit_depth=args.transcode_max_bit_depth or 0,
             playlist_urls=playlist_urls,
@@ -3447,6 +3486,8 @@ async def amain() -> None:
                 "transcode_to": args.transcode_to,
                 "transcode_bitrate": args.transcode_bitrate,
                 "transcode_keep_original": args.transcode_keep_original,
+                "dolby_to_ac3": args.dolby_to_ac3,
+                "dolby_ac3_keep_original": args.dolby_ac3_keep_original,
                 "transcode_max_sample_rate": args.transcode_max_sample_rate or 0,
                 "transcode_max_bit_depth": args.transcode_max_bit_depth or 0,
                 "m3u_format": args.m3u_format,

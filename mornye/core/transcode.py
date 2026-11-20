@@ -618,6 +618,15 @@ def _probe_sample_rate(src: Path) -> int:
         return 0
 
 
+#: ffprobe's names for the Dolby codecs an Atmos stream comes in.
+_DOLBY_CODECS = frozenset({"eac3", "ac3", "ac4"})
+
+
+def is_dolby_source(src: Path | str) -> bool:
+    """Whether `src` carries Dolby (E-AC-3 / AC-3 / AC-4) audio."""
+    return _audio_codec(Path(src)) in _DOLBY_CODECS
+
+
 def _audio_codec(src: Path) -> str:
     """The first audio stream's codec, lower-cased; "" when unknown."""
     try:
@@ -800,6 +809,18 @@ async def transcode_file_async(
     src = Path(source)
     spec = format_spec(fmt)
 
+    if await asyncio.to_thread(is_dolby_source, src):
+        # Dolby Atmos is the reason the file was fetched: decoding it to PCM
+        # for ALAC/FLAC/MP3 keeps at best the 5.1 bed of an E-AC-3 stream
+        # and drops the objects, and AC-4 (Amazon's Atmos) has no ffmpeg
+        # decoder at all. The download is kept as it arrived.
+        logger.info(
+            "[transcode] %s is Dolby (Atmos) audio: kept as is, not converted " "to %s",
+            src.name,
+            spec.name.upper(),
+        )
+        return src
+
     dest = transcoded_path(src, spec.name)
     if _already_in_target_format(src, spec) and not await asyncio.to_thread(
         exceeds_caps,
@@ -878,5 +899,125 @@ async def transcode_file_async(
         src.name,
         dest.name,
         bitrate if not spec.lossless else f"{bit_depth}-bit lossless",
+    )
+    return dest
+
+
+# ── Dolby Digital Plus → Dolby Digital, for S/PDIF ──────────────────────────
+#: The highest bit rate Dolby Digital (AC-3) allows.
+AC3_BITRATE = "640k"
+#: What an S/PDIF (coaxial or optical) link carries as Dolby Digital.
+AC3_MAX_CHANNELS = 6
+
+
+def _audio_channels(src: Path) -> int:
+    """The first audio stream's channel count; 0 when unknown."""
+    try:
+        out = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "a:0",
+                "-show_entries",
+                "stream=channels",
+                "-of",
+                "default=nw=1:nk=1",
+                str(src),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        ).stdout.strip()
+        return int(out or 0)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return 0
+
+
+def dolby_ac3_path(src: Path | str, keep_original: bool) -> Path:
+    """Where the Dolby Digital copy of `src` goes.
+
+    Beside the original under " (AC-3)" when the original stays — a Tidal
+    E-AC-3 download is already an .m4a, the very name the copy would take —
+    and under the original's own name, as .m4a, when it replaces it.
+    """
+    src = Path(src)
+    if keep_original:
+        return src.with_name(f"{src.stem} (AC-3).m4a")
+    return src.with_suffix(".m4a")
+
+
+async def convert_dolby_to_ac3_async(
+    source: Path | str,
+    *,
+    keep_original: bool = True,
+) -> Path | None:
+    """A Dolby Digital (AC-3) copy of a Dolby Digital Plus (E-AC-3) file.
+
+    For a receiver fed by S/PDIF — coaxial, or optical from a TV — which
+    carries Dolby Digital at up to 5.1 but not Dolby Digital Plus. The copy
+    is 5.1 (a 7.1 source is folded down) at 640 kb/s, the AC-3 maximum, in
+    an M4A with the original's tags and cover. Dolby Atmos height and object
+    information does not survive: neither Dolby Digital nor S/PDIF has room
+    for it, and decoding E-AC-3 keeps its channel bed.
+
+    Returns None for anything that is not E-AC-3: AC-3 already plays as is,
+    and AC-4 (Amazon's Atmos) has no ffmpeg decoder to start from. Raises
+    MornyeError when ffmpeg fails; the original is then left untouched.
+    """
+    src = Path(source)
+    if await asyncio.to_thread(_audio_codec, src) != "eac3":
+        return None
+    channels = await asyncio.to_thread(_audio_channels, src)
+    out_channels = min(channels or AC3_MAX_CHANNELS, AC3_MAX_CHANNELS)
+    dest = dolby_ac3_path(src, keep_original)
+    tmp = dest.with_name(f".{dest.stem}.mornye-ac3.m4a")
+
+    rc, stderr = await _run_ffmpeg(
+        "-y",
+        "-v",
+        "error",
+        "-i",
+        str(src),
+        "-map",
+        "0:a:0",
+        "-c:a",
+        "ac3",
+        "-b:a",
+        AC3_BITRATE,
+        "-ac",
+        str(out_channels),
+        "-f",
+        "mp4",
+        str(tmp),
+    )
+    if rc != 0 or not await asyncio.to_thread(transcoded_file_exists, tmp):
+        with contextlib.suppress(OSError):
+            await asyncio.to_thread(tmp.unlink, True)
+        msg = f"ffmpeg failed to convert {src.name} to Dolby Digital: {stderr}"
+        raise MornyeError(ErrorKind.FILE_IO, msg)
+
+    try:
+        await transfer_tags_async(src, tmp)
+    except Exception as exc:
+        logger.warning(
+            "[ac3] tag transfer failed for %s — %s may have no tags: %s",
+            src.name,
+            dest.name,
+            exc,
+        )
+
+    if not keep_original:
+        with contextlib.suppress(OSError):
+            await asyncio.to_thread(src.unlink)
+    await asyncio.to_thread(os.replace, tmp, dest)
+    logger.info(
+        "[ac3] %s → %s (Dolby Digital %d.%d, %s)",
+        src.name,
+        dest.name,
+        5 if out_channels == 6 else out_channels,
+        1 if out_channels == 6 else 0,
+        AC3_BITRATE,
     )
     return dest

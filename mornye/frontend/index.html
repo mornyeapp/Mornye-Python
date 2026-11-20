@@ -253,6 +253,8 @@
                     <span class="dot-sep">·</span>
                     <span id="album-tracks-count">— tracks</span>
                     <span class="dot-sep">·</span>
+                    <span id="album-duration"></span>
+                    <span class="dot-sep">·</span>
                     <span id="album-followers"></span>
                     <span class="dot-sep">·</span>
                     <span id="album-source"></span>
@@ -286,9 +288,9 @@
 
             <div id="track-controls" class="hidden">
               <div id="track-search-wrap">
-                <span class="ts-icon">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
-                </span>
+                <label class="ts-icon" for="trackSearch" title="Search tracks">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+                </label>
                 <input id="trackSearch" type="text" placeholder="Search tracks…" data-oninput="filterTracks()">
               </div>
               <div class="sort-wrap">
@@ -311,16 +313,22 @@
             <div id="track-table-wrap" class="hidden">
               <div class="track-table-header">
                 <div><input id="check-all" type="checkbox" title="Select all tracks" data-onchange="toggleAll(this)"></div>
-                <div>#</div>
+                <div class="th-num">#</div>
                 <div>Title</div>
                 <div>Playcount</div>
-                <div>Duration</div>
+                <div class="th-dur" title="Duration"><span class="th-sr">Duration</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg></div>
                 <div>Actions</div>
               </div>
               <div id="track-rows"></div>
               <div id="pagetion-controls" class="hidden">
                 <button id="page-prev" class="page-btn" data-onclick="previousPage()">← Previous</button>
-                <span id="page-info">Page 1 of 1</span>
+                <span id="page-info">
+                  <label for="page-jump">Page</label>
+                  <input type="number" id="page-jump" class="page-jump" min="1" value="1" inputmode="numeric"
+                         aria-label="Go to page" title="Type a page number and press Enter"
+                         data-onchange="goToPage(this.value)" data-onfocus="this.select()">
+                  <span id="page-total">of 1</span>
+                </span>
                 <button id="page-next" class="page-btn" data-onclick="nextPage()">Next →</button>
               </div>
             </div>
@@ -383,11 +391,30 @@
           <div class="plb-main">
             <strong id="plb-name"></strong>
             <span id="plb-stats" class="plb-stats"></span>
+            <div class="scan-bar hidden" id="plb-scan">
+              <div class="scan-bar-track" id="plb-scan-track" role="progressbar" aria-label="Library scan"
+                   aria-valuemin="0" aria-valuemax="100"><span class="scan-bar-fill"></span></div>
+              <div class="scan-bar-line">
+                <span class="scan-bar-text" id="plb-scan-text" aria-live="polite"></span>
+                <button class="scan-bar-stop" type="button" id="plb-scan-stop" data-onclick="cancelPlayerScan()">Stop</button>
+              </div>
+            </div>
           </div>
           <div class="plb-actions">
             <button class="act-btn secondary" type="button" data-onclick="togglePlayerSource()">Folders</button>
             <button class="act-btn secondary" type="button" id="plb-rescan" data-onclick="scanPlayerLibrary()">Rescan</button>
           </div>
+        </div>
+        <div class="player-playlist-tools">
+          <button class="act-btn primary" type="button" data-onclick="openPlayerPlaylistEditor()">New playlist</button>
+          <button class="act-btn secondary" type="button" data-onclick="openPlayerPlaylistImport()">Import M3U/M3U8</button>
+          <label for="player-playlist-url">Playlist link</label>
+          <input type="url" id="player-playlist-url" placeholder="Paste an M3U/M3U8 link"
+                 data-onkeydown="if(event.key==='Enter') importPlayerPlaylistFromUrl()">
+          <button class="act-btn secondary" type="button" id="player-playlist-url-import"
+                  data-onclick="importPlayerPlaylistFromUrl()">Import link</button>
+          <input type="file" id="player-playlist-file" accept=".m3u,.m3u8,audio/x-mpegurl,audio/mpegurl" class="hidden"
+                 data-onchange="onPlayerPlaylistFileChosen(this)">
         </div>
         <div class="s-section player-source" id="player-source">
           <div class="psrc-head">
@@ -421,15 +448,20 @@
             <button type="button" class="seg-tab active" data-tab="songs" data-onclick="setPlayerTab('songs')" role="tab" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg><span>Songs</span><span class="seg-count" id="ptab-count-songs">0</span></button>
             <button type="button" class="seg-tab" data-tab="albums" data-onclick="setPlayerTab('albums')" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg><span>Albums</span><span class="seg-count" id="ptab-count-albums">0</span></button>
             <button type="button" class="seg-tab" data-tab="artists" data-onclick="setPlayerTab('artists')" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>Artists</span><span class="seg-count" id="ptab-count-artists">0</span></button>
+            <button type="button" class="seg-tab" data-tab="playlists" data-onclick="setPlayerTab('playlists')" role="tab" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15V6"/><path d="M18.5 18a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/><path d="M12 12H3"/><path d="M16 6H3"/><path d="M12 18H3"/></svg><span>Playlists</span><span class="seg-count" id="ptab-count-playlists">0</span></button>
           </div>
           <div class="pt-row">
-            <div class="pt-group" role="group" aria-label="Playback">
-              <button class="pt-btn primary" type="button" data-onclick="playFromLibrary(0, false)">
+            <div class="pt-group" id="player-play-controls" role="group" aria-label="Playback">
+              <button class="pt-btn primary" type="button" data-onclick="playAllFromLibrary(false)">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Play all</button>
-              <button class="pt-btn" type="button" data-onclick="playFromLibrary(0, true)">
+              <button class="pt-btn" type="button" data-onclick="playAllFromLibrary(true)">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>Shuffle</button>
             </div>
-            <label class="pt-search">
+            <label class="player-add-select" id="player-add-select-wrap">
+                <span>Add to</span>
+                <select id="player-add-playlist" aria-label="Playlist for added tracks"></select>
+            </label>
+            <label class="pt-search" id="player-search-wrap">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
               <input type="search" id="player-search" placeholder="Search title, artist or album" data-oninput="filterPlayerLibrary()" autocomplete="off" spellcheck="false">
               <button type="button" class="pt-clear hidden" id="player-search-clear" data-onclick="clearPlayerSearch()" aria-label="Clear search">×</button>
@@ -454,6 +486,39 @@
           <div id="player-detail" class="player-detail hidden"></div>
           <div id="player-grid" class="player-grid hidden" role="list"></div>
           <div id="player-list" class="player-list" role="list"></div>
+        </div>
+      </div>
+      <div id="player-playlist-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="player-playlist-modal-title">
+        <div class="modal-content player-playlist-editor">
+          <div class="modal-header">
+            <h2 id="player-playlist-modal-title">New playlist</h2>
+            <button type="button" class="modal-close" data-onclick="closePlayerPlaylistEditor()" aria-label="Close">×</button>
+          </div>
+          <div id="player-playlist-import-options" class="hidden">
+            <label for="player-playlist-import-target">Import into</label>
+            <select id="player-playlist-import-target" data-onchange="updatePlayerPlaylistImportTarget()"></select>
+            <p id="player-playlist-import-preview" class="player-playlist-import-preview"></p>
+          </div>
+          <div id="player-playlist-new-fields">
+            <label for="player-playlist-name">Name</label>
+            <input type="text" id="player-playlist-name" maxlength="120" placeholder="Playlist name">
+            <label for="player-playlist-description">Description</label>
+            <textarea id="player-playlist-description" maxlength="2000" rows="4" placeholder="Add a description (optional)"></textarea>
+            <div class="player-playlist-cover-edit">
+              <img id="player-playlist-cover-preview" alt="Playlist cover preview" class="hidden">
+              <span id="player-playlist-cover-placeholder">No cover image</span>
+              <div class="player-playlist-cover-actions">
+                <button type="button" class="act-btn secondary" data-onclick="openPlayerPlaylistCoverPicker()">Choose photo</button>
+                <button type="button" class="act-btn secondary" data-onclick="removePlayerPlaylistCover()">Remove photo</button>
+              </div>
+            </div>
+          </div>
+          <input type="file" id="player-playlist-cover-file" accept="image/jpeg,image/png,image/webp,image/gif" class="hidden"
+                 data-onchange="onPlayerPlaylistCoverChosen(this)">
+          <div class="modal-footer">
+            <button type="button" class="act-btn secondary" data-onclick="closePlayerPlaylistEditor()">Cancel</button>
+            <button type="button" class="act-btn primary" id="player-playlist-save" data-onclick="savePlayerPlaylist()">Save playlist</button>
+          </div>
         </div>
       </div>
     </div>
@@ -504,6 +569,15 @@
               Mornye scans the files, finds the right metadata and lets you compare before anything is written.
             </p>
           </details>
+        </div>
+
+        <div class="scan-bar hidden" id="local-scan">
+          <div class="scan-bar-track" id="local-scan-track" role="progressbar" aria-label="Scan of the folder"
+               aria-valuemin="0" aria-valuemax="100"><span class="scan-bar-fill"></span></div>
+          <div class="scan-bar-line">
+            <span class="scan-bar-text" id="local-scan-text" aria-live="polite"></span>
+            <button class="scan-bar-stop" type="button" id="local-scan-stop" data-onclick="cancelLocalScan()">Stop</button>
+          </div>
         </div>
 
         <div class="local-empty" id="local-empty" role="status">
@@ -755,6 +829,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
           Metadata
         </button>
+        <button class="stab" data-onclick="switchTab('player',this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+          Player
+        </button>
         <button class="stab" data-onclick="switchTab('status',this)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><path d="M6 10v4"/><path d="M10 6v8"/><path d="M14 10v4"/><path d="M18 6v8"/><circle cx="6" cy="18" r="1"/><circle cx="10" cy="18" r="1"/></svg>
           Status
@@ -901,7 +979,7 @@
               <div id="ext-quality-rows"></div>
             </div>
             <div class="s-row">
-              <span class="s-label">Auto quality fallback<small>Try a lower quality on the same provider when the requested quality is unavailable.</small></span>
+              <span class="s-label">Auto quality fallback<small>On: accept a lower quality from the same provider when the requested quality is unavailable. Off: discard the lower-quality file and try the next provider at the same quality; the track fails only if no provider has it. With Dolby Atmos, only providers that offer Atmos (e.g. Tidal, Amazon) are tried, plus any service you set a quality for below (e.g. Amazon → Dolby Digital Plus).</small></span>
               <label class="toggle">
                 <input type="checkbox" id="config-fallback">
                 <span class="toggle-sl"></span>
@@ -926,7 +1004,7 @@
             <div class="s-title">Auth & APIs</div>
             <div class="s-row">
               <span class="s-label">Provider APIs<small>The APIs each download service uses (Tidal's download API, Deezer's resolver, Qobuz app ID, country codes…) are set in that extension's own settings</small></span>
-              <button class="act-btn secondary u-p-5-12 u-fs-11_5" type="button" data-onclick="switchTab('extensions', document.querySelector('.stab[onclick*=&quot;extensions&quot;]'))">Extension Settings</button>
+              <button class="act-btn secondary u-p-5-12 u-fs-11_5" type="button" data-onclick="openExtensionsSettings()">Extension Settings</button>
             </div>
             <div class="s-row">
               <span class="s-label">AcoustID API key<small>Optional. Identifying untagged files uses a key shared by all users, capped at 3 lookups/second between everyone; your own key gets its own budget. Free from acoustid.org/new-application</small></span>
@@ -1042,6 +1120,20 @@
               <span class="s-label">Keep original file<small>Off = the downloaded source is deleted after conversion</small></span>
               <label class="toggle">
                 <input type="checkbox" id="config-transcode-keep">
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Dolby Digital copy for S/PDIF<small>Converts Dolby Digital Plus (E-AC-3) downloads to Dolby Digital 5.1 at 640 kbps, for a receiver fed by a coaxial or optical cable, which cannot carry Dolby Digital Plus. Other files are left alone. Atmos height and object audio is not kept; AC-4 cannot be converted.</small></span>
+              <label class="toggle">
+                <input type="checkbox" id="config-dolby-ac3" data-onchange="onDolbyAc3Change()" checked>
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
+            <div class="s-row dolby-ac3-opt s-sub">
+              <span class="s-label">Keep the Dolby Digital Plus file<small>On = the AC-3 copy is saved beside it as "… (AC-3).m4a"; off = it replaces the original</small></span>
+              <label class="toggle">
+                <input type="checkbox" id="config-dolby-ac3-keep" checked>
                 <span class="toggle-sl"></span>
               </label>
             </div>
@@ -1271,7 +1363,7 @@
               <div class="s-title u-mt-8">Lyrics Providers</div>
               <div id="lyrics-list" class="sort-list"></div>
               <div class="s-row u-mt-8">
-                <span class="s-label">Word-by-word sync (Apple, BiniLyrics, Unison)<small>(off = line-by-line sync)</small></span>
+                <span class="s-label">Word-by-word sync<small>(on = every service above is tried for word-by-word lyrics first, in order, then line-by-line; off = line-by-line, first service that has lyrics)</small></span>
                 <label class="toggle">
                   <input type="checkbox" id="config-apple-wbw" checked>
                   <span class="toggle-sl"></span>
@@ -1334,6 +1426,133 @@
             <div id="status-services-grid" class="status-grid"></div>
           </div>
           <div id="hc-results"></div>
+        </div>
+
+        <div class="tc" id="tc-player" data-title="Player">
+          <div id="np-engine-note" class="s-section np-engine-note hidden" role="status"></div>
+          <div class="s-section">
+            <div class="s-title">Audio engine</div>
+            <div class="s-row">
+              <span class="s-label">Engine<small>Native plays the files itself through libmpv: bitstream, device choice, exclusive mode, gapless, ReplayGain and the equalizer. The window's own engine always decodes to PCM for the system mixer.</small></span>
+              <select id="np-opt-engine" data-np-opt="engine">
+                <option value="auto">Auto (native when available)</option>
+                <option value="native">Native (libmpv)</option>
+                <option value="browser">Window (built-in)</option>
+              </select>
+            </div>
+          </div>
+          <div class="s-section np-native-only">
+            <div class="s-title">Output</div>
+            <div class="s-row">
+              <span class="s-label">Output device</span>
+              <select id="np-opt-audio_device" data-np-opt="audio_device"><option value="auto">System default</option></select>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Exclusive mode<small>Takes the device for itself (WASAPI exclusive, Core Audio hog mode): bit-perfect, and no other app is heard meanwhile.</small></span>
+              <label class="toggle"><input type="checkbox" id="np-opt-exclusive" data-np-opt="exclusive"><span class="toggle-sl"></span></label>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Bitstream (passthrough)<small>Sends these formats compressed, for the receiver to decode. S/PDIF (coaxial, optical) carries AC-3 and DTS only; E-AC-3, DTS-HD and TrueHD need HDMI.</small></span>
+              <div class="np-spdif" role="group" aria-label="Bitstream formats">
+                <label><input type="checkbox" data-np-spdif="ac3"> AC-3</label>
+                <label><input type="checkbox" data-np-spdif="dts"> DTS</label>
+                <label><input type="checkbox" data-np-spdif="eac3"> E-AC-3 <em>HDMI</em></label>
+                <label><input type="checkbox" data-np-spdif="dts-hd"> DTS-HD <em>HDMI</em></label>
+                <label><input type="checkbox" data-np-spdif="truehd"> TrueHD <em>HDMI</em></label>
+              </div>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Output channels<small>Auto follows the device. A smaller layout downmixes (normalized, without clipping).</small></span>
+              <select id="np-opt-channels" data-np-opt="channels">
+                <option value="auto">Auto</option>
+                <option value="stereo">Stereo</option>
+                <option value="5.1">5.1</option>
+                <option value="7.1">7.1</option>
+              </select>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Upmix stereo<small>Spreads stereo over 5.1 or 7.1 when that layout is chosen above.</small></span>
+              <label class="toggle"><input type="checkbox" id="np-opt-upmix" data-np-opt="upmix"><span class="toggle-sl"></span></label>
+            </div>
+          </div>
+          <div class="s-section np-native-only">
+            <div class="s-title">Playback</div>
+            <div class="s-row">
+              <span class="s-label">Gapless<small>The next track is opened in advance and follows without a pause.</small></span>
+              <label class="toggle"><input type="checkbox" id="np-opt-gapless" data-np-opt="gapless"><span class="toggle-sl"></span></label>
+            </div>
+            <div class="s-row">
+              <span class="s-label">ReplayGain<small>From the files' tags; files without them play unchanged.</small></span>
+              <select id="np-opt-replaygain" data-np-opt="replaygain">
+                <option value="no">Off</option>
+                <option value="track">Track</option>
+                <option value="album">Album</option>
+              </select>
+            </div>
+            <div class="s-row">
+              <span class="s-label">ReplayGain pre-amp<small>dB added on top of the tag's gain.</small></span>
+              <div class="volume-control">
+                <input type="range" class="am-range" id="np-opt-replaygain_preamp" data-np-opt="replaygain_preamp" min="-15" max="15" step="0.5" value="0" aria-label="ReplayGain pre-amp">
+                <span class="volume-value" data-np-value="replaygain_preamp">0 dB</span>
+              </div>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Prevent clipping<small>Lowers the ReplayGain boost when it would clip.</small></span>
+              <label class="toggle"><input type="checkbox" id="np-opt-replaygain_clip" data-np-opt="replaygain_clip"><span class="toggle-sl"></span></label>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Audio delay<small>Milliseconds; for a receiver or speakers that lag behind.</small></span>
+              <div class="volume-control">
+                <input type="range" class="am-range" id="np-opt-audio_delay_ms" data-np-opt="audio_delay_ms" min="-2000" max="2000" step="10" value="0" aria-label="Audio delay">
+                <span class="volume-value" data-np-value="audio_delay_ms">0 ms</span>
+              </div>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Keep pitch when changing speed<small>Speed: [ and ] while playing, Backspace resets.</small></span>
+              <label class="toggle"><input type="checkbox" id="np-opt-pitch_correction" data-np-opt="pitch_correction"><span class="toggle-sl"></span></label>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Normalization<small>Evens out loud and quiet passages. Off for listening as mastered.</small></span>
+              <select id="np-opt-normalize" data-np-opt="normalize">
+                <option value="off">Off</option>
+                <option value="dynaudnorm">Dynamic (dynaudnorm)</option>
+                <option value="loudnorm">Loudness, EBU R128 (loudnorm)</option>
+              </select>
+            </div>
+          </div>
+          <div class="s-section np-native-only">
+            <div class="s-title">Equalizer</div>
+            <div class="s-row">
+              <span class="s-label">Equalizer<small>Ten bands; the signal is lowered by the largest boost so it cannot clip. Not applied to a bitstreamed format.</small></span>
+              <label class="toggle"><input type="checkbox" id="np-opt-eq_enabled" data-np-opt="eq_enabled"><span class="toggle-sl"></span></label>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Preset</span>
+              <select id="np-opt-eq_preset" data-np-opt="eq_preset">
+                <option value="flat">Flat</option>
+                <option value="bass">Bass boost</option>
+                <option value="treble">Treble boost</option>
+                <option value="loudness">Loudness</option>
+                <option value="vocal">Vocal</option>
+                <option value="rock">Rock</option>
+                <option value="classical">Classical</option>
+                <option value="electronic">Electronic</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+            <div class="np-eq" id="np-eq" role="group" aria-label="Equalizer bands, dB">
+                <label class="np-eq-band"><span class="np-eq-track"><input type="range" class="np-eq-slider" min="-12" max="12" step="0.5" value="0" data-band="0" aria-label="31 band"></span><span>31</span></label>
+                <label class="np-eq-band"><span class="np-eq-track"><input type="range" class="np-eq-slider" min="-12" max="12" step="0.5" value="0" data-band="1" aria-label="62 band"></span><span>62</span></label>
+                <label class="np-eq-band"><span class="np-eq-track"><input type="range" class="np-eq-slider" min="-12" max="12" step="0.5" value="0" data-band="2" aria-label="125 band"></span><span>125</span></label>
+                <label class="np-eq-band"><span class="np-eq-track"><input type="range" class="np-eq-slider" min="-12" max="12" step="0.5" value="0" data-band="3" aria-label="250 band"></span><span>250</span></label>
+                <label class="np-eq-band"><span class="np-eq-track"><input type="range" class="np-eq-slider" min="-12" max="12" step="0.5" value="0" data-band="4" aria-label="500 band"></span><span>500</span></label>
+                <label class="np-eq-band"><span class="np-eq-track"><input type="range" class="np-eq-slider" min="-12" max="12" step="0.5" value="0" data-band="5" aria-label="1k band"></span><span>1k</span></label>
+                <label class="np-eq-band"><span class="np-eq-track"><input type="range" class="np-eq-slider" min="-12" max="12" step="0.5" value="0" data-band="6" aria-label="2k band"></span><span>2k</span></label>
+                <label class="np-eq-band"><span class="np-eq-track"><input type="range" class="np-eq-slider" min="-12" max="12" step="0.5" value="0" data-band="7" aria-label="4k band"></span><span>4k</span></label>
+                <label class="np-eq-band"><span class="np-eq-track"><input type="range" class="np-eq-slider" min="-12" max="12" step="0.5" value="0" data-band="8" aria-label="8k band"></span><span>8k</span></label>
+                <label class="np-eq-band"><span class="np-eq-track"><input type="range" class="np-eq-slider" min="-12" max="12" step="0.5" value="0" data-band="9" aria-label="16k band"></span><span>16k</span></label>
+            </div>
+          </div>
         </div>
 
         <div class="tc" id="tc-extensions" data-title="Extensions">
@@ -1674,7 +1893,15 @@
           </div>
         </div>
         <div class="u-cols-1fr-1fr u-gap-10" id="tagedit-fields" style="display:grid;"></div>
-        <label class="u-fs-12 u-c-muted u-mt-12" for="tagedit-lyrics" style="display:block;">Lyrics</label>
+        <div class="u-items-center u-justify-space-between u-mt-12 u-gap-8" style="display:flex;">
+          <label class="u-fs-12 u-c-muted" for="tagedit-lyrics">Lyrics <span id="tagedit-lyrics-source"></span></label>
+          <div class="u-gap-8 u-items-center" style="display:flex;">
+            <select class="u-maxw-150" id="tagedit-lyrics-provider" aria-label="Search lyrics on" title="Where to look the lyrics up">
+              <option value="">Settings order</option>
+            </select>
+            <button class="act-btn secondary" type="button" data-onclick="fetchTagEditorLyrics()" id="tagedit-fetch-lyrics-btn" title="Look the lyrics up again. Save writes them to the file.">Fetch again</button>
+          </div>
+        </div>
         <textarea class="u-w-100pct u-mt-4 u-ff-font-mono u-fs-12" id="tagedit-lyrics" rows="6"></textarea>
         <div class="u-gap-8 u-items-center u-mt-8 u-wrap-wrap" style="display:flex;">
           <select class="u-maxw-150" id="tagedit-lang" aria-label="Translate to"></select>
@@ -1934,8 +2161,20 @@
     <span id="pl-dur" class="pl-time">0:00</span>
   </div>
   <input type="range" id="pl-vol" class="pl-vol am-range" min="0" max="100" value="100" aria-label="Volume">
+  <button type="button" class="pl-btn" id="pl-stats-btn" data-onclick="openPlayerStats()" aria-label="Playback statistics" title="Playback statistics (I)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></button>
   <button type="button" class="pl-btn" data-onclick="openNowPlaying()" aria-label="Open the full player" title="Open the full player"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>
   <button type="button" class="pl-btn" data-onclick="closePlayer()" aria-label="Close player">✕</button>
+</div>
+
+<div id="player-stats-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="player-stats-title">
+  <div class="modal-content player-stats">
+    <div class="modal-header">
+      <h2 id="player-stats-title">Playback statistics</h2>
+      <button type="button" class="modal-close" data-onclick="closePlayerStats()" aria-label="Close">×</button>
+    </div>
+    <dl id="player-stats-list" class="player-stats-list"></dl>
+    <p class="player-stats-keys">Space play/pause · ←/→ 5 s (Shift 30 s) · +/− volume · M mute · [ ] speed · Backspace normal speed · L A-B loop · I statistics</p>
+  </div>
 </div>
 
 <div id="np-view" class="hidden" role="dialog" aria-modal="true" aria-label="Now playing">

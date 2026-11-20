@@ -183,7 +183,8 @@ test('changing lyric speed immediately recalculates the current lyric position',
   const globals = {
     NP_SYNC: sync,
     NP: { focus: 0 },
-    $: (id) => id === 'player-audio' ? { currentTime: 100 } : output,
+    $: () => output,
+    playerEngine: { currentTime: 100 },
     npUpdate: (time) => { updatedTime = time; },
   };
   const f = pick(['npSetSync', 'npLyricsTime'], globals);
@@ -192,4 +193,16 @@ test('changing lyric speed immediately recalculates the current lyric position',
 
   assert.ok(Math.abs(f.npLyricsTime(100) - 110) < 1e-9);
   assert.ok(Math.abs(updatedTime - 110) < 1e-9);
+});
+
+test('parseLyrics shows line-only enhanced LRC line by line, real word timing word by word', () => {
+  const { parseLyrics } = pick(['parseLyrics']);
+  const lineOnly = '[by:Apple Music]\n[00:04.24]<00:04.24>One summer night<00:08.12>\n[00:08.52]<00:08.52>We ran away<00:14.77>';
+  const a = parseLyrics(lineOnly);
+  assert.equal(a.wordSynced, false);
+  assert.equal(a.lines[0].text, 'One summer night');
+  assert.equal(a.lines[0].words, null);
+  const b = parseLyrics(lineOnly + '\n[00:15.47]<00:15.47>Laughing, <00:16.10>we<00:16.40>');
+  assert.equal(b.wordSynced, true);
+  assert.equal(b.lines[2].words.length, 2);
 });

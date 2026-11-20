@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import io
 import logging
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -21,9 +21,16 @@ logger = logging.getLogger(__name__)
 THUMB_PX = 96
 
 
-def iter_audio_files(root: str | Path) -> Iterator[Path]:
+def iter_audio_files(
+    root: str | Path, on_found: Callable[[int], None] | None = None
+) -> Iterator[Path]:
     """Audio files under `root` (or `root` itself if it is a file), sorted, with
-    hidden folders and backup files left out."""
+    hidden folders and backup files left out.
+
+    The whole folder is listed before the first file is yielded (they come
+    sorted). On a network share that listing is most of the wait, so
+    `on_found`, when given, is called with the count of audio files found so
+    far as the listing goes."""
     base = Path(root)
     if base.is_file():
         if base.suffix.lower() in SUPPORTED_SUFFIXES:
@@ -31,11 +38,16 @@ def iter_audio_files(root: str | Path) -> Iterator[Path]:
         return
     if not base.is_dir():
         return
-    for path in sorted(base.rglob("*"), key=lambda p: str(p).lower()):
+    found: list[Path] = []
+    for path in base.rglob("*"):
         if path.suffix.lower() not in SUPPORTED_SUFFIXES:
             continue
         if any(part.startswith(".") for part in path.relative_to(base).parts):
             continue
+        found.append(path)
+        if on_found is not None:
+            on_found(len(found))
+    for path in sorted(found, key=lambda p: str(p).lower()):
         if path.is_file():
             yield path
 
@@ -75,6 +87,9 @@ def read_track_row(path: Path) -> dict[str, Any]:
         # Not shown by the Player; read for the Stats page, which counts the
         # library's files from before Mornye too (core/stats.py).
         "genre": tags.get("GENRE", ""),
+        # Lets a playlist imported from a provider find the file it lists
+        # (api_mixins/player_playlists.py).
+        "isrc": tags.get("ISRC", "").strip().upper(),
         "duration_s": _duration_s(path),
         "format": path.suffix.lstrip(".").upper(),
     }

@@ -65,6 +65,12 @@ function showSkeletonTracks(count = 5) {
   // Hide the table header until the real data arrives
   const header = document.querySelector('.track-table-header');
   if (header) header.style.display = 'none';
+
+  // ...and the previous result's page bar: it stayed under the placeholders
+  // ("Page 1 of 39" from a playlist while an artist loads), and its Next
+  // button put the old playlist back on screen. renderTracks() shows it
+  // again when the new result has more than one page.
+  updatePaginationControls(0);
 }
 
 // Initialize state after loaded settings
@@ -280,15 +286,21 @@ function filterSettings(query) {
 function switchTab(name, btn) {
   const search = $('settings-search');
   if (search && search.value) { search.value = ''; filterSettings(''); }
+  // A caller outside the tab strip may not have the button: find it, and stop
+  // before clearing the active tab if there is nothing to switch to.
+  btn = btn || document.querySelector(`.stab[data-onclick*="'${name}'"]`);
+  const panel = $('tc-' + name);
+  if (!btn || !panel) return;
   document.querySelectorAll('.stab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tc').forEach(c => c.classList.remove('active'));
   btn.classList.add('active');
-  $('tc-' + name).classList.add('active');
+  panel.classList.add('active');
   if (name === 'status' && !extensionStatusChecking) {
     // Lists the installed extensions' checks without running them; Check
     // runs them. Re-read each time: an extension may have been installed.
     loadExtensionStatusList();
   }
+  if (name === 'player') loadPlayerSettings();
   if (name === 'extensions') {
     loadRegistries();
     loadDirectories();
@@ -616,6 +628,9 @@ function applySettings(settings = {}) {
   if ($('config-transcode')) { $('config-transcode').value = cfg.transcode_to || 'none'; onTranscodeChange(); }
   if ($('config-transcode-bitrate')) $('config-transcode-bitrate').value = cfg.transcode_bitrate || '320k';
   if ($('config-transcode-keep')) $('config-transcode-keep').checked = cfg.transcode_keep_original;
+  if ($('config-dolby-ac3')) $('config-dolby-ac3').checked = cfg.dolby_to_ac3 !== false;
+  if ($('config-dolby-ac3-keep')) $('config-dolby-ac3-keep').checked = cfg.dolby_ac3_keep_original !== false;
+  onDolbyAc3Change();
   if ($('config-verify-hires')) $('config-verify-hires').checked = !!cfg.verify_hires || !!cfg.redownload_fake_hires;
   if ($('config-redownload-fake-hires')) $('config-redownload-fake-hires').checked = !!cfg.redownload_fake_hires;
   onVerifyHiresChange();
@@ -666,6 +681,8 @@ function applyListState(id, values = []) {
   items.forEach(item => {
     const cb = item.querySelector('input[type="checkbox"]');
     if (cb) cb.checked = values.includes(item.dataset.value);
+    // The row was drawn with the default's on/off look; it follows the tick.
+    item.classList.toggle('inactive', !(cb && cb.checked));
   });
   if (values.length) {
     values.forEach(value => {
@@ -794,6 +811,13 @@ function onTranscodeChange() {
 // Replacing a fake Hi-Res file means first knowing it is one, so the
 // replace toggle only exists while the check is on. Hidden rather than
 // disabled: an off check makes the setting inapplicable, not unavailable.
+function onDolbyAc3Change() {
+  const on = $('config-dolby-ac3')?.checked === true;
+  document.querySelectorAll('.dolby-ac3-opt').forEach(row => {
+    row.style.display = on ? 'flex' : 'none';
+  });
+}
+
 function onVerifyHiresChange() {
   const on = $('config-verify-hires') ? $('config-verify-hires').checked : false;
   document.querySelectorAll('.verify-hires-opt').forEach(row => {
@@ -929,6 +953,8 @@ const DEFAULT_SETTINGS = {
   transcode_to: 'none',
   transcode_bitrate: '320k',
   transcode_keep_original: false,
+  dolby_to_ac3: true,
+  dolby_ac3_keep_original: true,
   verify_hires: false,
   redownload_fake_hires: false,
   // Per-service quality id from each extension's manifest qualityOptions,
@@ -1185,12 +1211,6 @@ function showServicesPlaceholder(message, withLink = false) {
     ? ` <a href="#" data-onclick="openExtensionsSettings(); return false;">Settings → Extensions</a>.`
     : '';
   el.innerHTML = `<div class="s-label u-fs-11_5 u-p-6-2">${escHtml(message)}${link}</div>`;
-}
-
-function openExtensionsSettings() {
-  switchView('settings');
-  const tab = document.querySelector('.stab[data-onclick*="extensions"]');
-  if (tab) switchTab('extensions', tab);
 }
 
 showServicesPlaceholder('Reading the installed extensions…');
@@ -1814,7 +1834,8 @@ window.app_set_metadata = (data) => {
       d.release_date,
       d.track_count,
       d.artist_url,
-      d.artists_data
+      d.artists_data,
+      d.artist_avatar
     );
     g_artistConcerts = Array.isArray(d.artist_concerts) ? d.artist_concerts : [];
     renderConcertsButton(d.artist);
@@ -2232,7 +2253,11 @@ function tidyOwnerRow() {
   }
 }
 
-function setAlbumCard(title, artist, coverUrl, quality, description, followers, owner, ownerAvatar, source, artistListeners, artistRank, artistVerified, artistBiography, releaseDate, trackCount, artistUrl, artistsData) {
+//: The collection on screen, for "Import playlist" (importFetchedPlaylist).
+let g_albumImport = { title: '', description: '', cover: '' };
+
+function setAlbumCard(title, artist, coverUrl, quality, description, followers, owner, ownerAvatar, source, artistListeners, artistRank, artistVerified, artistBiography, releaseDate, trackCount, artistUrl, artistsData, artistAvatar) {
+  g_albumImport = { title: title || '', description: description || '', cover: coverUrl || '' };
   g_albumReleaseDate = releaseDate || '';
   g_albumTrackCount = trackCount || 0;
   g_albumArtistUrl = artistUrl || '';
@@ -2255,11 +2280,11 @@ function setAlbumCard(title, artist, coverUrl, quality, description, followers, 
   // separate, not-strictly-ordered backend callbacks).
 
   $('album-actions').innerHTML = `
-    <button class="act-btn primary" data-onclick="downloadAll()">
+    <button class="act-btn primary" data-onclick="downloadAll()" data-tip="Download all" aria-label="Download all">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       Download All
     </button>
-    <button class="act-btn secondary" data-onclick="downloadSelected()" id="dl-selected-btn" style="display:none;">
+    <button class="act-btn secondary" data-onclick="downloadSelected()" id="dl-selected-btn" style="display:none;" data-tip="Download selected" aria-label="Download selected">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="9 12 11 14 15 10"/></svg>
       Download Selected
     </button>
@@ -2271,6 +2296,7 @@ function setAlbumCard(title, artist, coverUrl, quality, description, followers, 
     </button>
     ${CLI_BUTTON_HTML}
   `;
+  renderImportPlaylistButton();
   $('album-title').innerHTML = escHtml(title || '—') + (artistVerified
     ? ` <span class="artist-verified-badge" title="Verified Artist"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="12" fill="#1d9bf0"/><path d="M8 12.5l2.5 2.5 5.5-5.5" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`
     : '');
@@ -2278,6 +2304,27 @@ function setAlbumCard(title, artist, coverUrl, quality, description, followers, 
   
   // For artists, show rank or listeners; for playlists, show quality
   const isArtistCard = !!(artistRank || artistListeners || artistVerified || artistBiography);
+  setArtistHero(isArtistCard, coverUrl);
+  if (isArtistCard) {
+    // On the banner, Spotify-style: "Verified Artist" over the name, the
+    // monthly listeners under it.
+    const listenerCount = Number(artistListeners) || 0;
+    $('album-title').innerHTML = `
+      ${artistVerified ? `<span class="hero-verified"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#3d91f4"/><path d="M8 12.5l2.5 2.5 5.5-5.5" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Verified Artist</span>` : ''}
+      <span class="hero-name">${escHtml(title || '—')}</span>
+      ${listenerCount > 0 ? `<span class="hero-listeners">${listenerCount.toLocaleString('en-US')} monthly listeners</span>` : ''}`;
+  }
+  g_artistAbout = isArtistCard ? {
+    name: title || '',
+    avatar: artistAvatar || coverUrl || '',
+    rank: artistRank,
+    listeners: artistListeners,
+    followers,
+    bio: artistBiography || description || '',
+  } : null;
+  if (!isArtistCard) setArtistOverviewMode(false);
+  $('album-card').classList.toggle('playlist-mode', !isArtistCard && /\/playlist\/|spotify:playlist:/i.test(currentUrl || ''));
+  renderArtistAbout();
 
   if (isArtistCard) {
     const bio = artistBiography || description || '';
@@ -2409,8 +2456,17 @@ function setAlbumCard(title, artist, coverUrl, quality, description, followers, 
     const img = document.createElement('img');
     img.alt = 'cover';
     img.className = 'cover-loading'; // blur-up: css/views/home.css clears it once decode() resolves
+    // Asked for with CORS so applyAlbumGlow can read its colour (Spotify's
+    // image host allows it); a host that refuses gets one retry without,
+    // which shows the cover and simply leaves the card untinted.
+    img.crossOrigin = 'anonymous';
     img.src = safeCover;
     img.addEventListener('error', () => {
+      if (img.crossOrigin) {
+        img.removeAttribute('crossorigin');
+        img.src = safeCover;
+        return;
+      }
       coverEl.textContent = '🎵';
       $('album-card')?.style.removeProperty('--album-glow');
     });
@@ -2438,6 +2494,27 @@ function setAlbumCard(title, artist, coverUrl, quality, description, followers, 
   $('album-card').classList.remove('hidden');
   $('text-search-container')?.classList.add('hidden');
 }
+// An artist page opens on a hero: the artist's picture, blurred, behind the
+// name and the round download controls (css/views/home.css, .artist-mode).
+function setArtistHero(on, coverUrl) {
+  const card = $('album-card');
+  if (!card) return;
+  card.classList.toggle('artist-mode', !!on);
+  let bg = card.querySelector('.artist-hero-bg');
+  const safe = httpUrlOrNull(coverUrl);
+  if (!on || !safe) { bg?.remove(); return; }
+  if (!bg) {
+    bg = document.createElement('div');
+    bg.className = 'artist-hero-bg';
+    bg.setAttribute('aria-hidden', 'true');
+    bg.appendChild(document.createElement('img'));
+    card.prepend(bg);
+  }
+  const img = bg.querySelector('img');
+  img.alt = '';
+  img.src = safe;
+}
+
 function updateAlbumMeta(trackCount) {
   const searchMode = $('searchMode')?.value === 'search';
   const url = currentUrl.toLowerCase();
@@ -2454,6 +2531,7 @@ function updateAlbumMeta(trackCount) {
   }
 
   currentItemType = badgeType;
+  $('album-card')?.classList.toggle('artist-mode', badgeType === 'ARTIST');
   $('album-type-badge').textContent = badgeType;
 
   // Hide "Save all covers" button for albums since they only have one cover
@@ -2471,8 +2549,10 @@ function updateAlbumMeta(trackCount) {
       const ac = albumSet.size;
       const albumTrackText = `${ac} album${ac !== 1 ? 's' : ''} · ${trackCount} track${trackCount !== 1 ? 's' : ''}`;
       
-      // Append the album/track part to the existing row
-      artistStatsRow.innerHTML += `<span class="dot-sep"> · </span><span>${escHtml(albumTrackText)}</span>`;
+      // Append the album/track part to the existing row — once: this runs
+      // again on every re-sort, and used to add the same segment each time.
+      artistStatsRow.querySelectorAll('.stats-albumtrack').forEach(el => el.remove());
+      artistStatsRow.insertAdjacentHTML('beforeend', `<span class="dot-sep stats-albumtrack"> · </span><span class="stats-albumtrack">${escHtml(albumTrackText)}</span>`);
     }
   }
   
@@ -2510,6 +2590,15 @@ function updateAlbumMeta(trackCount) {
   if (trackCountEl) {
     trackCountEl.textContent = `${trackCount} track${trackCount !== 1 ? 's' : ''}`;
   }
+  // A playlist opens like Spotify's: cover beside a big title, then one
+  // line of owner · tracks · total time · followers, the buttons under it.
+  const isPlaylist = badgeType === 'PLAYLIST';
+  $('album-card')?.classList.toggle('playlist-mode', isPlaylist);
+  const durationEl = $('album-duration');
+  if (durationEl) {
+    const totalMs = currentTracks.reduce((s, t) => s + (Number(t.duration_ms) || 0), 0);
+    durationEl.textContent = isPlaylist && totalMs > 0 ? formatLongDuration(totalMs) : '';
+  }
   tidyOwnerRow();
   // For an album the subtitle already reads "<artist> · <date> · <n> tracks";
   // the standalone artist line right under it was the same word again.
@@ -2518,7 +2607,11 @@ function updateAlbumMeta(trackCount) {
   // Technical sheet (right column of the card). Per-track fields are shared
   // across an album, so the first track stands in for the release; ISRC is
   // genuinely per-track and stays out of an album-level sheet.
-  if (badgeType === 'ALBUM' || badgeType === 'PLAYLIST') {
+  if (badgeType === 'PLAYLIST') {
+    // Track count and runtime are on the owner line; the rest of the sheet
+    // (label, UPC, ℗) would only describe whichever track came first.
+    renderAlbumTech([]);
+  } else if (badgeType === 'ALBUM') {
     const t0 = currentTracks[0] || {};
     const totalMs = currentTracks.reduce((s, t) => s + (Number(t.duration_ms) || 0), 0);
     const released = g_albumReleaseDate
@@ -2643,6 +2736,7 @@ function showSingleTrackCard(t) {
 }
 
 function closeAlbumCard() {
+  setArtistOverviewMode(false);
   setFetchingState(false);
   stopCurrentPreview();
   $('album-card').classList.add('hidden');
@@ -2820,6 +2914,409 @@ function retailBarcodeSvg(value) {
     `preserveAspectRatio="none" aria-hidden="true"><path d="${path}"/></svg>`;
 }
 
+const ARTIST_DL_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+
+function downloadTrackIndices(indices) {
+  addToQueue(indices);
+  startDownloadQueue();
+  $('queue-drawer').classList.add('open');
+}
+
+// "Latest Release" beside "Top Songs", above the artist's tabs: the newest
+// album (by release date) and the five most played tracks.
+function artistHighlightsEl(tracks, albumMap) {
+  const albums = [...albumMap.values()];
+  const dateOf = a => {
+    const t = tracks[a.indices[0]] || {};
+    return String(t.release_date || a.year || '').split('T')[0];
+  };
+  const latest = albums.slice().sort((x, y) => dateOf(y).localeCompare(dateOf(x)))[0];
+  const plays = t => Number(t.plays ?? t.playcount ?? t.playCount ?? t.plays_count ?? 0) || 0;
+  // The same song on several releases (single, album, deluxe) shows once.
+  const seenTitles = new Set();
+  const top = tracks.map((t, i) => ({ t, i })).filter(x => plays(x.t) > 0)
+    .sort((x, y) => plays(y.t) - plays(x.t))
+    .filter(({ t }) => {
+      const k = String(t.title || t.name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+      if (seenTitles.has(k)) return false;
+      seenTitles.add(k);
+      return true;
+    }).slice(0, 5);
+  if (!latest && !top.length) return null;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'artist-highlights';
+
+  if (latest) {
+    const sec = document.createElement('section');
+    sec.className = 'ah-sec';
+    const cover = httpUrlOrNull(latest.cover);
+    const date = dateOf(latest);
+    sec.innerHTML = `<h3 class="ah-title">Latest Release</h3>
+      <div class="ah-latest" title="${escHtml(latest.name)}">
+        <div class="ah-latest-cover">${cover ? `<img src="${escHtml(cover)}" alt="" loading="lazy">` : '🎵'}</div>
+        <div class="ah-latest-info">
+          ${date ? `<span class="ah-muted">${escHtml(date)}</span>` : ''}
+          <span class="ah-latest-name">${escHtml(latest.name)}</span>
+          <span class="ah-muted">${latest.indices.length} track${latest.indices.length !== 1 ? 's' : ''}</span>
+          <button type="button" class="ah-dl" title="Download this release" aria-label="Download ${escHtml(latest.name)}">${ARTIST_DL_SVG}</button>
+        </div>
+      </div>`;
+    const card = sec.querySelector('.ah-latest');
+    makeActivatable(card);
+    card.onclick = () => {
+      if (latest.url) { goToUrl(latest.url); return; }
+      switchArtistTab('tracks');
+      selectOnlyTracks(latest.indices);
+    };
+    sec.querySelector('.ah-dl').onclick = e => { e.stopPropagation(); downloadTrackIndices(latest.indices); };
+    wrap.appendChild(sec);
+  }
+
+  if (top.length) {
+    const sec = document.createElement('section');
+    sec.className = 'ah-sec';
+    sec.innerHTML = `<h3 class="ah-title">Top Songs</h3><div class="ah-top" role="list"></div>`;
+    const list = sec.querySelector('.ah-top');
+    top.forEach(({ t, i }) => {
+      const row = document.createElement('div');
+      row.className = 'ah-top-row';
+      row.setAttribute('role', 'listitem');
+      const cover = httpUrlOrNull(t.cover_url || t.cover || t.image);
+      row.innerHTML = `
+        <div class="ah-top-cover">${cover ? `<img src="${escHtml(cover)}" alt="" loading="lazy">` : ''}</div>
+        <div class="ah-top-info">
+          <span class="ah-top-name">${escHtml(t.title || t.name || '—')}</span>
+          <span class="ah-muted">${escHtml(t.artists || t.artist || '')}</span>
+        </div>
+        <span class="ah-muted ah-num">${plays(t).toLocaleString('en-US')}</span>
+        <button type="button" class="ah-dl" title="Download" aria-label="Download ${escHtml(t.title || t.name || '')}">${ARTIST_DL_SVG}</button>`;
+      row.querySelector('.ah-dl').onclick = () => downloadTrackIndices([i]);
+      list.appendChild(row);
+    });
+    wrap.appendChild(sec);
+  }
+  return wrap;
+}
+
+// "About", under Latest Release / Top Songs: the artist's picture with the
+// world rank, listeners and biography over it. The hero above keeps only the
+// name and the download controls, the way Spotify lays out an artist page.
+//
+// Called from setAlbumCard (metadata) and injectArtistTabs (tracks): the two
+// arrive on separate callbacks in either order, so whichever comes second
+// is the one that actually draws it.
+let g_artistAbout = null;
+function renderArtistAbout() {
+  const host = document.getElementById('artist-tabs-section');
+  document.getElementById('artist-about')?.remove();
+  const a = g_artistAbout;
+  if (!host || !a) return;
+  const num = v => (v === 0 || v) && Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : 0;
+  const listeners = num(a.listeners), followers = num(a.followers), rank = num(a.rank);
+  const albums = new Set(currentTracks.map(t => t.album_url || t.album || t.album_name || t.release).filter(Boolean)).size;
+  const tracks = currentTracks.length;
+  const facts = [];
+  if (followers) facts.push(`${followers.toLocaleString('en-US')} followers`);
+  if (albums) facts.push(`${albums} album${albums !== 1 ? 's' : ''}`);
+  if (tracks) facts.push(`${tracks} track${tracks !== 1 ? 's' : ''}`);
+  if (!listeners && !rank && !a.bio && !facts.length) return;
+
+  const sec = document.createElement('section');
+  sec.id = 'artist-about';
+  sec.className = 'artist-about';
+  const img = httpUrlOrNull(a.avatar);
+  sec.innerHTML = `<h3 class="ah-title">About</h3>
+    <div class="about-card${img ? '' : ' no-photo'}">
+      ${img ? `<img class="about-photo" src="${escHtml(img)}" alt="" loading="lazy">` : ''}
+      ${rank ? `<div class="about-rank"><strong>#${rank}</strong><span>in the world</span></div>` : ''}
+      <div class="about-text">
+        ${listeners ? `<p class="about-listeners">${listeners.toLocaleString('en-US')} monthly listeners</p>` : ''}
+        ${facts.length ? `<p class="about-facts">${facts.map(escHtml).join(' · ')}</p>` : ''}
+        <p class="about-bio"></p>
+        <button type="button" class="about-more" hidden aria-expanded="false">See more…</button>
+      </div>
+    </div>`;
+  // textContent: the bio is remote text (see setAlbumCard).
+  const bio = sec.querySelector('.about-bio');
+  // Providers send it with HTML entities left in ("World&#39;s"); decoded
+  // through an inert document, then set as text.
+  bio.textContent = a.bio.includes('&')
+    ? (new DOMParser().parseFromString(a.bio, 'text/html').documentElement.textContent || a.bio)
+    : a.bio;
+  if (!a.bio) bio.remove();
+  const more = sec.querySelector('.about-more');
+  more.onclick = () => {
+    const open = sec.classList.toggle('expanded');
+    more.textContent = open ? 'See less' : 'See more…';
+    more.setAttribute('aria-expanded', String(open));
+  };
+  // At the foot of the Spotify-style overview when there is one, otherwise
+  // after the highlights, ahead of the Albums/Tracks tabs.
+  const overview = host.querySelector('#artist-overview');
+  const highlights = host.querySelector('.artist-highlights');
+  if (overview) overview.appendChild(sec);
+  else if (highlights) highlights.after(sec);
+  else host.prepend(sec);
+  if (a.bio) requestAnimationFrame(() => {
+    more.hidden = !(bio.scrollHeight > bio.clientHeight + 1);
+  });
+}
+
+// ── Artist page overview ─────────────────────────────────────────────────
+// A Spotify artist link opens like Spotify's own page: Popular, the
+// artist's pick, Discography, the playlists that feature the artist, Fans
+// also like, Appears on and About (core/artist_overview.py sends the data).
+// The full track list — what selection and Download All work on — sits
+// behind Discography's "Show all", with a way back.
+//
+// Anything that can be opened opens in Mornye, like pasting its link; the
+// round button on a release's cover downloads it straight away, but only
+// for releases whose tracks are in this artist's list.
+let g_artistOverviewToken = 0;
+
+function artistCardEl(item, { round = false, sub = '', albumMap = null } = {}) {
+  const card = document.createElement('div');
+  card.className = 'ao-card' + (round ? ' round' : '');
+  card.setAttribute('role', 'listitem');
+  const img = httpUrlOrNull(round ? item.avatar : item.cover);
+  const album = albumMap && item.url ? albumMap.get(item.url) : null;
+  card.innerHTML = `
+    <div class="ao-card-img">${img ? `<img src="${escHtml(img)}" alt="" loading="lazy">` : '<span aria-hidden="true">🎵</span>'}
+      ${album ? `<button type="button" class="ao-card-dl" title="Download" aria-label="Download ${escHtml(item.name)}">${ARTIST_DL_SVG}</button>` : ''}
+    </div>
+    <span class="ao-card-name" title="${escHtml(item.name)}">${escHtml(item.name || '—')}</span>
+    ${sub ? `<span class="ao-card-sub">${escHtml(sub)}</span>` : ''}`;
+  if (item.url) {
+    makeActivatable(card);
+    card.onclick = () => goToUrl(item.url);
+  }
+  if (album) card.querySelector('.ao-card-dl').onclick = e => { e.stopPropagation(); downloadTrackIndices(album.indices); };
+  return card;
+}
+
+function artistShelfEl(title, items, opts = {}) {
+  if (!items?.length) return null;
+  const sec = document.createElement('section');
+  sec.className = 'ao-sec';
+  sec.innerHTML = `<div class="ao-head"><h3 class="ah-title">${escHtml(title)}</h3>
+      <button type="button" class="ao-showall" aria-expanded="false">Show all</button></div>
+    <div class="ao-row" role="list"></div>`;
+  const row = sec.querySelector('.ao-row');
+  items.forEach(it => row.appendChild(artistCardEl(it, { ...opts, sub: opts.subOf ? opts.subOf(it) : '' })));
+  // "Show all" lays the shelf out as a grid of every card; the row itself
+  // scrolls sideways with no scrollbar (trackpad / touch).
+  const all = sec.querySelector('.ao-showall');
+  all.onclick = () => {
+    const open = sec.classList.toggle('show-all');
+    all.textContent = open ? 'Show less' : 'Show all';
+    all.setAttribute('aria-expanded', String(open));
+    if (!open) sec.scrollIntoView({ block: 'nearest' });
+  };
+  return sec;
+}
+
+const RELEASE_KIND = { album: 'Album', single: 'Single', ep: 'EP', compilation: 'Compilation' };
+const releaseSub = r => [r.year, RELEASE_KIND[r.type] || ''].filter(Boolean).join(' · ');
+
+function artistPopularEl(top, tracks) {
+  if (!top.length) return null;
+  // By Spotify id first; a hit Spotify credits to another release of the
+  // same song (a single vs. the album) falls back to its title.
+  const byId = new Map(tracks.map((t, i) => [t.id, i]));
+  const key = v => String(v || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const byTitle = new Map();
+  tracks.forEach((t, i) => { const k = key(t.title || t.name); if (k && !byTitle.has(k)) byTitle.set(k, i); });
+  const sec = document.createElement('section');
+  sec.className = 'ao-sec ao-popular';
+  sec.innerHTML = `<h3 class="ah-title">Popular</h3><div class="ao-pop" role="list"></div>
+    ${top.length > 5 ? '<button type="button" class="ao-more" aria-expanded="false">Show more</button>' : ''}`;
+  const list = sec.querySelector('.ao-pop');
+  top.forEach((t, n) => {
+    const idx = byId.has(t.id) ? byId.get(t.id) : byTitle.get(key(t.name));
+    const row = document.createElement('div');
+    row.className = 'ao-pop-row' + (n >= 5 ? ' extra' : '');
+    row.setAttribute('role', 'listitem');
+    const cover = httpUrlOrNull(t.cover);
+    row.innerHTML = `
+      <span class="ao-pop-n">${n + 1}</span>
+      <div class="ah-top-cover">${cover ? `<img src="${escHtml(cover)}" alt="" loading="lazy">` : ''}</div>
+      <div class="ah-top-info">
+        <span class="ah-top-name">${escHtml(t.name)}</span>
+        <span class="ah-muted">${t.explicit ? '<span class="ao-explicit" title="Explicit">E</span> ' : ''}${escHtml((t.artists || []).join(', '))}</span>
+      </div>
+      <span class="ah-muted ah-num ao-pop-plays">${t.plays ? t.plays.toLocaleString('en-US') : ''}</span>
+      <span class="ah-muted ah-num">${t.duration_ms ? formatDuration(t.duration_ms) : ''}</span>
+      ${idx !== undefined || t.url ? `<button type="button" class="ah-dl" title="Download" aria-label="Download ${escHtml(t.name)}">${ARTIST_DL_SVG}</button>` : '<span></span>'}`;
+    const dl = row.querySelector('.ah-dl');
+    if (idx !== undefined) dl.onclick = e => { e.stopPropagation(); downloadTrackIndices([idx]); };
+    // A song from someone else's record (a feature) is not in this artist's
+    // list: fetched from its own link and queued as a list of its own.
+    else if (dl) dl.onclick = e => { e.stopPropagation(); downloadTrackLink(t, dl); };
+    if (t.url) {
+      const name = row.querySelector('.ah-top-name');
+      name.classList.add('ao-link');
+      makeActivatable(name, 'link');
+      name.onclick = () => goToUrl(t.url);
+    }
+    list.appendChild(row);
+  });
+  const more = sec.querySelector('.ao-more');
+  if (more) more.onclick = () => {
+    const open = sec.classList.toggle('expanded');
+    more.textContent = open ? 'Show less' : 'Show more';
+    more.setAttribute('aria-expanded', String(open));
+  };
+  return sec;
+}
+
+// Queue one track by its link (load_track_for_queue keeps it backend-side as
+// a one-track list), then start the Queue the same way a row's button does.
+async function downloadTrackLink(t, btn) {
+  if (btn?.classList.contains('ta-loading')) return;
+  const already = queue.find(q => q.spotify_id === t.id && q.source === t.url && !['error', 'skipped'].includes(q.status));
+  if (already) { showToast(`"${t.name}" is already in the Queue`, 'info'); return; }
+  setTaBtnState(btn, 'loading');
+  let res = null;
+  try { res = await window.pywebview.api.load_track_for_queue(t.url); } catch (e) { res = null; }
+  if (!res || res.status !== 'ok') {
+    setTaBtnState(btn, 'error');
+    resetTaBtnAfter(btn, 2000);
+    showToast(`Could not load "${t.name}"${res?.error ? `: ${res.error}` : ''}`, 'error');
+    return;
+  }
+  const tr = res.track || {};
+  queue.push({
+    id: tr.id || t.id || t.url,
+    spotify_id: tr.id || t.id || t.url,
+    source: t.url,
+    list: res.list_id,
+    index: 0,
+    title: tr.title || t.name,
+    artist: tr.artist || (t.artists || []).join(', '),
+    album: tr.album || '',
+    status: 'waiting',
+    progress: 0,
+    file_path: '',
+    file_size_mb: 0,
+  });
+  renderQueue();
+  const emptyMsg = $('queue-empty');
+  if (emptyMsg) emptyMsg.style.display = 'none';
+  setTaBtnState(btn, 'success');
+  resetTaBtnAfter(btn, 1500);
+  startDownloadQueue();
+  $('queue-drawer')?.classList.add('open');
+}
+
+function artistPickEl(pick) {
+  if (!pick?.url) return null;
+  const sec = document.createElement('section');
+  sec.className = 'ao-sec ao-pick';
+  const cover = httpUrlOrNull(pick.cover);
+  sec.innerHTML = `<h3 class="ah-title">Artist pick</h3>
+    <div class="ao-pick-card">
+      <div class="ao-pick-cover">${cover ? `<img src="${escHtml(cover)}" alt="" loading="lazy">` : ''}</div>
+      <div class="ao-pick-info">
+        ${pick.comment ? `<span class="ao-pick-note">${escHtml(pick.comment)}</span>` : ''}
+        <span class="ah-latest-name">${escHtml(pick.name)}</span>
+        <span class="ah-muted">${escHtml(RELEASE_KIND[pick.type] || (pick.type === 'playlist' ? 'Playlist' : ''))}</span>
+      </div>
+    </div>`;
+  const card = sec.querySelector('.ao-pick-card');
+  makeActivatable(card);
+  card.onclick = () => goToUrl(pick.url);
+  return sec;
+}
+
+function artistDiscographyEl(disc, albumMap, onShowAll) {
+  const groups = [
+    ['popular', 'Popular releases'],
+    ['albums', 'Albums'],
+    ['singles', 'Singles and EPs'],
+    ['compilations', 'Compilations'],
+  ].filter(([k]) => disc?.[k]?.length);
+  if (!groups.length) return null;
+  const sec = document.createElement('section');
+  sec.className = 'ao-sec';
+  sec.innerHTML = `<div class="ao-head"><h3 class="ah-title">Discography</h3>
+      <button type="button" class="ao-showall">Show all</button></div>
+    <div class="ao-chips" role="group" aria-label="Release type"></div>
+    <div class="ao-row" role="list"></div>`;
+  const chips = sec.querySelector('.ao-chips');
+  const row = sec.querySelector('.ao-row');
+  const show = key => {
+    chips.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.k === key)));
+    row.textContent = '';
+    row.scrollLeft = 0;
+    disc[key].forEach(r => row.appendChild(artistCardEl(r, { albumMap, sub: releaseSub(r) })));
+  };
+  groups.forEach(([k, label]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'ao-chip';
+    b.dataset.k = k;
+    b.textContent = label;
+    b.onclick = () => show(k);
+    chips.appendChild(b);
+  });
+  sec.querySelector('.ao-showall').onclick = onShowAll;
+  show(groups[0][0]);
+  return sec;
+}
+
+function setArtistOverviewMode(on) {
+  document.querySelector('.list-container')?.classList.toggle('artist-overview-mode', !!on);
+}
+
+async function loadArtistOverview(host, tracks, albumMap) {
+  const token = ++g_artistOverviewToken;
+  const url = currentUrl;
+  let data = null;
+  if (window.pywebview?.api?.get_artist_overview && /spotify(\.com\/(intl-[a-z-]+\/)?artist\/|:artist:)/i.test(url)) {
+    try { data = await window.pywebview.api.get_artist_overview(url); } catch (e) { data = null; }
+  }
+  if (token !== g_artistOverviewToken || !host.isConnected) return; // another artist opened meanwhile
+  host.querySelector('#artist-overview')?.remove();
+  if (!data || data.status !== 'ok') {
+    // No overview (another provider, or Spotify refused): the earlier
+    // layout — highlights over the full list — rather than an empty page.
+    setArtistOverviewMode(false);
+    const highlights = artistHighlightsEl(tracks, albumMap);
+    if (highlights) host.prepend(highlights);
+    renderArtistAbout();
+    return;
+  }
+  const byUrl = new Map([...albumMap.values()].filter(a => a.url).map(a => [a.url, a]));
+  const ov = document.createElement('div');
+  ov.id = 'artist-overview';
+  const top = document.createElement('div');
+  top.className = 'ao-top';
+  const pop = artistPopularEl(data.top_tracks || [], tracks);
+  const pick = artistPickEl(data.pick);
+  if (pop) top.appendChild(pop);
+  if (pick) top.appendChild(pick);
+  if (top.childElementCount) ov.appendChild(top);
+  const name = g_artistAbout?.name || 'the artist';
+  const showAll = () => {
+    setArtistOverviewMode(false);
+    switchArtistTab('albums');
+    host.querySelector('.artist-tabs-bar')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  const playlistSub = p => p.owner ? `By ${p.owner}` : '';
+  [
+    artistDiscographyEl(data.discography, byUrl, showAll),
+    artistShelfEl(`Featuring ${name}`, data.featuring, { subOf: p => p.description || playlistSub(p) }),
+    artistShelfEl('Artist playlists', data.playlists, { subOf: playlistSub }),
+    artistShelfEl('Discovered on', data.discovered_on, { subOf: p => p.description || playlistSub(p) }),
+    artistShelfEl('Fans also like', data.related_artists, { round: true, subOf: () => 'Artist' }),
+    artistShelfEl('Appears on', data.appears_on, { albumMap: byUrl, subOf: r => [r.year, (r.artists || []).join(', ')].filter(Boolean).join(' · ') }),
+  ].forEach(el => el && ov.appendChild(el));
+  host.prepend(ov);
+  setArtistOverviewMode(true);
+  renderArtistAbout();
+}
+
 function injectArtistTabs(tracks) {
   document.getElementById('artist-tabs-section')?.remove();
 
@@ -2845,6 +3342,8 @@ function injectArtistTabs(tracks) {
 
   const section = document.createElement('div');
   section.id = 'artist-tabs-section';
+  // The overview (or, failing that, the highlights) is put in by
+  // loadArtistOverview once it arrives.
 
   // ── Tab bar ──
   const tabBar = document.createElement('div');
@@ -2861,6 +3360,15 @@ function injectArtistTabs(tracks) {
     btn.onclick = () => switchArtistTab(tab.id);
     tabBar.appendChild(btn);
   });
+  const back = document.createElement('button');
+  back.type = 'button';
+  back.className = 'artist-tab ao-back';
+  back.textContent = '← Overview';
+  back.onclick = () => {
+    setArtistOverviewMode(true);
+    $('artist-overview')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  tabBar.prepend(back);
   section.appendChild(tabBar);
 
   // ── Albums Panel ──
@@ -2920,6 +3428,18 @@ function injectArtistTabs(tracks) {
   // Insert before track-controls
   const listContainer = document.querySelector('.list-container');
   listContainer.insertBefore(section, $('track-controls'));
+  // Spotify links start on the overview; the list shows once it is asked for.
+  const spotifyArtist = /spotify(\.com\/(intl-[a-z-]+\/)?artist\/|:artist:)/i.test(currentUrl);
+  setArtistOverviewMode(spotifyArtist);
+  if (spotifyArtist) {
+    const loading = document.createElement('div');
+    loading.id = 'artist-overview';
+    loading.className = 'ao-loading';
+    loading.textContent = 'Loading the artist page…';
+    section.prepend(loading);
+  }
+  renderArtistAbout();
+  loadArtistOverview(section, tracks, albumMap);
 
   // Load gallery in background
   loadArtistGallery(galleryPanel);
@@ -2992,13 +3512,19 @@ function renderTracks(tracks, page = 1) {
   const pageTrackS = tracks.slice(startIdx, endIdx);
   
   const container = $('track-rows');
+  // Keep the table's height while it refills, so a re-sort or page change
+  // doesn't collapse the page under the scroll position.
+  if (container.offsetHeight) container.style.minHeight = container.offsetHeight + 'px';
   container.innerHTML = '';
   const header = document.querySelector('.track-table-header');
   if (header) header.style.display = '';
   const renderToken = ++trackRenderToken;
   const batchSize = 40;
   let index = 0;
-  setTrackRenderStatus(`Rendering 0/${pageTrackS.length} tracks…`, pageTrackS.length > 0);
+  // A re-sort redraws one page in a blink: the "Rendering…" line would
+  // only push the table down and pull it back up under the pointer.
+  const quietRender = !!g_sortAnchor;
+  setTrackRenderStatus(`Rendering 0/${pageTrackS.length} tracks…`, pageTrackS.length > 0 && !quietRender);
 
   // Detect if current view is a playlist so we can show album instead of playcount
   const searchMode = $('searchMode')?.value === 'search';
@@ -3092,7 +3618,7 @@ function renderTracks(tracks, page = 1) {
     }
 
     container.appendChild(fragment);
-    setTrackRenderStatus(`Rendering ${Math.min(index, pageTrackS.length)}/${pageTrackS.length} tracks…`, index < pageTrackS.length);
+    setTrackRenderStatus(`Rendering ${Math.min(index, pageTrackS.length)}/${pageTrackS.length} tracks…`, index < pageTrackS.length && !quietRender);
 
     if (index < pageTrackS.length) {
       if (window.requestIdleCallback) {
@@ -3102,6 +3628,7 @@ function renderTracks(tracks, page = 1) {
       }
     } else {
       setTrackRenderStatus('', false);
+      container.style.minHeight = '';
       updateAlbumMeta(tracks.length);
       // If this is an artist page, inject the album section above the tracks
       const urlLower = (currentUrl || '').toLowerCase();
@@ -3131,6 +3658,7 @@ function renderTracks(tracks, page = 1) {
       
       // Show/hide pagination
       updatePaginationControls(totalPages);
+      restoreSortAnchor();
     }
   };
 
@@ -3145,8 +3673,12 @@ function updatePaginationControls(totalPages) {
     pagetionDiv.classList.remove('hidden');
     pagetionDiv.style.display = 'flex';
     
-    const pageInfo = $('page-info');
-    pageInfo.textContent = `Page ${currentPage} of ${totalPages} (${TRACKS_PER_PAGE} per page)`;
+    const jump = $('page-jump');
+    if (jump) {
+      jump.max = String(totalPages);
+      if (document.activeElement !== jump) jump.value = String(currentPage);
+    }
+    $('page-total').textContent = `of ${totalPages} (${TRACKS_PER_PAGE} per page)`;
     
     $('page-prev').disabled = currentPage === 1;
     $('page-next').disabled = currentPage === totalPages;
@@ -3156,22 +3688,33 @@ function updatePaginationControls(totalPages) {
   }
 }
 
-function previousPage() {
-  if (currentPage > 1) {
-    currentPage--;
-    renderTracks(currentTracks, currentPage);
-    $('track-table-wrap').scrollTop = 0;
-  }
+// The page a typed value asks for, kept within 1..total; null when it is
+// not a number at all.
+function clampPage(value, total) {
+  const n = Math.round(Number(String(value ?? '').trim()));
+  if (!String(value ?? '').trim() || !Number.isFinite(n)) return null;
+  return Math.min(Math.max(1, n), Math.max(1, total));
 }
 
-function nextPage() {
-  const totalPages = Math.ceil(currentTracks.length / TRACKS_PER_PAGE);
-  if (currentPage < totalPages) {
-    currentPage++;
-    renderTracks(currentTracks, currentPage);
-    $('track-table-wrap').scrollTop = 0;
+// Shows page `value` of the track list (typed in the page field, or from
+// Previous / Next). Something that is not a page puts the field back.
+function goToPage(value) {
+  const totalPages = Math.max(1, Math.ceil(currentTracks.length / TRACKS_PER_PAGE));
+  const page = clampPage(value, totalPages);
+  const jump = $('page-jump');
+  if (page === null || page === currentPage) {
+    if (jump) jump.value = String(currentPage);
+    return;
   }
+  currentPage = page;
+  renderTracks(currentTracks, currentPage);
+  $('track-table-wrap').scrollTop = 0;
+  if (jump) jump.value = String(currentPage);
 }
+
+function previousPage() { goToPage(currentPage - 1); }
+
+function nextPage() { goToPage(currentPage + 1); }
 
 // ── Action button feedback helper ─────────────────────────────────────────────
 const _SPIN_SVG  = `<svg class="ta-spin" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="9" stroke-opacity=".25"/><path d="M12 3a9 9 0 0 1 9 9"/></svg>`;
@@ -3913,7 +4456,7 @@ window.app_handle_provider_search_results = function(results) {
     if (item._kind === 'artist') {
       console.log('[Artist] Name:', name, 'cover_url:', item.cover_url, 'images:', item.images, 'cover:', item.cover, 'image:', item.image, 'full item:', item);
     }
-    return `
+    const row = `
       <div class="search-result-item" role="button" tabindex="0" data-activate data-url="${escHtml(url)}" data-name="${name}|${meta}">
         <div class="${thumbClass}">
           ${img ? `<img src="${escHtml(img)}" alt="" data-onerror="this.parentElement.innerHTML='${defaultIcon(item._kind)}'">` : defaultIcon(item._kind)}
@@ -3924,6 +4467,15 @@ window.app_handle_provider_search_results = function(results) {
           ${meta && typeLabel ? `<div class="search-result-meta">${meta}</div>` : meta ? `<div class="search-result-meta">${meta}</div>` : ''}
         </div>
         ${dur ? `<span class="sr-duration">${dur}</span>` : ''}
+      </div>`;
+    if (item._kind !== 'playlist' || !url) return row;
+    return `
+      <div class="search-result-playlist-row">
+        ${row}
+        <button type="button" class="act-btn secondary sr-import-playlist"
+                data-import-search-playlist data-url="${escHtml(url)}" data-name="${name}">
+          Import playlist
+        </button>
       </div>`;
   }
 
@@ -3993,6 +4545,13 @@ window.app_handle_provider_search_results = function(results) {
     contentArea.querySelectorAll('.search-result-item').forEach(el => {
       el.onclick = () => onSearchResultClick(el.dataset.url);
     });
+    contentArea.querySelectorAll('[data-import-search-playlist]').forEach(button => {
+      button.onclick = event => {
+        event.preventDefault();
+        event.stopPropagation();
+        importPlayerPlaylistSearchResult(button);
+      };
+    });
   }
 
   renderList();
@@ -4012,6 +4571,163 @@ function onSearchResultClick(url) {
   }
   $('urlInput').value = url;
   onFetch();
+}
+
+async function importPlayerPlaylistSearchResult(button) {
+  const url = button.dataset.url;
+  button.disabled = true;
+  try {
+    const result = await window.pywebview?.api?.fetch_player_playlist_search_import?.(url);
+    if (!result || result.status !== 'ok') {
+      toastMgr.error(result?.error || 'Could not fetch the playlist.');
+      return;
+    }
+    await importPlaylistCollection({
+      name: result.name || button.dataset.name || '',
+      description: result.description || '',
+      cover: result.cover || '',
+      tracks: result.tracks || [],
+    });
+  } catch (e) {
+    toastMgr.error(e?.message || 'Could not fetch the playlist.');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+// "Import playlist" beside Download All, on a playlist opened from a link
+// or a search: the Player gets the same name, description, cover and every
+// song. Songs not in the library are kept and labelled "Not downloaded".
+function renderImportPlaylistButton() {
+  document.getElementById('import-playlist-btn')?.remove();
+  const actions = $('album-actions');
+  if (!actions || detectUrlType(currentUrl) !== 'playlist') return;
+  const btn = document.createElement('button');
+  btn.id = 'import-playlist-btn';
+  btn.type = 'button';
+  btn.className = 'act-btn secondary';
+  // data-tip is the hover bubble (the round header buttons have no visible
+  // label); the longer wording stays as the accessible name.
+  btn.setAttribute('aria-label', 'Copy this playlist into the Player: cover, description and every song');
+  btn.dataset.tip = 'Import into the Player';
+  btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15V6"/><path d="M18.5 18a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z"/><path d="M12 12H3"/><path d="M16 6H3"/><path d="M12 18H3"/></svg> Import playlist`;
+  btn.onclick = () => importFetchedPlaylist(btn);
+  const cli = actions.querySelector('[data-onclick*="CliCommand"], .cli-btn');
+  cli ? actions.insertBefore(btn, cli) : actions.appendChild(btn);
+}
+
+async function importFetchedPlaylist(button) {
+  if (!currentTracks.length) {
+    toastMgr.error('Wait for the playlist\u2019s tracks to load.');
+    return;
+  }
+  button.disabled = true;
+  try {
+    await importPlaylistCollection({
+      name: g_albumImport.title,
+      description: g_albumImport.description,
+      cover: g_albumImport.cover,
+      tracks: currentTracks.map(t => ({
+        title: t.title || t.name || '',
+        artists: t.artists || t.artist || '',
+        album: t.album || t.album_name || '',
+        duration_ms: t.duration_ms || 0,
+        isrc: t.isrc || '',
+        external_url: t.external_url || t.externalUrl || t.link || '',
+      })),
+    });
+  } finally {
+    button.disabled = false;
+  }
+}
+
+//: Casefolded title without "(feat. …)", for matching files to songs.
+function playlistMatchTitle(text) {
+  return String(text || '')
+    .replace(/\s*[([](?:feat|ft|with)\.?\s[^)\]]*[)\]]/gi, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Only the library files that could be one of `tracks` travel to the
+// server, which makes the final choice (core matching in
+// api_mixins/player_playlists.py).
+function playlistLibraryCandidates(tracks) {
+  const isrcs = new Set(tracks.map(t => String(t.isrc || '').toUpperCase()).filter(Boolean));
+  const titles = new Set(tracks.map(t => playlistMatchTitle(t.title)).filter(Boolean));
+  return lib.items
+    .filter(t => (t.isrc && isrcs.has(String(t.isrc).toUpperCase())) || titles.has(playlistMatchTitle(t.title)))
+    .map(t => ({ path: t.path, title: t.title, artist: t.artist, album: t.album, duration_s: t.duration_s, isrc: t.isrc || '' }));
+}
+
+async function importPlaylistCollection({ name, description, cover, tracks }) {
+  if (!tracks?.length) {
+    toastMgr.error('The playlist has no tracks to import.');
+    return;
+  }
+  const res = await window.pywebview?.api?.import_player_playlist_collection?.(
+    name || 'Imported playlist',
+    description || '',
+    cover || '',
+    tracks,
+    playlistLibraryCandidates(tracks),
+    ''
+  );
+  if (!res || res.status !== 'ok') {
+    toastMgr.error(res?.error || 'Could not import the playlist.');
+    return;
+  }
+  await refreshPlayerPlaylists(res.playlist.id);
+  const missing = res.not_downloaded
+    ? ` · ${res.not_downloaded} not downloaded`
+    : '';
+  toastMgr.success(`Imported "${res.playlist.name}": ${res.imported} tracks${missing}.`);
+}
+
+// Songs a playlist lists as "Not downloaded" that are now in the library
+// are pointed at their file: same ISRC, else same title and a shared artist.
+let playlistLinkBusy = false;
+async function linkPlaylistTracksToLibrary() {
+  if (playlistLinkBusy || !lib.items.length || !lib.playlists.length) return;
+  const remote = lib.playlists.flatMap(p => p.tracks.filter(t => t.downloaded === false));
+  if (!remote.length) return;
+  const byIsrc = new Map();
+  const byTitle = new Map();
+  for (const t of lib.items) {
+    if (t.isrc) byIsrc.set(String(t.isrc).toUpperCase(), t);
+    const key = playlistMatchTitle(t.title);
+    if (!byTitle.has(key)) byTitle.set(key, []);
+    byTitle.get(key).push(t);
+  }
+  const names = s => new Set(String(s || '').split(/\s*(?:,|&|;|\/|feat\.?|ft\.?)\s*/i).map(playlistMatchTitle).filter(Boolean));
+  const links = [];
+  const seen = new Set();
+  for (const t of remote) {
+    if (seen.has(t.path)) continue;
+    seen.add(t.path);
+    let hit = t.isrc ? byIsrc.get(String(t.isrc).toUpperCase()) : null;
+    if (!hit) {
+      const want = names(t.artist);
+      hit = (byTitle.get(playlistMatchTitle(t.title)) || []).find(c => {
+        const have = names(c.artist);
+        return (!want.size || [...want].some(n => have.has(n)))
+          && (!t.duration_s || !c.duration_s || Math.abs(c.duration_s - t.duration_s) <= 10);
+      });
+    }
+    if (hit) links.push({ key: t.path, track: { path: hit.path, title: hit.title, artist: hit.artist, album: hit.album, duration_s: hit.duration_s, isrc: hit.isrc || '' } });
+  }
+  if (!links.length) return;
+  playlistLinkBusy = true;
+  try {
+    const res = await window.pywebview?.api?.link_player_playlist_tracks?.(links);
+    if (res?.status === 'ok' && res.linked) await refreshPlayerPlaylists(lib.playlist || undefined);
+  } catch (e) {
+    console.warn('[playlists] could not link downloaded tracks:', e);
+  } finally {
+    playlistLinkBusy = false;
+  }
 }
 
 // ── Error states ─────────────────────────────────────────────────────────────
@@ -4119,7 +4835,32 @@ function reverseTracks() {
   const c = $('track-rows'); const rows = [...c.children];
   rows.reverse().forEach(r => c.appendChild(r));
 }
+// The nearest ancestor that actually scrolls (the view, or the page).
+function scrollParentOf(el) {
+  for (let n = el?.parentElement; n; n = n.parentElement) {
+    const oy = getComputedStyle(n).overflowY;
+    if ((oy === 'auto' || oy === 'scroll') && n.scrollHeight > n.clientHeight) return n;
+  }
+  return document.scrollingElement || document.documentElement;
+}
+
+// Re-sorting rebuilds the table and the artist section above it. Without
+// this the page shrinks for a moment, the browser clamps the scroll, and
+// the list jumps: the sort box is put back where it was on screen.
+let g_sortAnchor = null;
 function sortTracks() {
+  const box = $('sort-select');
+  g_sortAnchor = box ? { el: box, top: box.getBoundingClientRect().top, scroller: scrollParentOf(box) } : null;
+  _sortTracks();
+}
+function restoreSortAnchor() {
+  const a = g_sortAnchor;
+  g_sortAnchor = null;
+  if (!a || !a.el.isConnected) return;
+  const delta = a.el.getBoundingClientRect().top - a.top;
+  if (Math.abs(delta) > 0.5) a.scroller.scrollTop += delta;
+}
+function _sortTracks() {
   const val = $('sort-select').value;
   const sorted = [...currentTracks]; // Always works on a copy
   
@@ -5729,6 +6470,8 @@ function buildConfig() {
     transcode_to:           $('config-transcode')?.value || 'none',
     transcode_bitrate:      $('config-transcode-bitrate')?.value || '320k',
     transcode_keep_original: $('config-transcode-keep')?.checked || false,
+    dolby_to_ac3: $('config-dolby-ac3') ? $('config-dolby-ac3').checked : true,
+    dolby_ac3_keep_original: $('config-dolby-ac3-keep') ? $('config-dolby-ac3-keep').checked : true,
     verify_hires:           $('config-verify-hires')?.checked || false,
     redownload_fake_hires:  $('config-redownload-fake-hires')?.checked || false,
     track_max_retries:      parseInt($('config-retries').value) || 0,
@@ -7147,6 +7890,7 @@ window.addEventListener('pywebviewready', async () => {
   // different capitalisations.
   loadHistoryAndProfiles();
   loadStaged();  // the sidebar's waiting-count badge
+  playerSetupEngine();  // the native engine in the desktop app, when libmpv is there
   checkAuthStatus();
   // The real download folder (MORNYE_DOWNLOAD_DIR in a container, the
   // account's own folder in multi-user mode), not the placeholder in the HTML.
@@ -7613,6 +8357,13 @@ async function startLocalScan() {
     setTaBtnState($('btn-scan-local'), 'loading');
     $('local-results-wrap').classList.add('hidden');
     $('local-footer').classList.add('hidden');
+    localScanData = [];
+    localScan.pending.clear();
+    if (localScan.raf) { cancelAnimationFrame(localScan.raf); localScan.raf = 0; }
+    $('local-track-rows').innerHTML = '';
+    localScan.id = null;
+    localScan.path = path;
+    paintScanBar('local-scan', { phase: 'listing', done: 0, total: 0 }, localScan);
 
     try {
         if (window.pywebview?.api && typeof window.pywebview.api.scan_local === 'function') {
@@ -7620,6 +8371,7 @@ async function startLocalScan() {
             if (result && result.status === 'error') {
                 throw new Error(result.error || 'Scan failed');
             }
+            localScanAdopt(result?.scan);
         } else {
             const response = await fetch('/api/scan_local', {
                 method: 'POST',
@@ -7633,9 +8385,10 @@ async function startLocalScan() {
             if (data?.result?.status === 'error') {
                 throw new Error(data.result.error || 'Scan failed');
             }
+            localScanAdopt(data?.result?.scan);
         }
-        toastMgr.info("Scanning local files... this may take a moment.");
     } catch (err) {
+        paintScanBar('local-scan', null, localScan);
         console.error('[LocalScan] start failed:', err);
         setTaBtnState($('btn-scan-local'), 'error');
         setTimeout(() => setTaBtnState($('btn-scan-local'), 'default'), 2500);
@@ -7643,19 +8396,161 @@ async function startLocalScan() {
     }
 }
 
-// Called by backend when scanning finishes
-window.app_local_scan_results = function(payload) {
-    setTaBtnState($('btn-scan-local'), 'default');
-    localScanData = payload.files || [];
-    renderLocalTracks();
-    $('local-results-wrap').classList.remove('hidden');
-    $('local-footer').classList.remove('hidden');
-    updateLocalSelection();
-    toastMgr.success(`Scan complete: found ${localScanData.length} files.`);
+// The scan whose events the list follows: a newer scan of the same page
+// replaces it, and events of an older one are dropped.
+const localScan = { id: null, last: 0, path: '', raf: 0, pending: new Set(), scanSamples: [] };
+
+function localScanAdopt(id) {
+  if (typeof id !== 'number') return;
+  localScan.last = Math.max(localScan.last, id);
+  if (localScan.id === null) localScan.id = id;
+}
+
+function localScanAccept(p) {
+  if (localScan.id === null) {
+    if (typeof p?.scan !== 'number' || p.scan < localScan.last) return false;
+    localScan.id = p.scan;
+    localScan.last = p.scan;
+  }
+  return p?.scan === localScan.id;
+}
+
+// Results by file, in the order they first came: a later result for the
+// same file (it changed on disk, or its stored result had grown old)
+// replaces it in place and a new file goes at the end, so the rows already
+// on screen keep their index. `touched` is the indices that changed.
+function mergeLocalResults(current, incoming) {
+  const items = current.slice();
+  const at = new Map(items.map((e, i) => [e.file_path, i]));
+  const touched = [];
+  for (const e of incoming || []) {
+    let i = at.get(e.file_path);
+    if (i === undefined) { i = items.length; at.set(e.file_path, i); items.push(e); }
+    else items[i] = e;
+    touched.push(i);
+  }
+  return { items, touched };
+}
+
+// Re-renders the whole list, keeping the boxes the user ticked or
+// unticked while results were still coming in. Only for a list that
+// shrank (files gone from the folder): new results are painted row by
+// row (paintLocalRows), since rebuilding thousands of rows with their
+// covers for every batch is what made the window stutter.
+function renderLocalTracksKeepingChoices() {
+  const picked = new Map([...document.querySelectorAll('#local-track-rows .local-cb')]
+    .map(cb => [cb.dataset.filePath, cb.checked]));
+  localScan.pending.clear();
+  renderLocalTracks();
+  for (const cb of document.querySelectorAll('#local-track-rows .local-cb')) {
+    if (!cb.disabled && picked.has(cb.dataset.filePath)) cb.checked = picked.get(cb.dataset.filePath);
+  }
+  $('local-results-wrap').classList.remove('hidden');
+  $('local-footer').classList.remove('hidden');
+  updateLocalSelection();
+}
+
+//: Rows built per animation frame while results come in.
+const LOCAL_ROWS_PER_FRAME = 150;
+
+function scheduleLocalRows() {
+  if (!localScan.raf) localScan.raf = requestAnimationFrame(paintLocalRows);
+}
+
+// Paints the rows of the results that came in since the last frame: a
+// changed one replaces its row (keeping its box as the user left it), a
+// new one is appended. At most LOCAL_ROWS_PER_FRAME a frame, the rest next.
+function paintLocalRows() {
+  localScan.raf = 0;
+  const container = $('local-track-rows');
+  if (!container) return;
+  if (!container.querySelector(':scope > [data-index]')) container.innerHTML = '';  // the "no files" note
+  const order = [...localScan.pending].sort((a, b) => a - b).slice(0, LOCAL_ROWS_PER_FRAME);
+  const added = document.createDocumentFragment();
+  for (const i of order) {
+    localScan.pending.delete(i);
+    const item = localScanData[i];
+    if (!item) continue;
+    const row = localRowElement(item, i);
+    const old = container.children[i];
+    if (old && old.dataset.index === String(i)) {
+      const was = old.querySelector('.local-cb');
+      const cb = row.querySelector('.local-cb');
+      if (was && cb && !cb.disabled && was.dataset.filePath === cb.dataset.filePath) cb.checked = was.checked;
+      old.replaceWith(row);
+    } else {
+      added.appendChild(row);
+    }
+  }
+  container.appendChild(added);
+  $('local-results-wrap').classList.remove('hidden');
+  $('local-footer').classList.remove('hidden');
+  renderLocalSummary();
+  updateLocalSelection();
+  if (localScan.pending.size) scheduleLocalRows();
+}
+
+// Results arrive in parts: those stored by an earlier scan of the folder
+// at once (cached), then the files that were new or changed as they are
+// matched.
+window.app_local_scan_chunk = function(p) {
+  if (!localScanAccept(p)) return;
+  const { items, touched } = mergeLocalResults(localScanData, p.files);
+  localScanData = items;
+  touched.forEach(i => localScan.pending.add(i));
+  scheduleLocalRows();
+};
+
+window.app_local_scan_progress = function(p) {
+  if (!localScanAccept(p)) return;
+  paintScanBar('local-scan', p, localScan);
+};
+
+// Stops the scan in progress: what was worked out so far stays in the
+// list (and is stored, so scanning again picks up from there).
+async function cancelLocalScan() {
+  const stop = $('local-scan-stop');
+  if (stop) stop.disabled = true;
+  let res = null;
+  try {
+    res = await window.pywebview?.api?.cancel_local_scan?.();
+  } finally {
+    if (stop) stop.disabled = false;
+  }
+  if (!res || res.status !== 'ok') toastMgr.error('Could not stop the scan.');
+}
+
+window.app_local_scan_cancelled = function(p) {
+  if (localScan.id === null || p?.scan !== localScan.id) return;
+  const n = localScanData.length;
+  // Nothing found yet is not "no audio files in this folder"; the rows
+  // still to paint are painted as usual.
+  paintScanBar('local-scan', null, localScan);
+  setTaBtnState($('btn-scan-local'), 'default');
+  toastMgr.info(n ? `Scan stopped: ${n} file${n === 1 ? '' : 's'} shown.` : 'Scan stopped.');
+};
+
+window.app_local_scan_done = function(p) {
+  if (!localScanAccept(p)) return;
+  const gone = new Set(p.removed || []);
+  if (gone.size || !localScanData.length) {
+    // Rows leave the list: indices shift, so it is drawn again whole.
+    localScanData = localScanData.filter(e => !gone.has(e.file_path));
+    if (localScan.raf) { cancelAnimationFrame(localScan.raf); localScan.raf = 0; }
+    renderLocalTracksKeepingChoices();
+  }
+  paintScanBar('local-scan', null, localScan);
+  setTaBtnState($('btn-scan-local'), 'default');
+  const n = localScanData.length;
+  const checked = Number(p.checked) || 0;
+  toastMgr.success(checked < n
+    ? `Scan complete: ${n} files, ${checked} new or changed.`
+    : `Scan complete: found ${n} files.`);
 };
 
 // Called by backend on scan error
 window.app_local_scan_error = function(err) {
+    paintScanBar('local-scan', null, localScan);
     setTaBtnState($('btn-scan-local'), 'error');
     setTimeout(() => setTaBtnState($('btn-scan-local'), 'default'), 2500);
     toastMgr.error("Scan failed: " + err);
@@ -7670,7 +8565,13 @@ function renderLocalTracks() {
         return;
     }
     
-    localScanData.forEach((item, i) => {
+    localScanData.forEach((item, i) => container.appendChild(localRowElement(item, i)));
+    renderLocalSummary();
+}
+
+// One row of the Fix Local Files list; `i` is the item's index in
+// localScanData, which its checkbox and buttons carry.
+function localRowElement(item, i) {
         const best = item.candidates && item.candidates[0];
         const hasMatch = !!best;
         const isSafe = hasMatch && best.is_safe;
@@ -7758,9 +8659,8 @@ function renderLocalTracks() {
         // What the summary above the list counts and filters by.
         row.dataset.state = item.error && !hasMatch ? 'error'
             : !hasMatch ? 'none' : isSafe ? 'matched' : 'review';
-        container.appendChild(row);
-    });
-    renderLocalSummary();
+        row.dataset.index = String(i);
+        return row;
 }
 
 //: Which rows the list shows: '' for all, else one row state.
@@ -7923,6 +8823,8 @@ async function openTagEditor(index) {
       <input class="u-w-100pct u-mt-3" type="text" id="tagedit-${f}" data-tag="${f}" value="${escHtml(res.tags[f] || '')}">
     </div>`).join('');
   $('tagedit-lyrics').value = res.lyrics || '';
+  $('tagedit-lyrics-source').textContent = '';
+  fillTagEditorLyricsProviders();
   $('tagedit-translation-wrap').classList.add('hidden');
   $('tagedit-translation').value = '';
   await ensureTranslationLanguages();
@@ -8243,6 +9145,42 @@ async function ensureTranslationLanguages() {
   if ([...sel.options].some(o => o.value === prefer)) sel.value = prefer;
 }
 
+// The lyrics in the editor, looked up again from the lyrics services. Only
+// the text box changes; Save writes it to the file like a hand edit.
+// "Settings order" first (every service ticked in Settings, ranked), then
+// each lyrics service on its own: the built-in ones and any extension.
+async function fillTagEditorLyricsProviders() {
+  const sel = $('tagedit-lyrics-provider');
+  if (!sel) return;
+  const keep = sel.value;
+  let exts = [];
+  try { exts = (await window.pywebview?.api?.get_lyrics_extensions?.())?.extensions || []; } catch (e) { exts = []; }
+  const opts = [{ id: '', label: 'Settings order' }, ...ALL_LYRICS, ...exts];
+  sel.innerHTML = opts.map(o => `<option value="${escHtml(o.id)}">${escHtml(o.label)}</option>`).join('');
+  if ([...sel.options].some(o => o.value === keep)) sel.value = keep;
+}
+
+async function fetchTagEditorLyrics() {
+  if (!tagEditState) return;
+  const path = tagEditState.path;
+  const tags = {};
+  document.querySelectorAll('#tagedit-fields [data-tag]').forEach(el => {
+    if (['TITLE', 'ARTIST', 'ALBUMARTIST', 'ALBUM', 'ISRC'].includes(el.dataset.tag)) tags[el.dataset.tag] = el.value.trim();
+  });
+  const btn = $('tagedit-fetch-lyrics-btn');
+  btn.disabled = true;
+  btn.textContent = 'Searching…';
+  const provider = $('tagedit-lyrics-provider')?.value || '';
+  const res = await window.pywebview?.api?.fetch_file_lyrics?.(path, tags, provider);
+  btn.disabled = false;
+  btn.textContent = 'Fetch again';
+  if (!tagEditState || tagEditState.path !== path) return;
+  if (!res || res.status !== 'ok') { toastMgr.error(res?.error || 'Could not fetch the lyrics.'); return; }
+  $('tagedit-lyrics').value = res.lyrics;
+  $('tagedit-lyrics-source').textContent = res.provider ? `· from ${res.provider}, not saved yet` : '· not saved yet';
+  toastMgr.info(`Lyrics found${res.provider ? ' on ' + res.provider : ''}. Press Save to write them to the file.`);
+}
+
 async function translateTagEditorLyrics() {
   const lyrics = $('tagedit-lyrics').value;
   if (!lyrics.trim()) { toastMgr.info('There are no lyrics to translate.'); return; }
@@ -8361,6 +9299,7 @@ function updatePlayerModes() {
     b.title = { off: 'Repeat: off', all: 'Repeat all', one: 'Repeat this track' }[playerRepeat];
   });
   try { localStorage.setItem('mornye-player-modes', JSON.stringify({ shuffle: playerShuffle, repeat: playerRepeat })); } catch (e) {}
+  playerRefreshNext();
 }
 
 function playerToggleShuffle() {
@@ -8398,44 +9337,372 @@ function playLocal(index) {
   startPlayback(items, index, undefined, true);
 }
 
-async function loadPlayerTrack(index) {
+// ── Playback engine ─────────────────────────────────────────────────────────
+// Everything the player asks of the audio goes through `playerEngine`: the
+// queue, the bars, the Now Playing view, the synced lyrics and the Media
+// Session never touch the <audio> element directly. The adapter keeps the
+// listeners itself and re-emits the events of whichever engine is active, so
+// the engine can be swapped without registering them again: the window's own
+// <audio>, or libmpv in the desktop app (docs/native-player-plan.md). The
+// surface is the part of HTMLMediaElement the player uses, plus `advanced`
+// (a gapless change to the queued track) and `output` (what reaches the
+// device), which only the native engine sends.
+const PLAYER_ENGINE_EVENTS = ['play', 'pause', 'timeupdate', 'ended', 'loadedmetadata', 'seeked', 'error'];
+
+function playerBrowserEngine(element) {
+  return {
+    kind: 'browser',
+    attach(emit) {
+      for (const type of PLAYER_ENGINE_EVENTS) element.addEventListener(type, () => emit(type));
+    },
+    get hasSource() { return !!element.getAttribute('src'); },
+    load(url) { element.src = url; },
+    clear() {
+      element.pause();
+      element.removeAttribute('src');
+      element.load();
+    },
+    play() { return element.play(); },
+    pause() { element.pause(); },
+    get paused() { return element.paused; },
+    get currentTime() { return element.currentTime; },
+    set currentTime(t) { element.currentTime = t; },
+    get duration() { return element.duration; },
+    get volume() { return element.volume; },
+    set volume(v) { element.volume = v; },
+    get muted() { return element.muted; },
+    set muted(v) { element.muted = v; },
+    get playbackRate() { return element.playbackRate; },
+    set playbackRate(r) { element.playbackRate = r; },
+  };
+}
+
+// The native engine: libmpv in the backend (core/native_player.py), driven
+// through the `native_player_*` API and heard back through
+// window.app_native_player_event, which hands each event to receive().
+// Calls are chained so they reach the backend in the order they were made
+// (pywebview runs each call on a thread of its own). The position arrives
+// about four times a second; between two updates it is extrapolated, since
+// the synced lyrics read it on every frame. An update reaches the page a
+// little after mpv took it (more so on a network share, where mpv also runs
+// in uneven steps), so it is often behind the extrapolated position: a small
+// step back like that is not shown; the position holds until mpv catches up.
+// Only a real gap (over a second) moves it back.
+function playerNativeEngine(api, clock = () => performance.now()) {
+  let emit = () => {};
+  let chain = Promise.resolve();
+  let src = '', paused = true, ended = false, time = 0, at = 0, duration = NaN;
+  let volume = 1, muted = false, rate = 1, seekUntil = 0, output = null;
+  let floor = 0; // the position never shows less than this until the next settle
+  const DRIFT_MAX_S = 1;
+  const call = (name, ...args) => {
+    const run = chain.then(() => api[name](...args));
+    chain = run.catch(() => {});
+    return run.then(r => {
+      if (r && r.status && r.status !== 'ok') throw new Error(r.error || r.status);
+      return r;
+    });
+  };
+  const command = (name, value = null) => call('native_player_command', name, value)
+    .catch(e => emit('error', { message: e.message }));
+  const now = () => clock();
+  const position = () => {
+    if (paused || !src) return time;
+    const t = Math.max(floor, time + (now() - at) / 1000 * rate);
+    return Number.isFinite(duration) ? Math.min(duration, t) : t;
+  };
+  const settle = (t) => { if (typeof t === 'number' && Number.isFinite(t)) time = t; at = now(); floor = 0; };
+  const engine = {
+    kind: 'native',
+    attach(fn) { emit = fn; },
+    get output() { return output; },
+    get hasSource() { return !!src; },
+    // mpv starts playing as soon as it opens the file, so a load is a play.
+    load(path, next) {
+      const wasPaused = paused;
+      src = path; paused = false; ended = false; duration = NaN; output = null;
+      settle(0);
+      call('native_player_load', path, next || null)
+        .catch(e => { paused = true; emit('pause'); emit('error', { message: e.message }); });
+      // Set while nothing was loaded (mpv starts only on the first file).
+      if (volume !== 1) command('volume', volume);
+      if (muted) command('mute', true);
+      if (rate !== 1) command('speed', rate);
+      if (wasPaused) emit('play');
+    },
+    setNext(path) {
+      if (src) call('native_player_set_next', path || null).catch(() => {});
+    },
+    clear() {
+      src = ''; paused = true; ended = false; duration = NaN; output = null;
+      settle(0);
+      command('stop');
+    },
+    play() {
+      if (!src || !paused) return Promise.resolve();
+      if (ended) { // mpv is idle after the end: open the file again
+        const from = time >= (duration || Infinity) - 0.05 ? 0 : time;
+        engine.load(src, null);
+        if (from > 0) engine.currentTime = from;
+        return Promise.resolve();
+      }
+      settle(time);
+      paused = false;
+      command('play');
+      emit('play');
+      return Promise.resolve();
+    },
+    pause() {
+      if (paused) return;
+      settle(position());
+      paused = true;
+      if (src) command('pause');
+      emit('pause');
+    },
+    get paused() { return paused; },
+    get currentTime() { return position(); },
+    set currentTime(t) {
+      settle(Math.max(0, t));
+      if (!src) return;
+      if (ended) { ended = false; paused = true; engine.load(src, null); }
+      seekUntil = now() + 1500; // older positions still on their way are dropped
+      command('seek', time);
+    },
+    get duration() { return duration; },
+    get volume() { return volume; },
+    set volume(v) { volume = v; if (src) command('volume', v); },
+    get muted() { return muted; },
+    set muted(v) { muted = !!v; if (src) command('mute', muted); },
+    get playbackRate() { return rate; },
+    set playbackRate(r) { settle(position()); rate = r; if (src) command('speed', r); },
+    setAbLoop(a, b) { command('ab_loop', a == null || b == null ? null : [a, b]); },
+    receive(evt) {
+      switch (evt?.type) {
+        case 'timeupdate':
+          if (now() < seekUntil || paused) return;
+          {
+            const shown = position();
+            settle(evt.time);
+            if (shown > time && shown - time < DRIFT_MAX_S) floor = shown;
+          }
+          emit('timeupdate'); return;
+        case 'play':
+          if (paused && !ended) { paused = false; settle(evt.time); emit('play'); }
+          return;
+        case 'pause':
+          if (!paused) { paused = true; settle(evt.time); emit('pause'); }
+          return;
+        case 'loadedmetadata':
+          if (Number.isFinite(evt.duration)) duration = evt.duration;
+          emit('loadedmetadata'); return;
+        case 'seeked':
+          seekUntil = 0; settle(evt.time); emit('seeked'); emit('timeupdate'); return;
+        case 'ended': // as <audio>: pause, then ended
+          settle(Number.isFinite(duration) ? duration : time);
+          ended = true;
+          if (!paused) { paused = true; emit('pause'); }
+          emit('ended'); return;
+        case 'advanced':
+          src = evt.path; ended = false; paused = false; duration = NaN; output = null;
+          settle(0);
+          emit('advanced', { path: evt.path }); return;
+        case 'output':
+          output = evt; emit('output', evt); return;
+        case 'error':
+          emit('error', { message: evt.message }); return;
+        case 'warning':
+          emit('warning', { message: evt.message }); return;
+      }
+    },
+  };
+  return engine;
+}
+
+function createPlayerEngine(initial) {
+  const listeners = new Map();
+  const attached = new Set();
+  let active = null;
+  const engine = {
+    get kind() { return active.kind; },
+    get active() { return active; },
+    addEventListener(type, fn) {
+      if (!listeners.has(type)) listeners.set(type, new Set());
+      listeners.get(type).add(fn);
+    },
+    removeEventListener(type, fn) { listeners.get(type)?.delete(fn); },
+    // Makes `next` the engine that plays. The old one is stopped and
+    // emptied; its late events are dropped. Volume, mute and speed carry over.
+    use(next) {
+      if (next === active) return;
+      if (active) {
+        const { volume, muted, playbackRate } = active;
+        if (active.hasSource) active.clear();
+        next.volume = volume;
+        next.muted = muted;
+        next.playbackRate = playbackRate;
+      }
+      active = next;
+      if (!attached.has(next)) {
+        attached.add(next);
+        next.attach((type, detail) => {
+          if (active !== next) return;
+          for (const fn of [...(listeners.get(type) || [])]) {
+            try { fn(detail); } catch (e) { console.error(e); }
+          }
+        });
+      }
+    },
+    get hasSource() { return active.hasSource; },
+    load(url, next) { active.load(url, next); },
+    setNext(path) { active.setNext?.(path); },
+    setAbLoop(a, b) { active.setAbLoop?.(a, b); },
+    get output() { return active.output || null; },
+    clear() { active.clear(); },
+    play() { return active.play(); },
+    pause() { active.pause(); },
+    get paused() { return active.paused; },
+    get currentTime() { return active.currentTime; },
+    set currentTime(t) { active.currentTime = t; },
+    get duration() { return active.duration; },
+    get volume() { return active.volume; },
+    set volume(v) { active.volume = v; },
+    get muted() { return active.muted; },
+    set muted(v) { active.muted = v; },
+    get playbackRate() { return active.playbackRate; },
+    set playbackRate(r) { active.playbackRate = r; },
+  };
+  engine.use(initial);
+  return engine;
+}
+
+const playerBrowser = playerBrowserEngine($('player-audio'));
+const playerEngine = createPlayerEngine(playerBrowser);
+let playerNative = null;          // the native engine, once the backend has one
+let playerNativeStatus = null;    // native_player_status(): availability and options
+let playerSourceQuality = '';     // the file's own quality label, from prepare_playback
+
+window.app_native_player_event = (evt) => playerNative?.receive(evt);
+
+// Desktop window only: the native engine when the setting asks for it (or
+// "auto") and libmpv is there; otherwise the window's own engine. A track
+// that is playing restarts on the new engine.
+async function playerSetupEngine() {
+  const api = window.pywebview?.api;
+  if (window.__mornyeWeb || !api?.native_player_status) return;
+  let status = null;
+  try { status = await api.native_player_status(); } catch (e) { status = null; }
+  playerNativeStatus = status;
+  const want = status?.options?.engine || 'auto';
+  const native = !!status?.available && want !== 'browser';
+  const target = native ? (playerNative ||= playerNativeEngine(api)) : playerBrowser;
+  if (want === 'native' && !status?.available) {
+    toastMgr.warning(`Native player unavailable: ${status?.reason || 'libmpv not found'}. Using the window's engine.`);
+  }
+  if (playerEngine.active === target) return;
+  const playing = playerIndex >= 0 && playerEngine.hasSource;
+  playerEngine.use(target);
+  playerMediaSessionActive(!native);
+  if (playing) loadPlayerTrack(playerIndex);
+}
+
+// The track that plays after the current one, or -1: what the native
+// engine opens in advance for a gapless change. Repeat-one queues the same
+// track; the wrap of a shuffled repeat-all reshuffles, so it is not queued.
+function playerUpcomingIndex() {
+  if (!playerOrder.length || playerIndex < 0) return -1;
+  if (playerRepeat === 'one') return playerIndex;
+  if (playerPos + 1 < playerOrder.length) return playerOrder[playerPos + 1];
+  if (playerRepeat === 'all' && !playerShuffle) return playerOrder[0];
+  return -1;
+}
+
+function playerUpcomingPath() {
+  const next = playerUpcomingIndex();
+  return next >= 0 ? (playerQueue[next]?.path || null) : null;
+}
+
+// Tells the native engine which file comes next, after anything that
+// changes the order (shuffle, repeat, a new queue).
+function playerRefreshNext() {
+  if (playerEngine.kind === 'native' && playerEngine.hasSource) playerEngine.setNext(playerUpcomingPath());
+}
+
+// The native engine went on to the queued file by itself: the page follows
+// without loading anything.
+function playerOnAdvanced(path) {
+  const expected = playerUpcomingIndex();
+  const index = expected >= 0 && playerQueue[expected]?.path === path
+    ? expected : playerQueue.findIndex(q => q.path === path);
+  if (index >= 0) loadPlayerTrack(index, { advanced: true });
+}
+
+function playerQualityText() {
+  const out = playerEngine.output;
+  if (out?.bitstream) return out.label;
+  return playerSourceQuality;
+}
+
+function playerShowQuality() {
+  const el = $('pl-quality');
+  if (!el || playerIndex < 0) return;
+  el.textContent = playerQualityText();
+  const out = playerEngine.output;
+  el.title = out?.label
+    ? `Output: ${out.label}${out.ao ? ` (${out.ao})` : ''}`
+    : 'Played exactly as stored. Formats the window cannot decode are played as a lossless FLAC copy. The operating system may still resample to your output device\'s rate.';
+}
+
+async function loadPlayerTrack(index, { advanced = false } = {}) {
   const item = playerQueue[index];
   if (!item) return;
   playerIndex = index;
   if (playerOrder.length !== playerQueue.length) playerBuildOrder(index);
   else playerPos = playerOrder.indexOf(index);
   const token = ++playerToken;
-  const audio = $('player-audio');
+  const audio = playerEngine;
+  const native = audio.kind === 'native';
   $('player-bar').classList.remove('hidden');
   document.body.classList.add('has-player');
   setPlayerArtwork('');
   const artist = displayArtists(item.artist);
   $('pl-title').textContent = artist ? `${item.title} — ${artist}` : item.title;
-  $('pl-quality').textContent = 'Preparing…';
+  if (!advanced) $('pl-quality').textContent = 'Preparing…';
   markPlayingRow();
-  audio.pause();
-  const res = await window.pywebview?.api?.prepare_playback?.(item.path, !window.__mornyeWeb);
+  playerAbReset();
+  if (!advanced) audio.pause();
+  const res = await window.pywebview?.api?.prepare_playback?.(item.path, !window.__mornyeWeb, native);
   if (token !== playerToken) return; // another track was chosen meanwhile
   if (!res || res.status !== 'ok') {
     $('pl-quality').textContent = 'Cannot play this file';
     toastMgr.error(res?.error || 'Could not play the file.');
     return;
   }
-  audio.src = res.url || ('/api/media?path=' + encodeURIComponent(res.path));
-  $('pl-quality').textContent = res.quality;
+  if (!advanced) {
+    audio.load(native ? res.path : (res.url || ('/api/media?path=' + encodeURIComponent(res.path))),
+      native ? playerUpcomingPath() : undefined);
+  } else {
+    playerRefreshNext();
+  }
+  playerSourceQuality = res.quality;
+  playerShowQuality();
   fillNowPlaying(item, res);
-  try { await audio.play(); } catch (e) { /* autoplay blocked: the play button works */ }
+  if (!advanced) {
+    try { await audio.play(); } catch (e) { /* autoplay blocked: the play button works */ }
+  }
   playerMediaMetadata(item, res, artist);
 }
 
 // ── Media keys and the system's "Now Playing" ───────────────────────────────
 // The Media Session is what the keyboard's play/pause/next keys, the macOS
 // Now Playing panel, the Windows media overlay and a Bluetooth headset talk
-// to, in the desktop window (WebView2, WebKit) as in a browser tab. Only
-// previous/next were wired: play, pause, stop and seeking were not, so the
-// play/pause key did nothing and the system showed no progress or cover.
+// to, in the desktop window (WebView2, WebKit) as in a browser tab. With the
+// native engine the window plays nothing, so the system talks to mpv instead
+// (its media-controls) and the page's handlers are taken off: both at once
+// would answer every key twice.
+let playerMediaSessionOn = true;
+
 function playerMediaMetadata(item, res, artist) {
-  if (!('mediaSession' in navigator)) return;
+  if (!('mediaSession' in navigator) || !playerMediaSessionOn) return;
   try {
     const cover = res?.cover || '';
     navigator.mediaSession.metadata = new MediaMetadata({
@@ -8448,9 +9715,10 @@ function playerMediaMetadata(item, res, artist) {
 }
 
 function playerMediaPosition() {
-  const audio = $('player-audio');
+  const audio = playerEngine;
+  if (!playerMediaSessionOn) return;
   if (!('mediaSession' in navigator) || !navigator.mediaSession.setPositionState) return;
-  if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) return;
+  if (!Number.isFinite(audio.duration) || audio.duration <= 0) return;
   try {
     navigator.mediaSession.setPositionState({
       duration: audio.duration,
@@ -8460,41 +9728,55 @@ function playerMediaPosition() {
   } catch (e) { /* position past the end while a track changes */ }
 }
 
-(function initMediaSession() {
-  const audio = $('player-audio');
-  if (!audio || !('mediaSession' in navigator)) return;
-  const session = navigator.mediaSession;
+function playerMediaHandlers() {
+  const audio = playerEngine;
   const seekBy = (offset) => {
-    if (!audio.src || !Number.isFinite(audio.duration)) return;
+    if (!audio.hasSource || !Number.isFinite(audio.duration)) return;
     audio.currentTime = Math.max(0, Math.min(audio.duration, audio.currentTime + offset));
     playerMediaPosition();
   };
-  const handlers = {
-    play: () => { if (audio.src) audio.play(); },
+  return {
+    play: () => { if (audio.hasSource) audio.play(); },
     pause: () => audio.pause(),
-    stop: () => { audio.pause(); if (audio.src) audio.currentTime = 0; },
+    stop: () => { audio.pause(); if (audio.hasSource) audio.currentTime = 0; },
     previoustrack: () => playerPrev(),
     nexttrack: () => playerNext(),
     seekbackward: (d) => seekBy(-(d?.seekOffset || 10)),
     seekforward: (d) => seekBy(d?.seekOffset || 10),
     seekto: (d) => {
-      if (!audio.src || d?.seekTime == null) return;
+      if (!audio.hasSource || d?.seekTime == null) return;
       audio.currentTime = d.seekTime;
       playerMediaPosition();
     },
   };
-  for (const [action, handler] of Object.entries(handlers)) {
-    try { session.setActionHandler(action, handler); } catch (e) { /* not supported here */ }
+}
+
+function playerMediaSessionActive(on) {
+  playerMediaSessionOn = on;
+  if (!('mediaSession' in navigator)) return;
+  const session = navigator.mediaSession;
+  for (const [action, handler] of Object.entries(playerMediaHandlers())) {
+    try { session.setActionHandler(action, on ? handler : null); } catch (e) { /* not supported here */ }
   }
-  audio.addEventListener('play', () => { session.playbackState = 'playing'; playerMediaPosition(); });
-  audio.addEventListener('pause', () => { session.playbackState = 'paused'; playerMediaPosition(); });
+  if (!on) {
+    try { session.metadata = null; session.playbackState = 'none'; } catch (e) { /* read-only here */ }
+  }
+}
+
+(function initMediaSession() {
+  const audio = playerEngine;
+  if (!('mediaSession' in navigator)) return;
+  const session = navigator.mediaSession;
+  playerMediaSessionActive(true);
+  audio.addEventListener('play', () => { if (playerMediaSessionOn) session.playbackState = 'playing'; playerMediaPosition(); });
+  audio.addEventListener('pause', () => { if (playerMediaSessionOn) session.playbackState = 'paused'; playerMediaPosition(); });
   audio.addEventListener('loadedmetadata', playerMediaPosition);
   audio.addEventListener('seeked', playerMediaPosition);
 })();
 
 function playerToggle() {
-  const audio = $('player-audio');
-  if (!audio.src) return;
+  const audio = playerEngine;
+  if (!audio.hasSource) return;
   audio.paused ? audio.play() : audio.pause();
 }
 
@@ -8509,12 +9791,12 @@ function playerNext(auto) {
   }
 }
 function playerEnded() {
-  const audio = $('player-audio');
+  const audio = playerEngine;
   if (playerRepeat === 'one') { audio.currentTime = 0; audio.play(); return; }
   playerNext(true);
 }
 function playerPrev() {
-  const audio = $('player-audio');
+  const audio = playerEngine;
   if (audio.currentTime > 3 || !playerOrder.length) { audio.currentTime = 0; return; }
   if (playerPos > 0) return loadPlayerTrack(playerOrder[playerPos - 1]);
   if (playerRepeat === 'all') return loadPlayerTrack(playerOrder[playerOrder.length - 1]);
@@ -8522,23 +9804,76 @@ function playerPrev() {
 }
 function closePlayer() {
   playerToken++;
-  const audio = $('player-audio');
-  audio.pause();
-  audio.removeAttribute('src');
-  audio.load();
+  const audio = playerEngine;
+  audio.clear();
+  playerAbReset();
   $('player-bar').classList.add('hidden');
   document.body.classList.remove('has-player');
   playerIndex = -1;
   markPlayingRow();
-  if ('mediaSession' in navigator) {
+  if ('mediaSession' in navigator && playerMediaSessionOn) {
     navigator.mediaSession.metadata = null;
     navigator.mediaSession.playbackState = 'none';
   }
 }
 
+// ── Speed and A-B repeat (both engines) ─────────────────────────────────────
+// Speed keeps the pitch (the browser's default; mpv's audio-pitch-correction
+// unless turned off in Settings → Player). A-B: the first press marks A, the
+// second B and starts the loop, the third clears it. mpv loops by itself; the
+// window's engine is sent back to A from timeupdate.
+const PLAYER_SPEED_MIN = 0.5, PLAYER_SPEED_MAX = 2;
+let playerAb = { a: null, b: null };
+
+function playerSpeedStep(current, delta) {
+  if (delta === 0) return 1;
+  const next = Math.round((current + delta) * 100) / 100;
+  return Math.min(PLAYER_SPEED_MAX, Math.max(PLAYER_SPEED_MIN, next));
+}
+
+function playerSetSpeed(delta) {
+  if (!playerEngine.hasSource) return;
+  const speed = playerSpeedStep(playerEngine.playbackRate || 1, delta);
+  playerEngine.playbackRate = speed;
+  toastMgr.info(`Speed ${speed.toFixed(2)}×`);
+}
+
+function playerAbNext(ab, time) {
+  if (ab.a == null) return { a: time, b: null };
+  if (ab.b == null) return time > ab.a + 0.2 ? { a: ab.a, b: time } : { a: null, b: null };
+  return { a: null, b: null };
+}
+
+function playerAbCycle() {
+  if (!playerEngine.hasSource) return;
+  playerAb = playerAbNext(playerAb, playerEngine.currentTime);
+  const { a, b } = playerAb;
+  playerEngine.setAbLoop(a, b);
+  // B is set where playback is now, so it would never be crossed: start the
+  // loop from A at once, as mpv's own ab-loop command does.
+  if (a != null && b != null) playerEngine.currentTime = a;
+  toastMgr.info(a == null ? 'A-B repeat off'
+    : b == null ? `A-B repeat: A at ${fmtTime(a)}, press again for B`
+      : `A-B repeat ${fmtTime(a)} – ${fmtTime(b)}`);
+}
+
+function playerAbReset() {
+  if (playerAb.a == null && playerAb.b == null) return;
+  playerAb = { a: null, b: null };
+  playerEngine.setAbLoop(null, null);
+}
+
+playerEngine.addEventListener('timeupdate', () => {
+  const { a, b } = playerAb;
+  if (playerEngine.kind !== 'browser' || a == null || b == null) return;
+  if (playerEngine.currentTime >= b) playerEngine.currentTime = a;
+});
+playerEngine.addEventListener('advanced', (d) => playerOnAdvanced(d?.path));
+playerEngine.addEventListener('output', playerShowQuality);
+playerEngine.addEventListener('warning', (d) => { if (d?.message) toastMgr.warning(d.message); });
+
 (function initPlayer() {
-  const audio = $('player-audio');
-  if (!audio) return;
+  const audio = playerEngine;
   const seek = $('pl-seek');
   audio.addEventListener('timeupdate', () => {
     $('pl-cur').textContent = fmtTime(audio.currentTime);
@@ -8553,8 +9888,10 @@ function closePlayer() {
   const PLAY = '<path d="M8 5v14l11-7z"/>', PAUSE = '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>';
   audio.addEventListener('play', () => { icon.innerHTML = PAUSE; });
   audio.addEventListener('pause', () => { icon.innerHTML = PLAY; });
-  audio.addEventListener('error', () => {
-    if (audio.getAttribute('src')) $('pl-quality').textContent = 'This window cannot decode the file';
+  audio.addEventListener('error', (d) => {
+    if (!audio.hasSource && !d?.message) return;
+    $('pl-quality').textContent = d?.message ? 'Cannot play this file' : 'This window cannot decode the file';
+    if (d?.message) toastMgr.error(d.message);
   });
   seek.addEventListener('input', () => {
     playerSeeking = true;
@@ -8614,6 +9951,253 @@ function closePlayer() {
   });
 })();
 
+// ── Settings → Player (the native engine's options) ─────────────────────────
+// Stored by the backend in player-audio.json and applied to mpv the moment
+// they change, so they stay out of the page's Save Changes.
+const NP_OPT_UNITS = { replaygain_preamp: ' dB', audio_delay_ms: ' ms' };
+let npOptSaveTimer = 0;
+let npOptPending = {};
+
+function npOptValue(el) {
+  if (el.type === 'checkbox') return el.checked;
+  if (el.type === 'range') return Number(el.value);
+  return el.value;
+}
+
+function npOptShowValue(name, value) {
+  const out = document.querySelector(`[data-np-value="${name}"]`);
+  if (out) out.textContent = `${value > 0 && name === 'replaygain_preamp' ? '+' : ''}${value}${NP_OPT_UNITS[name] || ''}`;
+}
+
+function npOptFill(options) {
+  if (!options) return;
+  document.querySelectorAll('#tc-player [data-np-opt]').forEach(el => {
+    const name = el.dataset.npOpt;
+    if (!(name in options)) return;
+    if (el.type === 'checkbox') el.checked = !!options[name];
+    else el.value = String(options[name]);
+    if (el.type === 'range') { amPaint(el); npOptShowValue(name, options[name]); }
+  });
+  document.querySelectorAll('#tc-player [data-np-spdif]').forEach(el => {
+    el.checked = (options.spdif || []).includes(el.dataset.npSpdif);
+  });
+  document.querySelectorAll('#np-eq .np-eq-slider').forEach(el => {
+    el.value = String(options.eq_gains?.[Number(el.dataset.band)] ?? 0);
+    amPaint(el);
+  });
+  npOptState(options);
+}
+
+// What can be set right now: without libmpv (or with the window's engine
+// chosen) the native-only sections are greyed out and say why.
+function npOptState(options) {
+  const st = playerNativeStatus;
+  const note = $('np-engine-note');
+  let message = '';
+  if (window.__mornyeWeb) message = 'In the web interface the browser plays the music on your device; these settings apply to the desktop app.';
+  else if (!st?.available) message = `Native engine unavailable: ${st?.reason || 'libmpv not found'}. Install libmpv to use the settings below (see the guide, "Player").`;
+  else if ((options?.engine || st.options?.engine) === 'browser') message = 'The window\'s own engine is selected: the settings below apply when the native engine plays.';
+  if (note) { note.textContent = message; note.classList.toggle('hidden', !message); }
+  const off = !!window.__mornyeWeb || !st?.available;
+  document.querySelectorAll('#tc-player .np-native-only').forEach(sec => {
+    sec.classList.toggle('np-disabled', off);
+    sec.querySelectorAll('input, select').forEach(el => { el.disabled = off; });
+  });
+  $('np-opt-engine').disabled = !!window.__mornyeWeb;
+}
+
+// A device's name in the menu. macOS lists each device under two drivers
+// (coreaudio/…, avfoundation/…) with the same description, Windows under
+// wasapi/… only: when a description repeats, the driver tells them apart.
+function npDeviceLabel(device, devices) {
+  if (device.name === 'auto') return 'System default';
+  const same = devices.filter(d => d.description === device.description).length;
+  return same > 1 ? `${device.description} (${device.name.split('/')[0]})` : device.description;
+}
+
+async function loadPlayerSettings() {
+  const api = window.pywebview?.api;
+  if (window.__mornyeWeb || !api?.native_player_status) { npOptState(null); return; }
+  try { playerNativeStatus = await api.native_player_status(); } catch (e) { playerNativeStatus = null; }
+  npOptFill(playerNativeStatus?.options);
+  if (!playerNativeStatus?.available) return;
+  try {
+    const res = await api.native_player_devices();
+    const select = $('np-opt-audio_device');
+    const current = playerNativeStatus.options.audio_device || 'auto';
+    const devices = res?.devices || [];
+    if (!devices.some(d => d.name === current)) devices.push({ name: current, description: `${current} (not connected)` });
+    select.innerHTML = devices.map(d => `<option value="${escHtml(d.name)}">${escHtml(npDeviceLabel(d, devices))}</option>`).join('');
+    select.value = current;
+  } catch (e) { /* the list stays at "System default" */ }
+}
+
+function npOptQueue(patch, delay) {
+  Object.assign(npOptPending, patch);
+  clearTimeout(npOptSaveTimer);
+  npOptSaveTimer = setTimeout(npOptFlush, delay);
+}
+
+async function npOptFlush() {
+  const patch = npOptPending;
+  npOptPending = {};
+  const api = window.pywebview?.api;
+  if (!api?.native_player_set_options || !Object.keys(patch).length) return;
+  let res;
+  try { res = await api.native_player_set_options(patch); } catch (e) { res = { status: 'error', error: String(e) }; }
+  if (res?.status !== 'ok') { toastMgr.error(res?.error || 'Could not save the player settings.'); return; }
+  if (playerNativeStatus) playerNativeStatus.options = res.options;
+  // A preset fills the sliders; a slider makes the preset "Custom".
+  if ('eq_preset' in patch || 'eq_gains' in patch) npOptFill(res.options);
+  if ('engine' in patch) { npOptState(res.options); playerSetupEngine(); }
+}
+
+(function initPlayerSettings() {
+  const pane = $('tc-player');
+  if (!pane) return;
+  const onChange = (e, live) => {
+    const el = e.target;
+    if (el.dataset.npOpt) {
+      const name = el.dataset.npOpt;
+      const value = npOptValue(el);
+      if (el.type === 'range') { amPaint(el); npOptShowValue(name, value); }
+      if (live && el.type !== 'range') return; // selects and toggles report on change
+      npOptQueue({ [name]: value }, el.type === 'range' ? 200 : 0);
+    } else if (el.dataset.npSpdif != null) {
+      if (live) return;
+      const spdif = [...pane.querySelectorAll('[data-np-spdif]')].filter(c => c.checked).map(c => c.dataset.npSpdif);
+      npOptQueue({ spdif }, 0);
+    } else if (el.classList.contains('np-eq-slider')) {
+      amPaint(el);
+      const eq_gains = [...pane.querySelectorAll('.np-eq-slider')].map(s => Number(s.value));
+      $('np-opt-eq_preset').value = 'custom';
+      npOptQueue({ eq_gains, eq_preset: 'custom' }, 200);
+    }
+  };
+  pane.addEventListener('input', e => onChange(e, true));
+  pane.addEventListener('change', e => onChange(e, false));
+})();
+
+// ── Playback statistics (I) ─────────────────────────────────────────────────
+function playerStatsRows(stats, engine) {
+  const rows = [['Engine', engine === 'native' ? 'Native (libmpv)' : 'Window (built-in)']];
+  if (!stats) return rows;
+  const p = stats.params || {}, o = stats.out_params || {};
+  const fmt = (v, unit = '') => (v == null || v === '' ? '—' : `${v}${unit}`);
+  rows.push(
+    ['File', stats.path ? stats.path.split(/[\\/]/).pop() : '—'],
+    ['Codec', stats.codec_desc ? `${stats.codec} (${stats.codec_desc})` : fmt(stats.codec)],
+    ['Source', [p.format, p.samplerate && `${p.samplerate / 1000} kHz`, p['hr-channels'] || p.channels].filter(Boolean).join(' · ') || '—'],
+    ['Bitrate', stats.bitrate ? `${Math.round(stats.bitrate / 1000)} kbps` : '—'],
+    ['Output', stats.output || '—'],
+    ['Output format', [o.format, o.samplerate && `${o.samplerate / 1000} kHz`, o['hr-channels'] || o.channels].filter(Boolean).join(' · ') || '—'],
+    ['Bitstream', stats.bitstream ? 'Yes' : 'No'],
+    ['Audio output', `${fmt(stats.ao)} · ${fmt(stats.device)}`],
+    ['Buffer', stats.cache_s != null ? `${Number(stats.cache_s).toFixed(1)} s${stats.cache_bytes ? ` · ${Math.round(stats.cache_bytes / 1024)} KB` : ''}` : '—'],
+    ['Speed', stats.speed != null ? `${Number(stats.speed).toFixed(2)}×` : '—'],
+    ['Audio delay', `${stats.delay_ms || 0} ms`],
+    ['A-B repeat', (stats.ab_loop || []).every(v => typeof v === 'number') ? stats.ab_loop.map(fmtTime).join(' – ') : 'Off'],
+    ['ReplayGain', stats.replaygain === 'no' ? 'Off' : stats.replaygain],
+    ['Filters', stats.filters?.length ? `${stats.filters.length} active` : 'None'],
+  );
+  return rows;
+}
+
+let playerStatsTimer = 0;
+
+async function renderPlayerStats() {
+  const list = $('player-stats-list');
+  if (!list) return;
+  let stats = null;
+  const engine = playerEngine.kind;
+  if (engine === 'native') {
+    try { stats = (await window.pywebview.api.native_player_stats())?.stats || null; } catch (e) { stats = null; }
+  } else if (playerEngine.hasSource) {
+    stats = {
+      path: playerQueue[playerIndex]?.path || '',
+      codec: playerSourceQuality,
+      output: 'PCM to the system mixer',
+      speed: playerEngine.playbackRate,
+      ab_loop: [playerAb.a, playerAb.b],
+      replaygain: 'no',
+    };
+  }
+  list.innerHTML = playerStatsRows(stats, engine)
+    .map(([k, v]) => `<dt>${escHtml(k)}</dt><dd>${escHtml(String(v))}</dd>`).join('');
+}
+
+function openPlayerStats() {
+  $('player-stats-modal').classList.remove('hidden');
+  renderPlayerStats();
+  clearInterval(playerStatsTimer);
+  playerStatsTimer = setInterval(renderPlayerStats, 1000);
+}
+
+function closePlayerStats() {
+  $('player-stats-modal').classList.add('hidden');
+  clearInterval(playerStatsTimer);
+}
+
+// ── Keyboard, as in MPC-HC ──────────────────────────────────────────────────
+// Only while something is loaded, and never while typing in a field or
+// with a dialog other than the full-screen player open.
+function playerShortcutAction(e) {
+  if (e.metaKey || e.ctrlKey || e.altKey) return null;
+  const k = e.key;
+  if (k === ' ') return 'toggle';
+  if (k === 'ArrowRight') return e.shiftKey ? 'fwd30' : 'fwd5';
+  if (k === 'ArrowLeft') return e.shiftKey ? 'back30' : 'back5';
+  if (k === '+' || k === '=') return 'volup';
+  if (k === '-' || k === '_') return 'voldown';
+  if (k === 'm' || k === 'M') return 'mute';
+  if (k === ']') return 'faster';
+  if (k === '[') return 'slower';
+  if (k === 'Backspace') return 'speed1';
+  if (k === 'l' || k === 'L') return 'ab';
+  if (k === 'i' || k === 'I') return 'stats';
+  return null;
+}
+
+function playerSetVolumePercent(value) {
+  const v = Math.max(0, Math.min(100, Math.round(value)));
+  playerEngine.volume = v / 100;
+  ['pl-vol', 'np-vol'].forEach(id => { const el = $(id); if (el) { el.value = v; amPaint(el); } });
+}
+
+document.addEventListener('keydown', (e) => {
+  if (!playerEngine.hasSource || e.defaultPrevented) return;
+  const t = e.target;
+  if (t instanceof Element && (t.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]')
+    || (t.closest('button, [data-activate]') && (e.key === ' ' || e.key === 'Enter')))) return;
+  if (document.querySelector('.modal:not(.hidden):not(#player-stats-modal)')) return;
+  const action = playerShortcutAction(e);
+  if (!action) return;
+  e.preventDefault();
+  const audio = playerEngine;
+  const seekBy = s => {
+    if (!Number.isFinite(audio.duration)) return;
+    audio.currentTime = Math.max(0, Math.min(audio.duration - 0.5, audio.currentTime + s));
+  };
+  switch (action) {
+    case 'toggle': playerToggle(); break;
+    case 'fwd5': seekBy(5); break;
+    case 'back5': seekBy(-5); break;
+    case 'fwd30': seekBy(30); break;
+    case 'back30': seekBy(-30); break;
+    case 'volup': playerSetVolumePercent(audio.volume * 100 + 5); break;
+    case 'voldown': playerSetVolumePercent(audio.volume * 100 - 5); break;
+    case 'mute': audio.muted = !audio.muted; toastMgr.info(audio.muted ? 'Muted' : 'Sound on'); break;
+    case 'faster': playerSetSpeed(0.1); break;
+    case 'slower': playerSetSpeed(-0.1); break;
+    case 'speed1': playerSetSpeed(0); break;
+    case 'ab': playerAbCycle(); break;
+    case 'stats': $('player-stats-modal').classList.contains('hidden') ? openPlayerStats() : closePlayerStats(); break;
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('player-stats-modal')?.classList.contains('hidden')) closePlayerStats();
+});
+
 // The filled share of an Apple Music slider (.am-range), drawn from --p.
 function amPaint(el) {
   if (!el) return;
@@ -8656,7 +10240,7 @@ function npSetSync(kind, rawValue) {
     return;
   }
   NP.focus = -2;
-  npUpdate(npLyricsTime($('player-audio').currentTime), true);
+  npUpdate(npLyricsTime(playerEngine.currentTime), true);
 }
 
 function npResetSync() {
@@ -8671,7 +10255,7 @@ function npResetSync() {
 function openNowPlaying() {
   $('np-view').classList.remove('hidden');
   npStartTick();
-  if (npLines.length) { npLayoutLyrics(); NP.focus = -2; NP.first = true; npUpdate(npLyricsTime($('player-audio').currentTime), true); }
+  if (npLines.length) { npLayoutLyrics(); NP.focus = -2; NP.first = true; npUpdate(npLyricsTime(playerEngine.currentTime), true); }
 }
 function closeNowPlaying() { $('np-view').classList.add('hidden'); }
 
@@ -8756,6 +10340,12 @@ function parseLyrics(text) {
       synced.push(entry);
       last = entry;
     }
+  }
+  // `[t]<t>Whole line<t_end>` on every line is line-synced lyrics written in
+  // the enhanced form: with no line split into two timed pieces there is no
+  // word timing to show, so it is shown line by line.
+  if (synced.length && !synced.some(l => l.words && l.words.length > 1)) {
+    synced.forEach(l => { l.words = null; });
   }
   if (synced.length) {
     supplements.forEach(sup => {
@@ -8954,12 +10544,12 @@ function fillNowPlaying(item, res) {
     }).join('');
     box.querySelectorAll('.np-line').forEach(el => el.addEventListener('click', () => {
       const l = npLines[parseInt(el.dataset.i)];
-      if (npSynced && l && l.t != null) { $('player-audio').currentTime = npAudioTimeForLyrics(l.t); $('player-audio').play(); }
+      if (npSynced && l && l.t != null) { playerEngine.currentTime = npAudioTimeForLyrics(l.t); playerEngine.play(); }
     }));
     npLayoutLyrics();
   }
   if (!$('np-queue').classList.contains('hidden')) npRenderQueue();
-  if (npSynced) npUpdate(npLyricsTime($('player-audio').currentTime), true);
+  if (npSynced) npUpdate(npLyricsTime(playerEngine.currentTime), true);
 }
 
 // How long a pause between two lines has to be before the intro's three
@@ -9212,7 +10802,7 @@ function npUpdate(time, force) {
     NP.userTimer = setTimeout(() => {
       NP.userScrolling = false;
       NP.focus = -2;                       // follow again, with the spring
-      npUpdate(npLyricsTime($('player-audio').currentTime), true);
+      npUpdate(npLyricsTime(playerEngine.currentTime), true);
     }, 4000);
   };
   box.addEventListener('wheel', hold, { passive: true });
@@ -9223,8 +10813,8 @@ function npUpdate(time, force) {
 let npRaf = 0;
 function npTick() {
   npRaf = 0;
-  const audio = $('player-audio');
-  if (!audio || audio.paused || $('np-view').classList.contains('hidden')) return;
+  const audio = playerEngine;
+  if (audio.paused || $('np-view').classList.contains('hidden')) return;
   npUpdate(npLyricsTime(audio.currentTime));
   npRaf = requestAnimationFrame(npTick);
 }
@@ -9243,8 +10833,8 @@ function npRenderQueue() {
 }
 
 // ── Player: browse and play a folder ────────────────────────────────────────
-const lib = { items: [], view: [], scan: null, lastScan: 0, shown: 0, loading: false, started: false, raf: 0, thumbBusy: 0,
-  tab: 'songs', album: null, artist: null, folder: '', cards: 0 };
+const lib = { items: [], view: [], scan: null, lastScan: 0, shown: 0, loading: false, scanning: false, scanSamples: [], lastLink: 0, started: false, raf: 0, thumbBusy: 0,
+  tab: 'songs', album: null, artist: null, playlist: null, playlists: [], folder: '', cards: 0 };
 const LIB_PAGE = 150;
 const LIB_FOLDERS_KEY = 'mornye-player-folders';
 //: The folders the library is made of, scanned together into one library.
@@ -9345,6 +10935,7 @@ function addPlayerFolderFromInput() {
 async function initPlayerView() {
   if (lib.started) { markPlayingRow(); return; }
   lib.started = true;
+  await refreshPlayerPlaylists();
   // A library saved before several folders were possible is its last folder.
   if (!libFolders().length) {
     let folder = libRecent()[0];
@@ -9375,6 +10966,10 @@ async function scanPlayerLibrary() {
   $('player-toolbar').classList.add('hidden');
   setPlayerStatus('Scanning…');
   renderPlayerEmptyState();
+  // The library bar carries the scan's progress, from the first scan on.
+  $('plb-name').textContent = libFoldersLabel(folders);
+  $('plb-name').title = folders.join('\n');
+  $('plb-stats').textContent = '';
   setPlayerScanBusy(true);
   const res = await window.pywebview?.api?.scan_music_library?.(folders);
   if (!res || res.status !== 'started') {
@@ -9393,6 +10988,98 @@ function setPlayerScanBusy(busy) {
   $('player-scan-btn').disabled = busy;
   const rescan = $('plb-rescan');
   if (rescan) { rescan.disabled = busy; rescan.textContent = busy ? 'Scanning…' : 'Rescan'; }
+  if (busy && !lib.scanning) lib.lastLink = Date.now();  // the first link waits for some rows
+  lib.scanning = !!busy;
+  setPlayerScanProgress(busy ? { phase: 'listing', done: 0, total: 0 } : null);
+}
+
+// What the scan bar shows for an app_library_scan_progress payload: a
+// percentage once the total is known, null (a sliding bar) while the
+// folders are still being listed — on a network share that can take long.
+// `eta` (seconds left, from libScanRemaining) is added when known.
+function libScanProgress(p, eta) {
+  const done = Math.max(0, Number(p?.done) || 0);
+  const total = Math.max(0, Number(p?.total) || 0);
+  if (p?.phase !== 'reading' || !total) {
+    return { pct: null, text: done ? `Looking for music… ${done.toLocaleString()} files found` : 'Looking for music…' };
+  }
+  const shown = Math.min(done, total);
+  const left = shown < total ? libScanEtaText(eta) : '';
+  return {
+    pct: Math.round((shown / total) * 100),
+    text: `${shown.toLocaleString()} / ${total.toLocaleString()} files scanned${left ? ` · ${left}` : ''}`,
+  };
+}
+
+// Seconds left in the reading phase, from the pace of the last ~30 s
+// (samples are {t: ms, done}); null until the pace is known. Files already
+// stored are skipped in a blink while new ones are read over the network,
+// so a recent window follows the real pace better than the average since
+// the start.
+function libScanRemaining(samples, done, total) {
+  if (!samples?.length || !(total > done)) return null;
+  const last = samples[samples.length - 1];
+  const from = samples.find(s => last.t - s.t <= 30000) || samples[0];
+  const secs = (last.t - from.t) / 1000;
+  const files = last.done - from.done;
+  if (secs < 3 || files <= 0) return null;
+  return (total - done) / (files / secs);
+}
+
+function libScanEtaText(seconds) {
+  const s = Math.round(Number(seconds) || 0);
+  if (!(s > 0)) return '';
+  if (s < 60) return 'less than a minute left';
+  const m = Math.round(s / 60);
+  if (m < 60) return `~${m} min left`;
+  return `~${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min left`;
+}
+
+// The bar under the library summary; null hides it.
+function setPlayerScanProgress(p) {
+  if (!$('plb-scan')) return;
+  paintScanBar('plb-scan', p, lib);
+  syncPlayerLibbar();
+}
+
+// Paints a scan bar (#<id>, #<id>-track, #<id>-text, styled in
+// feedback.css) for a scan progress payload; null hides it. `state` keeps
+// the pace samples the time left is worked out from.
+function paintScanBar(id, p, state) {
+  const box = $(id);
+  if (!box) return;
+  box.classList.toggle('hidden', !p);
+  if (!p) { state.scanSamples = []; return; }
+  let eta = null;
+  if (p.phase === 'reading' && p.total) {
+    const samples = (state.scanSamples ||= []);
+    samples.push({ t: Date.now(), done: Number(p.done) || 0 });
+    while (samples.length > 2 && samples[samples.length - 1].t - samples[1].t > 30000) samples.shift();
+    eta = libScanRemaining(samples, Number(p.done) || 0, Number(p.total));
+  } else {
+    state.scanSamples = [];
+  }
+  const { pct, text } = libScanProgress(p, eta);
+  const track = $(`${id}-track`);
+  box.classList.toggle('indeterminate', pct === null);
+  box.style.setProperty('--scan-pct', `${pct || 0}%`);
+  if (pct === null) track.removeAttribute('aria-valuenow');
+  else track.setAttribute('aria-valuenow', String(pct));
+  $(`${id}-text`).textContent = text;
+}
+
+// One folder by its name; several as "Music, NAS +1".
+function libFoldersLabel(folders) {
+  const names = folders.map(libFolderName);
+  return !names.length ? 'Library'
+    : names.length <= 2 ? names.join(', ')
+    : `${names.slice(0, 2).join(', ')} +${names.length - 2}`;
+}
+
+// The library bar shows once there is a library, and during any scan (its
+// progress bar lives there), even the first one.
+function syncPlayerLibbar() {
+  $('player-libbar')?.classList.toggle('hidden', !lib.scanning && (lib.items.length === 0 || lib.loading));
 }
 
 function setPlayerStatus(text) {
@@ -9450,11 +11137,58 @@ function libItem(t) {
   };
 }
 
+// While a long scan reads files (a network share can take an hour), the
+// songs of the playlists are linked to what has been read so far, every
+// LIB_LINK_EVERY ms, not only once the scan is over.
+const LIB_LINK_EVERY = 20000;
+function libLinkDue(last, now) {
+  return !(now - (last || 0) < LIB_LINK_EVERY);
+}
+function linkPlaylistsDuringScan() {
+  const now = Date.now();
+  if (!lib.scanning || !libLinkDue(lib.lastLink, now)) return;
+  lib.lastLink = now;
+  linkPlaylistTracksToLibrary();
+}
+
 window.app_library_scan_chunk = function(p) {
   if (!libAccept(p)) return;
   lib.items.push(...p.items.map(libItem));
   setPlayerStatus(`Scanning… ${p.done} / ${p.total}`);
   if (!lib.raf) lib.raf = requestAnimationFrame(() => { lib.raf = 0; filterPlayerLibrary(true); });
+  linkPlaylistsDuringScan();
+};
+
+// Stops the scan in progress (a slow network share can take very long):
+// what was read so far stays in the library, and Rescan picks up from there.
+async function cancelPlayerScan() {
+  const stop = $('plb-scan-stop');
+  if (stop) stop.disabled = true;
+  const res = await window.pywebview?.api?.cancel_music_library_scan?.();
+  if (stop) stop.disabled = false;
+  if (!res || res.status !== 'ok') toastMgr.error('Could not stop the scan.');
+}
+
+window.app_library_scan_cancelled = function(p) {
+  if (lib.scan === null || p?.scan !== lib.scan) return;
+  lib.loading = false;
+  setPlayerScanBusy(false);
+  setPlayerStatus(lib.items.length ? '' : 'Scan stopped.');
+  if (lib.items.length) {
+    lib.folder = libFolders()[0] || '';
+    lib.folders = libFolders();
+    showPlayerSource(false);
+  } else {
+    showPlayerSource(true);
+  }
+  filterPlayerLibrary(true);
+  renderPlayerEmptyState();
+  linkPlaylistTracksToLibrary();  // what was read before the stop counts too
+};
+
+window.app_library_scan_progress = function(p) {
+  if (!libAccept(p) || !lib.scanning) return;
+  setPlayerScanProgress(p);
 };
 
 window.app_library_scan_finished = function(p) {
@@ -9473,6 +11207,7 @@ window.app_library_scan_finished = function(p) {
     showPlayerSource(true);
   }
   filterPlayerLibrary(true);
+  linkPlaylistTracksToLibrary();
 };
 
 // After a library stored from an earlier visit is shown, the server walks
@@ -9486,12 +11221,14 @@ window.app_library_scan_delta = function(p) {
   lib.items = lib.items.filter(t => !removed.has(t.path) && !fresh.has(t.path));
   lib.items.push(...fresh.values());
   if (!lib.raf) lib.raf = requestAnimationFrame(() => { lib.raf = 0; filterPlayerLibrary(true); });
+  linkPlaylistsDuringScan();
 };
 
 window.app_library_scan_synced = function(p) {
   if (!libAccept(p)) return;
   setPlayerScanBusy(false);
   setPlayerStatus('');
+  linkPlaylistTracksToLibrary();
 };
 
 window.app_library_scan_error = function(p) {
@@ -9603,6 +11340,7 @@ function setPlayerTab(tab) {
   lib.tab = tab;
   lib.album = null;
   lib.artist = null;
+  lib.playlist = null;
   document.querySelectorAll('.player-tabs .seg-tab').forEach(b => {
     const on = b.dataset.tab === tab;
     b.classList.toggle('active', on);
@@ -9622,6 +11360,7 @@ function playerScrollTop() {
 function openPlayerAlbum(key) {
   lib.tab = 'albums';
   lib.album = key;
+  lib.playlist = null;
   document.querySelectorAll('.player-tabs .seg-tab').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === 'albums');
     b.setAttribute('aria-selected', b.dataset.tab === 'albums' ? 'true' : 'false');
@@ -9634,6 +11373,7 @@ function openPlayerArtist(key) {
   lib.tab = 'artists';
   lib.album = null;
   lib.artist = key;
+  lib.playlist = null;
   document.querySelectorAll('.player-tabs .seg-tab').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === 'artists');
     b.setAttribute('aria-selected', b.dataset.tab === 'artists' ? 'true' : 'false');
@@ -9644,7 +11384,8 @@ function openPlayerArtist(key) {
 
 // Back from an album page goes to the artist it was opened from, if any.
 function playerBack() {
-  if (lib.album && lib.artist) { lib.album = null; lib.tab = 'artists'; }
+  if (lib.playlist) { lib.playlist = null; }
+  else if (lib.album && lib.artist) { lib.album = null; lib.tab = 'artists'; }
   else if (lib.album) lib.album = null;
   else lib.artist = null;
   document.querySelectorAll('.player-tabs .seg-tab').forEach(b => {
@@ -9661,6 +11402,386 @@ function clearPlayerSearch() {
   $('player-search').focus();
 }
 
+async function refreshPlayerPlaylists(selectedId) {
+  const res = await window.pywebview?.api?.get_player_playlists?.();
+  if (!res || res.status !== 'ok') {
+    toastMgr.error(res?.error || 'Could not load playlists.');
+    return false;
+  }
+  lib.playlists = res.playlists || [];
+  const select = $('player-add-playlist');
+  if (select) {
+    const current = selectedId || select.value;
+    select.innerHTML = '<option value="">Choose playlist</option>' + lib.playlists.map(p =>
+      `<option value="${escHtml(p.id)}">${escHtml(p.name)}</option>`).join('');
+    if (lib.playlists.some(p => p.id === current)) select.value = current;
+  }
+  $('ptab-count-playlists').textContent = lib.playlists.length.toLocaleString();
+  filterPlayerLibrary(true);
+  return true;
+}
+
+function openPlayerPlaylistEditor(id) {
+  const current = id ? lib.playlists.find(p => p.id === id) : null;
+  playerPlaylistEdit = {
+    id: current?.id || '',
+    cover: current?.cover || '',
+    mode: 'edit',
+  };
+  $('player-playlist-import-options').classList.add('hidden');
+  $('player-playlist-new-fields').classList.remove('hidden');
+  $('player-playlist-modal-title').textContent = current ? 'Edit playlist' : 'New playlist';
+  $('player-playlist-save').textContent = current ? 'Save changes' : 'Create playlist';
+  $('player-playlist-name').value = current?.name || '';
+  $('player-playlist-description').value = current?.description || '';
+  renderPlayerPlaylistCover();
+  $('player-playlist-modal').classList.remove('hidden');
+  $('player-playlist-name').focus();
+}
+
+function closePlayerPlaylistEditor() {
+  $('player-playlist-modal').classList.add('hidden');
+  playerPlaylistEdit = null;
+}
+
+function updatePlayerPlaylistImportTarget() {
+  const target = $('player-playlist-import-target').value;
+  $('player-playlist-new-fields').classList.toggle('hidden', !!target);
+  $('player-playlist-save').textContent = target ? 'Add tracks to playlist' : 'Create playlist';
+}
+
+function renderPlayerPlaylistCover() {
+  const img = $('player-playlist-cover-preview');
+  const empty = $('player-playlist-cover-placeholder');
+  img.src = playerPlaylistEdit?.cover || '';
+  img.classList.toggle('hidden', !playerPlaylistEdit?.cover);
+  empty.classList.toggle('hidden', !!playerPlaylistEdit?.cover);
+}
+
+function openPlayerPlaylistCoverPicker() { $('player-playlist-cover-file').click(); }
+function removePlayerPlaylistCover() {
+  if (!playerPlaylistEdit) return;
+  playerPlaylistEdit.cover = '';
+  renderPlayerPlaylistCover();
+}
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('Could not read the image.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function onPlayerPlaylistCoverChosen(input) {
+  const file = input?.files?.[0];
+  input.value = '';
+  if (!file || !playerPlaylistEdit) return;
+  if (file.size > 5_000_000) {
+    toastMgr.error('Cover image must be smaller than 5 MB.');
+    return;
+  }
+  try {
+    playerPlaylistEdit.cover = await readFileAsDataURL(file);
+    renderPlayerPlaylistCover();
+  } catch (e) {
+    toastMgr.error(e?.message || 'Could not read the cover image.');
+  }
+}
+
+async function savePlayerPlaylist() {
+  if (!playerPlaylistEdit) return;
+  const name = $('player-playlist-name').value.trim();
+  const description = $('player-playlist-description').value.trim();
+  if (!name) {
+    toastMgr.error('Enter a playlist name.');
+    $('player-playlist-name').focus();
+    return;
+  }
+  const button = $('player-playlist-save');
+  const mode = playerPlaylistEdit.mode;
+  const editing = !!playerPlaylistEdit.id;
+  if (mode === 'import' && !playerPlaylistEdit.preview.matched) {
+    toastMgr.error('No tracks from this file matched your local library.');
+    return;
+  }
+  button.disabled = true;
+  try {
+    const api = window.pywebview?.api;
+    let res;
+    if (mode === 'import') {
+      res = await api?.import_player_playlist?.(
+        playerPlaylistEdit.text,
+        playerPlaylistEdit.filename,
+        name,
+        description,
+        playerPlaylistEdit.cover,
+        playerPlaylistEdit.candidates,
+        $('player-playlist-import-target').value
+      );
+    } else if (playerPlaylistEdit.id) {
+      res = await api?.update_player_playlist?.(
+        playerPlaylistEdit.id, name, description, playerPlaylistEdit.cover
+      );
+    } else {
+      res = await api?.create_player_playlist?.(
+        name, description, playerPlaylistEdit.cover, []
+      );
+    }
+    if (!res || res.status !== 'ok') {
+      toastMgr.error(res?.error || 'Could not save the playlist.');
+      return;
+    }
+    const id = res.playlist.id;
+    closePlayerPlaylistEditor();
+    await refreshPlayerPlaylists(id);
+    openPlayerPlaylist(id);
+    if (mode === 'import') {
+      toastMgr.success(res.imported
+        ? `Imported ${res.imported} tracks.`
+        : 'No new tracks were added; they were already in the playlist.');
+    } else {
+      toastMgr.success(editing ? 'Playlist updated.' : 'Playlist created.');
+    }
+  } catch (e) {
+    toastMgr.error(e?.message || 'Could not save the playlist.');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function openPlayerPlaylistImport() {
+  if (!lib.items.length) {
+    toastMgr.error('Scan your music library before importing a playlist.');
+    return;
+  }
+  $('player-playlist-file').click();
+}
+
+function playerPlaylistImportCandidates(text) {
+  const basenames = new Set();
+  const metadata = new Set();
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (/^#EXTINF:/i.test(line)) {
+      const display = line.slice(line.indexOf(',') + 1).trim();
+      const split = display.indexOf(' - ');
+      if (split > 0) metadata.add(`${display.slice(0, split).trim().toLowerCase()}\u0000${display.slice(split + 3).trim().toLowerCase()}`);
+      else if (display) metadata.add(`\u0000${display.toLowerCase()}`);
+      continue;
+    }
+    if (line.startsWith('#') || /^(https?:|spotify:)/i.test(line)) continue;
+    let path = line.replace(/^file:\/\//i, '').split(/[?#]/, 1)[0];
+    try { path = decodeURIComponent(path); } catch {}
+    basenames.add(path.split(/[\\/]/).pop().toLowerCase());
+  }
+  return lib.items.filter(track => {
+    const basename = String(track.path || '').split(/[\\/]/).pop().toLowerCase();
+    const artist = String(track.artist || '').toLowerCase();
+    const title = String(track.title || '').toLowerCase();
+    return basenames.has(basename) || metadata.has(`${artist}\u0000${title}`) || metadata.has(`\u0000${title}`);
+  });
+}
+
+async function preparePlayerPlaylistImport(text, filename, name = '') {
+  if (!lib.items.length) {
+    toastMgr.error('Scan your music library before importing a playlist.');
+    return false;
+  }
+  const playlistName = name.trim() ||
+    filename.replace(/\.(m3u8?)$/i, '').trim() || 'Imported playlist';
+  const candidates = playerPlaylistImportCandidates(text);
+  const preview = await window.pywebview?.api?.preview_player_playlist_import?.(
+    text, filename, candidates
+  );
+  if (!preview || preview.status !== 'ok') {
+    toastMgr.error(preview?.error || 'Could not preview the playlist.');
+    return false;
+  }
+  await refreshPlayerPlaylists();
+  playerPlaylistEdit = {
+    id: '',
+    mode: 'import',
+    text,
+    filename,
+    name: playlistName,
+    description: '',
+    cover: '',
+    candidates,
+    preview,
+  };
+  $('player-playlist-modal-title').textContent = 'Import playlist';
+  $('player-playlist-save').textContent = 'Create playlist';
+  $('player-playlist-name').value = playlistName;
+  $('player-playlist-description').value = '';
+  $('player-playlist-import-target').innerHTML = '<option value="">Create a new playlist</option>' +
+    lib.playlists.map(p => `<option value="${escHtml(p.id)}">${escHtml(p.name)}</option>`).join('');
+  $('player-playlist-import-preview').textContent =
+    `${preview.matched} tracks found; ${preview.skipped} not found; ${preview.ambiguous} ambiguous.` +
+    (preview.missing_tracks?.length ? ` Missing: ${preview.missing_tracks.join(', ')}.` : '') +
+    (preview.ambiguous_tracks?.length ? ` Ambiguous: ${preview.ambiguous_tracks.join(', ')}.` : '');
+  $('player-playlist-import-options').classList.remove('hidden');
+  $('player-playlist-new-fields').classList.remove('hidden');
+  $('player-playlist-import-target').value = '';
+  renderPlayerPlaylistCover();
+  $('player-playlist-modal').classList.remove('hidden');
+  $('player-playlist-name').focus();
+  return true;
+}
+
+async function onPlayerPlaylistFileChosen(input) {
+  const file = input?.files?.[0];
+  input.value = '';
+  if (!file) return;
+  try {
+    const text = await readFileAsText(file);
+    await preparePlayerPlaylistImport(text, file.name);
+  } catch (e) {
+    toastMgr.error(e?.message || 'Could not read the playlist file.');
+  }
+}
+
+async function importPlayerPlaylistFromUrl() {
+  const input = $('player-playlist-url');
+  const url = input.value.trim();
+  if (!url) {
+    toastMgr.error('Paste a direct M3U/M3U8 link first.');
+    input.focus();
+    return;
+  }
+  if (!lib.items.length) {
+    toastMgr.error('Scan your music library before importing a playlist.');
+    return;
+  }
+  const button = $('player-playlist-url-import');
+  button.disabled = true;
+  try {
+    const result = await window.pywebview?.api?.fetch_player_playlist_import?.(url);
+    if (!result || result.status !== 'ok') {
+      toastMgr.error(result?.error || 'Could not download the playlist link.');
+      return;
+    }
+    await preparePlayerPlaylistImport(result.text, result.filename);
+  } catch (e) {
+    toastMgr.error(e?.message || 'Could not download the playlist link.');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function openPlayerPlaylist(id) {
+  const playlist = lib.playlists.find(p => p.id === id);
+  if (!playlist) return;
+  lib.tab = 'playlists';
+  lib.album = null;
+  lib.artist = null;
+  lib.playlist = playlist.id;
+  document.querySelectorAll('.player-tabs .seg-tab').forEach(b => {
+    const on = b.dataset.tab === 'playlists';
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  filterPlayerLibrary();
+  playerScrollTop();
+}
+
+async function addPlayerTrackToPlaylist(index) {
+  const id = $('player-add-playlist').value;
+  const track = lib.view[Number(index)];
+  if (!id) {
+    toastMgr.error('Choose a playlist in “Add to” first.');
+    return;
+  }
+  if (!track) return;
+  try {
+    const res = await window.pywebview?.api?.add_player_playlist_tracks?.(id, [track]);
+    if (!res || res.status !== 'ok') {
+      toastMgr.error(res?.error || 'Could not add the track.');
+      return;
+    }
+    await refreshPlayerPlaylists(id);
+    toastMgr.success('Track added to playlist.');
+  } catch (e) {
+    toastMgr.error(e?.message || 'Could not add the track.');
+  }
+}
+
+async function removePlayerPlaylistTrack(index) {
+  const playlist = lib.playlists.find(p => p.id === lib.playlist);
+  const track = lib.view[Number(index)];
+  if (!playlist || !track) return;
+  try {
+    const res = await window.pywebview?.api?.remove_player_playlist_track?.(playlist.id, track.path);
+    if (!res || res.status !== 'ok') {
+      toastMgr.error(res?.error || 'Could not remove the track.');
+      return;
+    }
+    await refreshPlayerPlaylists(playlist.id);
+    openPlayerPlaylist(playlist.id);
+  } catch (e) {
+    toastMgr.error(e?.message || 'Could not remove the track.');
+  }
+}
+
+async function deletePlayerPlaylist(id) {
+  const playlist = lib.playlists.find(p => p.id === id);
+  if (!playlist || !window.confirm(`Delete “${playlist.name}”?`)) return;
+  try {
+    const res = await window.pywebview?.api?.delete_player_playlist?.(id);
+    if (!res || res.status !== 'ok') {
+      toastMgr.error(res?.error || 'Could not delete the playlist.');
+      return;
+    }
+    lib.playlist = null;
+    await refreshPlayerPlaylists();
+    toastMgr.success('Playlist deleted.');
+  } catch (e) {
+    toastMgr.error(e?.message || 'Could not delete the playlist.');
+  }
+}
+
+async function reorderPlayerPlaylistTrack(index, delta) {
+  const playlist = lib.playlists.find(p => p.id === lib.playlist);
+  if (!playlist) return;
+  const ordered = playlist.tracks.map(track => track.path);
+  const from = Number(index);
+  const to = from + Number(delta);
+  if (!Number.isInteger(from) || to < 0 || to >= ordered.length) return;
+  [ordered[from], ordered[to]] = [ordered[to], ordered[from]];
+  try {
+    const res = await window.pywebview?.api?.reorder_player_playlist_tracks?.(playlist.id, ordered);
+    if (!res || res.status !== 'ok') {
+      toastMgr.error(res?.error || 'Could not reorder playlist tracks.');
+      return;
+    }
+    await refreshPlayerPlaylists(playlist.id);
+    openPlayerPlaylist(playlist.id);
+  } catch (e) {
+    toastMgr.error(e?.message || 'Could not reorder playlist tracks.');
+  }
+}
+
+async function exportPlayerPlaylist(id) {
+  try {
+    const res = await window.pywebview?.api?.export_player_playlist?.(id);
+    if (!res || res.status !== 'ok') {
+      toastMgr.error(res?.error || 'Could not export the playlist.');
+      return;
+    }
+    const url = URL.createObjectURL(new Blob([res.text], { type: 'audio/x-mpegurl;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${res.name}.m3u8`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toastMgr.success('Playlist exported as M3U8.');
+  } catch (e) {
+    toastMgr.error(e?.message || 'Could not export the playlist.');
+  }
+}
+
 function filterPlayerLibrary(keepScroll) {
   const q = ($('player-search').value || '').trim().toLowerCase();
   $('player-search-clear').classList.toggle('hidden', !q);
@@ -9673,25 +11794,37 @@ function filterPlayerLibrary(keepScroll) {
 
   // Library bar and tab counts describe the whole library, not the search.
   const total = lib.items.reduce((s, t) => s + (t.duration_s || 0), 0);
-  // One folder by its name; several as "Music, NAS +1".
   const folders = (lib.folders && lib.folders.length) ? lib.folders : [lib.folder].filter(Boolean);
-  const names = folders.map(libFolderName);
-  $('plb-name').textContent = !names.length ? 'Library'
-    : names.length <= 2 ? names.join(', ')
-    : `${names.slice(0, 2).join(', ')} +${names.length - 2}`;
+  $('plb-name').textContent = libFoldersLabel(folders);
   $('plb-name').title = folders.join('\n');
   $('plb-stats').textContent = [plural(lib.items.length, 'track'), plural(allAlbums.length, 'album'),
     plural(allArtists.length, 'artist'), libDuration(total)].filter(Boolean).join(' · ');
-  $('player-libbar').classList.toggle('hidden', lib.items.length === 0 || lib.loading);
+  syncPlayerLibbar();
   $('ptab-count-songs').textContent = lib.items.length.toLocaleString();
   $('ptab-count-albums').textContent = allAlbums.length.toLocaleString();
   $('ptab-count-artists').textContent = allArtists.length.toLocaleString();
-  $('player-toolbar').classList.toggle('hidden', lib.items.length === 0);
+  $('ptab-count-playlists').textContent = lib.playlists.length.toLocaleString();
+  $('player-toolbar').classList.toggle('hidden', lib.items.length === 0 && tab !== 'playlists');
+  const addSelect = $('player-add-select-wrap');
+  addSelect.classList.toggle('hidden', tab === 'playlists');
+  $('player-play-controls').classList.toggle('hidden', tab === 'playlists' && !lib.playlist);
+  $('player-search-wrap').classList.toggle('hidden', tab === 'playlists');
 
   const list = $('player-list'), grid = $('player-grid'), detail = $('player-detail');
   let rows = null, cards = null, header = '', count = '';
 
-  if (tab === 'albums' && lib.album) {
+  if (tab === 'playlists' && lib.playlist) {
+    const playlist = lib.playlists.find(p => p.id === lib.playlist);
+    if (!playlist) { lib.playlist = null; return filterPlayerLibrary(keepScroll); }
+    rows = playlist.tracks;
+    header = libPlaylistHeaderHtml(playlist);
+    count = plural(rows.length, 'track');
+  } else if (tab === 'playlists') {
+    cards = lib.playlists.length
+      ? lib.playlists.map(libPlaylistCardHtml)
+      : ['<div class="pl-playlist-empty">No playlists yet. Create one or import an M3U/M3U8 file.</div>'];
+    count = plural(lib.playlists.length, 'playlist');
+  } else if (tab === 'albums' && lib.album) {
     const album = allAlbums.find(a => a.key === lib.album);
     if (!album) { lib.album = null; return filterPlayerLibrary(keepScroll); }
     rows = album.tracks;
@@ -9701,7 +11834,7 @@ function filterPlayerLibrary(keepScroll) {
     const artist = allArtists.find(a => a.key === lib.artist);
     if (!artist) { lib.artist = null; return filterPlayerLibrary(keepScroll); }
     const { own, guest } = libAlbumsOf(allAlbums, artist.key);
-    cards = own.map(libAlbumCardHtml);
+    cards = own.length ? [`<h3 class="pl-sec-title pl-grid-sec">Albums</h3>`, ...own.map(libAlbumCardHtml)] : [];
     if (guest.length) {
       cards.push(`<h3 class="pl-grid-head">Appears on</h3>`, ...guest.map(libAlbumCardHtml));
     }
@@ -9756,6 +11889,8 @@ function filterPlayerLibrary(keepScroll) {
     } else if (tab === 'artists') {
       const shown = new Set(libArtists(matches).map(a => a.key));
       lib.playAll = allAlbums.flatMap(a => a.tracks).filter(t => libCredited(t).some(n => shown.has(n.toLowerCase())));
+    } else if (tab === 'playlists') {
+      lib.playAll = null;
     } else {
       lib.playAll = allAlbums.filter(a => libAlbums(matches).some(m => m.key === a.key)).flatMap(a => a.tracks);
     }
@@ -9769,6 +11904,7 @@ const LIB_PLAY_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="
 const LIB_SHUFFLE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>';
 const LIB_BACK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>';
 const LIB_NOTE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
+let playerPlaylistEdit = null;
 
 function libCoverHtml(path, size, extraClass = '') {
   return `<div class="pl-cover ${extraClass}" data-p="${escHtml(path || '')}" data-size="${size}">
@@ -9794,6 +11930,47 @@ function libArtistCardHtml(a, allAlbums) {
     <div class="pl-card-t">${escHtml(a.name)}</div>
     <div class="pl-card-a">${escHtml(meta)}</div>
   </div>`;
+}
+
+function libPlaylistCardHtml(playlist) {
+  const cover = playlist.cover
+    ? `<img src="${escHtml(playlist.cover)}" alt="" draggable="false">`
+    : `<span class="pl-cover-ph">${LIB_NOTE_SVG}</span>`;
+  const summary = playlist.description || plural(playlist.tracks.length, 'track');
+  return `<div class="pl-card pl-playlist-card" role="listitem" tabindex="0" data-activate data-player-playlist="${escHtml(playlist.id)}" title="${escHtml(playlist.name)}">
+    <div class="pl-card-art"><div class="pl-cover ${playlist.cover ? 'has-cover' : ''}">${cover}</div></div>
+    <div class="pl-card-t">${escHtml(playlist.name)}</div>
+    <div class="pl-card-a">${escHtml(summary)}</div>
+    <div class="pl-playlist-card-actions">
+      <button type="button" class="act-btn secondary" data-edit-player-playlist="${escHtml(playlist.id)}">Edit</button>
+      <button type="button" class="act-btn secondary" data-delete-player-playlist="${escHtml(playlist.id)}">Delete</button>
+    </div>
+  </div>`;
+}
+
+function libPlaylistHeaderHtml(playlist) {
+  const cover = playlist.cover
+    ? `<img src="${escHtml(playlist.cover)}" alt="" draggable="false">`
+    : `<span class="pl-cover-ph">${LIB_NOTE_SVG}</span>`;
+  const duration = playlist.tracks.reduce((sum, track) => sum + (track.duration_s || 0), 0);
+  const missing = playlist.tracks.filter(t => t.downloaded === false).length;
+  const meta = [plural(playlist.tracks.length, 'track'), missing ? `${missing} not downloaded` : '', libDuration(duration)].filter(Boolean);
+  return `<button type="button" class="pl-back" data-onclick="playerBack()">${LIB_BACK_SVG}Playlists</button>
+    <div class="pl-detail-head">
+      <div class="pl-cover ${playlist.cover ? 'has-cover' : ''} pl-detail-cover">${cover}</div>
+      <div class="pl-detail-info">
+        <span class="pl-detail-kind">Playlist</span>
+        <h2 class="pl-detail-title">${escHtml(playlist.name)}</h2>
+        ${playlist.description ? `<div class="pl-playlist-description">${escHtml(playlist.description)}</div>` : ''}
+        <div class="pl-detail-meta">${meta.map(escHtml).join('<span aria-hidden="true"> · </span>')}</div>
+        <div class="pl-detail-actions">
+          <button class="pt-btn primary" type="button" data-play-player-playlist="${escHtml(playlist.id)}">${LIB_PLAY_SVG}Play</button>
+          <button class="pt-btn" type="button" data-shuffle-player-playlist="${escHtml(playlist.id)}">${LIB_SHUFFLE_SVG}Shuffle</button>
+          <button class="pt-btn" type="button" data-edit-player-playlist="${escHtml(playlist.id)}">Edit</button>
+          <button class="pt-btn" type="button" data-export-player-playlist="${escHtml(playlist.id)}">Export M3U8</button>
+        </div>
+      </div>
+    </div>`;
 }
 
 function libDetailActions(kind, key) {
@@ -9825,28 +12002,87 @@ function libAlbumHeaderHtml(a) {
     </div>`;
 }
 
+const LIB_PLAYS = t => parseInt(t.plays ?? t.playcount ?? t.playCount ?? t.plays_count ?? '0', 10) || 0;
+
+// The artist's newest release: their own albums first, a guest spot only
+// when they have none.
+function libLatestAlbum(albums) {
+  const newest = list => list.slice().sort((x, y) => String(y.year || '').localeCompare(String(x.year || '')))[0];
+  return newest(albums.filter(al => libAlbumIsBy(al, lib.artist))) || newest(albums);
+}
+
+// Top songs by play count when the files carry one; otherwise the newest
+// release's tracks lead, in album order.
+function libArtistTopSongs(key, albums) {
+  const tracks = libArtistTracks(key).filter(t => t.downloaded !== false);
+  if (tracks.some(t => LIB_PLAYS(t) > 0)) {
+    return { ranked: true, tracks: tracks.slice().sort((x, y) => LIB_PLAYS(y) - LIB_PLAYS(x)).slice(0, 5) };
+  }
+  const order = albums.slice().sort((x, y) => String(y.year || '').localeCompare(String(x.year || '')));
+  const rank = new Map(order.map((al, i) => [al.key, i]));
+  const sorted = tracks.slice().sort((x, y) => (rank.get(libAlbumKey(x)) ?? 99) - (rank.get(libAlbumKey(y)) ?? 99));
+  return { ranked: false, tracks: sorted.slice(0, 5) };
+}
+
 function libArtistHeaderHtml(a, albums) {
   const meta = [plural(albums.length, 'album'), plural(a.tracks.length, 'track'), libDuration(a.duration)].filter(Boolean);
-  return `<button type="button" class="pl-back" data-onclick="playerBack()">${LIB_BACK_SVG}Artists</button>
-    <div class="pl-detail-head">
-      ${libCoverHtml((albums[0]?.tracks[0] || a.tracks[0])?.path, 400, 'pl-detail-cover')}
-      <div class="pl-detail-info">
-        <span class="pl-detail-kind">Artist</span>
-        <h2 class="pl-detail-title">${escHtml(a.name)}</h2>
-        <div class="pl-detail-meta">${meta.map(escHtml).join('<span aria-hidden="true"> · </span>')}</div>
-        ${libDetailActions('artist', a.key)}
+  const heroPath = (albums[0]?.tracks[0] || a.tracks[0])?.path;
+  const latest = libLatestAlbum(albums);
+  const top = libArtistTopSongs(a.key, albums);
+  lib.artistTop = top.tracks;
+  const latestHtml = latest ? `<section class="pl-artist-sec">
+      <h3 class="pl-sec-title">Latest Release</h3>
+      <div class="pl-latest" role="button" tabindex="0" data-activate data-album="${escHtml(latest.key)}" title="${escHtml(latest.title)}">
+        ${libCoverHtml(latest.tracks[0]?.path, 400, 'pl-latest-cover')}
+        <div class="pl-latest-info">
+          ${latest.year ? `<span class="pl-latest-date">${escHtml(String(latest.year))}</span>` : ''}
+          <span class="pl-latest-title">${escHtml(latest.title)}</span>
+          <span class="pl-latest-meta">${escHtml(plural(latest.tracks.length, 'track'))}</span>
+        </div>
       </div>
-    </div>`;
+    </section>` : '';
+  const topHtml = top.tracks.length ? `<section class="pl-artist-sec">
+      <h3 class="pl-sec-title">${top.ranked ? 'Top Songs' : 'Songs'}</h3>
+      <div class="pl-top-list" role="list">${top.tracks.map((t, i) => `
+        <div class="pl-top-row" role="listitem" tabindex="0" data-activate data-artist-top="${i}" title="Play ${escHtml(t.title)}">
+          ${libCoverHtml(t.path, 120, 'pl-top-cover')}
+          <div class="pl-top-info"><span class="pl-top-t">${escHtml(t.title)}</span><span class="pl-top-a">${escHtml(t.album || '')}</span></div>
+          <span class="pl-top-dur">${t.duration_s ? fmtTime(t.duration_s) : ''}</span>
+        </div>`).join('')}
+      </div>
+    </section>` : '';
+  return `<div class="pl-artist-hero">
+      ${libCoverHtml(heroPath, 400, 'pl-artist-hero-bg')}
+      <button type="button" class="pl-hero-back" data-onclick="playerBack()" aria-label="Back to artists" title="Artists">${LIB_BACK_SVG}</button>
+      <div class="pl-artist-hero-body">
+        <h2 class="pl-artist-name">${escHtml(a.name)}</h2>
+        <div class="pl-artist-meta">${meta.map(escHtml).join('<span aria-hidden="true"> · </span>')}</div>
+        <div class="pl-artist-actions">
+          <button type="button" class="pl-round" data-shuffle-artist="${escHtml(a.key)}" aria-label="Shuffle ${escHtml(a.name)}" title="Shuffle">${LIB_SHUFFLE_SVG}</button>
+          <button type="button" class="pl-round primary" data-play-artist="${escHtml(a.key)}" aria-label="Play ${escHtml(a.name)}" title="Play">${LIB_PLAY_SVG}</button>
+        </div>
+      </div>
+    </div>
+    ${latestHtml || topHtml ? `<div class="pl-artist-cols">${latestHtml}${topHtml}</div>` : ''}`;
 }
 
 function libRowHtml(t, i) {
   const inAlbum = !!lib.album;
   const art = inAlbum ? (t.artist && t.artist !== libArtistOf(t) ? t.artist : '') : [t.artist, t.album].filter(Boolean).join(' — ');
   const num = inAlbum && t.track ? t.track : i + 1;
-  return `<div class="pl-row" role="listitem" tabindex="0" data-activate data-i="${i}" data-p="${escHtml(t.path)}" data-size="0">
+  const rowAction = lib.tab === 'playlists' && lib.playlist
+    ? `<span class="pl-row-actions">
+        <button type="button" class="pl-row-action" data-move-player-track="${i},-1" ${i === 0 ? 'disabled' : ''} aria-label="Move ${escHtml(t.title)} up" title="Move up">↑</button>
+        <button type="button" class="pl-row-action" data-move-player-track="${i},1" ${i === lib.view.length - 1 ? 'disabled' : ''} aria-label="Move ${escHtml(t.title)} down" title="Move down">↓</button>
+        <button type="button" class="pl-row-action" data-remove-player-track="${i}" aria-label="Remove ${escHtml(t.title)} from playlist" title="Remove from playlist">−</button>
+      </span>`
+    : `<button type="button" class="pl-row-action" data-add-player-track="${i}" aria-label="Add ${escHtml(t.title)} to playlist" title="Add to selected playlist">+</button>`;
+  const remote = t.downloaded === false;
+  const badge = remote ? '<span class="pl-not-downloaded" title="Not in your library yet: download it and it plays from here">Not downloaded</span>' : '';
+  return `<div class="pl-row ${remote ? 'is-remote' : ''}" role="listitem" tabindex="0" data-activate data-i="${i}" data-p="${remote ? '' : escHtml(t.path)}" data-size="0">
     <div class="pl-num"><span class="n">${num}</span><span class="pi" aria-hidden="true">${LIB_PLAY_SVG}</span><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span></div>
     <div class="pl-thumb"><img alt="" draggable="false"></div>
-    <div class="pl-main"><div class="pl-t">${escHtml(t.title)}</div>${art ? `<div class="pl-a">${escHtml(art)}</div>` : ''}</div>
+    <div class="pl-main"><div class="pl-main-info"><div class="pl-t">${escHtml(t.title)}${badge}</div>${art ? `<div class="pl-a">${escHtml(art)}</div>` : ''}</div>${rowAction}</div>
     <div class="pl-dur">${t.duration_s ? fmtTime(t.duration_s) : ''}</div>
     <div class="pl-fmt">${escHtml(t.format)}</div>
   </div>`;
@@ -9869,6 +12105,16 @@ function renderPlayerEmptyState() {
 
   const title = empty.querySelector('.player-empty-title');
   const copy = empty.querySelector('.player-empty-copy');
+  if (lib.tab === 'playlists' && lib.playlist) {
+    title.textContent = 'This playlist is empty';
+    copy.textContent = 'Add tracks from Songs, Albums or Artists.';
+    return;
+  }
+  if (lib.tab === 'playlists') {
+    title.textContent = 'No playlists yet';
+    copy.textContent = 'Create a playlist or import an M3U/M3U8 file above.';
+    return;
+  }
   const query = ($('player-search')?.value || '').trim();
   if (query && lib.items.length) {
     title.textContent = 'Nothing matches';
@@ -9917,13 +12163,17 @@ function libObserve(root) {
 // for covers it has already sent.
 const libThumbCache = new Map();
 const libThumbQueue = [];
+let libThumbPumpQueued = false;
 function libLoadThumb(el) {
   el.dataset.th = '1';
   if (!el.dataset.p) return;
   const key = `${el.dataset.p}\u0000${el.dataset.size || 0}`;
   if (libThumbCache.has(key)) { libShowThumb(el, libThumbCache.get(key)); return; }
   libThumbQueue.push(el);
-  libPumpThumbs();
+  if (!libThumbPumpQueued) {
+    libThumbPumpQueued = true;
+    setTimeout(() => { libThumbPumpQueued = false; libPumpThumbs(); }, 0);
+  }
 }
 function libShowThumb(el, url) {
   const img = el.querySelector('img');
@@ -9931,17 +12181,42 @@ function libShowThumb(el, url) {
   img.src = url;
   el.classList.add('has-cover');
 }
+// Covers are asked for in batches the backend reads side by side, the rows
+// seen last first: scrolling fast through a long list should not leave the
+// screen waiting on covers for rows already scrolled past.
+function libThumbNear(el) {
+  if (!el.isConnected) return false;
+  const r = el.getBoundingClientRect();
+  return r.bottom > -600 && r.top < innerHeight + 600;
+}
 async function libPumpThumbs() {
-  while (lib.thumbBusy < 4 && libThumbQueue.length) {
-    const el = libThumbQueue.shift();
-    if (!el.isConnected) continue;
+  const api = window.pywebview?.api;
+  while (lib.thumbBusy < 2 && libThumbQueue.length) {
+    const batch = [];
+    while (batch.length < 24 && libThumbQueue.length) {
+      const el = libThumbQueue.pop();
+      if (libThumbNear(el)) batch.push(el);
+      else if (el.isConnected) { delete el.dataset.th; libIO?.observe(el); } // ask again when it comes back
+    }
+    if (!batch.length) break;
     lib.thumbBusy++;
     (async () => {
-      const key = `${el.dataset.p}\u0000${el.dataset.size || 0}`;
+      const size = Number(batch[0].dataset.size) || 0;
+      const sameSize = batch.every(el => (Number(el.dataset.size) || 0) === size);
       try {
-        const url = await window.pywebview?.api?.get_track_thumb?.(el.dataset.p, Number(el.dataset.size) || 0);
-        libThumbCache.set(key, url || '');
-        if (el.isConnected) libShowThumb(el, url);
+        let urls = {};
+        if (sameSize && api?.get_track_thumbs) {
+          urls = (await api.get_track_thumbs([...new Set(batch.map(el => el.dataset.p))], size)) || {};
+        } else {
+          await Promise.all(batch.map(async el => {
+            urls[el.dataset.p] = await api?.get_track_thumb?.(el.dataset.p, Number(el.dataset.size) || 0);
+          }));
+        }
+        batch.forEach(el => {
+          const url = urls[el.dataset.p] || '';
+          libThumbCache.set(`${el.dataset.p}\u0000${el.dataset.size || 0}`, url);
+          if (el.isConnected) libShowThumb(el, url);
+        });
       } catch (e) { /* a missing cover is fine */ }
       lib.thumbBusy--;
       libPumpThumbs();
@@ -9955,7 +12230,25 @@ function libQueueItems(tracks) {
 
 function playFromLibrary(index, shuffle) {
   const tracks = lib.view.length ? lib.view : (lib.playAll || []);
-  if (tracks.length) startPlayback(libQueueItems(tracks), index, shuffle, false);
+  const chosen = tracks[index];
+  if (chosen && chosen.downloaded === false) {
+    toastMgr.info('This song is not downloaded yet.');
+    return;
+  }
+  // A playlist can list songs that are not downloaded: the queue skips
+  // them, so the clicked song's place is counted among the playable ones.
+  const playable = tracks.filter(t => t.downloaded !== false);
+  const at = Math.max(0, playable.indexOf(chosen));
+  if (playable.length) startPlayback(libQueueItems(playable), at, shuffle, false);
+}
+
+// The toolbar's "Play all" / "Shuffle": every playable song on the page,
+// skipping the ones not downloaded wherever they sit in the list.
+function playAllFromLibrary(shuffle) {
+  const tracks = lib.view.length ? lib.view : (lib.playAll || []);
+  const playable = tracks.filter(t => t.downloaded !== false);
+  if (playable.length) startPlayback(libQueueItems(playable), 0, !!shuffle, false);
+  else if (tracks.length) toastMgr.info('None of these songs is downloaded yet.');
 }
 
 // An artist plays album by album, each in track order: their own albums
@@ -9987,13 +12280,60 @@ function markPlayingRow() {
   const list = $('player-list');
   if (!list) return;
   list.addEventListener('click', e => {
+    const move = e.target.closest('[data-move-player-track]');
+    if (move) {
+      e.preventDefault();
+      e.stopPropagation();
+      const [index, delta] = move.dataset.movePlayerTrack.split(',');
+      reorderPlayerPlaylistTrack(index, delta);
+      return;
+    }
+    const add = e.target.closest('[data-add-player-track]');
+    if (add) {
+      e.preventDefault();
+      e.stopPropagation();
+      addPlayerTrackToPlaylist(add.dataset.addPlayerTrack);
+      return;
+    }
+    const remove = e.target.closest('[data-remove-player-track]');
+    if (remove) {
+      e.preventDefault();
+      e.stopPropagation();
+      removePlayerPlaylistTrack(remove.dataset.removePlayerTrack);
+      return;
+    }
     const row = e.target.closest('.pl-row');
     if (row) playFromLibrary(Number(row.dataset.i));
   });
   const onGroupClick = e => {
-    const t = e.target.closest('[data-play-album],[data-play-artist],[data-shuffle-album],[data-shuffle-artist],[data-artist-link],.pl-card');
+    const t = e.target.closest('[data-artist-top],[data-play-album],[data-play-artist],[data-shuffle-album],[data-shuffle-artist],[data-artist-link],[data-player-playlist],[data-play-player-playlist],[data-shuffle-player-playlist],[data-edit-player-playlist],[data-delete-player-playlist],[data-export-player-playlist],.pl-card,.pl-latest');
     if (!t) return;
     const d = t.dataset;
+    if (d.editPlayerPlaylist != null) { e.stopPropagation(); openPlayerPlaylistEditor(d.editPlayerPlaylist); return; }
+    if (d.deletePlayerPlaylist != null) { e.stopPropagation(); deletePlayerPlaylist(d.deletePlayerPlaylist); return; }
+    if (d.exportPlayerPlaylist != null) { e.stopPropagation(); exportPlayerPlaylist(d.exportPlayerPlaylist); return; }
+    if (d.playPlayerPlaylist != null) {
+      e.stopPropagation();
+      const playlist = lib.playlists.find(p => p.id === d.playPlayerPlaylist);
+      const playable = (playlist?.tracks || []).filter(t => t.downloaded !== false);
+      if (playable.length) startPlayback(libQueueItems(playable), 0, false, false);
+      else if (playlist) toastMgr.info('None of these songs is downloaded yet.');
+      return;
+    }
+    if (d.shufflePlayerPlaylist != null) {
+      e.stopPropagation();
+      const playlist = lib.playlists.find(p => p.id === d.shufflePlayerPlaylist);
+      const playable = (playlist?.tracks || []).filter(t => t.downloaded !== false);
+      if (playable.length) startPlayback(libQueueItems(playable), 0, true, false);
+      else if (playlist) toastMgr.info('None of these songs is downloaded yet.');
+      return;
+    }
+    if (d.artistTop != null) {
+      const top = lib.artistTop || [];
+      if (top.length) startPlayback(libQueueItems(top), Number(d.artistTop) || 0, false, false);
+      return;
+    }
+    if (d.playerPlaylist != null) { openPlayerPlaylist(d.playerPlaylist); return; }
     if (d.playAlbum != null) { e.stopPropagation(); playLibraryGroup('album', d.playAlbum, false); return; }
     if (d.playArtist != null) { e.stopPropagation(); playLibraryGroup('artist', d.playArtist, false); return; }
     if (d.shuffleAlbum != null) { playLibraryGroup('album', d.shuffleAlbum, true); return; }
@@ -10015,7 +12355,7 @@ function markPlayingRow() {
     if (top > 40 && box.scrollHeight - box.clientHeight > 160) view.classList.add('player-compact');
     else if (top < 8) view.classList.remove('player-compact');
   }, { passive: true });
-  const audio = $('player-audio');
+  const audio = playerEngine;
   audio.addEventListener('play', () => $('player-list').classList.remove('paused'));
   audio.addEventListener('pause', () => $('player-list').classList.add('paused'));
 })();

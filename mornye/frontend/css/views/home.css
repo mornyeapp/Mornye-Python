@@ -519,6 +519,18 @@
   cursor: pointer;
 }
 .search-result-item:last-child { border-bottom: none; }
+.search-result-playlist-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--rule);
+}
+.search-result-playlist-row .search-result-item {
+  flex: 1;
+  min-width: 0;
+  border-bottom: 0;
+}
+.sr-import-playlist { flex-shrink: 0; }
 
 .search-result-thumbnail {
   background: var(--selected);
@@ -595,7 +607,20 @@
   gap: var(--space-2); padding: var(--space-4) var(--space-2);
   margin: 0 auto; max-width: 100%; font-size: var(--text-md);
 }
-#page-info { color: var(--text-muted); min-width: 120px; text-align: center; font-family: var(--font); }
+#page-info {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  color: var(--text-muted); min-width: 120px; text-align: center; font-family: var(--font);
+}
+/* The page number is a field: type one and press Enter to go there. */
+#page-info .page-jump {
+  width: 6ch; padding: 2px var(--space-1); text-align: center;
+  border: 1px solid var(--rule); border-radius: var(--radius-1);
+  background: var(--ground); color: var(--text);
+  font: inherit; font-variant-numeric: tabular-nums; -moz-appearance: textfield;
+}
+#page-info .page-jump::-webkit-outer-spin-button,
+#page-info .page-jump::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+#page-info .page-jump:focus-visible { outline: none; border-color: var(--signal-strong); }
 /* Per-row download progress — app.js's syncTrackRowsWithQueue() mirrors
    each queue item onto its row (matched by data-spotify-id, so it
    survives a re-sort) whenever the queue re-renders, setting
@@ -1455,6 +1480,92 @@ body:has(#album-card:not(.hidden)) #fetchBtn {
 /* The margin:0 above glued the search bar to the card's bottom border. */
 #album-card:not(.hidden) ~ #track-controls { margin-top: var(--space-4); }
 
+/* ── Track list: Spotify-style ────────────────────────────────────────────
+   Rows without rules between them, larger rounded covers, a quiet
+   sentence-case header with a clock over the durations. The row number and
+   its checkbox share the first column: the number shows, the checkbox takes
+   its place on hover, on keyboard focus, or while the track is deselected —
+   so selection still works and still reads at a glance. Search folds into a
+   magnifier beside the sort menu and opens when clicked or typed into. The
+   narrow-container rules above (column collapse) keep working: the shared
+   first column only applies where every column is on screen. */
+.track-table-header {
+  border-bottom: 1px solid var(--rule);
+  text-transform: none; letter-spacing: 0; font-size: var(--text-sm); font-weight: 400;
+  margin-bottom: var(--space-2);
+}
+.th-dur { display: flex; justify-content: flex-end; padding-right: 22px; }
+.th-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.track-row {
+  min-height: 56px; border-bottom: 0; border-radius: var(--radius-1);
+}
+.track-row:hover, .track-row:focus-within { background: var(--raised); }
+.track-row:focus-within:not(.done):not(.failed):not(.skipped):not(.dl-active) { box-shadow: none; }
+.tr-thumb { width: 40px; height: 40px; border-radius: 4px; overflow: hidden; flex: none; }
+.tr-thumb img { border-radius: 4px; }
+.tr-name { font-size: var(--text-md); font-weight: 500; }
+.tr-num { text-align: center; padding: 0; color: var(--text-muted); font-size: var(--text-md); }
+.tr-playcount { color: var(--text-muted); }
+
+@container tracktable (min-width: 799px) {
+  .track-table-header, .track-row {
+    grid-template-columns: 40px minmax(0, 1.7fr) minmax(0, 1fr) 72px 150px;
+  }
+  .track-table-header > :nth-child(1), .track-row > .tr-check,
+  .track-table-header > :nth-child(2), .track-row > .tr-num { grid-column: 1; grid-row: 1; justify-self: center; }
+  /* The number shares the checkbox's cell and comes after it, so even at
+     opacity 0 it sat on top and swallowed the click on "select all". */
+  .track-table-header > :nth-child(2), .track-row > .tr-num { pointer-events: none; }
+  .track-table-header > :nth-child(3), .track-row > .tr-title-cell { grid-column: 2; }
+  .track-table-header > div:nth-child(4), .track-row > .tr-playcount { grid-column: 3; text-align: left; padding-left: 0; }
+  .track-table-header > :nth-child(5), .track-row > .tr-dur { grid-column: 4; }
+  .track-table-header > :nth-child(6), .track-row > .tr-actions { grid-column: 5; }
+  /* Block, not the centred flex box of the base rule: a long album name
+     was clipped on both sides instead of trailing off on the right. */
+  .track-row > .tr-playcount {
+    display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    padding-right: var(--space-3);
+  }
+
+  .track-row > .tr-check, .track-table-header > :nth-child(1) { opacity: 0; }
+  .track-row:hover > .tr-check,
+  .track-row:focus-within > .tr-check,
+  .track-row:has(.track-cb:not(:checked)) > .tr-check,
+  .track-table-header:hover > :nth-child(1),
+  .track-table-header:focus-within > :nth-child(1),
+  .track-table-header:has(#check-all:not(:checked)) > :nth-child(1) { opacity: 1; }
+  .track-row:hover > .tr-num,
+  .track-row:focus-within > .tr-num,
+  .track-row:has(.track-cb:not(:checked)) > .tr-num,
+  .track-table-header:hover > :nth-child(2),
+  .track-table-header:focus-within > :nth-child(2),
+  .track-table-header:has(#check-all:not(:checked)) > :nth-child(2) { opacity: 0; }
+  .tr-check input, .track-table-header input { width: 15px; height: 15px; }
+}
+
+#track-controls { justify-content: flex-end; gap: var(--space-3); }
+#track-search-wrap { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; }
+#track-search-wrap .ts-icon {
+  flex: none; position: static; transform: none; pointer-events: auto; cursor: pointer;
+  display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%;
+  color: var(--text-muted);
+}
+#track-search-wrap .ts-icon:hover { color: var(--text); background: var(--raised); }
+#track-search-wrap #trackSearch {
+  width: 0; padding: 0; border-color: transparent; background: transparent; opacity: 0;
+  transition: width var(--motion) var(--ease), padding var(--motion) var(--ease), opacity var(--motion) var(--ease);
+}
+#track-search-wrap:focus-within #trackSearch,
+#track-search-wrap #trackSearch:not(:placeholder-shown) {
+  /* Shrinks rather than pushing past the edge when the row is narrow. */
+  width: 240px; flex: 0 1 240px; min-width: 0; padding: 6px 10px; opacity: 1;
+  border-color: var(--rule); background: var(--raised);
+}
+#track-controls .sort-wrap { flex: none; }
+#track-controls #sort-select { width: auto; border-color: transparent; background-color: transparent; color: var(--text-muted); }
+#track-controls #sort-select:hover, #track-controls #sort-select:focus-visible { color: var(--text); background-color: var(--raised); }
+@media (prefers-reduced-motion: reduce) { #track-search-wrap #trackSearch { transition: none; } }
+
 /* ── Album card: compact layout ─────────────────────────────────────────
    The facts column was a 200px single file of six label/value pairs, so it
    ran ~300px tall, wrapped every label and copyright line, and set the card
@@ -1616,3 +1727,366 @@ body:has(#album-card:not(.hidden)) #fetchBtn {
     font-size: var(--text-2xl); font-weight: var(--weight-bold); line-height: 1.1;
   }
 }
+
+/* ── Artist page: hero ────────────────────────────────────────────────────
+   Laid out like Spotify's artist page: the header banner with the name in
+   its bottom-left corner, and the round download controls on a row under
+   it, between the banner and Popular. Rank, listeners and the biography
+   live in the About card further down. The banner stays dark at its foot in
+   both themes so the white name always reads. */
+#album-card.artist-mode {
+  --hero-h: clamp(240px, 32vw, 380px);
+  position: relative; overflow: visible; isolation: isolate;
+  flex-direction: column; flex-wrap: nowrap; align-items: stretch; justify-content: flex-start;
+  min-height: 0; padding: 0;
+  border: 0; border-radius: 0; background: none; box-shadow: none;
+  color: var(--text); text-align: left;
+}
+#album-card > .artist-hero-bg { display: none; }
+#album-card.artist-mode > .artist-hero-bg {
+  display: block; position: absolute; inset: 0 0 auto 0; height: var(--hero-h); z-index: 0;
+  overflow: hidden; border-radius: var(--radius-2); pointer-events: none;
+  background: linear-gradient(160deg, var(--media-tint-to), var(--media-bg));
+}
+.artist-hero-bg img {
+  width: 100%; height: 100%; object-fit: cover; object-position: center 22%;
+  filter: brightness(.9);
+}
+/* Darkest at the bottom-left, where the name sits; the photo reads clearly
+   everywhere else. */
+.artist-hero-bg::after {
+  content: ""; position: absolute; inset: 0;
+  background:
+    linear-gradient(180deg, rgba(var(--shade-rgb), 0) 45%, rgba(var(--shade-rgb), .6) 100%),
+    linear-gradient(90deg, rgba(var(--shade-rgb), .25) 0%, rgba(var(--shade-rgb), 0) 60%);
+}
+#album-card.artist-mode #album-cover,
+#album-card.artist-mode #album-tech,
+#album-card.artist-mode #album-type-badge,
+#album-card.artist-mode #album-meta,
+#album-card.artist-mode #album-meta-details,
+#album-card.artist-mode #album-subtitle,
+#album-card.artist-mode .artist-bio-toggle { display: none !important; }
+/* flex: none — the shared rule grows #album-info to the card's full height. */
+#album-card.artist-mode #album-info {
+  position: relative; z-index: 1;
+  flex: none; align-self: stretch; align-items: flex-start; justify-content: flex-start;
+  width: 100%; max-width: none; padding: 0; gap: 0;
+}
+/* The title fills the banner's height so its text lands in the bottom-left. */
+#album-card.artist-mode #album-title {
+  box-sizing: border-box; width: 100%; min-height: var(--hero-h);
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-end; gap: var(--space-2);
+  padding: var(--space-6) 72px var(--space-5) var(--space-5);
+  color: var(--media-ink); font-size: var(--text-md); font-weight: 400; line-height: 1.2;
+  text-shadow: 0 1px 12px rgba(var(--shade-rgb), .45);
+}
+#album-card.artist-mode .hero-verified { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); }
+#album-card.artist-mode .hero-verified svg { flex: none; }
+#album-card.artist-mode .hero-name {
+  font-size: clamp(32px, 5.2vw, 76px); line-height: 1; font-weight: 800; letter-spacing: -0.03em;
+  overflow-wrap: anywhere; margin-bottom: var(--space-2);
+}
+#album-card.artist-mode .hero-listeners { font-size: var(--text-md); }
+:is(#album-card.artist-mode, #album-card.playlist-mode) #album-actions {
+  justify-content: flex-start; align-items: center; gap: var(--space-3);
+  margin: 0; padding: var(--space-5) 0 0;
+}
+/* Icon-only round buttons; the label stays as the accessible name. */
+:is(#album-card.artist-mode, #album-card.playlist-mode) #album-actions .act-btn {
+  order: 3; width: 48px; height: 48px; min-width: 0; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 0; gap: 0;
+  border: 0; border-radius: 50%;
+  background: var(--raised); color: var(--text);
+  transition: transform .15s ease, filter .15s ease;
+}
+:is(#album-card.artist-mode, #album-card.playlist-mode) #album-actions .act-btn svg { width: 20px; height: 20px; }
+:is(#album-card.artist-mode, #album-card.playlist-mode) #album-actions .act-btn:hover { filter: brightness(1.08); transform: scale(1.05); }
+:is(#album-card.artist-mode, #album-card.playlist-mode) #album-actions #save-all-covers-btn { order: 1; }
+/* Nothing can be selected on the overview; the button comes back once
+   Discography's "Show all" opens the list where tracks are picked. */
+.list-container.artist-overview-mode #album-card.artist-mode #dl-selected-btn { display: none !important; }
+:is(#album-card.artist-mode, #album-card.playlist-mode) #album-actions #dl-selected-btn { order: 1; }
+:is(#album-card.artist-mode, #album-card.playlist-mode) #album-actions .act-btn.primary {
+  order: 0; width: 64px; height: 64px; margin-right: var(--space-2);
+  background: var(--signal); color: var(--signal-ink); box-shadow: 0 6px 18px rgba(var(--shade-rgb), .25);
+}
+:is(#album-card.artist-mode, #album-card.playlist-mode) #album-actions .act-btn.primary svg { width: 26px; height: 26px; }
+:is(#album-card.artist-mode, #album-card.playlist-mode) #album-actions .act-btn:focus-visible { outline: 2px solid var(--signal-strong); outline-offset: 2px; }
+#album-card.artist-mode > button[data-onclick="closeAlbumCard()"] {
+  position: absolute; z-index: 2; color: var(--media-ink);
+  width: 36px; height: 36px; border-radius: 50%; background: rgba(var(--shade-rgb), .35);
+  display: grid; place-items: center; top: 14px; right: 14px;
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(#album-card.artist-mode, #album-card.playlist-mode) #album-actions .act-btn { transition: none; }
+  :is(#album-card.artist-mode, #album-card.playlist-mode) #album-actions .act-btn:hover { transform: none; }
+}
+
+/* ── Playlist header ──────────────────────────────────────────────────────
+   Laid out like Spotify's: the cover beside a large title, the description
+   and one line of owner · tracks · total time · followers under it, all
+   sitting on the cover's own colour (--album-glow, sampled in app.js); the
+   round download controls on a row of their own beneath. #album-info is
+   display: contents so its children — the buttons included — become cells
+   of the card's grid without moving them in the markup. */
+#album-card.playlist-mode {
+  display: grid; align-items: end;
+  grid-template-columns: clamp(132px, 22vw, 232px) minmax(0, 1fr);
+  column-gap: var(--space-5); row-gap: 0;
+  padding: var(--space-5) var(--space-5) var(--space-4);
+  border: 0; border-radius: var(--radius-2);
+  background:
+    linear-gradient(180deg, var(--album-glow, rgba(var(--shade-rgb), .08)) 0%, rgba(var(--shade-rgb), 0) 100%),
+    var(--surface);
+}
+#album-card.playlist-mode #album-info { display: contents; }
+#album-card.playlist-mode #album-cover {
+  grid-column: 1; grid-row: 1 / span 6; align-self: end;
+  width: 100%; height: auto; aspect-ratio: 1; box-shadow: 0 8px 28px rgba(var(--shade-rgb), .35);
+}
+#album-card.playlist-mode #album-info > * { grid-column: 2; min-width: 0; }
+#album-card.playlist-mode #album-type-badge { grid-row: 2; margin: 0 0 var(--space-1); font-size: var(--text-sm); color: var(--text); }
+#album-card.playlist-mode #album-title {
+  grid-row: 3; margin: 0 0 var(--space-3);
+  font-size: clamp(30px, 5.5vw, 84px); line-height: 1; font-weight: 800; letter-spacing: -0.03em;
+  overflow-wrap: anywhere;
+}
+#album-card.playlist-mode #album-subtitle { grid-row: 4; margin: 0 0 var(--space-2); color: var(--text-muted); }
+#album-card.playlist-mode #album-meta { grid-row: 5; }
+#album-card.playlist-mode #album-meta-details { grid-row: 6; color: var(--text-muted); }
+#album-card.playlist-mode #album-owner { color: var(--text); font-weight: 700; }
+#album-card.playlist-mode #album-description { grid-row: 4; }
+#album-card.playlist-mode #album-tech { display: none !important; }
+#album-card.playlist-mode #album-actions {
+  grid-column: 1 / -1; grid-row: 7;
+  justify-content: flex-start; align-items: center; flex-wrap: wrap; gap: var(--space-3);
+  margin: 0; padding: var(--space-5) 0 0;
+}
+@media (max-width: 720px) {
+  #album-card.playlist-mode { grid-template-columns: minmax(0, 1fr); padding: var(--space-4); }
+  #album-card.playlist-mode #album-cover { grid-row: 1; width: min(60%, 232px); justify-self: center; margin-bottom: var(--space-4); }
+  #album-card.playlist-mode #album-info > * { grid-column: 1; }
+  #album-card.playlist-mode #album-type-badge { grid-row: 2; }
+  /* Six controls on one row at phone width. */
+  .list-container #album-card.playlist-mode #album-actions { gap: var(--space-2); }
+  .list-container #album-card.playlist-mode #album-actions .act-btn { width: 40px; height: 40px; }
+  .list-container #album-card.playlist-mode #album-actions .act-btn.primary { width: 52px; height: 52px; margin-right: 0; }
+}
+
+/* ── Artist page: About ───────────────────────────────────────────────── */
+.artist-about { display: grid; gap: var(--space-3); padding: var(--space-2) 0 var(--space-5); }
+.about-card {
+  position: relative; isolation: isolate; overflow: hidden;
+  display: flex; align-items: flex-end; min-height: 360px;
+  border-radius: var(--radius-2); background: linear-gradient(160deg, var(--media-tint-to), var(--media-bg));
+  color: var(--media-ink);
+}
+.about-card.no-photo { min-height: 0; }
+.about-photo {
+  position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%;
+  object-fit: cover; object-position: center 25%;
+}
+/* Dark at the foot, where the text sits; the photo reads clearly above. */
+.about-card:not(.no-photo)::after {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: linear-gradient(180deg, rgba(var(--shade-rgb), 0) 35%, rgba(var(--shade-rgb), .8) 100%);
+  transition: background .2s ease;
+}
+/* The open bio can climb over the bright parts of the photo: darken all of it. */
+.artist-about.expanded .about-card:not(.no-photo)::after { background: rgba(var(--shade-rgb), .78); }
+.about-text { text-shadow: 0 1px 3px rgba(var(--shade-rgb), .6); }
+.about-rank {
+  position: absolute; top: var(--space-4); right: var(--space-4);
+  width: 96px; height: 96px; border-radius: 50%;
+  display: grid; place-content: center; text-align: center; line-height: 1.1;
+  background: var(--signal); color: var(--signal-ink); box-shadow: 0 6px 20px rgba(var(--shade-rgb), .35);
+}
+.about-rank strong { font-size: var(--text-2xl); font-weight: 800; }
+.about-rank span { font-size: var(--text-xs); }
+.about-text { display: grid; gap: var(--space-2); justify-items: start; max-width: 76ch; padding: var(--space-5); }
+.about-text p { margin: 0; }
+.about-listeners { font-size: var(--text-lg); font-weight: 700; }
+.about-facts { color: rgba(var(--media-ink-rgb), .75); font-size: var(--text-sm); }
+.about-bio {
+  color: rgba(var(--media-ink-rgb), .9); line-height: 1.5;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden;
+}
+.artist-about.expanded .about-bio { -webkit-line-clamp: unset; line-clamp: unset; }
+.about-more { padding: 0; border: 0; background: none; color: var(--media-ink); font: inherit; font-weight: 700; cursor: pointer; }
+.about-more:hover { text-decoration: underline; }
+.about-more[hidden] { display: none; }
+.about-more:focus-visible { outline: 2px solid var(--media-ink); outline-offset: 2px; }
+@media (max-width: 720px) {
+  .about-card { min-height: 280px; }
+  .about-rank { width: 72px; height: 72px; top: var(--space-3); right: var(--space-3); }
+  .about-rank strong { font-size: var(--text-lg); }
+  .about-text { padding: var(--space-4); }
+}
+
+/* ── Artist page: Spotify-style overview ─────────────────────────────────
+   Popular + Artist pick side by side, then shelves of cards that scroll
+   sideways. While it shows, the full track list and its tabs stay out of
+   the way until Discography's "Show all". */
+.list-container.artist-overview-mode #track-controls,
+.list-container.artist-overview-mode #track-table-wrap,
+.list-container.artist-overview-mode #track-render-status,
+.list-container.artist-overview-mode .artist-tabs-bar,
+.list-container.artist-overview-mode #artist-panel-albums,
+.list-container.artist-overview-mode #artist-panel-gallery { display: none !important; }
+.list-container:not(.artist-overview-mode) #artist-overview,
+#artist-tabs-section:not(:has(#artist-overview)) .ao-back { display: none; }
+.ao-loading { padding: var(--space-6) 0; color: var(--text-muted); text-align: center; }
+#artist-overview { display: grid; gap: var(--space-6); padding: var(--space-5) 0 var(--space-4); min-width: 0; }
+.ao-top { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: var(--space-6); }
+.ao-sec { display: grid; gap: var(--space-3); align-content: start; min-width: 0; }
+.ao-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.ao-showall, .ao-more {
+  padding: 0; border: 0; background: none; color: var(--text-muted);
+  font: inherit; font-size: var(--text-sm); font-weight: 700; cursor: pointer; justify-self: start;
+}
+.ao-showall:hover, .ao-more:hover { color: var(--text); text-decoration: underline; }
+.ao-showall:focus-visible, .ao-more:focus-visible { outline: 2px solid var(--signal-strong); outline-offset: 2px; }
+
+.ao-pop { display: grid; }
+.ao-pop-row {
+  display: grid; grid-template-columns: 24px 44px minmax(0, 1fr) auto 48px 32px; align-items: center; gap: var(--space-3);
+  padding: 6px var(--space-2); border-radius: var(--radius-1);
+}
+.ao-pop-row:hover { background: var(--raised); }
+.ao-pop-row .ah-top-cover { width: 44px; }
+.ao-popular:not(.expanded) .ao-pop-row.extra { display: none; }
+.ao-pop-n { color: var(--text-muted); text-align: right; font-variant-numeric: tabular-nums; }
+.ao-link { cursor: pointer; }
+.ao-link:hover { text-decoration: underline; }
+.ao-explicit {
+  display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 2px;
+  background: var(--text-muted); color: var(--surface); font-size: 9px; font-weight: 700; vertical-align: 1px;
+}
+
+.ao-pick-card {
+  display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: var(--space-3); align-items: center;
+  padding: var(--space-2); border-radius: var(--radius-2); cursor: pointer;
+}
+.ao-pick-card:hover { background: var(--raised); }
+.ao-pick-card:focus-visible { outline: 2px solid var(--signal-strong); }
+.ao-pick-cover { width: 120px; aspect-ratio: 1; overflow: hidden; border-radius: var(--radius-1); background: var(--raised); }
+.ao-pick-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ao-pick-info { display: grid; gap: 4px; justify-items: start; min-width: 0; }
+.ao-pick-note {
+  padding: 3px 10px; border-radius: 999px; background: var(--text); color: var(--surface);
+  font-size: var(--text-sm); font-weight: 600;
+}
+
+.ao-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.ao-chip {
+  padding: 6px 14px; border: 0; border-radius: 999px; background: var(--raised); color: var(--text);
+  font: inherit; font-size: var(--text-sm); cursor: pointer;
+}
+.ao-chip:hover { filter: brightness(1.08); }
+.ao-chip[aria-pressed="true"] { background: var(--text); color: var(--surface); }
+.ao-chip:focus-visible { outline: 2px solid var(--signal-strong); outline-offset: 2px; }
+
+.ao-row {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 168px; gap: var(--space-3);
+  overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+.ao-row::-webkit-scrollbar { display: none; }
+.ao-sec.show-all .ao-row {
+  grid-auto-flow: row; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); overflow: visible;
+}
+.ao-card {
+  display: grid; gap: 4px; align-content: start; padding: var(--space-2); border-radius: var(--radius-2);
+  scroll-snap-align: start; min-width: 0;
+}
+.ao-card[tabindex] { cursor: pointer; }
+.ao-card:hover { background: var(--raised); }
+.ao-card:focus-visible { outline: 2px solid var(--signal-strong); }
+.ao-card-img {
+  position: relative; aspect-ratio: 1; overflow: hidden; margin-bottom: var(--space-1);
+  display: grid; place-items: center; border-radius: var(--radius-1); background: var(--raised); font-size: 32px;
+}
+.ao-card.round .ao-card-img { border-radius: 50%; }
+.ao-card-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ao-card-name { color: var(--text); font-weight: var(--weight-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ao-card-sub {
+  color: var(--text-muted); font-size: var(--text-sm); line-height: 1.35;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+}
+.ao-card-dl {
+  position: absolute; right: 8px; bottom: 8px; width: 40px; height: 40px; border: 0; border-radius: 50%;
+  display: grid; place-items: center; background: var(--signal); color: var(--signal-ink);
+  box-shadow: 0 4px 14px rgba(var(--shade-rgb), .35); cursor: pointer;
+  opacity: 0; transform: translateY(6px); transition: opacity .15s ease, transform .15s ease;
+}
+.ao-card:hover .ao-card-dl, .ao-card:focus-within .ao-card-dl, .ao-card-dl:focus-visible { opacity: 1; transform: none; }
+@media (hover: none) { .ao-card-dl { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .ao-card-dl { transition: none; } }
+.ao-back { margin-right: auto; }
+@media (max-width: 860px) {
+  .ao-top { grid-template-columns: 1fr; }
+  .ao-row { grid-auto-columns: 136px; }
+  .ao-sec.show-all .ao-row { grid-template-columns: repeat(auto-fill, minmax(136px, 1fr)); }
+  .ao-pop-row { grid-template-columns: 20px 40px minmax(0, 1fr) 44px 32px; }
+  .ao-pop-plays { display: none; }
+}
+
+/* ── Artist page: Latest Release + Top Songs ─────────────────────────── */
+.artist-highlights {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: var(--space-6);
+  padding: var(--space-5) 0 var(--space-4);
+}
+.ah-sec { display: grid; gap: var(--space-3); align-content: start; min-width: 0; }
+.ah-title { margin: 0; color: var(--text); font-size: var(--text-lg); font-weight: 700; }
+.ah-muted { color: var(--text-muted); font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ah-latest {
+  display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: var(--space-4); align-items: center;
+  padding: var(--space-2); margin: calc(-1 * var(--space-2)); border-radius: var(--radius-2); cursor: pointer;
+}
+.ah-latest:hover { background: var(--raised); }
+.ah-latest:focus-visible { outline: 2px solid var(--signal-strong); }
+.ah-latest-cover {
+  width: 180px; aspect-ratio: 1; display: grid; place-items: center; overflow: hidden;
+  background: var(--raised); border-radius: var(--radius-1); box-shadow: 0 8px 24px rgba(var(--shade-rgb), .22);
+}
+.ah-latest-cover img { width: 100%; height: 100%; object-fit: cover; }
+.ah-latest-info { display: grid; gap: 4px; justify-items: start; min-width: 0; }
+.ah-latest-name { color: var(--text); font-size: var(--text-lg); font-weight: var(--weight-medium); overflow-wrap: anywhere; }
+.ah-top { display: grid; }
+.ah-top-row {
+  display: grid; grid-template-columns: 52px minmax(0, 1fr) auto auto; gap: var(--space-3); align-items: center;
+  padding: 6px var(--space-2); border-bottom: 1px solid var(--rule);
+}
+.ah-top-row:last-child { border-bottom: 0; }
+.ah-top-row:hover { background: var(--raised); }
+.ah-top-cover { width: 52px; aspect-ratio: 1; overflow: hidden; background: var(--raised); border-radius: var(--radius-1); }
+.ah-top-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ah-top-info { display: grid; gap: 2px; min-width: 0; }
+.ah-top-name { color: var(--text); font-weight: var(--weight-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ah-num { font-variant-numeric: tabular-nums; }
+.ah-dl {
+  width: 32px; height: 32px; display: grid; place-items: center; cursor: pointer;
+  border: 1px solid var(--rule-strong); border-radius: var(--radius-1); background: transparent; color: var(--text-2);
+}
+.ah-dl:hover { background: var(--signal); border-color: var(--signal); color: var(--signal-ink); }
+.ah-latest-info .ah-dl { margin-top: var(--space-2); }
+@media (max-width: 900px) {
+  .artist-highlights { grid-template-columns: 1fr; gap: var(--space-5); }
+}
+@media (max-width: 700px) {
+  #album-card.artist-mode #album-title { padding: var(--space-5) 56px var(--space-4) var(--space-4); }
+  :is(#album-card.artist-mode, #album-card.playlist-mode) #album-actions .act-btn { width: 44px; height: 44px; }
+  :is(#album-card.artist-mode, #album-card.playlist-mode) #album-actions .act-btn.primary { width: 56px; height: 56px; }
+  .ah-latest { grid-template-columns: 120px minmax(0, 1fr); }
+  .ah-latest-cover { width: 120px; }
+  .ah-top-row { grid-template-columns: 44px minmax(0, 1fr) auto; }
+  .ah-top-cover { width: 44px; }
+  .ah-num { display: none; }
+}
+
+/* Once a link or a search has a result on screen, the Home title and
+   tagline step aside so the result starts right under the search bar.
+   Closing the result brings them back. */
+body:has(#album-card:not(.hidden)) #home-hero,
+body:has(#text-search-container:not(.hidden)) #home-hero { display: none; }

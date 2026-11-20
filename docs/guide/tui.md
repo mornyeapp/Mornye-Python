@@ -138,8 +138,10 @@ which is what the command line already does, in
 nothing, so it disappears from the menu and the setting falls back to Hi-Res
 Lossless.
 
-*Allow quality fallback* — on by default — covers a tier a given provider
-will not serve.
+*Allow quality fallback* — on by default — accepts a lower tier when a
+provider will not serve the one you picked. Turn it off and a lower-tier
+file is discarded and the next provider is asked for the same quality; the
+track fails only when no provider has it.
 
 ### Where downloads land
 

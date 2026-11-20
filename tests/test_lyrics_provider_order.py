@@ -70,13 +70,14 @@ def _providers(monkeypatch, answers: dict[str, tuple[float, str]]):
     )
 
 
-def _fetch(order):
+def _fetch(order, word_by_word=True):
     return asyncio.run(
         L.fetch_lyrics_async(
             "Like Him",
             "Tyler, The Creator",
             duration_s=278,
             providers=order,
+            apple_word_by_word=word_by_word,
         ),
     )
 
@@ -93,11 +94,54 @@ def test_the_slower_first_choice_still_wins(monkeypatch) -> None:
 
 
 def test_reversing_the_order_reverses_the_winner(monkeypatch) -> None:
+    """With word-by-word off the order alone decides, whatever the timing."""
     _providers(
         monkeypatch,
         {"apple": (0.0, APPLE_LRC), "lrclib": (0.05, LRCLIB_LRC)},
     )
-    assert _fetch(["lrclib", "apple"])[1] == "lrclib"
+    assert _fetch(["lrclib", "apple"], word_by_word=False)[1] == "lrclib"
+
+
+def test_word_by_word_further_down_beats_a_line_synced_first_choice(
+    monkeypatch,
+) -> None:
+    _providers(
+        monkeypatch,
+        {"apple": (0.05, APPLE_LRC), "lrclib": (0.0, LRCLIB_LRC)},
+    )
+    text, provider = _fetch(["lrclib", "apple"])
+    assert provider == "apple"
+    assert "<00:03.24>" in text
+
+
+def test_word_by_word_is_ranked_by_the_order_too(monkeypatch) -> None:
+    other = "[00:02.64]<00:02.64>Damn <00:03.00>every <00:03.50>time"
+    _providers(
+        monkeypatch,
+        {
+            "lrclib": (0.0, LRCLIB_LRC),
+            "binilyrics": (0.0, other),
+            "apple": (0.0, APPLE_LRC),
+        },
+    )
+    assert _fetch(["lrclib", "binilyrics", "apple"])[1] == "binilyrics"
+
+
+def test_no_word_timing_anywhere_falls_back_to_the_first_line_synced(
+    monkeypatch,
+) -> None:
+    fake_wbw = "[00:02.64]<00:02.64>Damn, every time<00:04.00>"
+    _providers(
+        monkeypatch,
+        {
+            "apple": (0.0, ""),
+            "binilyrics": (0.0, fake_wbw),
+            "lrclib": (0.0, LRCLIB_LRC),
+        },
+    )
+    text, provider = _fetch(["apple", "binilyrics", "lrclib"])
+    assert provider == "binilyrics"
+    assert text.endswith("[00:02.64]Damn, every time")
 
 
 def test_an_empty_first_choice_falls_through_in_order(monkeypatch) -> None:

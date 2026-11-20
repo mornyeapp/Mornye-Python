@@ -22,9 +22,11 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import os
 import queue
 import re
 import shutil
+import struct
 import threading
 import time
 from collections.abc import Callable
@@ -1114,6 +1116,26 @@ class JSExtensionProvider(BaseProvider):
                             "[%s] FLAC extraction failed, keeping the original file.",
                             self.name,
                         )
+                elif d_key:
+                    # AC-4 Atmos, E-AC-3 and Opus arrive CENC-encrypted
+                    # too, with the key beside them. Only the FLAC branch
+                    # above used to pass it to ffmpeg, so these were kept
+                    # encrypted — reported as a success, and unplayable.
+                    # Decrypted by stream copy: nothing is re-encoded (and
+                    # ffmpeg has no AC-4 encoder to re-encode with).
+                    if await _decrypt_mp4_async(actual_path, d_key):
+                        logger.info(
+                            "[%s] Decrypted %s stream (stream copy).",
+                            self.name,
+                            codec or "audio",
+                        )
+                    else:
+                        logger.warning(
+                            "[%s] Could not decrypt the %s stream; the file "
+                            "is left encrypted and will not play.",
+                            self.name,
+                            codec or "audio",
+                        )
 
             fmt = _ext_to_fmt(Path(actual_path).suffix)
 
@@ -1572,7 +1594,16 @@ def _quality_to_ext(quality: str) -> str:
 
 
 def _ext_to_fmt(suffix: str) -> str:
-    return {".flac": "flac", ".mp3": "mp3", ".m4a": "m4a"}.get(suffix.lower(), "flac")
+    # ".mp4" is what Amazon's AC-4 Dolby Atmos keeps as its name: calling it
+    # "flac" printed "FLAC" for an Atmos download and sent it to the Hi-Res
+    # spectral check.
+    return {
+        ".flac": "flac",
+        ".mp3": "mp3",
+        ".m4a": "m4a",
+        ".mp4": "mp4",
+        ".opus": "opus",
+    }.get(suffix.lower(), "flac")
 
 
 async def _get_codec_async(filepath: str) -> str:
@@ -1628,6 +1659,115 @@ def _m4a_is_the_final_container(
         # An unknown target is not a reason to change what we do with the
         # download; the old path still produces a file that plays.
         return False
+
+
+def _decryption_key_candidates(raw_key: str) -> list[str]:
+    """The forms a key may arrive in, most literal first.
+
+    Same list as the Mornye app (lib/services/ffmpeg_decryption.dart): as
+    given, without a 0x prefix, as bare hex, and decoded from base64.
+    ffmpeg rejects a malformed key outright, so trying them in turn is safe.
+    """
+    import base64
+    import binascii
+
+    out: list[str] = []
+
+    def add(key: str) -> None:
+        key = key.strip()
+        if key and key not in out:
+            out.append(key)
+
+    trimmed = str(raw_key or "").strip()
+    if not trimmed:
+        return out
+    add(trimmed)
+    no_prefix = trimmed[2:] if trimmed.lower().startswith("0x") else trimmed
+    add(no_prefix)
+    compact = re.sub(r"[^0-9a-fA-F]", "", no_prefix)
+    if compact and len(compact) % 2 == 0:
+        add(compact)
+    with contextlib.suppress(binascii.Error, ValueError):
+        decoded = base64.b64decode(re.sub(r"\s+", "", no_prefix), validate=True)
+        if decoded:
+            add(decoded.hex())
+    return out
+
+
+def _restore_codec_config(original: bytes, target: Path) -> None:
+    """Put back the codec configuration ffmpeg's MOV muxer drops (AC-4's
+    `dac4`); see core/mp4_config.py. A failure keeps the decrypted file."""
+    from mornye.core.mp4_config import Mp4ConfigError, restore_codec_config
+
+    try:
+        added = restore_codec_config(original, target)
+    except (Mp4ConfigError, OSError, struct.error) as exc:
+        logger.warning("Could not restore the codec configuration: %s", exc)
+        return
+    if added:
+        logger.info("Restored the codec configuration (%s).", ", ".join(added))
+
+
+async def _decrypt_mp4_async(path: str, decryption_key: str) -> bool:
+    """Decrypt an encrypted MP4/M4A by ffmpeg stream copy, under its name.
+
+    The MP4 muxer first; then MOV, which accepts codecs the MP4 muxer
+    refuses — AC-4, Amazon's Dolby Atmos, fails with "Could not find tag
+    for codec ac4" — while the file keeps its .mp4/.m4a name. That is the
+    order the Mornye app uses for its `ffmpeg.mov_key` strategy. The result
+    is written beside the original and swapped in only on success, so a
+    failure leaves the download exactly as it was.
+    """
+    src = Path(path)
+    tmp = src.with_name(f"{src.stem}.decrypting{src.suffix}")
+    last_error = ""
+    try:
+        for key in _decryption_key_candidates(decryption_key):
+            for muxer in ("mp4", "mov"):
+                proc = await asyncio.create_subprocess_exec(
+                    "ffmpeg",
+                    "-y",
+                    "-v",
+                    "error",
+                    "-decryption_key",
+                    key,
+                    "-f",
+                    "mov",
+                    "-i",
+                    str(src),
+                    "-map",
+                    "0:a:0",
+                    "-c",
+                    "copy",
+                    "-f",
+                    muxer,
+                    str(tmp),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                _, stderr = await proc.communicate()
+                # ffmpeg can exit 0 having written only a header (a demux
+                # error mid-stream is a warning to it); stream copy keeps the
+                # size close to the original, so far smaller is not the track.
+                written = tmp.stat().st_size if tmp.is_file() else 0
+                if proc.returncode == 0 and written >= src.stat().st_size // 2:
+                    original = src.read_bytes() if muxer == "mov" else b""
+                    os.replace(tmp, src)
+                    if muxer == "mov":
+                        logger.info(
+                            "Decrypted into a MOV container (the codec is not "
+                            "allowed in MP4)."
+                        )
+                        await asyncio.to_thread(_restore_codec_config, original, src)
+                    return True
+                last_error = stderr.decode(errors="ignore")[-200:].replace("\n", " ")
+                tmp.unlink(missing_ok=True)
+    except Exception as exc:
+        last_error = str(exc)
+        with contextlib.suppress(OSError):
+            tmp.unlink(missing_ok=True)
+    logger.warning("ffmpeg decryption failed: %s", last_error)
+    return False
 
 
 async def _remux_to_flac_async(

@@ -21,6 +21,61 @@ class MusicExtrasMixin:
         download_dir: str
         log: Any
         _is_approved_path: Any
+        _remember_tracklist: Any
+
+    # ── Artist page sections ────────────────────────────────────────────────
+
+    def get_artist_overview(self, url: str) -> dict:
+        """Popular tracks, discography, related artists and the rest of a
+        Spotify artist page (core/artist_overview.py)."""
+        from ..core.artist_overview import fetch_artist_overview_async
+
+        try:
+            data = run_sync(fetch_artist_overview_async(str(url or "")), timeout=60)
+        except Exception as e:
+            self.log(f"[artist] Could not load the artist page sections: {e}", "debug")
+            return {"status": "error", "error": str(e)}
+        return {"status": "ok", **data}
+
+    def load_track_for_queue(self, url: str) -> dict:
+        """A track that is not in the list on screen, ready for the Queue.
+
+        The artist page's Popular can hold songs from other artists' records
+        (a feature), which the artist's own tracklist does not contain. The
+        Queue only downloads positions in a tracklist the backend keeps, so
+        the track is fetched from its link and kept as a one-track list of
+        its own: the same thing pasting its link on Home would do. The page
+        queues it under the returned `list_id`, at index 0.
+        """
+        from ..core.metadata_fallback import get_url_with_fallback
+        from ..core.tracklist import metadata_client_for
+
+        link = str(url or "").strip()
+        if "/track/" not in link and ":track:" not in link:
+            return {"status": "error", "error": "Not a track link"}
+        try:
+            result = run_sync(
+                get_url_with_fallback(link, lambda: metadata_client_for(link)),
+                timeout=90,
+            )
+        except Exception as e:
+            self.log(f"Could not load {link}: {e}", "error")
+            return {"status": "error", "error": str(e)}
+        tracks = list(result[1]) if result and len(result) > 1 else []
+        if not tracks:
+            return {"status": "error", "error": "No track found at this link"}
+        track = tracks[0]
+        list_id = self._remember_tracklist([track], link, "")
+        return {
+            "status": "ok",
+            "list_id": list_id,
+            "track": {
+                "id": getattr(track, "id", "") or "",
+                "title": getattr(track, "title", "") or "",
+                "artist": getattr(track, "artists", "") or "",
+                "album": getattr(track, "album", "") or "",
+            },
+        }
 
     # ── Weekly releases ─────────────────────────────────────────────────────
 

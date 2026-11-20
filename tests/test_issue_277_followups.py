@@ -87,6 +87,31 @@ def test_a_whole_list_is_whole_against_its_own_length() -> None:
     assert api._download_queue.jobs[0]["whole"] is True
 
 
+def test_a_playlist_listing_a_song_twice_is_whole_without_the_repeat() -> None:
+    # The Queue keeps one row per song, so a playlist with a repeated track
+    # never sends the repeat's position; it is still the whole playlist,
+    # downloaded into its own folder with its M3U, not as loose tracks.
+    api = MornyeAPI()
+    api._download_queue = _RecordingQueue()
+    tracks = [_track("s0"), _track("s1"), _track("s0"), _track("s2")]
+    list_id = api._remember_tracklist(tracks, A, "falling in love <3")
+
+    api.download_tracks([0, 1, 3], {}, list_id)
+
+    assert api._download_queue.jobs[0]["whole"] is True
+
+
+def test_a_missing_song_is_not_whole_even_with_repeats() -> None:
+    api = MornyeAPI()
+    api._download_queue = _RecordingQueue()
+    tracks = [_track("s0"), _track("s1"), _track("s0"), _track("s2")]
+    list_id = api._remember_tracklist(tracks, A, "falling in love <3")
+
+    api.download_tracks([0, 1, 2], {}, list_id)
+
+    assert api._download_queue.jobs[0]["whole"] is False
+
+
 def test_without_a_list_id_the_current_list_is_meant() -> None:
     api, _, _ = _api_with_two_lists()
 

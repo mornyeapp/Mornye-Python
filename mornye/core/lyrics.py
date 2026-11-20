@@ -106,11 +106,87 @@ def normalize_loose_string(text: str) -> str:
     return " ".join(text.split())
 
 
-def add_lrc_metadata(lrc_text: str, track_name: str, artist_name: str) -> str:
+#: How each provider is named in the [by:] header of a saved .lrc — the same
+#: names the settings page shows.
+LYRICS_PROVIDER_LABELS = {
+    "apple": "Apple Music",
+    "binilyrics": "BiniLyrics",
+    "lrclib": "LRCLIB",
+    "lyricsplus": "LyricsPlus",
+    "lrcred": "lrc.red",
+    "amazon": "Amazon Music",
+    "unison": "Unison",
+    "jiosaavn": "JioSaavn",
+    "kugou": "KuGou",
+    "qq": "QQ Music",
+    "genius": "Genius",
+    "spotify": "Spotify",
+}
+
+
+def lyrics_provider_label(provider: str) -> str:
+    """`provider` as a person would name it; an extension keeps its own name."""
+    provider = (provider or "").strip()
+    if provider.startswith("ext:"):
+        return provider[4:]
+    return LYRICS_PROVIDER_LABELS.get(provider.lower(), provider)
+
+
+def add_lrc_metadata(
+    lrc_text: str, track_name: str, artist_name: str, provider: str = ""
+) -> str:
+    """Prepend the ID tags. [by:] names the service the lyrics came from (the
+    LRC author, in the format's own terms) and [re:] the program that wrote
+    the file; without a known service it stays [by:Mornye] as before."""
     if not lrc_text or "[ti:" in lrc_text:
         return lrc_text
-    headers = f"[ti:{track_name}]\n[ar:{artist_name}]\n[by:Mornye]\n\n"
+    source = lyrics_provider_label(provider)
+    credit = f"[by:{source}]\n[re:Mornye]" if source else "[by:Mornye]"
+    headers = f"[ti:{track_name}]\n[ar:{artist_name}]\n{credit}\n\n"
     return headers + lrc_text
+
+
+_ANY_WORD_TAG = re.compile(r"<\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?>")
+_LEADING_LINE_TAGS = re.compile(r"^(?:\[[^\]]*\]\s*)+")
+_VOICE_PREFIX = re.compile(r"^\s*(?:<[^>]*>\s*)*v[1-9]\d*:\s*", re.IGNORECASE)
+
+
+def has_word_timing(lrc_text: str) -> bool:
+    """True when at least one line is split into two or more timed pieces —
+    real word-by-word (or syllable) timing, not just a line's start and end."""
+    if not lrc_text or "<" not in lrc_text:
+        return False
+    for line in lrc_text.split("\n"):
+        body = _LEADING_LINE_TAGS.sub("", line.strip(), count=1)
+        body = _VOICE_PREFIX.sub("", body, count=1)
+        if len([p for p in _ANY_WORD_TAG.split(body) if p.strip()]) > 1:
+            return True
+    return False
+
+
+def collapse_line_only_word_tags(lrc_text: str) -> str:
+    """Plain line-synced LRC for lyrics whose inline tags only time lines.
+
+    Some providers answer in the enhanced form even when they have no word
+    timing: every line is ``[start]<start>whole line<end>``. A player sees
+    the inline tags and shows the line as word-by-word, filling it as if it
+    were a single word. When no line anywhere has two timed pieces, the
+    inline tags carry nothing the line stamp does not, so they are dropped.
+    One real word-by-word line keeps the whole text as it is.
+    """
+    if not lrc_text or "<" not in lrc_text or has_word_timing(lrc_text):
+        return lrc_text
+    lines = lrc_text.split("\n")
+    out = []
+    for line in lines:
+        if not _ANY_WORD_TAG.search(line):
+            out.append(line)
+            continue
+        lead = _LEADING_LINE_TAGS.match(line)
+        prefix = lead.group(0) if lead else ""
+        body = _ANY_WORD_TAG.sub("", line[len(prefix) :])
+        out.append(prefix + " ".join(body.split()))
+    return "\n".join(out)
 
 
 #: Jellyfin parses word-by-word lyrics into one cue per word and runs .NET's
@@ -1376,6 +1452,26 @@ async def fetch_lyrics_async(
     # then and their results are already waiting.
     tasks = [asyncio.create_task(run_provider(provider)) for provider in providers]
 
+    #
+    # With word-by-word on, the ranking is applied twice: first among the
+    # providers that have real word timing, then — only if none of them
+    # does — among everything, so a line-synced answer from the first
+    # choice no longer beats word-by-word lyrics further down the list.
+    def _finish(lyrics_text: str, provider: str) -> tuple[str, str]:
+        if _env_flag("MORNYE_LYRICS_JELLYFIN_COMPAT"):
+            lyrics_text = apply_jellyfin_word_gap(lyrics_text)
+        logger.debug(
+            "[lyrics] Lyrics found with provider '%s' for %s - %s",
+            provider,
+            artist_name,
+            track_name,
+        )
+        return (
+            add_lrc_metadata(lyrics_text, track_name, artist_name, provider),
+            provider,
+        )
+
+    fallback: tuple[str, str] | None = None
     try:
         for task in tasks:
             lyrics, provider = await task
@@ -1383,26 +1479,14 @@ async def fetch_lyrics_async(
             if not lyrics:
                 continue
 
-            lyrics_text = lyrics.strip()
-            if _env_flag("MORNYE_LYRICS_JELLYFIN_COMPAT"):
-                lyrics_text = apply_jellyfin_word_gap(lyrics_text)
+            lyrics_text = collapse_line_only_word_tags(lyrics.strip())
+            if not apple_word_by_word or has_word_timing(lyrics_text):
+                return _finish(lyrics_text, provider)
+            if fallback is None:
+                fallback = (lyrics_text, provider)
 
-            result = (
-                add_lrc_metadata(
-                    lyrics_text,
-                    track_name,
-                    artist_name,
-                ),
-                provider,
-            )
-            logger.debug(
-                "[lyrics] Lyrics found with provider '%s' for %s - %s",
-                provider,
-                artist_name,
-                track_name,
-            )
-            return result
-
+        if fallback is not None:
+            return _finish(*fallback)
         return "", ""
     finally:
         for task in tasks:

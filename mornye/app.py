@@ -32,7 +32,9 @@ from .api_mixins.extension_settings import ExtensionSettingsMixin
 from .api_mixins.failed_tracks import FailedTracksMixin
 from .api_mixins.library_tools import LibraryToolsMixin
 from .api_mixins.local_tagging import LocalTaggingMixin
+from .api_mixins.player_playlists import PlayerPlaylistsMixin
 from .api_mixins.music_extras import MusicExtrasMixin
+from .api_mixins.native_player import NativePlayerMixin
 from .api_mixins.search import SearchMixin
 from .api_mixins.signed_sessions import SignedSessionsMixin
 from .api_mixins.stats import StatsMixin
@@ -206,10 +208,33 @@ _quiet_log = logging.getLogger("mornye_gui.app")
 _push_guard = threading.local()
 
 
+def _covers_whole_list(indices: list[int], listed: list) -> bool:
+    """Whether `indices` select every track of `listed`.
+
+    By the tracks themselves, not only their positions: a playlist can list
+    the same song twice, and the Queue keeps one row per song, so its
+    second place is never sent. Compared by position alone such a playlist
+    was never whole, and downloaded as loose tracks: no folder, no M3U
+    (issue #277). A track with no id counts by its position.
+    """
+    if sorted(indices) == list(range(len(listed))):
+        return True
+    if not listed or any(not 0 <= i < len(listed) for i in indices):
+        return False
+
+    def identity(position: int) -> object:
+        track_id = getattr(listed[position], "id", None)
+        return track_id if track_id else ("position", position)
+
+    chosen = {identity(i) for i in indices}
+    return chosen == {identity(i) for i in range(len(listed))}
+
+
 class MornyeAPI(
     SearchMixin,
     LocalTaggingMixin,
     LibraryToolsMixin,
+    PlayerPlaylistsMixin,
     MusicExtrasMixin,
     CoversLyricsMixin,
     DiscoveryMixin,
@@ -223,6 +248,7 @@ class MornyeAPI(
     FailedTracksMixin,
     SignedSessionsMixin,
     QueueHistoryMixin,
+    NativePlayerMixin,
 ):
     """pywebview/`--web` bridge — every method here (plus the two mixins
     above) becomes a callable the frontend invokes as `pywebview.api.<name>`
@@ -568,6 +594,7 @@ class MornyeAPI(
         artist_url="",
         artists_data=None,
         artist_concerts=None,
+        artist_avatar="",
     ) -> None:
         payload = {
             "title": title,
@@ -599,6 +626,8 @@ class MornyeAPI(
             payload["artist_biography"] = artist_biography
         if artist_concerts:
             payload["artist_concerts"] = artist_concerts
+        if artist_avatar:
+            payload["artist_avatar"] = artist_avatar
         if release_date:
             payload["release_date"] = release_date
         if track_count is not None:
@@ -1380,6 +1409,36 @@ class MornyeAPI(
             daemon=True,
         ).start()
 
+    def _spotify_playcounts(self, url: str) -> dict:
+        """Play counts for a Spotify link, by track id; {} when unavailable.
+
+        Runs in a worker thread, alongside the metadata fetch.
+        """
+        try:
+            from .core.spotfetch import SpotifyWebClient
+
+            sp_client = SpotifyWebClient()
+            sp_client.initialize()
+            lower_url = url.lower()
+            if "/artist/" in lower_url or "spotify:artist:" in lower_url:
+                return {}
+            if playlist_match := re.search(r"playlist[:/]([a-zA-Z0-9]+)", url):
+                self.log("Attempting to fetch playcount…", "debug")
+                return sp_client.get_playlist_stats(playlist_match.group(1)) or {}
+            if album_match := re.search(r"album[:/]([A-Za-z0-9]+)", url):
+                self.log(
+                    "Attempting to fetch playcount for album (fast mode)…", "debug"
+                )
+                return sp_client.get_album_stats(album_match.group(1)) or {}
+            if track_match := re.search(r"track[:/]([a-zA-Z0-9]+)", url):
+                self.log("Attempting to fetch playcount…", "debug")
+                track_id = track_match.group(1)
+                stats = sp_client.get_track_stats(track_id)
+                return {track_id: stats["playcount"]} if stats.get("playcount") else {}
+        except Exception as exc:
+            self.log(f"Playcount unavailable: {type(exc).__name__}", "debug")
+        return {}
+
     async def _fetch_metadata_task(self, url) -> None:
         try:
             self.set_progress("Retrieving metadata…")
@@ -1416,9 +1475,23 @@ class MornyeAPI(
             # Returns (name, tracks) OR (name, tracks, cover) OR (name, tracks, cover, meta).
             from .core.metadata_fallback import get_url_with_fallback
 
-            result = await get_url_with_fallback(
-                stripped, lambda: metadata_client_for(url)
+            # Spotify play counts need only the link, so they are fetched
+            # while the metadata loads instead of after it: a separate
+            # client with its own session, close to a second of waiting
+            # that used to come on top of the metadata.
+            playcount_task = (
+                asyncio.ensure_future(asyncio.to_thread(self._spotify_playcounts, url))
+                if url_host_matches(url, "spotify.com")
+                else None
             )
+            try:
+                result = await get_url_with_fallback(
+                    stripped, lambda: metadata_client_for(url)
+                )
+            except BaseException:
+                if playcount_task is not None:
+                    playcount_task.cancel()
+                raise
             collection_name = result[0]
             tracks = result[1]
             collection_cover = result[2] if len(result) > 2 else ""
@@ -1435,6 +1508,8 @@ class MornyeAPI(
                 cover = getattr(tracks[0], "cover_url", "") or ""
 
             if not tracks:
+                if playcount_task is not None:
+                    playcount_task.cancel()
                 self.log("No tracks found at this URL.", "error")
                 return
 
@@ -1443,57 +1518,20 @@ class MornyeAPI(
             list_id = self._remember_tracklist(tracks, url, self.current_playlist_name)
             track_data = []
 
-            # Retrieve playcount from Spotify if applicable (non-blocking)
-            playcount_map = {}
-            if url_host_matches(url, "spotify.com"):
+            playcount_map: dict = {}
+            if playcount_task is not None:
                 try:
-                    from .core.spotfetch import SpotifyWebClient
-
-                    sp_client = SpotifyWebClient()
-
-                    try:
-                        # Initialize with timeout (5 seconds)
-                        sp_client.initialize()
-
-                        # Try to extract playlist / track / artist info from URL
-
-                        playlist_match = re.search(r"playlist[:/]([a-zA-Z0-9]+)", url)
-                        track_match = re.search(r"track[:/]([a-zA-Z0-9]+)", url)
-                        album_match = re.search(r"album[:/]([A-Za-z0-9]+)", url)
-                        lower_url = url.lower()
-                        is_artist = (
-                            "/artist/" in lower_url or "spotify:artist:" in lower_url
-                        )
-
-                        if playlist_match:
-                            self.log("Attempting to fetch playcount…", "debug")
-                            playlist_id = playlist_match.group(1)
-                            playcount_map = sp_client.get_playlist_stats(playlist_id)
-                        elif track_match and len(tracks) == 1 and not is_artist:
-                            self.log("Attempting to fetch playcount…", "debug")
-                            track_id = track_match.group(1)
-                            stats = sp_client.get_track_stats(track_id)
-                            if stats.get("playcount"):
-                                playcount_map[track_id] = stats.get("playcount")
-                        elif album_match:
-                            self.log(
-                                "Attempting to fetch playcount for album (fast mode)…",
-                                "debug",
-                            )
-                            album_id = album_match.group(1)
-                            playcount_map = sp_client.get_album_stats(album_id)
-                        elif is_artist:
-                            playcount_map = {}
-                        else:
-                            pass
-                    except Exception as auth_err:
-                        self.log(
-                            f"Playcount unavailable: {type(auth_err).__name__}",
-                            "debug",
-                        )
-
+                    playcount_map = await playcount_task or {}
                 except Exception:
                     _quiet_log.debug("Playcount lookup failed", exc_info=True)
+            # A track link's count is kept only when the link did give one
+            # track (an artist link can contain "/track/" further along).
+            if (
+                len(tracks) != 1
+                and re.search(r"track[:/]", url)
+                and not re.search(r"(playlist|album)[:/]", url)
+            ):
+                playcount_map = {}
 
             # ── Enhanced metadata-extraction loop ──
             for i, t in enumerate(tracks):
@@ -1574,16 +1612,20 @@ class MornyeAPI(
                 display_artists_data = (tracks[0].artists_data if tracks else []) or []
 
             if is_artist:
+                # The hero is a wide banner, so it takes the artist's header
+                # image like Spotify's own page does; the square avatar stays
+                # the cover everywhere else (the fetch history thumbnail).
                 self.set_metadata(
                     display_title,
                     display_artist,
-                    cover,
+                    collection_meta.get("header") or cover,
                     badge,
                     artist_listeners=collection_meta.get("listeners"),
                     artist_rank=collection_meta.get("rank"),
                     artist_verified=collection_meta.get("verified", False),
                     artist_biography=collection_meta.get("biography", ""),
                     artist_concerts=collection_meta.get("concerts"),
+                    artist_avatar=collection_meta.get("avatar") or cover,
                 )
             else:
                 self.set_metadata(
@@ -1742,7 +1784,7 @@ class MornyeAPI(
             "source_url": url,
             # Decided now, against the tracklist the user was looking at:
             # after a restart there is no tracklist left to compare with.
-            "whole": sorted(indices) == list(range(len(listed))),
+            "whole": _covers_whole_list(indices, listed),
             # Only recorded with a failure (core/failed_tracks.py), never a
             # folder for this job: a whole playlist gets its folder from the
             # downloader, and "playlist_name" would nest it twice.
@@ -2250,6 +2292,10 @@ class MornyeAPI(
             transcode_to = normalize_transcode_format(config.get("transcode_to"))
             transcode_bitrate = config.get("transcode_bitrate") or "320k"
             transcode_keep_original = config.get("transcode_keep_original", False)
+            # On unless switched off with a real False; only a real False
+            # lets the copy replace the original (see the note below).
+            dolby_to_ac3 = config.get("dolby_to_ac3") is not False
+            dolby_ac3_keep_original = config.get("dolby_ac3_keep_original") is not False
             # `is True`, not bool(): in --web mode this dict is an HTTP
             # request body, so a setting can arrive as the *string* "false"
             # — which bool() reads as on, and which would switch on a
@@ -2319,7 +2365,9 @@ class MornyeAPI(
             whole_list = (
                 whole
                 if whole is not None
-                else sorted(selected_indices) == list(range(len(self.current_tracks)))
+                else _covers_whole_list(
+                    [int(i) for i in selected_indices], self.current_tracks
+                )
             )
             if from_a_link and whole_list:
                 urls_to_download = [collection_url]
@@ -2491,6 +2539,8 @@ class MornyeAPI(
                 transcode_to=transcode_to,
                 transcode_bitrate=transcode_bitrate,
                 transcode_keep_original=transcode_keep_original,
+                dolby_to_ac3=dolby_to_ac3,
+                dolby_ac3_keep_original=dolby_ac3_keep_original,
                 track_max_retries=track_max_retries,
                 post_download_action=(
                     "none" if destination_id else post_download_action
@@ -2996,13 +3046,16 @@ def run_gui() -> None:
     with contextlib.suppress(Exception):
         Path(storage_path).mkdir(parents=True, exist_ok=True)
 
-    webview.start(
-        http_server=True,
-        http_port=_pick_gui_port(),
-        private_mode=False,
-        storage_path=storage_path,
-        icon=window_icon,
-    )
+    try:
+        webview.start(
+            http_server=True,
+            http_port=_pick_gui_port(),
+            private_mode=False,
+            storage_path=storage_path,
+            icon=window_icon,
+        )
+    finally:
+        api._close_native_player()
 
 
 if __name__ == "__main__":

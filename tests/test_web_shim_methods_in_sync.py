@@ -66,6 +66,17 @@ def _allowed_push_fns_from_web_shim() -> set[str]:
     return set(re.findall(r"'([a-zA-Z_][a-zA-Z0-9_]*)'", match.group(1)))
 
 
+#: Events only the desktop window can receive. The native audio engine's
+#: (api_mixins/native_player.py) comes from methods absent from
+#: ALLOWED_METHODS on purpose, so --web can never produce it.
+_DESKTOP_ONLY_PUSHES = {"app_native_player_event"}
+
+
+def test_desktop_only_pushes_come_from_desktop_only_methods() -> None:
+    assert _DESKTOP_ONLY_PUSHES <= _pushed_event_names()
+    assert not [m for m in ALLOWED_METHODS if m.startswith("native_player")]
+
+
 def test_every_pushed_event_is_dispatched_by_the_web_shim() -> None:
     """The other half of the same drift, and the one that fails silently.
 
@@ -75,7 +86,9 @@ def test_every_pushed_event_is_dispatched_by_the_web_shim() -> None:
     about it. Three names had already drifted out this way — the fingerprint
     duplicate finder's two among them — before this test existed.
     """
-    missing = _pushed_event_names() - _allowed_push_fns_from_web_shim()
+    missing = (
+        _pushed_event_names() - _allowed_push_fns_from_web_shim() - _DESKTOP_ONLY_PUSHES
+    )
     assert not missing, (
         "Events pushed by the backend but not dispatched by web-shim.js "
         f"(silently dropped in --web mode): {sorted(missing)}"

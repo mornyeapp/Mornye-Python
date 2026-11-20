@@ -143,6 +143,8 @@ class ConfigState:
     transcode_to: str | None = None
     transcode_bitrate: str = "320k"
     transcode_keep_original: bool = False
+    dolby_to_ac3: bool = True
+    dolby_ac3_keep_original: bool = True
     # Carried through from a profile/--transcode-max-*; no widget of its own.
     transcode_max_sample_rate: int = 0
     transcode_max_bit_depth: int = 0
@@ -466,6 +468,8 @@ class ConfigState:
             "transcode_to": state.transcode_to,
             "transcode_bitrate": state.transcode_bitrate,
             "transcode_keep_original": state.transcode_keep_original,
+            "dolby_to_ac3": state.dolby_to_ac3,
+            "dolby_ac3_keep_original": state.dolby_ac3_keep_original,
             "transcode_max_sample_rate": state.transcode_max_sample_rate,
             "transcode_max_bit_depth": state.transcode_max_bit_depth,
             "filename_format": state.filename_format,

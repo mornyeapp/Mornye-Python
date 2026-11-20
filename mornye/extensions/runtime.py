@@ -33,6 +33,9 @@ from .storage import ExtensionStorage
 
 logger = logging.getLogger(__name__)
 
+#: How much of the extension's stdout one read takes (see _read_loop).
+_READ_CHUNK = 1 << 16
+
 _BRIDGE_JS = Path(__file__).parent / "_bridge.js"
 
 
@@ -382,32 +385,46 @@ class JSRuntime:
     # ─────────────────────── internals ────────────────────────
 
     def _read_loop(self) -> None:
-        """Reads Node.js stdout line by line and routes responses."""
+        """Reads Node.js stdout line by line and routes responses.
+
+        In blocks, not a byte at a time. stdout is an unbuffered pipe
+        (bufsize=0), so read(n) returns whatever has arrived, up to n,
+        without waiting for n. Reading one byte per call, appending it to
+        an immutable `bytes` and searching the whole buffer for a newline
+        each time made a large reply quadratic: a 1920-track playlist is
+        one JSON line of a few MB, and receiving it took a minute while the
+        extension had produced it in three seconds.
+        """
         proc = self._proc
         if proc is None or proc.stdout is None:
             return
-        buf = b""
-        while proc.poll() is None:
+        buf = bytearray()
+        while True:
             try:
-                chunk = proc.stdout.read(1)
+                chunk = proc.stdout.read(_READ_CHUNK)
             except Exception:
                 break
             if not chunk:
-                break
+                break  # EOF: the process has exited and the pipe is drained
+            searched = len(buf)
             buf += chunk
-            if b"\n" not in buf:
+            # Only the new bytes can hold a newline the last pass missed.
+            newline = buf.find(b"\n", searched)
+            if newline < 0:
                 continue
-            lines = buf.split(b"\n")
-            buf = lines[-1]
-            for raw in lines[:-1]:
-                raw = raw.strip()
-                if not raw:
-                    continue
-                try:
-                    msg = json.loads(raw)
-                except json.JSONDecodeError:
-                    continue
-                self._dispatch(msg)
+            start = 0
+            while newline >= 0:
+                raw = bytes(buf[start:newline]).strip()
+                start = newline + 1
+                if raw:
+                    try:
+                        msg = json.loads(raw)
+                    except json.JSONDecodeError:
+                        msg = None
+                    if isinstance(msg, dict):
+                        self._dispatch(msg)
+                newline = buf.find(b"\n", start)
+            del buf[:start]
 
         # Empties pending with error
         err = {"error": "Node.js process terminated unexpectedly"}

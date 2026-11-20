@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mornye"
-version = "2.1.3"
+version = "2.2.0"
 description = "A Python module for metadata and user-configured music-provider extensions."
 readme = "README.md"
 # 3.11 is the floor because Pillow 13+ now requires it. This aligns the
@@ -79,7 +79,15 @@ dependencies = [
     # fingerprinting is in `fpcalc` (Chromaprint), a system binary pip could
     # never have installed anyway — so gating the Python half behind an
     # extra only added a second way for the feature to be missing.
-    "pyacoustid>=1.3.0"
+    "pyacoustid>=1.3.0",
+    # Base, not an extra: the Player's native audio engine (bitstream to
+    # S/PDIF/HDMI, output device, exclusive mode, gapless, ReplayGain,
+    # equalizer). python-mpv is a single pure-ctypes module and loads
+    # nothing until the engine starts; what the engine really needs is
+    # libmpv itself (bundled in the Windows release, Homebrew `mpv` on
+    # macOS, the distro's libmpv on Linux — see the Player section of the
+    # guide). Without libmpv the window's own engine plays.
+    "python-mpv>=1.0.8",
 ]
 
 [project.urls]
@@ -131,7 +139,7 @@ dev = [
 visual = [
     "playwright>=1.48",
 ]
-# `web`, `hires` and `dedup` used to live here. Everything they installed is
+# `web`, `hires`, `dedup` and `player` used to live here. Everything they installed is
 # part of the base install now, and pip treats a request for an extra that no
 # longer exists as a warning rather than an error, so an old
 # `pip install 'mornye[web]'` still gets a working install.

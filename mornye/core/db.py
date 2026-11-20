@@ -382,6 +382,72 @@ _MIGRATIONS: tuple[tuple[str, ...], ...] = (
         )
         """,
     ),
+    # v13 — playlists made from the Player's local library.
+    #
+    # Playlist metadata and ordered file references are separate so a
+    # description or cover can change without rewriting every track.
+    (
+        """
+        CREATE TABLE IF NOT EXISTS player_playlists (
+            id          TEXT PRIMARY KEY,
+            owner       TEXT NOT NULL DEFAULT '',
+            name        TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            cover       TEXT NOT NULL DEFAULT '',
+            created_at  REAL NOT NULL,
+            updated_at  REAL NOT NULL
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_player_playlists_owner "
+        "ON player_playlists(owner, updated_at)",
+        """
+        CREATE TABLE IF NOT EXISTS player_playlist_tracks (
+            playlist_id TEXT NOT NULL,
+            position    INTEGER NOT NULL,
+            path        TEXT NOT NULL,
+            title       TEXT NOT NULL DEFAULT '',
+            artist      TEXT NOT NULL DEFAULT '',
+            album       TEXT NOT NULL DEFAULT '',
+            duration_s  REAL NOT NULL DEFAULT 0,
+            PRIMARY KEY (playlist_id, position),
+            UNIQUE (playlist_id, path),
+            FOREIGN KEY (playlist_id) REFERENCES player_playlists(id)
+                ON DELETE CASCADE
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_player_playlist_tracks_path "
+        "ON player_playlist_tracks(path)",
+    ),
+    # v14 — playlist tracks that are not in the library yet.
+    #
+    # A playlist imported from a streaming service keeps every song, the
+    # ones never downloaded included. Those have no file: their `path` is a
+    # "remote:" key, and what identifies the song once it is downloaded is
+    # kept beside it, so the entry can be pointed at the file later.
+    (
+        "ALTER TABLE player_playlist_tracks "
+        "ADD COLUMN isrc TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE player_playlist_tracks "
+        "ADD COLUMN source_url TEXT NOT NULL DEFAULT ''",
+    ),
+    # v15 — Fix Local Files results, kept between scans.
+    #
+    # Every scan of a folder read every file again and asked Spotify about
+    # each one: on a NAS share, the same long wait each time. One row per
+    # file (core/local_scan_cache.py): the result the list shows, and the
+    # size and modification time it was worked out for, so the next scan
+    # shows it at once and redoes only what changed (or what is too old).
+    (
+        """
+        CREATE TABLE IF NOT EXISTS local_scan_cache (
+            path       TEXT PRIMARY KEY,
+            mtime_ns   INTEGER NOT NULL,
+            size       INTEGER NOT NULL,
+            entry      TEXT NOT NULL,
+            scanned_at REAL NOT NULL
+        )
+        """,
+    ),
 )
 
 

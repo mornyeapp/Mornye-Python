@@ -400,6 +400,19 @@ class ConfigPanel(VerticalScroll):
                     id=_field_id("transcode_keep_original"),
                 ),
             )
+            # Dolby Digital Plus → Dolby Digital, for a receiver on S/PDIF
+            # (coaxial or optical). Independent of the conversion above.
+            yield Row(
+                "Dolby Digital copy (S/PDIF)",
+                Switch(value=state.dolby_to_ac3, id=_field_id("dolby_to_ac3")),
+            )
+            yield Row(
+                "Keep the Dolby Digital Plus file",
+                Switch(
+                    value=state.dolby_ac3_keep_original,
+                    id=_field_id("dolby_ac3_keep_original"),
+                ),
+            )
 
         with Collapsible(title="Naming & organisation", collapsed=True):
             yield Row(

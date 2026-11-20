@@ -10,6 +10,7 @@ from mornye.core.models import DownloadResult, TrackMetadata
 from mornye.core.models import fit_name_bytes, sanitize
 from mornye.core.transcode import (
     already_in_target_format,
+    convert_dolby_to_ac3_async,
     result_format_for,
     exceeds_caps,
     transcode_file_async,
@@ -61,6 +62,8 @@ async def apply_post_processing(
         result = await _transcode_result(result, options)
         if not result.success:
             return result
+    if getattr(options, "dolby_to_ac3", True) and result.success and not result.skipped:
+        result = await _dolby_ac3_result(result, options)
     if result.success and not result.skipped:
         await _write_lrc_sidecars(result, metadata, options)
     if result.success:
@@ -99,11 +102,39 @@ async def _transcode_result(result: DownloadResult, options: Any) -> DownloadRes
             result.provider,
             f"Downloaded, but transcode to {target_format.upper()} failed: {exc}",
         )
+    if Path(destination) == Path(source):
+        # Kept as it arrived (Dolby Atmos, see transcode_file_async): it is
+        # not in the target format, so it is not labelled as being in it.
+        return result
     return DownloadResult.ok(
         result.provider,
         str(destination),
         cast(Any, result_format_for(target_format) or "flac"),
     )
+
+
+async def _dolby_ac3_result(result: DownloadResult, options: Any) -> DownloadResult:
+    """A Dolby Digital copy of a Dolby Digital Plus download, for S/PDIF.
+
+    On by default, and a no-op for anything but E-AC-3 (see
+    transcode.convert_dolby_to_ac3_async). A failure keeps the download as
+    it is: the E-AC-3 file is still a good file, only not one an optical
+    link can carry.
+    """
+    if not result.file_path:
+        return result
+    source = Path(result.file_path)
+    try:
+        destination = await convert_dolby_to_ac3_async(
+            source,
+            keep_original=getattr(options, "dolby_ac3_keep_original", True),
+        )
+    except Exception as exc:
+        logger.warning("[ac3] %s: %s", source.name, exc)
+        return result
+    if destination is None:
+        return result
+    return DownloadResult.ok(result.provider, str(destination), cast(Any, "m4a"))
 
 
 async def _write_lrc_sidecars(

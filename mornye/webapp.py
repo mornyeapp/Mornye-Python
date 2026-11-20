@@ -125,6 +125,8 @@ ALLOWED_METHODS: set[str] = {
     "clear_download_history",
     "clear_fetch_history",
     "get_artist_images",
+    "get_artist_overview",
+    "load_track_for_queue",
     "get_ffmpeg_status",
     "get_node_status",
     "save_settings",
@@ -179,6 +181,7 @@ ALLOWED_METHODS: set[str] = {
     "get_convert_formats",
     "convert_local_files",
     "read_file_tags",
+    "fetch_file_lyrics",
     "save_file_tags",
     "analyze_audio_file",
     "probe_audio_quality",
@@ -190,7 +193,24 @@ ALLOWED_METHODS: set[str] = {
     "prepare_playback",
     "get_library_default_folder",
     "scan_music_library",
+    "cancel_music_library_scan",
+    "cancel_local_scan",
     "get_track_thumb",
+    "get_track_thumbs",
+    "get_player_playlists",
+    "create_player_playlist",
+    "update_player_playlist",
+    "delete_player_playlist",
+    "add_player_playlist_tracks",
+    "remove_player_playlist_track",
+    "reorder_player_playlist_tracks",
+    "export_player_playlist",
+    "fetch_player_playlist_import",
+    "fetch_player_playlist_search_import",
+    "preview_player_playlist_import",
+    "import_player_playlist",
+    "import_player_playlist_collection",
+    "link_player_playlist_tracks",
     "get_weekly_releases",
     "get_lyrics_ai_config",
     "save_lyrics_ai_config",
@@ -297,6 +317,13 @@ EXTENSION_SETTINGS_ADMIN_METHODS = {
 #
 #   choose_folder and the window-chrome methods
 #       See the note above the allowlist — those are native-window only.
+#
+#   native_player_* (api_mixins/native_player.py)
+#       The native audio engine plays on the machine running Mornye. In
+#       --web the music must come out of the listener's device, and over
+#       HTTP these would let anyone who reaches the port play files on the
+#       server's speakers and list its audio devices. The web UI always
+#       uses the browser engine.
 
 
 class LoginRateLimiter:
