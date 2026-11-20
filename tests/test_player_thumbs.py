@@ -82,4 +82,6 @@ def test_batch_returns_one_url_per_path(tmp_path, data_dir, monkeypatch):
     out = Api().get_track_thumbs(songs + [songs[0], "", 7], 0)
     assert list(out) == songs
     assert out[songs[3]] == ""
-    assert all(out[p].startswith("data:image/jpeg;base64,") for p in songs if p != songs[3])
+    assert all(
+        out[p].startswith("data:image/jpeg;base64,") for p in songs if p != songs[3]
+    )

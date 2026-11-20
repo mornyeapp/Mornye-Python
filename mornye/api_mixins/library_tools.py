@@ -671,7 +671,9 @@ class LibraryToolsMixin:
         the rows on screen are fetched together rather than one bridge call
         each. Returns {path: data URL or ""}.
         """
-        wanted = [p for p in dict.fromkeys(paths or []) if isinstance(p, str) and p][:64]
+        wanted = [p for p in dict.fromkeys(paths or []) if isinstance(p, str) and p][
+            :64
+        ]
         if not wanted:
             return {}
         from concurrent.futures import ThreadPoolExecutor
