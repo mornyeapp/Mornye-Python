@@ -3147,8 +3147,12 @@ function artistPopularEl(top, tracks) {
       </div>
       <span class="ah-muted ah-num ao-pop-plays">${t.plays ? t.plays.toLocaleString('en-US') : ''}</span>
       <span class="ah-muted ah-num">${t.duration_ms ? formatDuration(t.duration_ms) : ''}</span>
-      ${idx !== undefined ? `<button type="button" class="ah-dl" title="Download" aria-label="Download ${escHtml(t.name)}">${ARTIST_DL_SVG}</button>` : '<span></span>'}`;
-    if (idx !== undefined) row.querySelector('.ah-dl').onclick = e => { e.stopPropagation(); downloadTrackIndices([idx]); };
+      ${idx !== undefined || t.url ? `<button type="button" class="ah-dl" title="Download" aria-label="Download ${escHtml(t.name)}">${ARTIST_DL_SVG}</button>` : '<span></span>'}`;
+    const dl = row.querySelector('.ah-dl');
+    if (idx !== undefined) dl.onclick = e => { e.stopPropagation(); downloadTrackIndices([idx]); };
+    // A song from someone else's record (a feature) is not in this artist's
+    // list: fetched from its own link and queued as a list of its own.
+    else if (dl) dl.onclick = e => { e.stopPropagation(); downloadTrackLink(t, dl); };
     if (t.url) {
       const name = row.querySelector('.ah-top-name');
       name.classList.add('ao-link');
@@ -3164,6 +3168,45 @@ function artistPopularEl(top, tracks) {
     more.setAttribute('aria-expanded', String(open));
   };
   return sec;
+}
+
+// Queue one track by its link (load_track_for_queue keeps it backend-side as
+// a one-track list), then start the Queue the same way a row's button does.
+async function downloadTrackLink(t, btn) {
+  if (btn?.classList.contains('ta-loading')) return;
+  const already = queue.find(q => q.spotify_id === t.id && q.source === t.url && !['error', 'skipped'].includes(q.status));
+  if (already) { showToast(`"${t.name}" is already in the Queue`, 'info'); return; }
+  setTaBtnState(btn, 'loading');
+  let res = null;
+  try { res = await window.pywebview.api.load_track_for_queue(t.url); } catch (e) { res = null; }
+  if (!res || res.status !== 'ok') {
+    setTaBtnState(btn, 'error');
+    resetTaBtnAfter(btn, 2000);
+    showToast(`Could not load "${t.name}"${res?.error ? `: ${res.error}` : ''}`, 'error');
+    return;
+  }
+  const tr = res.track || {};
+  queue.push({
+    id: tr.id || t.id || t.url,
+    spotify_id: tr.id || t.id || t.url,
+    source: t.url,
+    list: res.list_id,
+    index: 0,
+    title: tr.title || t.name,
+    artist: tr.artist || (t.artists || []).join(', '),
+    album: tr.album || '',
+    status: 'waiting',
+    progress: 0,
+    file_path: '',
+    file_size_mb: 0,
+  });
+  renderQueue();
+  const emptyMsg = $('queue-empty');
+  if (emptyMsg) emptyMsg.style.display = 'none';
+  setTaBtnState(btn, 'success');
+  resetTaBtnAfter(btn, 1500);
+  startDownloadQueue();
+  $('queue-drawer')?.classList.add('open');
 }
 
 function artistPickEl(pick) {

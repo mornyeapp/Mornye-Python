@@ -134,3 +134,41 @@ def test_normalize_overview_empty():
     o = normalize_overview({})
     assert o["top_tracks"] == [] and o["pick"] is None
     assert all(v == [] for v in o["discography"].values())
+
+
+# ── load_track_for_queue ──────────────────────────────────────────────────
+
+
+def test_load_track_for_queue_keeps_a_one_track_list(monkeypatch):
+    """A Popular song from another artist's record is fetched by its link and
+    kept as a tracklist of its own, which the Queue then downloads at index 0."""
+    from types import SimpleNamespace
+
+    import mornye.core.metadata_fallback as fallback
+    from mornye.app import MornyeAPI
+
+    track = SimpleNamespace(id="t9", title="Feel This Moment", artists="Pitbull, Christina Aguilera", album="Meltdown")
+
+    async def fake_fetch(url, factory, **kw):
+        assert url == "https://open.spotify.com/track/t9"
+        return ("Feel This Moment", [track])
+
+    monkeypatch.setattr(fallback, "get_url_with_fallback", fake_fetch)
+    api = MornyeAPI()
+    res = api.load_track_for_queue("https://open.spotify.com/track/t9")
+    assert res["status"] == "ok"
+    assert res["track"] == {
+        "id": "t9",
+        "title": "Feel This Moment",
+        "artist": "Pitbull, Christina Aguilera",
+        "album": "Meltdown",
+    }
+    tracks, url, playlist_name = api._tracklists[res["list_id"]]
+    assert tracks == [track] and url.endswith("/track/t9") and playlist_name == ""
+
+
+def test_load_track_for_queue_refuses_other_links():
+    from mornye.app import MornyeAPI
+
+    res = MornyeAPI().load_track_for_queue("https://open.spotify.com/album/x")
+    assert res["status"] == "error"
