@@ -49,9 +49,7 @@ def _open_log() -> TextIO | None:
         path.parent.mkdir(parents=True, exist_ok=True)
         # Line-buffered and overwritten on every launch: the file is for
         # the run that just went wrong, not a history.
-        return open(
-            path, "w", encoding="utf-8", errors="replace", buffering=1
-        )
+        return open(path, "w", encoding="utf-8", errors="replace", buffering=1)
     except OSError:
         return None
 
