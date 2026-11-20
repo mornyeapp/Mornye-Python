@@ -97,7 +97,11 @@ def _releases(group: Any) -> list[dict]:
 
 def _playlist(node: Any) -> dict | None:
     data = _get(node, "data")
-    if not isinstance(data, dict) or data.get("__typename") != "Playlist" or not data.get("uri"):
+    if (
+        not isinstance(data, dict)
+        or data.get("__typename") != "Playlist"
+        or not data.get("uri")
+    ):
         return None
     images = _items(data.get("images"))
     return {
@@ -168,11 +172,17 @@ def normalize_overview(artist: dict) -> dict:
     related = artist.get("relatedContent") or {}
     profile = artist.get("profile") or {}
     return {
-        "top_tracks": [t for t in (_top_track(i) for i in _items(disc.get("topTracks"))) if t],
+        "top_tracks": [
+            t for t in (_top_track(i) for i in _items(disc.get("topTracks"))) if t
+        ],
         "pick": _pick(profile),
         "discography": {
             "popular": [
-                r for r in (_release(i) for i in _items(disc.get("popularReleasesAlbums"))) if r
+                r
+                for r in (
+                    _release(i) for i in _items(disc.get("popularReleasesAlbums"))
+                )
+                if r
             ],
             "albums": _releases(disc.get("albums")),
             "singles": _releases(disc.get("singles")),
@@ -182,7 +192,9 @@ def normalize_overview(artist: dict) -> dict:
         "discovered_on": _playlists(related.get("discoveredOnV2")),
         "playlists": _playlists(profile.get("playlistsV2")),
         "related_artists": [
-            a for a in (_related_artist(i) for i in _items(related.get("relatedArtists"))) if a
+            a
+            for a in (_related_artist(i) for i in _items(related.get("relatedArtists")))
+            if a
         ],
         "appears_on": _releases(related.get("appearsOn")),
     }

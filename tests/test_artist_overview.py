@@ -1,4 +1,8 @@
-from mornye.core.artist_overview import artist_id_from_url, normalize_overview, uri_to_url
+from mornye.core.artist_overview import (
+    artist_id_from_url,
+    normalize_overview,
+    uri_to_url,
+)
 
 AID = "4iHNK0tOyZPYnBU7nGAgpQ"
 
@@ -21,7 +25,9 @@ ARTIST = {
                         "contentRating": {"label": "EXPLICIT"},
                         "albumOfTrack": {
                             "uri": "spotify:album:a1",
-                            "coverArt": {"sources": [_src("small", 64), _src("big", 640)]},
+                            "coverArt": {
+                                "sources": [_src("small", 64), _src("big", 640)]
+                            },
                         },
                         "artists": {"items": [{"profile": {"name": "Mariah Carey"}}]},
                     }
@@ -76,7 +82,9 @@ ARTIST = {
                             {
                                 "uri": "spotify:album:a3",
                                 "name": "Duet",
-                                "artists": {"items": [{"profile": {"name": "Westlife"}}]},
+                                "artists": {
+                                    "items": [{"profile": {"name": "Westlife"}}]
+                                },
                             }
                         ]
                     }
@@ -88,7 +96,11 @@ ARTIST = {
         "pinnedItem": {
             "comment": "Glitter 25",
             "itemV2": {
-                "data": {"__typename": "Album", "uri": "spotify:album:a1", "name": "Glitter"}
+                "data": {
+                    "__typename": "Album",
+                    "uri": "spotify:album:a1",
+                    "name": "Glitter",
+                }
             },
         }
     },
@@ -147,7 +159,12 @@ def test_load_track_for_queue_keeps_a_one_track_list(monkeypatch):
     import mornye.core.metadata_fallback as fallback
     from mornye.app import MornyeAPI
 
-    track = SimpleNamespace(id="t9", title="Feel This Moment", artists="Pitbull, Christina Aguilera", album="Meltdown")
+    track = SimpleNamespace(
+        id="t9",
+        title="Feel This Moment",
+        artists="Pitbull, Christina Aguilera",
+        album="Meltdown",
+    )
 
     async def fake_fetch(url, factory, **kw):
         assert url == "https://open.spotify.com/track/t9"
