@@ -37,6 +37,45 @@ test('Fix Local Files follows the scan in parts, with the shared scan bar', () =
   assert.match(html, /class="scan-bar hidden" id="plb-scan"/);
 });
 
+test('a result is Ready, Check, No match or Error from its best candidate', () => {
+  const { localRowState } = pick(['localRowState']);
+  assert.equal(localRowState({ candidates: [{ is_safe: true }] }), 'matched');
+  assert.equal(localRowState({ candidates: [{ is_safe: false }] }), 'review');
+  assert.equal(localRowState({ candidates: [] }), 'none');
+  assert.equal(localRowState({ candidates: [], error: 'unreadable' }), 'error');
+  assert.equal(localRowState({ candidates: [{ is_safe: true }], error: 'x' }), 'matched',
+    'a match wins over an error, as the row shows it');
+});
+
+test('a filter chip hides rows with one attribute, not a class on every row', () => {
+  // Toggling .hidden on each of thousands of rows froze the window for
+  // minutes on "Check"; the list now carries data-filter and CSS does the rest.
+  const app = source('app.js');
+  const start = app.indexOf('function applyLocalFilter()');
+  const body = app.slice(start, app.indexOf('\n}\n', start));
+  assert.match(body, /container\.dataset\.filter = localFilter/);
+  assert.doesNotMatch(body, /querySelectorAll/);
+  const css = source('css/views/local.css');
+  for (const state of ['matched', 'review', 'none', 'error']) {
+    assert.match(css, new RegExp(
+      `#local-track-rows\\[data-filter="${state}"\\] > \\[data-state\\]:not\\(\\[data-state="${state}"\\]\\)`
+    ), state);
+  }
+});
+
+test('while a scan paints, the summary is counted from the data a few times a second', () => {
+  const app = source('app.js');
+  const start = app.indexOf('function paintLocalRows()');
+  const body = app.slice(start, app.indexOf('\n}\n', start));
+  assert.match(body, /scheduleLocalSummary\(\)/);
+  assert.doesNotMatch(body, /renderLocalSummary\(\)/);
+  assert.doesNotMatch(body, /updateLocalSelection\(\)/);
+  const summaryStart = app.indexOf('function renderLocalSummary()');
+  const summary = app.slice(summaryStart, app.indexOf('\n}\n', summaryStart));
+  assert.match(summary, /for \(const item of localScanData\)/);
+  assert.doesNotMatch(summary, /querySelectorAll\('#local-track-rows/);
+});
+
 test('a Fix Local Files scan can be stopped from its bar', () => {
   const html = source('index.html');
   assert.match(html, /id="local-scan-stop"[^>]*data-onclick="cancelLocalScan\(\)"/);

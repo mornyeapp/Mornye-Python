@@ -8485,8 +8485,7 @@ function paintLocalRows() {
   container.appendChild(added);
   $('local-results-wrap').classList.remove('hidden');
   $('local-footer').classList.remove('hidden');
-  renderLocalSummary();
-  updateLocalSelection();
+  scheduleLocalSummary();
   if (localScan.pending.size) scheduleLocalRows();
 }
 
@@ -8576,8 +8575,8 @@ function localRowElement(item, i) {
         const hasMatch = !!best;
         const isSafe = hasMatch && best.is_safe;
         
-        const oldCover = item.old_cover_base64 
-            ? `<img src="${item.old_cover_base64}" alt="cover">` 
+        const oldCover = item.old_cover_base64
+            ? `<img src="${item.old_cover_base64}" alt="cover" decoding="async">`
             : `🎵`;
             
         const fileName = item.file_path.split(/[\\/]/).pop();
@@ -8590,7 +8589,12 @@ function localRowElement(item, i) {
 
         if (hasMatch) {
             const newCover = best.metadata.cover_url || best.metadata.cover || '';
-            const newCoverHtml = newCover ? `<img src="${escHtml(newCover)}" alt="">` : `🎵`;
+            // Lazy: a folder of thousands of files would otherwise fetch
+            // every candidate's cover from the network as its row appears,
+            // the ones far below the fold included.
+            const newCoverHtml = newCover
+                ? `<img src="${escHtml(newCover)}" alt="" loading="lazy" decoding="async">`
+                : `🎵`;
             const newTitle = best.metadata.title || '';
             const newArtist = best.metadata.first_artist || '';
 
@@ -8657,44 +8661,77 @@ function localRowElement(item, i) {
             ${newCol}
         `;
         // What the summary above the list counts and filters by.
-        row.dataset.state = item.error && !hasMatch ? 'error'
-            : !hasMatch ? 'none' : isSafe ? 'matched' : 'review';
+        row.dataset.state = localRowState(item);
         row.dataset.index = String(i);
         return row;
+}
+
+// A result's state in the list: what its row shows and the chips count.
+function localRowState(item) {
+    const best = item.candidates && item.candidates[0];
+    if (!best) return item.error ? 'error' : 'none';
+    return best.is_safe ? 'matched' : 'review';
 }
 
 //: Which rows the list shows: '' for all, else one row state.
 let localFilter = '';
 
 // Counts per state above the list; a click shows only that state.
+//
+// Counted from localScanData, not by querying the rows: during a scan this
+// ran after every painted batch, and walking 4,000 rows each time (plus the
+// filter and the selection count doing the same) is what made a large
+// folder grind as it filled up.
 function renderLocalSummary() {
     const box = $('local-summary');
     if (!box) return;
-    const rows = [...document.querySelectorAll('#local-track-rows > [data-state]')];
-    const count = state => rows.filter(r => r.dataset.state === state).length;
+    const counts = { matched: 0, review: 0, none: 0, error: 0 };
+    let total = 0;
+    for (const item of localScanData) {
+        if (!item) continue;
+        total += 1;
+        counts[localRowState(item)] += 1;
+    }
     const chips = [
-        ['', `${rows.length} file${rows.length === 1 ? '' : 's'}`, rows.length],
-        ['matched', 'Ready', count('matched')],
-        ['review', 'Check', count('review')],
-        ['none', 'No match', count('none')],
-        ['error', 'Errors', count('error')],
+        ['', `${total} file${total === 1 ? '' : 's'}`, total],
+        ['matched', 'Ready', counts.matched],
+        ['review', 'Check', counts.review],
+        ['none', 'No match', counts.none],
+        ['error', 'Errors', counts.error],
     ].filter(([state, , n]) => state === '' || n > 0);
     if (localFilter && !chips.some(([state]) => state === localFilter)) localFilter = '';
-    box.innerHTML = rows.length ? chips.map(([state, label, n]) =>
+    box.innerHTML = total ? chips.map(([state, label, n]) =>
         `<button type="button" class="local-chip ${state || 'all'}${localFilter === state ? ' active' : ''}" data-state="${state}" aria-pressed="${localFilter === state}">`
         + (state ? `<span class="local-chip-n">${n}</span> ` : '') + `${escHtml(label)}</button>`).join('') : '';
     box.querySelectorAll('.local-chip').forEach(btn => btn.addEventListener('click', () => {
         localFilter = btn.dataset.state === localFilter ? '' : btn.dataset.state;
-        applyLocalFilter();
         renderLocalSummary();
     }));
     applyLocalFilter();
 }
 
+// One attribute on the list, not a class on each of its rows: the rows
+// that do not match are hidden by local.css. Toggling a class on thousands
+// of rows one by one is what froze the window for minutes on "Check".
 function applyLocalFilter() {
-    document.querySelectorAll('#local-track-rows > [data-state]').forEach(r => {
-        r.classList.toggle('hidden', !!localFilter && r.dataset.state !== localFilter);
-    });
+    const container = $('local-track-rows');
+    if (!container) return;
+    if (localFilter) container.dataset.filter = localFilter;
+    else delete container.dataset.filter;
+}
+
+//: Pending timer for the summary and selection count while a scan paints.
+let localSummaryTimer = 0;
+
+// Both walk the whole result set, so while results keep arriving they run
+// at most a few times a second instead of after every painted batch.
+function scheduleLocalSummary() {
+    if (localSummaryTimer) return;
+    localSummaryTimer = setTimeout(() => {
+        localSummaryTimer = 0;
+        renderLocalSummary();
+        updateLocalSelection();
+    }, 400);
 }
 
 // ── Convert files to another format ─────────────────────────────────────────
