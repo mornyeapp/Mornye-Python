@@ -794,9 +794,13 @@ class JSExtensionProvider(BaseProvider):
             # Native provider tokens are not necessarily extension tokens:
             # Qobuz's JS extension treats an unrecognised "27" as CD quality.
             # Always hand the extension one of the ids its manifest declares.
-            quality = self.select_quality(
-                quality, kwargs.pop("extension_quality", None)
-            )
+            extension_quality = kwargs.pop("extension_quality", None)
+            quality = self.select_quality(quality, extension_quality)
+            if extension_quality:
+                # A per-service quality is the user's choice, and the host
+                # keeps whatever it delivers (_reject_quality_downgrade_async
+                # skips it), so the extension may still step down its ladder.
+                allow_fallback = True
             return await self._do_download_async(
                 metadata,
                 output_dir,
@@ -880,6 +884,11 @@ class JSExtensionProvider(BaseProvider):
         prepared_context = avail.get("prepared_context")
         if isinstance(prepared_context, dict):
             download_options["preparedContext"] = prepared_context
+        # Extensions that walk their own quality ladder (TIDAL: Atmos →
+        # Hi-Res → CD) need this to stop at the requested tier. Without it a
+        # failed Atmos request downloads a stereo file the host then deletes,
+        # instead of moving straight on to the next provider.
+        download_options["allowFallback"] = bool(allow_fallback)
 
         ext_hint = _quality_to_ext(quality)
         output_path = self._build_output_path(
