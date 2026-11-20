@@ -208,6 +208,28 @@ _quiet_log = logging.getLogger("mornye_gui.app")
 _push_guard = threading.local()
 
 
+def _covers_whole_list(indices: list[int], listed: list) -> bool:
+    """Whether `indices` select every track of `listed`.
+
+    By the tracks themselves, not only their positions: a playlist can list
+    the same song twice, and the Queue keeps one row per song, so its
+    second place is never sent. Compared by position alone such a playlist
+    was never whole, and downloaded as loose tracks: no folder, no M3U
+    (issue #277). A track with no id counts by its position.
+    """
+    if sorted(indices) == list(range(len(listed))):
+        return True
+    if not listed or any(not 0 <= i < len(listed) for i in indices):
+        return False
+
+    def identity(position: int) -> object:
+        track_id = getattr(listed[position], "id", None)
+        return track_id if track_id else ("position", position)
+
+    chosen = {identity(i) for i in indices}
+    return chosen == {identity(i) for i in range(len(listed))}
+
+
 class MornyeAPI(
     SearchMixin,
     LocalTaggingMixin,
@@ -1755,7 +1777,7 @@ class MornyeAPI(
             "source_url": url,
             # Decided now, against the tracklist the user was looking at:
             # after a restart there is no tracklist left to compare with.
-            "whole": sorted(indices) == list(range(len(listed))),
+            "whole": _covers_whole_list(indices, listed),
             # Only recorded with a failure (core/failed_tracks.py), never a
             # folder for this job: a whole playlist gets its folder from the
             # downloader, and "playlist_name" would nest it twice.
@@ -2336,7 +2358,9 @@ class MornyeAPI(
             whole_list = (
                 whole
                 if whole is not None
-                else sorted(selected_indices) == list(range(len(self.current_tracks)))
+                else _covers_whole_list(
+                    [int(i) for i in selected_indices], self.current_tracks
+                )
             )
             if from_a_link and whole_list:
                 urls_to_download = [collection_url]
