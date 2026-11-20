@@ -10265,7 +10265,7 @@ function npRenderQueue() {
 }
 
 // ── Player: browse and play a folder ────────────────────────────────────────
-const lib = { items: [], view: [], scan: null, lastScan: 0, shown: 0, loading: false, scanning: false, started: false, raf: 0, thumbBusy: 0,
+const lib = { items: [], view: [], scan: null, lastScan: 0, shown: 0, loading: false, scanning: false, scanSamples: [], started: false, raf: 0, thumbBusy: 0,
   tab: 'songs', album: null, artist: null, playlist: null, playlists: [], folder: '', cards: 0 };
 const LIB_PAGE = 150;
 const LIB_FOLDERS_KEY = 'mornye-player-folders';
@@ -10427,17 +10427,43 @@ function setPlayerScanBusy(busy) {
 // What the scan bar shows for an app_library_scan_progress payload: a
 // percentage once the total is known, null (a sliding bar) while the
 // folders are still being listed — on a network share that can take long.
-function libScanProgress(p) {
+// `eta` (seconds left, from libScanRemaining) is added when known.
+function libScanProgress(p, eta) {
   const done = Math.max(0, Number(p?.done) || 0);
   const total = Math.max(0, Number(p?.total) || 0);
   if (p?.phase !== 'reading' || !total) {
     return { pct: null, text: done ? `Looking for music… ${done.toLocaleString()} files found` : 'Looking for music…' };
   }
   const shown = Math.min(done, total);
+  const left = shown < total ? libScanEtaText(eta) : '';
   return {
     pct: Math.round((shown / total) * 100),
-    text: `${shown.toLocaleString()} / ${total.toLocaleString()} files scanned`,
+    text: `${shown.toLocaleString()} / ${total.toLocaleString()} files scanned${left ? ` · ${left}` : ''}`,
   };
+}
+
+// Seconds left in the reading phase, from the pace of the last ~30 s
+// (samples are {t: ms, done}); null until the pace is known. Files already
+// stored are skipped in a blink while new ones are read over the network,
+// so a recent window follows the real pace better than the average since
+// the start.
+function libScanRemaining(samples, done, total) {
+  if (!samples?.length || !(total > done)) return null;
+  const last = samples[samples.length - 1];
+  const from = samples.find(s => last.t - s.t <= 30000) || samples[0];
+  const secs = (last.t - from.t) / 1000;
+  const files = last.done - from.done;
+  if (secs < 3 || files <= 0) return null;
+  return (total - done) / (files / secs);
+}
+
+function libScanEtaText(seconds) {
+  const s = Math.round(Number(seconds) || 0);
+  if (!(s > 0)) return '';
+  if (s < 60) return 'less than a minute left';
+  const m = Math.round(s / 60);
+  if (m < 60) return `~${m} min left`;
+  return `~${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min left`;
 }
 
 // The bar under the library summary; null hides it.
@@ -10446,8 +10472,17 @@ function setPlayerScanProgress(p) {
   if (!box) return;
   box.classList.toggle('hidden', !p);
   syncPlayerLibbar();
-  if (!p) return;
-  const { pct, text } = libScanProgress(p);
+  if (!p) { lib.scanSamples = []; return; }
+  let eta = null;
+  if (p.phase === 'reading' && p.total) {
+    const samples = (lib.scanSamples ||= []);
+    samples.push({ t: Date.now(), done: Number(p.done) || 0 });
+    while (samples.length > 2 && samples[samples.length - 1].t - samples[1].t > 30000) samples.shift();
+    eta = libScanRemaining(samples, Number(p.done) || 0, Number(p.total));
+  } else {
+    lib.scanSamples = [];
+  }
+  const { pct, text } = libScanProgress(p, eta);
   const track = $('plb-scan-track');
   box.classList.toggle('indeterminate', pct === null);
   box.style.setProperty('--plb-scan-pct', `${pct || 0}%`);
@@ -10556,6 +10591,7 @@ window.app_library_scan_cancelled = function(p) {
   }
   filterPlayerLibrary(true);
   renderPlayerEmptyState();
+  linkPlaylistTracksToLibrary();  // what was read before the stop counts too
 };
 
 window.app_library_scan_progress = function(p) {

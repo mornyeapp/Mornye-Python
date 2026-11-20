@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { pick, source } from './load.mjs';
 
-const { libScanProgress } = pick(['libScanProgress']);
+const { libScanProgress } = pick(['libScanProgress', 'libScanEtaText']);
 
 test('while folders are listed the bar is indeterminate and counts the files found', () => {
   assert.deepEqual({ ...libScanProgress({ phase: 'listing', done: 0, total: 0 }) },
@@ -44,4 +44,33 @@ test('the scan can be stopped from the card, and the Player handles the stop', (
   assert.match(app, /^async function cancelPlayerScan\(\)/m);
   assert.match(app, /cancel_music_library_scan/);
   assert.match(app, /window\.app_library_scan_cancelled = function/);
+});
+
+const eta = pick(['libScanProgress', 'libScanRemaining', 'libScanEtaText']);
+
+test('time left comes from the recent pace, and only once the pace is known', () => {
+  assert.equal(eta.libScanRemaining([], 0, 100), null);
+  assert.equal(eta.libScanRemaining([{ t: 0, done: 0 }, { t: 1000, done: 10 }], 10, 100), null, 'under 3 s');
+  // 20 files in 10 s → 2 files/s; 80 left → 40 s.
+  assert.equal(eta.libScanRemaining([{ t: 0, done: 0 }, { t: 10000, done: 20 }], 20, 100), 40);
+  // Only the last 30 s count: a fast start (skipped, stored files) is forgotten.
+  const samples = [{ t: 0, done: 0 }, { t: 5000, done: 1000 }, { t: 35000, done: 1030 }];
+  assert.equal(eta.libScanRemaining(samples, 1030, 1090), 60);
+  assert.equal(eta.libScanRemaining(samples, 1090, 1090), null, 'nothing left');
+});
+
+test('time left reads as minutes or hours, and joins the counter', () => {
+  assert.equal(eta.libScanEtaText(null), '');
+  assert.equal(eta.libScanEtaText(20), 'less than a minute left');
+  assert.equal(eta.libScanEtaText(12 * 60), '~12 min left');
+  assert.equal(eta.libScanEtaText(2 * 3600 + 5 * 60), '~2 h 05 min left');
+  const p = eta.libScanProgress({ phase: 'reading', done: 1, total: 4 }, 12 * 60);
+  assert.equal(p.text, '1 / 4 files scanned · ~12 min left');
+  assert.equal(eta.libScanProgress({ phase: 'reading', done: 4, total: 4 }, 30).text, '4 / 4 files scanned');
+});
+
+test('stopping a scan still links playlist songs to what was read', () => {
+  const app = source('app.js');
+  const body = app.slice(app.indexOf('window.app_library_scan_cancelled'), app.indexOf('window.app_library_scan_progress'));
+  assert.match(body, /linkPlaylistTracksToLibrary\(\)/);
 });
