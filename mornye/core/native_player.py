@@ -836,7 +836,18 @@ class NativePlayer:
                 current = self._current
                 resume, self._resume = self._resume, None
             if advanced:
-                self._post({"type": "advanced", "path": current})
+                # The duration goes with the change. mpv reports a property
+                # only when it changes, so a file that follows itself (repeat
+                # one) or one as long as the last never reports it again, and
+                # the page, which forgets the old one on a change, was left
+                # with no duration: no remaining time, a seek bar that did not
+                # move. When a new value does come in later it still arrives
+                # as "loadedmetadata" and replaces this one.
+                event: dict = {"type": "advanced", "path": current}
+                duration = self._state.get("duration")
+                if isinstance(duration, (int, float)) and duration > 0:
+                    event["duration"] = float(duration)
+                self._post(event)
             elif resume is not None:
                 # Off mpv's event thread: a seek from here would wait on it.
                 threading.Thread(

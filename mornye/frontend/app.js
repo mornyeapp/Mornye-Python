@@ -9608,9 +9608,14 @@ function playerNativeEngine(api, clock = () => performance.now()) {
           if (!paused) { paused = true; emit('pause'); }
           emit('ended'); return;
         case 'advanced':
-          src = evt.path; ended = false; paused = false; duration = NaN; output = null;
+          // The duration comes with the change (core/native_player.py): a
+          // track that repeats never reports it again on its own.
+          src = evt.path; ended = false; paused = false; output = null;
+          duration = Number.isFinite(evt.duration) ? evt.duration : NaN;
           settle(0);
-          emit('advanced', { path: evt.path }); return;
+          emit('advanced', { path: evt.path });
+          if (Number.isFinite(duration)) emit('loadedmetadata');
+          return;
         case 'output':
           output = evt; emit('output', evt); return;
         case 'error':

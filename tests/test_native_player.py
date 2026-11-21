@@ -319,6 +319,21 @@ def test_gapless_advance_and_end_of_queue_events():
     player.close()
 
 
+def test_a_track_that_repeats_keeps_its_duration():
+    # Repeat one queues the file after itself: mpv never reports the same
+    # duration again, so the change has to carry it.
+    player, events, fakes = make_player()
+    player.load("/m/a.flac", "/m/a.flac")
+    fake = fakes[0]
+    fake.change("duration", 183.5)
+    fake.event(event="end-file", reason="eof")
+    fake.event(event="file-loaded")
+    assert wait_for(events, "advanced") == [
+        {"type": "advanced", "path": "/m/a.flac", "duration": 183.5}
+    ]
+    player.close()
+
+
 def test_a_load_after_a_natural_end_is_not_an_advance():
     player, events, fakes = make_player()
     player.load("/m/a.flac", "/m/b.flac")
@@ -694,7 +709,8 @@ def test_real_mpv_plays_gapless_and_ends(tmp_path):
         meta = wait_for(events, "loadedmetadata", 5)
         assert meta and meta[0]["duration"] == pytest.approx(3, abs=0.1)
         player.command("seek", 2.6)
-        assert wait_for(events, "advanced", 5) == [{"type": "advanced", "path": b}]
+        advanced = wait_for(events, "advanced", 5)
+        assert [e["path"] for e in advanced] == [b]
         end = time.monotonic() + 3  # the decoder opens just after the change
         while time.monotonic() < end and not player.stats()["codec"]:
             time.sleep(0.02)
