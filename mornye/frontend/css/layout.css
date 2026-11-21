@@ -642,6 +642,14 @@ body {
 #np-view > * { position: relative; z-index: 1; }
 #np-view > #np-bg { position: absolute; }
 #np-view > #np-bg { inset: 0; z-index: 0; }
+/* The Canvas plays in the cover's square, over the still cover, cropped to
+   it (a canvas is 9:16); it fades in once it has a frame to show. */
+.np-cover-wrap { position: relative; }
+.np-cover-wrap > #np-canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; pointer-events: none; opacity: 0; transition: opacity .6s ease;
+}
+#np-view.has-canvas .np-cover-wrap > #np-canvas { opacity: 1; }
 /* The full-screen player covers the titlebar, which is the only place the
    frameless desktop window can be dragged from. This strip along its top
    takes over that job; it sits under the close and volume controls (later
@@ -1092,4 +1100,42 @@ body.has-player #queue-dock { bottom: var(--player-h); }
   #player-bar .pl-artwork { width: 28px; height: 28px; }
   #player-bar .pl-controls { gap: 0; }
   #player-bar .pl-time { min-width: 32px; }
+}
+
+/* ── The library in the sidebar ───────────────────────────────────────
+   Recently Added, Artists, Albums, Songs and each playlist are rows of
+   their own (app.js: openLibrary, renderSidebarPlaylists), so the tabs
+   at the top of the Player page and the single Player row are not needed.
+   The phone bar has room for neither: it keeps the Player button and the
+   tabs, as before. */
+#nav-player { display: none; }
+#view-player .player-tabs { display: none; }
+
+/* The playlists fold away with the rail, like the group headings: a column
+   of identical icons would say nothing. */
+.sb-playlists {
+  display: grid; grid-template-rows: 1fr;
+  transition: grid-template-rows var(--fold, 240ms) var(--ease), opacity var(--fold, 240ms) var(--ease);
+}
+.sb-playlists-inner { min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+body.sidebar-collapsed .sb-playlists { grid-template-rows: 0fr; opacity: 0; }
+body.sidebar-collapsed .sb-playlists-inner { visibility: hidden; }
+
+/* Open, the sidebar now holds more rows than a short window shows: it
+   scrolls. Folded it keeps overflow:visible for its tooltips (which the
+   open sidebar does not show). */
+@media (min-width: 901px) {
+  body:not(.sidebar-collapsed) #sidebar { overflow-y: auto; overflow-x: hidden; }
+  /* In a column that scrolls, the headings would otherwise be squeezed
+     before anything scrolls. */
+  #sidebar > .sb-brand, #sidebar > .sb-group, #sidebar > .sb-playlists { flex-shrink: 0; }
+}
+@media (max-width: 900px) {
+  body:not(.web-mode) .sb-playlists { display: none; }
+}
+@media (max-width: 700px) {
+  body.web-mode #nav-player { display: flex; }
+  body.web-mode .nav-lib,
+  body.web-mode .sb-playlists { display: none; }
+  body.web-mode #view-player .player-tabs { display: flex; }
 }

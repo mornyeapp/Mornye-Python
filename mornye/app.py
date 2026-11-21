@@ -93,6 +93,24 @@ def _post_command_allowed() -> bool:
     )
 
 
+#: "builtin" makes the desktop app's Choose Folder use the folder picker in
+#: the page instead of the operating system's dialog.
+FOLDER_DIALOG_ENV = "MORNYE_FOLDER_DIALOG"
+
+
+def folder_dialog_is_builtin() -> bool:
+    """Whether Choose Folder should open the picker drawn in the page.
+
+    The native dialog is a second window, and some setups cannot show one:
+    a kiosk compositor such as cage gives the screen to a single window, so
+    the GTK dialog opened behind the app while the app, waiting on it, stopped
+    answering. The page's own picker (the one the web build always uses)
+    needs no second window. Off unless the environment asks for it, so the
+    desktop app keeps its native dialog everywhere else.
+    """
+    return (env_value(FOLDER_DIALOG_ENV, "") or "").strip().lower() == "builtin"
+
+
 #: Console formats launcher.py uses for the same records (see its
 #: --log-level/--verbose plumbing). Reused verbatim so a GUI started from a
 #: terminal reads exactly like `mornye <url>` does.
@@ -169,9 +187,17 @@ def configure_console_logging(level: int) -> None:
             else _CONSOLE_LOG_FORMAT
         )
     )
+    # The tracebacks the console leaves out go to errors.log (ERROR only).
+    from .core.error_log import error_log_handler
+
+    handlers: list[logging.Handler] = [handler]
+    file_handler = error_log_handler()
+    if file_handler is not None:
+        handlers.append(file_handler)
     # force=True: this also runs from _download_task when the picker changed
     # the level, and basicConfig is otherwise a no-op once root has handlers.
-    logging.basicConfig(level=level, handlers=[handler], force=True)
+    # force also closes the errors.log handler the previous call installed.
+    logging.basicConfig(level=level, handlers=handlers, force=True)
     logging.getLogger("pywebview").setLevel(logging.WARNING)
     _quiet_noisy_libraries(level)
 
@@ -1215,6 +1241,11 @@ class MornyeAPI(
         folder browser instead, since a browser cannot open a native dialog
         that returns a real filesystem path on the server.
         """
+        if self._window and folder_dialog_is_builtin():
+            # Opened in the page, the same picker the web build uses, which
+            # ends in set_download_dir(). See folder_dialog_is_builtin().
+            self._push("openDownloadFolderBrowser")
+            return
         if self._window:
             dialog_type = getattr(webview, "FileDialog", None)
             if dialog_type is None:
@@ -1751,6 +1782,93 @@ class MornyeAPI(
             kwargs={"expected_generation": self._current_stop_generation()},
             daemon=True,
         ).start()
+
+    def save_playlist_m3u(self, config=None, list_id=None) -> dict:
+        """Writes the M3U of a playlist shown on Home, downloading nothing.
+
+        For a playlist whose M3U was deleted, or never written: its tracks are
+        looked up in the download folder (every playlist folder in it) and
+        in the "existing library folders", and the file goes where a download
+        of the playlist puts it — ``<folder>/<Playlist>/<Playlist>.m3u8`` —
+        listing the tracks found, in the playlist's order.
+        """
+        from .core.models import TrackMetadata
+
+        config = dict(config or {})
+        context = None
+        if list_id is not None:
+            try:
+                context = self._tracklists.get(int(list_id))
+            except (TypeError, ValueError):
+                context = None
+        if context is None:
+            context = (
+                self.current_tracks,
+                self.current_url or "",
+                getattr(self, "current_playlist_name", ""),
+            )
+        listed, _url, playlist_name = context
+        tracks = [t for t in listed if isinstance(t, TrackMetadata)]
+        if not (playlist_name or "").strip() or not tracks:
+            return {"ok": False, "error": "Open a playlist first."}
+        return self._write_playlist_m3u(config, playlist_name, tracks)
+
+    def _write_playlist_m3u(
+        self, config: dict, playlist_name: str, tracks: list, *, quiet: bool = False
+    ) -> dict:
+        """Rewrites a playlist's M3U to `tracks`, from the files on disk.
+
+        Shared by "Save .m3u8" and the followed-playlist check, which calls
+        it with the playlist's full current listing so a track that left the
+        playlist leaves its M3U too (issue #280). `quiet` keeps a scheduled
+        check's success out of the toasts.
+        """
+        fmt = str(config.get("m3u_format") or "m3u8").lower()
+        if fmt == "none":
+            return {
+                "ok": False,
+                "error": "Playlist files are switched off in Settings (M3U format).",
+            }
+        if config.get("network_destination_id") or config.get("output_path"):
+            return {
+                "ok": False,
+                "error": "Not available with a network destination or an exact "
+                "output path.",
+            }
+
+        from .core.network_destinations import normalize_mounted_path
+        from .core.playlist_sync import library_scan_dirs_from
+        from .downloader import DownloadOptions, MornyeDownloader
+
+        opts = DownloadOptions(
+            output_dir=normalize_mounted_path(self.download_dir),
+            filename_format=config.get("filename_format") or "{title} - {artist}",
+            use_track_numbers=config.get("use_track_numbers") is True,
+            use_album_track_numbers=config.get("use_album_track_numbers") is True,
+            first_artist_only=config.get("first_artist_only") is True,
+            create_playlist_subfolders=config.get("create_playlist_subfolders")
+            is not False,
+            m3u_format=fmt,
+            library_scan_dirs=library_scan_dirs_from(config.get("library_scan_dirs")),
+        )
+        try:
+            target, count = run_sync(
+                MornyeDownloader.write_playlist_m3u_async(opts, playlist_name, tracks)
+            )
+        except Exception as exc:
+            _quiet_log.warning("Could not write the playlist file", exc_info=True)
+            return {"ok": False, "error": f"Could not write the playlist file: {exc}"}
+        if target is None:
+            return {
+                "ok": False,
+                "error": "None of this playlist's tracks are in the download "
+                "folder yet: download it first.",
+            }
+        self.log(
+            f"Playlist file written: {target} ({count} track(s))",
+            "debug" if quiet else "ok",
+        )
+        return {"ok": True, "path": str(target), "found": count, "total": len(tracks)}
 
     def _download_job_payload(
         self, selected_indices, config, context: tuple | None = None

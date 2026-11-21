@@ -219,7 +219,12 @@ def mpv_properties(options: PlayerOptions) -> dict[str, Any]:
         "audio-device": options.audio_device or "auto",
         "audio-spdif": ",".join(options.spdif),
         "audio-exclusive": options.exclusive,
-        "gapless-audio": "yes" if options.gapless else "no",
+        # "weak", not "yes": "yes" keeps the output as the first file opened
+        # it, so after a PCM track an AC-3 one was decoded to PCM instead of
+        # going out as bitstream (and a PCM track after a bitstreamed one hit
+        # an output still in S/PDIF mode). "weak" stays gapless between files
+        # of one format and reopens the output when the format changes.
+        "gapless-audio": "weak" if options.gapless else "no",
         "replaygain": options.replaygain,
         "replaygain-preamp": options.replaygain_preamp,
         "replaygain-clip": options.replaygain_clip,
@@ -385,6 +390,27 @@ _OBSERVED = (
 )
 
 
+#: The system's media keys, as mpv names them, and what the page does for
+#: each. The macOS Now Playing commands, the Windows media overlay and a
+#: keyboard's media keys reach mpv as these keys; its own bindings for them
+#: are off (input_default_bindings), and they would only walk mpv's
+#: two-entry playlist anyway. The page owns the queue, so each key goes to
+#: it. PLAY and PAUSE toggle, as in mpv's input.conf.
+_MEDIA_KEYS = {
+    "PLAY": "toggle",
+    "PAUSE": "toggle",
+    "PLAYPAUSE": "toggle",
+    "PLAYONLY": "play",
+    "PAUSEONLY": "pause",
+    "STOP": "stop",
+    "NEXT": "nexttrack",
+    "PREV": "previoustrack",
+    "FORWARD": "seekforward",
+    "REWIND": "seekbackward",
+}
+_MEDIA_MESSAGE = "mornye-media"
+
+
 #: Properties fixed when mpv opens the audio output (see NativePlayer._reopen).
 _OUTPUT_PROPERTIES = ("audio-spdif", "audio-exclusive", "audio-device")
 
@@ -474,8 +500,20 @@ class NativePlayer:
             for name in _OBSERVED:
                 player.observe_property(name, self._on_property)
             player.register_event_callback(self._on_event)
+            self._bind_media_keys(player)
             self._start_sender()
             return player
+
+    @staticmethod
+    def _bind_media_keys(player: Any) -> None:
+        for key, action in _MEDIA_KEYS.items():
+            try:
+                player.command(
+                    "keybind", key, f"script-message {_MEDIA_MESSAGE} {action}"
+                )
+            except Exception:  # an mpv without `keybind`: the keys stay mpv's
+                logger.debug("mpv keybind %s failed", key, exc_info=True)
+                return
 
     def _start_sender(self) -> None:
         if self._sender is not None:
@@ -798,7 +836,18 @@ class NativePlayer:
                 current = self._current
                 resume, self._resume = self._resume, None
             if advanced:
-                self._post({"type": "advanced", "path": current})
+                # The duration goes with the change. mpv reports a property
+                # only when it changes, so a file that follows itself (repeat
+                # one) or one as long as the last never reports it again, and
+                # the page, which forgets the old one on a change, was left
+                # with no duration: no remaining time, a seek bar that did not
+                # move. When a new value does come in later it still arrives
+                # as "loadedmetadata" and replaces this one.
+                advanced_event: dict = {"type": "advanced", "path": current}
+                duration = self._state.get("duration")
+                if isinstance(duration, (int, float)) and duration > 0:
+                    advanced_event["duration"] = float(duration)
+                self._post(advanced_event)
             elif resume is not None:
                 # Off mpv's event thread: a seek from here would wait on it.
                 threading.Thread(
@@ -806,11 +855,19 @@ class NativePlayer:
                 ).start()
         elif kind == "end-file":
             reason = data.get("reason")
+            # Only a file that was going out as bitstream can blame the
+            # output for refusing it. A PCM file (ALAC, FLAC, AAC...) that
+            # fails is a real error: blaming bitstream for it switched
+            # passthrough off for the rest of the session, so every AC-3
+            # track after it played as PCM. An unknown codec keeps the
+            # benefit of the doubt.
+            codec = self._state.get("audio-codec-name")
             if (
                 reason == "error"
                 and self._options.spdif
                 and not self._spdif_failed
                 and self._current is not None
+                and (not codec or is_bitstreamed(codec, self._options.spdif))
             ):
                 # The output would not take the compressed stream (a device
                 # without passthrough, a shared-mode WASAPI endpoint): carry
@@ -833,6 +890,14 @@ class NativePlayer:
                     self._advancing = queued
                 if not queued:
                     self._post({"type": "ended"})
+        elif kind == "client-message":
+            args = data.get("args") or []
+            if (
+                len(args) == 2
+                and args[0] == _MEDIA_MESSAGE
+                and args[1] in _MEDIA_KEYS.values()
+            ):
+                self._post({"type": "media", "action": args[1]})
         elif kind == "playback-restart":
             self._post({"type": "seeked", "time": self._time()})
 

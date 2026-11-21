@@ -10,6 +10,8 @@
   document.write('<script src="app.js?_=' + t + '"><\/script>');
   // The command palette and shortcuts (N1): after app.js, whose functions it calls.
   document.write('<script src="palette.js?_=' + t + '"><\/script>');
+  // Arrow-key navigation of the sidebar and the Player: after app.js too.
+  document.write('<script src="keynav.js?_=' + t + '"><\/script>');
 })();
 
 // --web mode only (see sw.js's own comment for what the service worker

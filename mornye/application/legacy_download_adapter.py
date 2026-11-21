@@ -34,6 +34,21 @@ class LegacyDownloadAdapter(ProviderExecutor):
         self._options = options
         self._last_result: DownloadResult | None = None
         self._forward_metadata = forward_metadata
+        #: (tier, allow_fallback) for the next provider runs, set by
+        #: DownloadService while it walks the quality tiers; None keeps the
+        #: options' own quality.
+        self._quality: tuple[str, bool] | None = None
+
+    @property
+    def can_scope_quality(self) -> bool:
+        """Whether each provider run can be given its own quality tier: only
+        when the adapter builds a fresh engine per provider from options."""
+        return self._options is not None
+
+    def use_quality(self, tier: str | None, allow_fallback: bool = True) -> None:
+        """Run the next providers at `tier` (strict unless `allow_fallback`),
+        or with the options' own quality again when `tier` is None."""
+        self._quality = (tier, allow_fallback) if tier else None
 
     @property
     def downloader(self) -> Any:
@@ -163,6 +178,8 @@ class LegacyDownloadAdapter(ProviderExecutor):
 
         scoped_options = cast("DownloadOptions", copy.copy(self._options))
         scoped_options.services = [self._service_name(provider)]
+        if self._quality is not None:
+            scoped_options.quality, scoped_options.allow_fallback = self._quality
         return MornyeDownloader(scoped_options)
 
     async def execute(self, provider: str, source: str) -> None:

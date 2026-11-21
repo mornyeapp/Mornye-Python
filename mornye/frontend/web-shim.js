@@ -170,9 +170,9 @@
     'save_profile_data', 'delete_profile_data', 'check_animated_artwork_api',
     'get_download_dir', 'open_config_folder', 'open_url', 'download_track_lyrics',
     'download_track_cover', 'download_cover', 'download_album_cover', 'download_all_covers',
-    'download_all_lyrics', 'get_track_preview', 'fetch_metadata', 'download_tracks',
+    'download_all_lyrics', 'save_playlist_m3u', 'get_track_preview', 'fetch_metadata', 'download_tracks',
     'stop_all_downloads', 'finish_current_downloads',
-    'run_health_check', 'scan_local', 'apply_local_tags', 'get_convert_formats', 'convert_local_files', 'read_file_tags', 'fetch_file_lyrics', 'save_file_tags', 'analyze_audio_file', 'probe_audio_quality', 'get_cli_command', 'save_density', 'get_reorganize_defaults', 'plan_library_reorganize', 'apply_library_reorganize', 'prepare_playback', 'get_library_default_folder', 'scan_music_library', 'cancel_music_library_scan', 'cancel_local_scan', 'get_track_thumb', 'get_track_thumbs', 'get_player_playlists', 'create_player_playlist', 'update_player_playlist', 'delete_player_playlist', 'add_player_playlist_tracks', 'remove_player_playlist_track', 'reorder_player_playlist_tracks', 'export_player_playlist', 'fetch_player_playlist_import', 'fetch_player_playlist_search_import', 'preview_player_playlist_import', 'import_player_playlist', 'import_player_playlist_collection', 'link_player_playlist_tracks', 'get_weekly_releases', 'get_lyrics_ai_config', 'save_lyrics_ai_config', 'translate_lyrics', 'save_translated_lyrics', 'set_download_dir',
+    'run_health_check', 'scan_local', 'apply_local_tags', 'get_convert_formats', 'convert_local_files', 'read_file_tags', 'fetch_file_lyrics', 'save_file_tags', 'analyze_audio_file', 'probe_audio_quality', 'get_cli_command', 'save_density', 'get_reorganize_defaults', 'plan_library_reorganize', 'apply_library_reorganize', 'prepare_playback', 'get_library_default_folder', 'scan_music_library', 'cancel_music_library_scan', 'cancel_local_scan', 'get_track_thumb', 'get_track_thumbs', 'get_artist_photos', 'get_player_playlists', 'create_player_playlist', 'update_player_playlist', 'delete_player_playlist', 'add_player_playlist_tracks', 'remove_player_playlist_track', 'reorder_player_playlist_tracks', 'export_player_playlist', 'fetch_player_playlist_import', 'fetch_player_playlist_search_import', 'preview_player_playlist_import', 'import_player_playlist', 'import_player_playlist_collection', 'link_player_playlist_tracks', 'get_weekly_releases', 'get_lyrics_ai_config', 'save_lyrics_ai_config', 'translate_lyrics', 'save_translated_lyrics', 'set_download_dir',
     'get_registry_directories', 'add_registry_directory', 'remove_registry_directory',
     'discover_registries', 'get_download_services', 'get_dedup_status',
     'scan_for_duplicates',
@@ -370,6 +370,9 @@
     'showNodeWarning',
     'showTracklist',
     'subscriptionsChecked',
+    // Desktop-only in practice (choose_folder() is replaced above here),
+    // listed so every event the backend can push has a dispatcher.
+    'openDownloadFolderBrowser',
     'updateFolderLabel',
     'updateHealthResults',
   ]);

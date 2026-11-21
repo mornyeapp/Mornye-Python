@@ -46,6 +46,45 @@ from mornye.core.retry import RetryPolicy
 logger = logging.getLogger(__name__)
 
 
+def _quality_attempts(
+    request: Any, candidates: list[Any], executor: Any
+) -> list[tuple[Any, str | None, bool]]:
+    """The (provider, tier, permissive) runs for one source, in order.
+
+    With quality fallback on and a tier to fall back to, every service is
+    asked for the best tier before any is asked for the next one: Hi-Res
+    Lossless from Tidal, Qobuz, Amazon and Deezer, and only then Lossless
+    from Tidal again. Every tier but the last is strict (a lower file is
+    refused and the next service asked); the last keeps the fallback the
+    services do themselves. Without that, one run per service at the
+    configured quality, as before — each of which already falls back to
+    Lossless on its own, which is what let a 16-bit file from the first
+    service win over a 24-bit one from the second.
+    """
+    from mornye.core.quality import quality_fallback_chain
+
+    plain: list[tuple[Any, str | None, bool]] = [
+        (candidate, None, True) for candidate in candidates
+    ]
+    download = request.config.download
+    if (
+        len(candidates) < 2
+        or not download.allow_fallback
+        or not isinstance(executor, LegacyDownloadAdapter)
+        or not executor.can_scope_quality
+    ):
+        return plain
+    tiers = quality_fallback_chain(download.quality)
+    if len(tiers) < 2:
+        return plain
+    last = len(tiers) - 1
+    return [
+        (candidate, tier, index == last)
+        for index, tier in enumerate(tiers)
+        for candidate in candidates
+    ]
+
+
 class DownloadService:
     """Application-layer orchestrator for the refactor baseline.
 
@@ -346,8 +385,30 @@ class DownloadService:
                         )
                     )
                 provider_executor = legacy_adapter
-            for candidate in candidates:
+            quality_adapter = (
+                provider_executor
+                if isinstance(provider_executor, LegacyDownloadAdapter)
+                else None
+            )
+            attempts = _quality_attempts(request, candidates, provider_executor)
+            tier_shown: str | None = None
+            for candidate, tier, permissive in attempts:
                 provider = candidate.name
+                if tier is not None:
+                    if quality_adapter is None:
+                        raise RuntimeError(
+                            "Quality tiers require a legacy download adapter"
+                        )
+                    quality_adapter.use_quality(tier, permissive)
+                    if tier_shown is not None and tier != tier_shown:
+                        logger.info(
+                            "[quality] %s: no %s on any service, trying %s "
+                            "from the first service",
+                            source,
+                            tier_shown,
+                            tier,
+                        )
+                    tier_shown = tier
                 await self._event_bus.publish(
                     "provider.selected",
                     {
@@ -412,6 +473,12 @@ class DownloadService:
                     break
                 if not ProviderExecutor.is_retryable(last_error, policy):
                     break
+            if attempts and attempts[0][1] is not None:
+                if quality_adapter is None:
+                    raise RuntimeError(
+                        "Quality tiers require a legacy download adapter"
+                    )
+                quality_adapter.use_quality(None)
             if last_error is not None:
                 result_error = (
                     last_error.result

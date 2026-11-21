@@ -243,7 +243,9 @@ class SubscriptionsMixin:
         )
         self._push("subscriptionsChecked", {"results": payload, "new": total_new})
 
-        if download and total_new:
+        if download:
+            # Also with nothing new: a followed playlist that only lost or
+            # reordered tracks still gets its M3U rewritten (issue #280).
             self._download_subscription_results(results, config)
 
     def _run_scheduled_check(self, sub) -> None:
@@ -264,7 +266,7 @@ class SubscriptionsMixin:
             "subscriptionsChecked",
             {"results": [result.to_dict()], "new": len(result.new), "scheduled": True},
         )
-        if result.new:
+        if not result.error:
             self._download_subscription_results([result])
 
     def _download_subscription_results(
@@ -282,6 +284,23 @@ class SubscriptionsMixin:
         for result in results:
             sub = result.subscription
             settings = dict(config or sub.download_config or {})
+            if result.error:
+                continue
+            if (
+                sub.kind == "playlist"
+                and result.playlist_tracks
+                and not result.new_tracks
+            ):
+                # Nothing to download, but the playlist may have lost or
+                # reordered tracks since the last check: its M3U follows the
+                # current listing, as the download job does when tracks were
+                # added (issue #280).
+                self._refresh_subscription_m3u(
+                    settings,
+                    result.artist_name or sub.name or "",
+                    result.playlist_tracks,
+                )
+                continue
             if result.new_tracks:
                 if not self._queue_subscription_tracks(
                     result.new_tracks,
@@ -319,6 +338,31 @@ class SubscriptionsMixin:
                 f"{unqueued} new release(s) could not be queued for download — "
                 "see the Logs view for why.",
                 "error",
+            )
+
+    def _refresh_subscription_m3u(
+        self, settings: dict, playlist_name: str, tracks: list
+    ) -> None:
+        """Rewrites a followed playlist's M3U to its current listing.
+
+        Never fails the check: a playlist not downloaded yet, or one with
+        playlist files switched off, simply has no M3U to rewrite.
+        """
+        writer = getattr(self, "_write_playlist_m3u", None)
+        if writer is None or not playlist_name.strip():
+            return
+        try:
+            result = writer(settings, playlist_name, tracks, quiet=True)
+        except Exception as exc:
+            self.log(
+                f"Could not update the playlist file of {playlist_name}: {exc}",
+                "warn-quiet",
+            )
+            return
+        if not result.get("ok"):
+            self.log(
+                f"Playlist file of {playlist_name} not updated: {result.get('error')}",
+                "debug",
             )
 
     def _release_tracks(self, url: str) -> list:

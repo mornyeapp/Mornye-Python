@@ -141,6 +141,25 @@
 .local-empty-icon svg { width: 20px; height: 20px; }
 #view-local .s-body:has(#local-results-wrap:not(.hidden)) #local-empty { display: none; }
 
+/* Finds one song among the scanned files (app.js, filterLocalSearch). */
+.local-search { position: relative; display: block; max-width: 460px; margin-bottom: var(--space-3); }
+.local-search > svg {
+  position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
+  color: var(--text-muted); pointer-events: none;
+}
+#view-local .local-search input[type="search"] {
+  width: 100%; box-sizing: border-box; padding: 0 36px 0 40px;
+  -webkit-appearance: none; appearance: none;
+}
+#view-local .local-search input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; }
+.local-search-clear {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px;
+  border: 0; border-radius: var(--radius-1); background: transparent;
+  color: var(--text-2); font-size: 16px; line-height: 1; cursor: pointer;
+}
+.local-search-clear:hover { color: var(--text); background: var(--raised); }
+.local-search-clear.hidden { display: none; }
+
 .local-summary { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: var(--space-3); }
 .local-summary:empty { display: none; }
 .local-chip {
@@ -156,6 +175,11 @@
 .local-chip.review .local-chip-n { color: var(--signal-text); }
 .local-chip.none .local-chip-n, .local-chip.error .local-chip-n { color: var(--error); }
 #local-track-rows > .hidden { display: none !important; }
+/* The list has rows for the first files only (app.js, LOCAL_PAGE): this
+   marker at its end asks for the next ones as it scrolls into view. */
+#local-track-rows > .local-more {
+  flex-shrink: 0; text-align: center; color: var(--text-muted); font-size: var(--text-xs); padding: 14px;
+}
 /* The list is a scrolling flex column, and a row's min-height of 40px
    (home.css) replaced the "as tall as my content" minimum: with many files
    the column squeezed every row to 40px and the title, artist, file name and

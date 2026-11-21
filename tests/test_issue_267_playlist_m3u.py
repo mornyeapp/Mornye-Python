@@ -245,3 +245,71 @@ def test_plain_download_has_no_library_dir(tmp_path: Path, monkeypatch: Any) -> 
     opts = _gui_options(tmp_path, monkeypatch)
 
     assert opts["library_dir"] is None
+
+
+# ---------------------------------------------------------------------------
+# "Save .m3u8": the playlist file rebuilt from the library, nothing downloaded
+# ---------------------------------------------------------------------------
+
+
+def test_save_m3u_rebuilds_a_deleted_playlist_file(tmp_path: Path) -> None:
+    (tmp_path / "Playlist1").mkdir()
+    (tmp_path / "Playlist1" / "Shared - Artist.flac").write_bytes(b"audio")
+    (tmp_path / "Playlist2").mkdir()
+    (tmp_path / "Playlist2" / "Own - Artist.flac").write_bytes(b"audio")
+    tracks = [_track("t1", "Own"), _track("t2", "Missing"), _track("t3", "Shared")]
+
+    target, count = asyncio.run(
+        MornyeDownloader.write_playlist_m3u_async(
+            DownloadOptions(output_dir=str(tmp_path)), "Playlist2", tracks
+        )
+    )
+
+    assert target == tmp_path / "Playlist2" / "Playlist2.m3u8"
+    assert count == 2
+    assert target.read_text(encoding="utf-8").splitlines() == [
+        "#EXTM3U",
+        "#EXTINF:180,Artist - Own",
+        "Own - Artist.flac",
+        "#EXTINF:180,Artist - Shared",
+        "../Playlist1/Shared - Artist.flac",
+    ]
+
+
+def test_save_m3u_writes_nothing_when_no_track_is_downloaded(tmp_path: Path) -> None:
+    target, count = asyncio.run(
+        MornyeDownloader.write_playlist_m3u_async(
+            DownloadOptions(output_dir=str(tmp_path)), "Playlist2", [_track("t1", "A")]
+        )
+    )
+
+    assert (target, count) == (None, 0)
+    assert not (tmp_path / "Playlist2").exists()
+
+
+def test_save_playlist_m3u_api_uses_the_current_playlist(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    (tmp_path / "Mix").mkdir()
+    (tmp_path / "Mix" / "Song - Artist.flac").write_bytes(b"audio")
+    api = MornyeAPI()
+    monkeypatch.setattr(api, "download_dir", str(tmp_path), raising=False)
+    api.current_tracks = [_track("t1", "Song"), _track("t2", "Gone")]
+    api.current_playlist_name = "Mix"
+
+    result = api.save_playlist_m3u({"m3u_format": "m3u8"})
+
+    assert result == {
+        "ok": True,
+        "path": str(tmp_path / "Mix" / "Mix.m3u8"),
+        "found": 1,
+        "total": 2,
+    }
+
+
+def test_save_playlist_m3u_api_refuses_a_non_playlist() -> None:
+    api = MornyeAPI()
+    api.current_tracks = [_track("t1", "Song")]
+    api.current_playlist_name = ""
+
+    assert api.save_playlist_m3u({})["ok"] is False

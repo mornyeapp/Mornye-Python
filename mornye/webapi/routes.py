@@ -381,8 +381,15 @@ def _download_routes(router: APIRouter, deps: ApiDeps) -> None:
             )
             if payload.services:
                 download_config.metadata.providers = list(payload.services)
-            if payload.output_dir and not deps.multiuser:
-                download_config.output.directory = Path(payload.output_dir)
+            # Without an output_dir the download goes to the instance's own
+            # download folder, as it does from the Web UI. MornyeConfig()
+            # alone would send it to ./Downloads under the working directory
+            # (issue #288).
+            download_config.output.directory = (
+                Path(payload.output_dir)
+                if payload.output_dir and not deps.multiuser
+                else Path(api.download_dir).expanduser()
+            )
             download_request = DownloadRequest(
                 sources=[payload.url],
                 config=download_config,

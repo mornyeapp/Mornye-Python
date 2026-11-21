@@ -82,11 +82,45 @@
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
       <span class="nav-label">Explore</span>
     </button>
+    <button class="nav-btn" id="nav-following" data-onclick="switchView('following'); loadSubscriptions();" title="Following" data-label="Following">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+      <span class="nav-label">Following</span>
+    </button>
     <div class="sb-group">Library</div>
+    <!-- One row per page of the library, the way a music app lays it out;
+         the phone bar has no room for them and keeps the one Player button
+         (and the tabs at the top of the page). -->
     <button class="nav-btn" id="nav-player" data-onclick="switchView('player')" title="Play the music in a folder" data-label="Player">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor"/></svg>
       <span class="nav-label">Player</span>
     </button>
+    <button class="nav-btn nav-lib" id="nav-lib-recent" type="button" data-onclick="openLibrary('recent')" title="Recently Added" data-label="Recently Added">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+      <span class="nav-label">Recently Added</span>
+    </button>
+    <button class="nav-btn nav-lib" id="nav-lib-artists" type="button" data-onclick="openLibrary('artists')" title="Artists" data-label="Artists">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a4 4 0 0 1 4 4v1a4 4 0 0 1-8 0V7a4 4 0 0 1 4-4z"/><path d="M12 16v5"/><path d="M8 21h8"/><path d="M5 11a7 7 0 0 0 14 0"/></svg>
+      <span class="nav-label">Artists</span>
+    </button>
+    <button class="nav-btn nav-lib" id="nav-lib-albums" type="button" data-onclick="openLibrary('albums')" title="Albums" data-label="Albums">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="14" rx="2"/><path d="M6 4h12"/></svg>
+      <span class="nav-label">Albums</span>
+    </button>
+    <button class="nav-btn nav-lib" id="nav-lib-songs" type="button" data-onclick="openLibrary('songs')" title="Songs" data-label="Songs">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg>
+      <span class="nav-label">Songs</span>
+    </button>
+    <div class="sb-group sb-lib-group">Playlists</div>
+    <button class="nav-btn nav-lib" id="nav-lib-playlists" type="button" data-onclick="openLibrary('playlists')" title="All Playlists" data-label="All Playlists">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      <span class="nav-label">All Playlists</span>
+    </button>
+    <div class="sb-playlists" id="sb-playlists"><div class="sb-playlists-inner" id="sb-playlist-list" role="list" aria-label="Playlists"></div></div>
+    <button class="nav-btn nav-lib sb-pl-new" id="nav-lib-new" type="button" data-onclick="newLibraryPlaylist()" title="New Playlist" data-label="New Playlist">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <span class="nav-label">New Playlist</span>
+    </button>
+    <div class="sb-group">Downloads</div>
     <button class="nav-btn" id="nav-queue" data-onclick="switchView('queue')" title="Queue" data-label="Queue">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>
       <span class="nav-label">Queue</span>
@@ -99,10 +133,6 @@
     <button class="nav-btn" id="nav-local" data-onclick="switchView('local')" title="Fix Local Files" data-label="Fix Local Files">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
       <span class="nav-label">Fix Local Files</span>
-    </button>
-    <button class="nav-btn" id="nav-following" data-onclick="switchView('following'); loadSubscriptions();" title="Following" data-label="Following">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-      <span class="nav-label">Following</span>
     </button>
     <button class="nav-btn" id="nav-stats" data-onclick="switchView('stats'); loadStats();" title="Your library in numbers" data-label="Stats">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
@@ -379,7 +409,7 @@
     <div class="view" id="view-player">
       <div class="s-header">
         <div class="player-heading">
-          <h1>Player</h1>
+          <h1 id="player-title">Player</h1>
           <p>Browse and play music from your local library.</p>
         </div>
       </div>
@@ -405,7 +435,7 @@
             <button class="act-btn secondary" type="button" id="plb-rescan" data-onclick="scanPlayerLibrary()">Rescan</button>
           </div>
         </div>
-        <div class="player-playlist-tools">
+        <div class="player-playlist-tools hidden" id="player-playlist-tools">
           <button class="act-btn primary" type="button" data-onclick="openPlayerPlaylistEditor()">New playlist</button>
           <button class="act-btn secondary" type="button" data-onclick="openPlayerPlaylistImport()">Import M3U/M3U8</button>
           <label for="player-playlist-url">Playlist link</label>
@@ -590,6 +620,11 @@
              the panel, a 0 basis left the list no height at all, so a scan
              showed its column header and "1 file(s) selected" but no rows. -->
         <div id="local-results-wrap" class="hidden u-dir-column u-minh-0" style="display:flex;flex:1 0 min(68vh, 640px);">
+          <label class="local-search" id="local-search-wrap">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="search" id="local-search" placeholder="Find a song: title, artist or file name" aria-label="Find a song in the scanned files" data-oninput="filterLocalSearch()" autocomplete="off" spellcheck="false">
+            <button type="button" class="local-search-clear hidden" id="local-search-clear" data-onclick="clearLocalSearch()" aria-label="Clear search">×</button>
+          </label>
           <div class="local-summary" id="local-summary" role="group" aria-label="Filter the scanned files"></div>
           <div class="track-table-header u-cols-24-1fr-80-1fr u-mb-8">
             <div><input id="check-all-local" type="checkbox" checked data-onchange="toggleAllLocal(this)"></div>
@@ -1429,6 +1464,13 @@
         </div>
 
         <div class="tc" id="tc-player" data-title="Player">
+          <div class="s-section">
+            <div class="s-title">Now Playing</div>
+            <div class="s-row">
+              <span class="s-label">Canvas<small>Loops the short video saved with a track (Save Spotify Canvas) in place of its cover, as Spotify does. Saved on this device.</small></span>
+              <label class="toggle"><input type="checkbox" id="np-canvas-enabled" checked data-onchange="setCanvasEnabled(this.checked)"><span class="toggle-sl"></span></label>
+            </div>
+          </div>
           <div id="np-engine-note" class="s-section np-engine-note hidden" role="status"></div>
           <div class="s-section">
             <div class="s-title">Audio engine</div>
@@ -2189,7 +2231,7 @@
     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg>
   </div>
   <div class="np-left">
-    <div class="np-cover-wrap"><img id="np-cover" alt="Cover"><div id="np-cover-empty" class="np-cover-empty">🎵</div></div>
+    <div class="np-cover-wrap"><img id="np-cover" alt="Cover"><div id="np-cover-empty" class="np-cover-empty">🎵</div><!-- The track's Spotify Canvas plays in the cover's place (Settings → Player → Canvas; npShowCanvas in app.js). --><video id="np-canvas" muted loop playsinline preload="auto" aria-hidden="true" tabindex="-1"></video></div>
     <div class="np-meta">
       <div class="np-title-row"><span id="np-title" class="np-title"></span><span id="np-explicit" class="np-e hidden">E</span></div>
       <div id="np-artist" class="np-artist"></div>

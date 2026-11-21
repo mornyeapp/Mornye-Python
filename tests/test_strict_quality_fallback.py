@@ -99,20 +99,114 @@ def test_fallback_off_fails_when_no_provider_has_the_tier(
     assert not (tmp_path / "a.flac").exists()
 
 
-def test_fallback_on_keeps_the_lower_tier_from_the_first_provider(
+class _LoggingProvider(_Provider):
+    """Also writes every request into one log shared by all providers."""
+
+    def __init__(self, name: str, path: Path, log: list, quality_options=None) -> None:
+        super().__init__(name, path)
+        self.log = log
+        if quality_options is not None:
+            self.quality_options = quality_options
+
+    async def download_track_async(self, metadata, output_dir, **kwargs):
+        self.log.append((self.name, kwargs["quality"]))
+        return await super().download_track_async(metadata, output_dir, **kwargs)
+
+
+def test_fallback_on_asks_every_service_for_hi_res_before_lossless(
     tmp_path, monkeypatch
 ) -> None:
-    _isolate(monkeypatch, {"a.flac": ("LOSSLESS", "16-bit/44.1 kHz")})
-    first = _Provider("ext:first", tmp_path / "a.flac")
-    second = _Provider("ext:second", tmp_path / "b.flac")
+    _isolate(
+        monkeypatch,
+        {
+            "a.flac": ("LOSSLESS", "16-bit/44.1 kHz"),
+            "b.flac": ("HI_RES", "24-bit/96 kHz"),
+        },
+    )
+    log: list = []
+    first = _LoggingProvider("ext:first", tmp_path / "a.flac", log)
+    second = _LoggingProvider("ext:second", tmp_path / "b.flac", log)
 
     result = _run(
         tmp_path, [first, second], quality="HI_RES_LOSSLESS", allow_fallback=True
     )
 
     assert result.success
-    assert result.provider == "ext:first"
-    assert second.calls == []
+    assert result.provider == "ext:second"
+    assert not (tmp_path / "a.flac").exists()
+    assert log == [("ext:first", "HI_RES_LOSSLESS"), ("ext:second", "HI_RES_LOSSLESS")]
+
+
+def test_fallback_on_goes_back_to_the_first_service_for_lossless(
+    tmp_path, monkeypatch
+) -> None:
+    _isolate(
+        monkeypatch,
+        {
+            "a.flac": ("LOSSLESS", "16-bit/44.1 kHz"),
+            "b.flac": ("LOSSLESS", "16-bit/44.1 kHz"),
+            "c.flac": ("LOSSLESS", "16-bit/44.1 kHz"),
+        },
+    )
+    log: list = []
+    providers = [
+        _LoggingProvider("ext:svc1", tmp_path / "a.flac", log),
+        _LoggingProvider("ext:svc2", tmp_path / "b.flac", log),
+        _LoggingProvider("ext:svc3", tmp_path / "c.flac", log),
+    ]
+
+    result = _run(tmp_path, providers, quality="HI_RES_LOSSLESS", allow_fallback=True)
+
+    assert result.success
+    assert result.provider == "ext:svc1"
+    assert log == [
+        ("ext:svc1", "HI_RES_LOSSLESS"),
+        ("ext:svc2", "HI_RES_LOSSLESS"),
+        ("ext:svc3", "HI_RES_LOSSLESS"),
+        ("ext:svc1", "LOSSLESS"),
+    ]
+
+
+def test_a_service_with_no_hi_res_option_waits_for_the_lossless_pass(
+    tmp_path, monkeypatch
+) -> None:
+    _isolate(
+        monkeypatch,
+        {
+            "a.flac": ("LOSSLESS", "16-bit/44.1 kHz"),
+            "d.flac": ("LOSSLESS", "16-bit/44.1 kHz"),
+        },
+    )
+    log: list = []
+    no_hi_res = _LoggingProvider(
+        "ext:no-hi-res",
+        tmp_path / "d.flac",
+        log,
+        quality_options=[
+            {"id": "LOSSLESS", "label": "FLAC 16-bit", "kind": "lossless"}
+        ],
+    )
+    hi_res = _LoggingProvider("ext:hi-res", tmp_path / "a.flac", log)
+
+    result = _run(
+        tmp_path, [no_hi_res, hi_res], quality="HI_RES_LOSSLESS", allow_fallback=True
+    )
+
+    assert result.success
+    assert result.provider == "ext:no-hi-res"
+    assert log == [("ext:hi-res", "HI_RES_LOSSLESS"), ("ext:no-hi-res", "LOSSLESS")]
+
+
+def test_a_lossless_request_is_still_a_single_pass(tmp_path, monkeypatch) -> None:
+    _isolate(monkeypatch, {"a.flac": ("LOSSLESS", "16-bit/44.1 kHz")})
+    log: list = []
+    first = _LoggingProvider("ext:first", tmp_path / "a.flac", log)
+    second = _LoggingProvider("ext:second", tmp_path / "b.flac", log)
+
+    result = _run(tmp_path, [first, second], quality="LOSSLESS", allow_fallback=True)
+
+    assert result.success
+    assert log == [("ext:first", "LOSSLESS")]
 
 
 def test_fallback_off_rejects_lossy_for_a_lossless_request(
@@ -270,13 +364,16 @@ def test_atmos_without_fallback_rejects_a_stereo_file(tmp_path, monkeypatch) -> 
 
 
 def test_atmos_with_fallback_still_asks_every_provider(tmp_path, monkeypatch) -> None:
+    # No Atmos option: left out of the Atmos pass, then asked for Hi-Res
+    # (its 16-bit file is refused there) and finally for Lossless.
     _isolate(monkeypatch, {"q.flac": ("LOSSLESS", "16-bit/44.1 kHz stereo")})
     qobuz = _ExtProvider("ext:qobuz-web", tmp_path / "q.flac", _QOBUZ_OPTIONS)
 
     result = _run(tmp_path, [qobuz], quality="DOLBY_ATMOS", allow_fallback=True)
 
     assert result.success
-    assert qobuz.calls == ["DOLBY_ATMOS"]
+    assert result.provider == "ext:qobuz-web"
+    assert qobuz.calls == ["HI_RES_LOSSLESS", "LOSSLESS"]
 
 
 def test_an_amazon_override_to_flac_is_not_atmos() -> None:

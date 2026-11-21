@@ -16,6 +16,7 @@ still works, it only scans everything as it used to.
 from __future__ import annotations
 
 import logging
+import os
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -36,6 +37,25 @@ class Stored:
     def matches(self, mtime_ns: int, size: int) -> bool:
         """Whether the file is still the one this row was read from."""
         return self.mtime_ns == mtime_ns and self.size == size
+
+
+def added_at(st: os.stat_result) -> int:
+    """When a file arrived in the library, in seconds, for Recently Added.
+
+    Its creation time where the system keeps one (macOS, Windows), so that
+    retagging a file does not make it new again; its modification time
+    elsewhere.
+    """
+    born = getattr(st, "st_birthtime", 0) or (st.st_ctime if os.name == "nt" else 0)
+    return int(born or st.st_mtime)
+
+
+def with_added(stored: Stored) -> dict[str, Any]:
+    """A stored row with its "added" time; rows read before it was kept
+    use the modification time recorded with them."""
+    if stored.row.get("added"):
+        return stored.row
+    return {**stored.row, "added": stored.mtime_ns // 1_000_000_000}
 
 
 def _under(path: str, roots: list[Path]) -> bool:

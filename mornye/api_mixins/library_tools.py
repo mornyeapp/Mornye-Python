@@ -363,14 +363,60 @@ class LibraryToolsMixin:
         url = ""
         if local_url and not native:
             url = get_media_server(self._is_media_path).url_for(served)
+        motion = self._animated_cover(path)
+        canvas = self._track_canvas(path)
+        motion_url = canvas_url = ""
+        if local_url:
+            # Through the media server even with the native engine playing
+            # the audio: the window still has no other route to the files.
+            server = get_media_server(self._is_media_path)
+            motion_url = server.url_for(motion) if motion else ""
+            canvas_url = server.url_for(canvas) if canvas else ""
         return {
             "status": "ok",
             "path": str(served),
             "url": url,
             "mode": mode,
             "quality": label,
+            "motion_path": str(motion) if motion else "",
+            "motion_url": motion_url,
+            "canvas_path": str(canvas) if canvas else "",
+            "canvas_url": canvas_url,
             **self._now_playing(path, info),
         }
+
+    def _track_canvas(self, path: str) -> Path | None:
+        """The track's Spotify Canvas, saved beside it under the same name
+        (``Song.mp4`` for ``Song.flac``, see download_engine
+        _write_canvas_sidecars_async), for the full-screen player to loop
+        behind the lyrics. Videos only: a still canvas adds nothing to the
+        cover. None when the track has none."""
+        from ..core.canvas import _VIDEO_SUFFIXES
+
+        audio = Path(path)
+        for suffix in _VIDEO_SUFFIXES:
+            candidate = audio.with_suffix(suffix)
+            if candidate == audio:
+                continue
+            try:
+                if candidate.is_file() and candidate.stat().st_size > 0:
+                    return candidate
+            except OSError:
+                continue
+        return None
+
+    def _animated_cover(self, path: str) -> Path | None:
+        """The album's animated artwork, saved as ``cover.webp`` in the
+        track's folder by the download (post_processing.
+        _write_animated_artwork_sidecar), for the full-screen player to show
+        in place of the still cover. None when the folder has none."""
+        candidate = Path(path).parent / "cover.webp"
+        try:
+            if candidate.is_file() and candidate.stat().st_size > 0:
+                return candidate
+        except OSError:
+            pass
+        return None
 
     def _now_playing(self, path: str, info: dict) -> dict:
         """What the full-screen player shows: tags, cover and lyrics.
@@ -469,7 +515,7 @@ class LibraryToolsMixin:
             stored = player_library.stored_rows(roots)
             if stored:
                 rows = sorted(
-                    (s.row for s in stored.values()),
+                    (player_library.with_added(s) for s in stored.values()),
                     key=lambda r: str(r.get("path", "")).lower(),
                 )
                 for start in range(0, len(rows), 500):
@@ -532,7 +578,7 @@ class LibraryToolsMixin:
                     and "genre" in known.row
                 ):
                     continue
-                row = read_track_row(path)
+                row = {**read_track_row(path), "added": player_library.added_at(st)}
                 batch.append(row)
                 to_store.append((str(path), st.st_mtime_ns, st.st_size, row))
                 if len(to_store) >= 200:
@@ -681,3 +727,17 @@ class LibraryToolsMixin:
         with ThreadPoolExecutor(max_workers=min(8, len(wanted))) as pool:
             urls = list(pool.map(lambda p: self.get_track_thumb(p, size), wanted))
         return dict(zip(wanted, urls, strict=True))
+
+    def get_artist_photos(self, names: list) -> dict:
+        """The artists' own photos for the Player's artist cards and header:
+        {name: image URL or ""}, from the same Spotify artist search the
+        text search uses, cached on disk (core/artist_photos.py). "" means
+        the card keeps the album cover it already shows.
+        """
+        from ..core.artist_photos import artist_photos
+
+        try:
+            return artist_photos(names if isinstance(names, list) else [])
+        except Exception as exc:
+            self.log(f"get_artist_photos error: {exc}", "error")
+            return {}

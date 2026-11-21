@@ -917,3 +917,38 @@ def test_a_saved_soundcloud_enrichment_setting_is_ignored(monkeypatch):
     assert asked == ["deezer"]
     assert out.genre == "Pop"
     assert "soundcloud" not in out._sources.values()
+
+
+def test_playlist_local_match_finds_multi_artist_track_without_isrc(
+    monkeypatch, tmp_path
+):
+    # A followed playlist's listing carries no ISRC, so a refresh finds the
+    # tracks already downloaded by their tags. Every credited artist is
+    # written to ARTIST and read back joined ("Lead, Guest"); matching only
+    # the lead artist dropped every collaboration from the rewritten M3U.
+    track_path = tmp_path / "renamed.flac"
+    track_path.write_bytes(b"audio")
+
+    monkeypatch.setattr(
+        playlist_sync,
+        "read_embedded_tags",
+        lambda path, include_cover=False: tagger.EmbeddedTags(
+            tags={
+                "ISRC": "USABC1234567",
+                "TITLE": "Song",
+                "ARTIST": "Lead, Guest",
+                "ALBUM": "Album",
+            }
+        ),
+    )
+    index = playlist_sync.index_audio_files(tmp_path, use_cache=False)
+
+    listed = TrackMetadata(
+        id="track-1",
+        title="Song",
+        artists="Lead, Guest",
+        artist_names=["Lead", "Guest"],
+        album="Album",
+        album_artist="Lead",
+    )
+    assert playlist_sync.find_existing_track(index, listed, "missing") == track_path

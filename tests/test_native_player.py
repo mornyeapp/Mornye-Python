@@ -228,6 +228,43 @@ def test_mpv_is_created_on_first_use_with_options_applied():
     assert fake.terminated
 
 
+def test_media_keys_go_to_the_page_not_to_mpvs_playlist():
+    # mpv's default bindings are off, so without these the keyboard's media
+    # keys and the Now Playing commands did nothing with the native engine.
+    player, events, fakes = make_player()
+    player.load("/music/a.flac")
+    (fake,) = fakes
+    binds = {c[1]: c[2] for c in fake.commands if c[0] == "keybind"}
+    assert binds["PLAYPAUSE"] == "script-message mornye-media toggle"
+    assert binds["PLAY"] == "script-message mornye-media toggle"
+    assert binds["PAUSEONLY"] == "script-message mornye-media pause"
+    assert binds["NEXT"] == "script-message mornye-media nexttrack"
+    assert binds["PREV"] == "script-message mornye-media previoustrack"
+    fake.event(event="client-message", args=["mornye-media", "nexttrack"])
+    fake.event(event="client-message", args=["mornye-media", "rm -rf"])
+    fake.event(event="client-message", args=["other-script", "toggle"])
+    assert wait_for(events, "media") == [{"type": "media", "action": "nexttrack"}]
+    player.close()
+
+
+def test_an_mpv_without_keybind_still_starts():
+    def factory(**kw):
+        fake = FakeMPV(**kw)
+        original = fake.command
+
+        def command(*args):
+            if args[0] == "keybind":
+                raise SystemError("unknown command")
+            original(*args)
+
+        fake.command = command
+        return fake
+
+    player = NativePlayer(lambda e: None, options=PlayerOptions(), mpv_factory=factory)
+    player.load("/music/a.flac")
+    player.close()
+
+
 def test_an_mpv_without_media_controls_still_starts():
     made = []
 
@@ -279,6 +316,21 @@ def test_gapless_advance_and_end_of_queue_events():
     assert wait_for(events, "ended")
     fake.event(event="end-file", reason="error", file_error="unrecognized file format")
     assert wait_for(events, "error")[0]["message"] == "unrecognized file format"
+    player.close()
+
+
+def test_a_track_that_repeats_keeps_its_duration():
+    # Repeat one queues the file after itself: mpv never reports the same
+    # duration again, so the change has to carry it.
+    player, events, fakes = make_player()
+    player.load("/m/a.flac", "/m/a.flac")
+    fake = fakes[0]
+    fake.change("duration", 183.5)
+    fake.event(event="end-file", reason="eof")
+    fake.event(event="file-loaded")
+    assert wait_for(events, "advanced") == [
+        {"type": "advanced", "path": "/m/a.flac", "duration": 183.5}
+    ]
     player.close()
 
 
@@ -447,6 +499,26 @@ def test_a_refused_bitstream_falls_back_to_pcm_instead_of_stopping():
     # Choosing bitstream again tries it again.
     player.set_options({"spdif": ["ac3", "eac3"]})
     assert fake.props["audio-spdif"] == "ac3,eac3"
+    player.close()
+
+
+def test_gapless_reopens_the_output_when_the_format_changes():
+    # "yes" kept the output as the first file opened it: after a PCM track
+    # an AC-3 one went out decoded to PCM instead of as bitstream.
+    assert mpv_properties(PlayerOptions(gapless=True))["gapless-audio"] == "weak"
+
+
+def test_a_pcm_track_that_fails_does_not_switch_bitstream_off():
+    player, events, fakes = make_player(PlayerOptions(spdif=["ac3"]))
+    player.load("/m/stereo.m4a")
+    fake = fakes[0]
+    fake.change("audio-codec-name", "alac")
+    fake.event(event="end-file", reason="error", file_error="audio output failed")
+    assert wait_for(events, "error")[0]["message"] == "audio output failed"
+    assert not [e for e in events if e["type"] == "warning"]
+    # The next AC-3 track still goes out as bitstream.
+    player.load("/m/dolby.m4a")
+    assert fake.props["audio-spdif"] == "ac3"
     player.close()
 
 
@@ -637,7 +709,8 @@ def test_real_mpv_plays_gapless_and_ends(tmp_path):
         meta = wait_for(events, "loadedmetadata", 5)
         assert meta and meta[0]["duration"] == pytest.approx(3, abs=0.1)
         player.command("seek", 2.6)
-        assert wait_for(events, "advanced", 5) == [{"type": "advanced", "path": b}]
+        advanced = wait_for(events, "advanced", 5)
+        assert [e["path"] for e in advanced] == [b]
         end = time.monotonic() + 3  # the decoder opens just after the change
         while time.monotonic() < end and not player.stats()["codec"]:
             time.sleep(0.02)

@@ -204,6 +204,7 @@ function switchView(name) {
   if (name === 'history') loadHistory();
   if (name === 'following') loadWeeklyReleases(false);
   if (name === 'player') initPlayerView();
+  syncLibraryNav();
 }
 
 // Mounted network shares as one-click picks under the library path field:
@@ -1844,6 +1845,9 @@ window.app_set_metadata = (data) => {
 window.updateFolderLabel = (path) => {
   $('folder-path').textContent = path; $('folder-path').title = path;
 };
+// Sent by choose_folder() when the native dialog is switched off
+// (MORNYE_FOLDER_DIALOG=builtin): the download folder is picked in the page.
+window.openDownloadFolderBrowser = () => openFolderBrowser('download');
     let currentDownloadToastId = null;
     let downloadToastMuted = false;
     // Hidden quietly: no "closed by the user" mute when the app removes it.
@@ -4599,6 +4603,7 @@ async function importPlayerPlaylistSearchResult(button) {
 // or a search: the Player gets the same name, description, cover and every
 // song. Songs not in the library are kept and labelled "Not downloaded".
 function renderImportPlaylistButton() {
+  renderSaveM3uButton();
   document.getElementById('import-playlist-btn')?.remove();
   const actions = $('album-actions');
   if (!actions || detectUrlType(currentUrl) !== 'playlist') return;
@@ -4614,6 +4619,54 @@ function renderImportPlaylistButton() {
   btn.onclick = () => importFetchedPlaylist(btn);
   const cli = actions.querySelector('[data-onclick*="CliCommand"], .cli-btn');
   cli ? actions.insertBefore(btn, cli) : actions.appendChild(btn);
+}
+
+// "Save .m3u8" beside Download All, on a playlist: rebuilds the playlist file
+// (deleted by mistake, or never written) from the tracks already in the
+// download folder, where a download would have put it — nothing is fetched.
+function renderSaveM3uButton() {
+  document.getElementById('save-m3u-btn')?.remove();
+  const actions = $('album-actions');
+  if (!actions || detectUrlType(currentUrl) !== 'playlist') return;
+  const btn = document.createElement('button');
+  btn.id = 'save-m3u-btn';
+  btn.type = 'button';
+  btn.className = 'act-btn secondary';
+  btn.setAttribute('aria-label', 'Write this playlist\u2019s .m3u8 file from the tracks already downloaded');
+  btn.dataset.tip = 'Save the playlist file (.m3u8)';
+  btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg> Save .m3u8`;
+  btn.onclick = () => savePlaylistM3u(btn);
+  const cli = actions.querySelector('[data-onclick*="CliCommand"], .cli-btn');
+  cli ? actions.insertBefore(btn, cli) : actions.appendChild(btn);
+}
+
+async function savePlaylistM3u(btn) {
+  if (!currentTracks.length) {
+    toastMgr.error('Wait for the playlist\u2019s tracks to load.');
+    return;
+  }
+  if (!window.pywebview?.api?.save_playlist_m3u) return;
+  setTaBtnState(btn, 'loading');
+  try {
+    const res = await window.pywebview.api.save_playlist_m3u(
+      buildConfig(), currentTracks[0]?.list_id ?? null);
+    if (res?.ok) {
+      setTaBtnState(btn, 'success');
+      const missing = (res.total || 0) - (res.found || 0);
+      toastMgr.success(missing > 0
+        ? `Playlist file saved with ${res.found} of ${res.total} tracks (${missing} not downloaded yet).`
+        : `Playlist file saved with all ${res.found} tracks.`);
+      logMessage(`Playlist file saved: ${res.path}`, 'ok');
+    } else {
+      setTaBtnState(btn, 'error');
+      toastMgr.error(res?.error || 'Could not write the playlist file.');
+    }
+  } catch (e) {
+    setTaBtnState(btn, 'error');
+    toastMgr.error('Could not write the playlist file: ' + e);
+  } finally {
+    resetTaBtnAfter(btn, 2500);
+  }
 }
 
 async function importFetchedPlaylist(button) {
@@ -7890,6 +7943,7 @@ window.addEventListener('pywebviewready', async () => {
   // different capitalisations.
   loadHistoryAndProfiles();
   loadStaged();  // the sidebar's waiting-count badge
+  loadSidebarPlaylists();
   playerSetupEngine();  // the native engine in the desktop app, when libmpv is there
   checkAuthStatus();
   // The real download folder (MORNYE_DOWNLOAD_DIR in a container, the
@@ -8185,7 +8239,7 @@ function goFolderBrowserBack() {
 }
 
 async function openFolderBrowser(target) {
-    folderBrowserTarget = target === 'player' ? 'player' : 'local';
+    folderBrowserTarget = ['player', 'download'].includes(target) ? target : 'local';
     const modal = $('folder-browser-modal');
     modal.classList.remove('hidden');
     modal.focus();
@@ -8200,7 +8254,10 @@ async function openFolderBrowser(target) {
     modal.dataset.escapeAttached = 'true';
 
     currentFolderBrowserParent = null;
-    const currentPath = $(folderBrowserTarget === 'player' ? 'player-path-input' : 'local-path-input').value.trim() || null;
+    const currentPath = (folderBrowserTarget === 'download'
+        ? $('folder-path').textContent
+        : $(folderBrowserTarget === 'player' ? 'player-path-input' : 'local-path-input').value
+    ).trim() || null;
 
     if (window.pywebview?.api) {
         const api = window.pywebview.api;
@@ -8334,9 +8391,20 @@ function setFolderPath() {
     if (currentFolderBrowserPath) applyFolderBrowserChoice(currentFolderBrowserPath);
 }
 
-// The folder picker is shared: Fix Local Files and the Player both open it.
+// The folder picker is shared: Fix Local Files and the Player open it, and
+// so does Settings' Choose Folder when the desktop app is told to use it
+// instead of the native dialog (MORNYE_FOLDER_DIALOG=builtin, see app.py).
 function applyFolderBrowserChoice(path) {
     closeFolderBrowser();
+    if (folderBrowserTarget === 'download') {
+        window.pywebview?.api?.set_download_dir?.(path)
+            .then((res) => {
+                if (res?.ok) toastMgr.success(`Download folder: ${res.download_dir}`);
+                else toastMgr.error(res?.error || 'Could not use that folder.');
+            })
+            .catch((err) => toastMgr.error(`Could not use that folder: ${err}`));
+        return;
+    }
     if (folderBrowserTarget === 'player') {
         $('player-path-input').value = path;
         scanPlayerLibrary();
@@ -8361,6 +8429,11 @@ async function startLocalScan() {
     localScan.pending.clear();
     if (localScan.raf) { cancelAnimationFrame(localScan.raf); localScan.raf = 0; }
     $('local-track-rows').innerHTML = '';
+    localList.view = [];
+    localList.shown = 0;
+    localList.rows.clear();
+    localList.picked.clear();
+    localList.applied.clear();
     localScan.id = null;
     localScan.path = path;
     paintScanBar('local-scan', { phase: 'listing', done: 0, total: 0 }, localScan);
@@ -8432,62 +8505,205 @@ function mergeLocalResults(current, incoming) {
   return { items, touched };
 }
 
-// Re-renders the whole list, keeping the boxes the user ticked or
-// unticked while results were still coming in. Only for a list that
-// shrank (files gone from the folder): new results are painted row by
-// row (paintLocalRows), since rebuilding thousands of rows with their
-// covers for every batch is what made the window stutter.
-function renderLocalTracksKeepingChoices() {
-  const picked = new Map([...document.querySelectorAll('#local-track-rows .local-cb')]
-    .map(cb => [cb.dataset.filePath, cb.checked]));
-  localScan.pending.clear();
-  renderLocalTracks();
-  for (const cb of document.querySelectorAll('#local-track-rows .local-cb')) {
-    if (!cb.disabled && picked.has(cb.dataset.filePath)) cb.checked = picked.get(cb.dataset.filePath);
-  }
-  $('local-results-wrap').classList.remove('hidden');
-  $('local-footer').classList.remove('hidden');
+//: Rows of the list in the page at a time; the next ones are added as the
+//: end of the list scrolls into view. Every file used to get a row, and
+//: laying out a list of thousands of rows again after each batch of
+//: results (~40 ms a batch at 3,000 files, growing with the folder) is
+//: what kept the window stalling for as long as a scan ran.
+const LOCAL_PAGE = 120;
+
+// What the list shows. `view` is the indices of localScanData that pass
+// the filter, in order; the first `shown` of them have a row, kept in
+// `rows` by index. The ticks are kept here by file, not in the rows, since
+// most files have no row: `picked` is what the user chose (a file not in
+// it is ticked when its match is safe), `applied` the files already tagged.
+const localList = { view: [], shown: 0, rows: new Map(), picked: new Map(), applied: new Set() };
+
+function localHasMatch(item) {
+  return !!(item && item.candidates && item.candidates[0]);
+}
+
+function localIsPicked(item) {
+  if (!localHasMatch(item) || localList.applied.has(item.file_path)) return false;
+  const choice = localList.picked.get(item.file_path);
+  return choice === undefined ? !!item.candidates[0].is_safe : choice;
+}
+
+// The indices of the ticked files, rows on screen or not.
+function localPickedIndices() {
+  const out = [];
+  localScanData.forEach((item, i) => { if (localIsPicked(item)) out.push(i); });
+  return out;
+}
+
+// A row's box was ticked or unticked.
+function localPick(cb) {
+  const item = localScanData[Number(cb.value)];
+  if (item) localList.picked.set(item.file_path, cb.checked);
   updateLocalSelection();
 }
 
-//: Rows built per animation frame while results come in.
-const LOCAL_ROWS_PER_FRAME = 150;
+function localViewIndices() {
+  const terms = localSearchTerms(localQuery);
+  const out = [];
+  localScanData.forEach((item, i) => {
+    if (item && (!localFilter || localRowState(item) === localFilter)
+        && (!terms.length || localMatchesSearch(item, terms))) out.push(i);
+  });
+  return out;
+}
+
+//: What the search box above the list asks for; '' shows every file.
+let localQuery = '';
+let localSearchTimer = 0;
+
+function localSearchTerms(query) {
+  return String(query || '').toLowerCase().split(/\s+/).filter(Boolean);
+}
+
+// The text a file is found by: its tags (or what its name gave), its file
+// name and the match it would get. Kept per result, since a scan asks
+// again every frame while results arrive; a changed result is a new object.
+const localSearchText = new WeakMap();
+
+// Every word of the search is somewhere in it, in any order: "queen
+// bohemian" finds "Bohemian Rhapsody" by Queen.
+function localMatchesSearch(item, terms) {
+  let text = localSearchText.get(item);
+  if (text === undefined) {
+    const meta = (item.candidates && item.candidates[0] && item.candidates[0].metadata) || {};
+    text = [
+      item.old_title, item.old_artist, item.old_album, item.guessed_title, item.guessed_artist,
+      String(item.file_path || '').split(/[\\/]/).pop(), meta.title, meta.first_artist, meta.album,
+    ].filter(Boolean).join(' ').toLowerCase();
+    localSearchText.set(item, text);
+  }
+  return terms.every(t => text.includes(t));
+}
+
+// Typing in the search box: the list follows once the typing pauses.
+function filterLocalSearch() {
+  clearTimeout(localSearchTimer);
+  localSearchTimer = setTimeout(() => {
+    localQuery = ($('local-search')?.value || '').trim();
+    $('local-search-clear')?.classList.toggle('hidden', !localQuery);
+    renderLocalTracks();
+  }, 120);
+}
+
+function clearLocalSearch() {
+  const input = $('local-search');
+  if (input) input.value = '';
+  clearTimeout(localSearchTimer);
+  localQuery = '';
+  $('local-search-clear')?.classList.add('hidden');
+  renderLocalTracks();
+  input?.focus();
+}
+
+// Said in the list when the search or the filter leaves no file to show.
+function localNoMatchNote(container) {
+  if (localList.view.length || !localScanData.length || container.querySelector(':scope > .local-nomatch')) return;
+  const note = document.createElement('div');
+  note.className = 'local-nomatch u-p-40-20 u-ta-center u-c-muted u-fs-14';
+  note.textContent = localQuery ? `No file matches "${localQuery}".` : 'No file in this group.';
+  container.appendChild(note);
+}
+
+// Watches the "Loading more" marker against the list itself, which scrolls
+// on its own: against the window, the page around the list hides the
+// marker and the next rows would never come.
+let localIO = null;
+function localObserver(container) {
+  if (!localIO && typeof IntersectionObserver === 'function') {
+    localIO = new IntersectionObserver(entries => {
+      for (const en of entries) {
+        if (en.isIntersecting && en.target.isConnected) localAppendRows(LOCAL_PAGE);
+      }
+    }, { root: container, rootMargin: '300px' });
+  }
+  return localIO;
+}
+
+// Adds rows for the next `count` files of the view, then the "Loading
+// more" marker when some are still without a row.
+function localAppendRows(count) {
+  const container = $('local-track-rows');
+  if (!container) return;
+  if (!localObserver(container)) count = Infinity;
+  let more = container.querySelector(':scope > .local-more');
+  const from = localList.shown;
+  const to = Math.min(localList.view.length, from + count);
+  if (to > from) {
+    const frag = document.createDocumentFragment();
+    for (let k = from; k < to; k++) {
+      const i = localList.view[k];
+      const row = localRowElement(localScanData[i], i);
+      localList.rows.set(i, row);
+      frag.appendChild(row);
+    }
+    container.insertBefore(frag, more);
+  }
+  localList.shown = to;
+  const left = to < localList.view.length;
+  if (left && !more) {
+    more = document.createElement('div');
+    more.className = 'local-more';
+    more.textContent = 'Loading more…';
+    container.appendChild(more);
+    localIO.observe(more);
+  } else if (!left && more) {
+    localIO?.unobserve(more);
+    more.remove();
+  } else if (left && to > from) {
+    // Observed again so that a marker still in view after this page
+    // (the user is at the bottom) asks for the next one.
+    localIO.unobserve(more);
+    localIO.observe(more);
+  }
+}
 
 function scheduleLocalRows() {
   if (!localScan.raf) localScan.raf = requestAnimationFrame(paintLocalRows);
 }
 
-// Paints the rows of the results that came in since the last frame: a
-// changed one replaces its row (keeping its box as the user left it), a
-// new one is appended. At most LOCAL_ROWS_PER_FRAME a frame, the rest next.
+// Brings the list up to date with the results that came in since the last
+// frame: a changed file that has a row gets a new one, and new files get a
+// row while the list is still short of a page (else the "Loading more"
+// marker adds them as the user scrolls). If the rows on screen are no
+// longer the first of the view (a file changed state under a filter), the
+// rows are built again.
 function paintLocalRows() {
   localScan.raf = 0;
   const container = $('local-track-rows');
   if (!container) return;
-  if (!container.querySelector(':scope > [data-index]')) container.innerHTML = '';  // the "no files" note
-  const order = [...localScan.pending].sort((a, b) => a - b).slice(0, LOCAL_ROWS_PER_FRAME);
-  const added = document.createDocumentFragment();
-  for (const i of order) {
-    localScan.pending.delete(i);
-    const item = localScanData[i];
-    if (!item) continue;
-    const row = localRowElement(item, i);
-    const old = container.children[i];
-    if (old && old.dataset.index === String(i)) {
-      const was = old.querySelector('.local-cb');
-      const cb = row.querySelector('.local-cb');
-      if (was && cb && !cb.disabled && was.dataset.filePath === cb.dataset.filePath) cb.checked = was.checked;
-      old.replaceWith(row);
-    } else {
-      added.appendChild(row);
-    }
-  }
-  container.appendChild(added);
+  const touched = localScan.pending;
+  localScan.pending = new Set();
+  const view = localViewIndices();
+  const same = localList.shown <= view.length
+    && localList.view.slice(0, localList.shown).every((i, k) => view[k] === i);
+  const fresh = !localList.shown;
   $('local-results-wrap').classList.remove('hidden');
   $('local-footer').classList.remove('hidden');
-  renderLocalSummary();
-  updateLocalSelection();
-  if (localScan.pending.size) scheduleLocalRows();
+  // The first results of a scan start at the top: the list was hidden
+  // when the scan began, and a hidden list keeps the old scroll position.
+  if (fresh) container.scrollTop = 0;
+  if (!same) {
+    renderLocalTracks(true);
+  } else {
+    if (fresh && view.length) container.innerHTML = '';  // the "no files" or "no match" note
+    localList.view = view;
+    for (const i of touched) {
+      const old = localList.rows.get(i);
+      if (!old) continue;
+      const row = localRowElement(localScanData[i], i);
+      old.replaceWith(row);
+      localList.rows.set(i, row);
+    }
+    localAppendRows(Math.max(0, LOCAL_PAGE - localList.shown));
+    localNoMatchNote(container);
+  }
+  scheduleLocalSummary();
 }
 
 // Results arrive in parts: those stored by an earlier scan of the folder
@@ -8537,7 +8753,10 @@ window.app_local_scan_done = function(p) {
     // Rows leave the list: indices shift, so it is drawn again whole.
     localScanData = localScanData.filter(e => !gone.has(e.file_path));
     if (localScan.raf) { cancelAnimationFrame(localScan.raf); localScan.raf = 0; }
-    renderLocalTracksKeepingChoices();
+    renderLocalTracks(true);
+    $('local-results-wrap').classList.remove('hidden');
+    $('local-footer').classList.remove('hidden');
+    updateLocalSelection();
   }
   paintScanBar('local-scan', null, localScan);
   setTaBtnState($('btn-scan-local'), 'default');
@@ -8556,16 +8775,28 @@ window.app_local_scan_error = function(err) {
     toastMgr.error("Scan failed: " + err);
 };
 
-function renderLocalTracks() {
+// Builds the rows again from the first file of the view. `keepPlace`
+// keeps as many rows as there were and where the list was scrolled to (a
+// file was edited, converted or moved); otherwise it starts from the top
+// (the filter changed).
+function renderLocalTracks(keepPlace = false) {
     const container = $('local-track-rows');
+    const top = container.scrollTop;
+    const count = keepPlace ? Math.max(LOCAL_PAGE, localList.shown) : LOCAL_PAGE;
+    localScan.pending.clear();
+    localList.rows.clear();
+    localList.shown = 0;
+    localList.view = localViewIndices();
     container.innerHTML = '';
-    
+
     if (!localScanData.length) {
         container.innerHTML = '<div class="u-p-40-20 u-ta-center u-c-muted u-fs-14">No supported audio files found in this folder (FLAC, MP3, M4A/AAC, OGG, Opus, WAV, AIFF, WMA, WavPack, APE and more).</div>';
         return;
     }
-    
-    localScanData.forEach((item, i) => container.appendChild(localRowElement(item, i)));
+
+    localAppendRows(count);
+    localNoMatchNote(container);
+    container.scrollTop = keepPlace ? top : 0;
     renderLocalSummary();
 }
 
@@ -8576,8 +8807,8 @@ function localRowElement(item, i) {
         const hasMatch = !!best;
         const isSafe = hasMatch && best.is_safe;
         
-        const oldCover = item.old_cover_base64 
-            ? `<img src="${item.old_cover_base64}" alt="cover">` 
+        const oldCover = item.old_cover_base64
+            ? `<img src="${item.old_cover_base64}" alt="cover" decoding="async">`
             : `🎵`;
             
         const fileName = item.file_path.split(/[\\/]/).pop();
@@ -8587,10 +8818,16 @@ function localRowElement(item, i) {
         let newCol = `<div class="u-c-muted u-fs-12_5 u-fst-italic">No match found</div>`;
         let scoreCol = `<span class="local-badge err">No Match</span>`;
         let checkbox = `<input type="checkbox" class="local-cb" value="${i}" data-file-path="${escHtml(item.file_path)}" disabled>`;
+        const done = localList.applied.has(item.file_path);
 
         if (hasMatch) {
             const newCover = best.metadata.cover_url || best.metadata.cover || '';
-            const newCoverHtml = newCover ? `<img src="${escHtml(newCover)}" alt="">` : `🎵`;
+            // Lazy: a folder of thousands of files would otherwise fetch
+            // every candidate's cover from the network as its row appears,
+            // the ones far below the fold included.
+            const newCoverHtml = newCover
+                ? `<img src="${escHtml(newCover)}" alt="" loading="lazy" decoding="async">`
+                : `🎵`;
             const newTitle = best.metadata.title || '';
             const newArtist = best.metadata.first_artist || '';
 
@@ -8628,7 +8865,7 @@ function localRowElement(item, i) {
                 }
                 scoreCol = `<span class="local-badge ${isSafe ? 'ok' : 'warn'}" title="${escHtml(why)}">${best.confidence}%</span>`;
             }
-            checkbox = `<input type="checkbox" class="local-cb" value="${i}" data-file-path="${escHtml(item.file_path)}" ${isSafe ? 'checked' : ''} data-onchange="updateLocalSelection()">`;
+            checkbox = `<input type="checkbox" class="local-cb" value="${i}" data-file-path="${escHtml(item.file_path)}" ${localIsPicked(item) ? 'checked' : ''} ${done ? 'disabled' : ''} data-onchange="localPick(this)">`;
         } else if (item.error) {
             scoreCol = `<span class="local-badge err">Error</span>`;
             newCol = `<div class="u-c-red u-fs-11">${escHtml(item.error)}</div>`;
@@ -8657,44 +8894,68 @@ function localRowElement(item, i) {
             ${newCol}
         `;
         // What the summary above the list counts and filters by.
-        row.dataset.state = item.error && !hasMatch ? 'error'
-            : !hasMatch ? 'none' : isSafe ? 'matched' : 'review';
+        row.dataset.state = localRowState(item);
         row.dataset.index = String(i);
         return row;
+}
+
+// A result's state in the list: what its row shows and the chips count.
+function localRowState(item) {
+    const best = item.candidates && item.candidates[0];
+    if (!best) return item.error ? 'error' : 'none';
+    return best.is_safe ? 'matched' : 'review';
 }
 
 //: Which rows the list shows: '' for all, else one row state.
 let localFilter = '';
 
 // Counts per state above the list; a click shows only that state.
+//
+// Counted from localScanData, not by querying the rows: during a scan this
+// ran after every painted batch, and walking 4,000 rows each time (plus the
+// filter and the selection count doing the same) is what made a large
+// folder grind as it filled up.
 function renderLocalSummary() {
     const box = $('local-summary');
     if (!box) return;
-    const rows = [...document.querySelectorAll('#local-track-rows > [data-state]')];
-    const count = state => rows.filter(r => r.dataset.state === state).length;
+    const counts = { matched: 0, review: 0, none: 0, error: 0 };
+    let total = 0;
+    for (const item of localScanData) {
+        if (!item) continue;
+        total += 1;
+        counts[localRowState(item)] += 1;
+    }
     const chips = [
-        ['', `${rows.length} file${rows.length === 1 ? '' : 's'}`, rows.length],
-        ['matched', 'Ready', count('matched')],
-        ['review', 'Check', count('review')],
-        ['none', 'No match', count('none')],
-        ['error', 'Errors', count('error')],
+        ['', `${total} file${total === 1 ? '' : 's'}`, total],
+        ['matched', 'Ready', counts.matched],
+        ['review', 'Check', counts.review],
+        ['none', 'No match', counts.none],
+        ['error', 'Errors', counts.error],
     ].filter(([state, , n]) => state === '' || n > 0);
-    if (localFilter && !chips.some(([state]) => state === localFilter)) localFilter = '';
-    box.innerHTML = rows.length ? chips.map(([state, label, n]) =>
+    const lost = localFilter && !chips.some(([state]) => state === localFilter);
+    if (lost) localFilter = '';
+    box.innerHTML = total ? chips.map(([state, label, n]) =>
         `<button type="button" class="local-chip ${state || 'all'}${localFilter === state ? ' active' : ''}" data-state="${state}" aria-pressed="${localFilter === state}">`
         + (state ? `<span class="local-chip-n">${n}</span> ` : '') + `${escHtml(label)}</button>`).join('') : '';
     box.querySelectorAll('.local-chip').forEach(btn => btn.addEventListener('click', () => {
         localFilter = btn.dataset.state === localFilter ? '' : btn.dataset.state;
-        applyLocalFilter();
-        renderLocalSummary();
+        renderLocalTracks();
     }));
-    applyLocalFilter();
+    if (lost) renderLocalTracks();  // its last file changed state
 }
 
-function applyLocalFilter() {
-    document.querySelectorAll('#local-track-rows > [data-state]').forEach(r => {
-        r.classList.toggle('hidden', !!localFilter && r.dataset.state !== localFilter);
-    });
+//: Pending timer for the summary and selection count while a scan paints.
+let localSummaryTimer = 0;
+
+// Both walk the whole result set, so while results keep arriving they run
+// at most a few times a second instead of after every painted batch.
+function scheduleLocalSummary() {
+    if (localSummaryTimer) return;
+    localSummaryTimer = setTimeout(() => {
+        localSummaryTimer = 0;
+        renderLocalSummary();
+        updateLocalSelection();
+    }, 400);
 }
 
 // ── Convert files to another format ─────────────────────────────────────────
@@ -8704,7 +8965,7 @@ let convertFormats = null;
 async function openConvertDialog(indices) {
   const idx = Array.isArray(indices)
     ? indices
-    : Array.from(document.querySelectorAll('.local-cb:checked')).map(cb => parseInt(cb.value));
+    : localPickedIndices();
   convertPaths = idx.map(i => localScanData[i]?.file_path).filter(Boolean);
   if (!convertPaths.length) {
     toastMgr.info('Tick at least one file to convert.');
@@ -9392,7 +9653,7 @@ function playerNativeEngine(api, clock = () => performance.now()) {
   let emit = () => {};
   let chain = Promise.resolve();
   let src = '', paused = true, ended = false, time = 0, at = 0, duration = NaN;
-  let volume = 1, muted = false, rate = 1, seekUntil = 0, output = null;
+  let volume = 1, muted = false, rate = 1, seekUntil = 0, output = null, loadGuardUntil = 0, staleAt = NaN;
   let floor = 0; // the position never shows less than this until the next settle
   const DRIFT_MAX_S = 1;
   const call = (name, ...args) => {
@@ -9420,8 +9681,11 @@ function playerNativeEngine(api, clock = () => performance.now()) {
     // mpv starts playing as soon as it opens the file, so a load is a play.
     load(path, next) {
       const wasPaused = paused;
+      // Where the last file was: a late update from it says about this.
+      staleAt = src ? position() : NaN;
       src = path; paused = false; ended = false; duration = NaN; output = null;
       settle(0);
+      loadGuardUntil = now() + 1500;
       call('native_player_load', path, next || null)
         .catch(e => { paused = true; emit('pause'); emit('error', { message: e.message }); });
       // Set while nothing was loaded (mpv starts only on the first file).
@@ -9480,6 +9744,10 @@ function playerNativeEngine(api, clock = () => performance.now()) {
       switch (evt?.type) {
         case 'timeupdate':
           if (now() < seekUntil || paused) return;
+          // A position the last file sent just before the change can arrive
+          // after the new one was opened; it would put the new track (and
+          // its lyrics) at the old track's minute.
+          if (now() < loadGuardUntil && Math.abs(evt.time - staleAt) < 1.5) return;
           {
             const shown = position();
             settle(evt.time);
@@ -9503,15 +9771,22 @@ function playerNativeEngine(api, clock = () => performance.now()) {
           if (!paused) { paused = true; emit('pause'); }
           emit('ended'); return;
         case 'advanced':
-          src = evt.path; ended = false; paused = false; duration = NaN; output = null;
+          // The duration comes with the change (core/native_player.py): a
+          // track that repeats never reports it again on its own.
+          src = evt.path; ended = false; paused = false; output = null;
+          duration = Number.isFinite(evt.duration) ? evt.duration : NaN;
           settle(0);
-          emit('advanced', { path: evt.path }); return;
+          emit('advanced', { path: evt.path });
+          if (Number.isFinite(duration)) emit('loadedmetadata');
+          return;
         case 'output':
           output = evt; emit('output', evt); return;
         case 'error':
           emit('error', { message: evt.message }); return;
         case 'warning':
           emit('warning', { message: evt.message }); return;
+        case 'media': // a media key or Now Playing command that reached mpv
+          emit('media', { action: evt.action }); return;
       }
     },
   };
@@ -9666,6 +9941,7 @@ async function loadPlayerTrack(index, { advanced = false } = {}) {
   setPlayerArtwork('');
   const artist = displayArtists(item.artist);
   $('pl-title').textContent = artist ? `${item.title} — ${artist}` : item.title;
+  marqueeFit($('pl-title'));
   if (!advanced) $('pl-quality').textContent = 'Preparing…';
   markPlayingRow();
   playerAbReset();
@@ -9698,8 +9974,17 @@ async function loadPlayerTrack(index, { advanced = false } = {}) {
 // to, in the desktop window (WebView2, WebKit) as in a browser tab. With the
 // native engine the window plays nothing, so the system talks to mpv instead
 // (its media-controls) and the page's handlers are taken off: both at once
-// would answer every key twice.
+// would answer every key twice. mpv hands each key back to the page (a
+// 'media' event), since the page owns the queue. Where a key also arrives as
+// a keydown (WebView2 or GTK with the window focused, some browsers), the
+// same press can come twice: from the keydown and from the system, so an
+// echo from another source within PLAYER_MEDIA_ECHO_MS is dropped.
+// The volume keys are left to the system: on macOS they never reach the
+// window, and where they do the system volume moves anyway, so moving
+// Mornye's slider too would apply every press twice.
 let playerMediaSessionOn = true;
+const PLAYER_MEDIA_ECHO_MS = 400;
+let playerMediaLast = { family: '', source: '', at: -Infinity };
 
 function playerMediaMetadata(item, res, artist) {
   if (!('mediaSession' in navigator) || !playerMediaSessionOn) return;
@@ -9728,6 +10013,44 @@ function playerMediaPosition() {
   } catch (e) { /* position past the end while a track changes */ }
 }
 
+// The keydown keys that are media keys, as Media Session actions.
+function playerMediaKeyAction(key) {
+  switch (key) {
+    case 'MediaPlayPause': return 'toggle';
+    case 'MediaPlay': return 'play';
+    case 'MediaPause': return 'pause';
+    case 'MediaStop': return 'stop';
+    case 'MediaTrackNext': return 'nexttrack';
+    case 'MediaTrackPrevious': return 'previoustrack';
+    default: return null;
+  }
+}
+
+// Play, pause and toggle are one key: the system turns a toggle into play
+// or pause.
+function playerMediaFamily(action) {
+  return ['toggle', 'play', 'pause'].includes(action) ? 'playpause' : action;
+}
+
+// True when `action` from `source` is the same press already handled from
+// another source (a keydown and the system's command for one key).
+function playerMediaIsEcho(last, action, source, now) {
+  return last.family === playerMediaFamily(action) && last.source !== source
+    && now - last.at < PLAYER_MEDIA_ECHO_MS;
+}
+
+// Every media key, whichever way it came: 'session' (Media Session),
+// 'native' (mpv) or 'key' (a keydown).
+function playerMediaAction(action, source, detail) {
+  const handler = playerMediaHandlers()[action];
+  if (!handler) return false;
+  const now = performance.now();
+  if (playerMediaIsEcho(playerMediaLast, action, source, now)) return true;
+  playerMediaLast = { family: playerMediaFamily(action), source, at: now };
+  handler(detail);
+  return true;
+}
+
 function playerMediaHandlers() {
   const audio = playerEngine;
   const seekBy = (offset) => {
@@ -9736,6 +10059,7 @@ function playerMediaHandlers() {
     playerMediaPosition();
   };
   return {
+    toggle: () => playerToggle(),
     play: () => { if (audio.hasSource) audio.play(); },
     pause: () => audio.pause(),
     stop: () => { audio.pause(); if (audio.hasSource) audio.currentTime = 0; },
@@ -9755,13 +10079,25 @@ function playerMediaSessionActive(on) {
   playerMediaSessionOn = on;
   if (!('mediaSession' in navigator)) return;
   const session = navigator.mediaSession;
-  for (const [action, handler] of Object.entries(playerMediaHandlers())) {
+  for (const action of Object.keys(playerMediaHandlers())) {
+    if (action === 'toggle') continue; // not a Media Session action
+    const handler = (d) => playerMediaAction(action, 'session', d);
     try { session.setActionHandler(action, on ? handler : null); } catch (e) { /* not supported here */ }
   }
   if (!on) {
     try { session.metadata = null; session.playbackState = 'none'; } catch (e) { /* read-only here */ }
   }
 }
+
+playerEngine.addEventListener('media', (d) => playerMediaAction(d?.action, 'native'));
+
+// Media keys that arrive as keys (with the window focused). Never typed
+// text, so a focused field does not keep them from the player.
+document.addEventListener('keydown', (e) => {
+  const action = playerMediaKeyAction(e.key);
+  if (!action || e.defaultPrevented) return;
+  if (playerMediaAction(action, 'key')) e.preventDefault();
+});
 
 (function initMediaSession() {
   const audio = playerEngine;
@@ -9870,6 +10206,10 @@ playerEngine.addEventListener('timeupdate', () => {
 });
 playerEngine.addEventListener('advanced', (d) => playerOnAdvanced(d?.path));
 playerEngine.addEventListener('output', playerShowQuality);
+// The Canvas moves only while the music does, as in Spotify.
+playerEngine.addEventListener('play', () => npCanvasSync());
+playerEngine.addEventListener('pause', () => npCanvasSync());
+{ const box = $('np-canvas-enabled'); if (box) box.checked = canvasEnabled(); }
 playerEngine.addEventListener('warning', (d) => { if (d?.message) toastMgr.warning(d.message); });
 
 (function initPlayer() {
@@ -10255,9 +10595,10 @@ function npResetSync() {
 function openNowPlaying() {
   $('np-view').classList.remove('hidden');
   npStartTick();
+  npCanvasSync();
   if (npLines.length) { npLayoutLyrics(); NP.focus = -2; NP.first = true; npUpdate(npLyricsTime(playerEngine.currentTime), true); }
 }
-function closeNowPlaying() { $('np-view').classList.add('hidden'); }
+function closeNowPlaying() { $('np-view').classList.add('hidden'); npCanvasSync(); }
 
 function npShow(which) {
   $('np-lyrics').classList.toggle('hidden', which !== 'lyrics');
@@ -10418,6 +10759,44 @@ function npApplyColors(src) {
   img.src = src;
 }
 
+// A line in the player too long for its box scrolls slowly to its end and
+// back instead of being cut off with "…". The text is moved into an inner
+// span (the delegated data-onclick links keep working), and a ResizeObserver
+// measures again whenever the box changes size — including when the Now
+// Playing view, filled while hidden, is opened.
+const marqueeObserver = typeof ResizeObserver === 'function'
+  ? new ResizeObserver(entries => entries.forEach(e => marqueeMeasure(e.target)))
+  : null;
+
+function marqueeFit(el) {
+  if (!el) return;
+  let inner = el.firstElementChild;
+  if (!(inner && inner.classList.contains('marquee-inner') && el.childNodes.length === 1)) {
+    inner = document.createElement('span');
+    inner.className = 'marquee-inner';
+    while (el.firstChild) inner.appendChild(el.firstChild);
+    el.appendChild(inner);
+  }
+  if (marqueeObserver && !el.dataset.marquee) {
+    el.dataset.marquee = '1';
+    marqueeObserver.observe(el);
+  }
+  marqueeMeasure(el);
+}
+
+function marqueeMeasure(el) {
+  const inner = el.firstElementChild;
+  if (!inner || !inner.classList.contains('marquee-inner')) return;
+  el.classList.remove('marquee');
+  const overflow = el.scrollWidth - el.clientWidth;
+  if (el.clientWidth > 0 && overflow > 2) {
+    el.style.setProperty('--marquee-shift', `${-overflow}px`);
+    // About 30px a second, never so short the text flickers past.
+    el.style.setProperty('--marquee-dur', `${Math.max(6, overflow / 30 + 4).toFixed(1)}s`);
+    el.classList.add('marquee');
+  }
+}
+
 // The artist and album under the title, as links into the library: an
 // artist with a page of their own opens it, anyone else (a featured artist
 // is rarely an album artist) opens the songs that name them; the album
@@ -10439,6 +10818,7 @@ function npFillCredits(item, res) {
   if (artists) parts.push(artists);
   if (album) parts.push(`<button type="button" class="np-link" data-onclick="npGoAlbum()">${escHtml(album)}</button>`);
   $('np-artist').innerHTML = parts.join(' · ');
+  marqueeFit($('np-artist'));
 }
 
 function npShowInLibrary() {
@@ -10450,7 +10830,7 @@ function npGoArtist(name) {
   const key = String(name || '').trim().toLowerCase();
   if (!key) return;
   npShowInLibrary();
-  if (libArtists(lib.items).some(a => a.key === key)) {
+  if (libAll().artists.some(a => a.key === key)) {
     $('player-search').value = '';
     openPlayerArtist(key);
   } else {
@@ -10461,7 +10841,7 @@ function npGoArtist(name) {
 
 function npGoAlbum() {
   npShowInLibrary();
-  if (NP.albumKey && libAlbums(lib.items).some(a => a.key === NP.albumKey)) {
+  if (NP.albumKey && libAll().albums.some(a => a.key === NP.albumKey)) {
     $('player-search').value = '';
     openPlayerAlbum(NP.albumKey);
   } else if (NP.albumName) {
@@ -10470,16 +10850,88 @@ function npGoAlbum() {
   }
 }
 
+// Where the animated artwork is served from: the desktop window gets a
+// media-server URL, the web UI streams the file through /api/media like the
+// audio. None with Reduce Motion on, where the still cover stays.
+function npMotionUrl(res) {
+  if (!res?.motion_path && !res?.motion_url) return '';
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return '';
+  return res.motion_url || ('/api/media?path=' + encodeURIComponent(res.motion_path));
+}
+
+// ── Canvas ──────────────────────────────────────────────────────────────────
+// The short looping video Spotify shows with a track, saved beside the file
+// by "Save Spotify Canvas", plays in the cover's square of the full-screen
+// player, as in Spotify's Now Playing panel. On by
+// default and switched off in Settings → Player → Canvas; the choice is per
+// device, like the sidebar's.
+const NP_CANVAS_KEY = 'mornye-np-canvas';
+let npCanvasRes = null;
+function canvasEnabled() {
+  try { return localStorage.getItem(NP_CANVAS_KEY) !== 'off'; } catch (e) { return true; }
+}
+function setCanvasEnabled(on) {
+  try { localStorage.setItem(NP_CANVAS_KEY, on ? 'on' : 'off'); } catch (e) {}
+  npShowCanvas(npCanvasRes);
+}
+function npCanvasUrl(res) {
+  if (!res?.canvas_path && !res?.canvas_url) return '';
+  return res.canvas_url || ('/api/media?path=' + encodeURIComponent(res.canvas_path));
+}
+function npShowCanvas(res) {
+  npCanvasRes = res;
+  const video = $('np-canvas'), view = $('np-view');
+  if (!video || !view) return;
+  const url = canvasEnabled() ? npCanvasUrl(res) : '';
+  if (!url) {
+    view.classList.remove('has-canvas');
+    video.pause();
+    if (video.dataset.src) { delete video.dataset.src; video.removeAttribute('src'); video.load(); }
+    return;
+  }
+  if (video.dataset.src !== url) {
+    // The last track's frame fades out; this one fades in once it can show.
+    view.classList.remove('has-canvas');
+    video.onloadeddata = () => view.classList.add('has-canvas');
+    video.onerror = () => view.classList.remove('has-canvas');
+    video.dataset.src = url;
+    video.src = url;
+  } else if (video.readyState >= 2) {
+    view.classList.add('has-canvas');
+  }
+  npCanvasSync();
+}
+// Plays only while the view is open and the music is playing.
+function npCanvasSync() {
+  const video = $('np-canvas');
+  if (!video?.dataset.src) return;
+  const open = !$('np-view').classList.contains('hidden');
+  if (open && !playerEngine.paused) video.play().catch(() => {});
+  else video.pause();
+}
+
 function fillNowPlaying(item, res) {
   setPlayerArtwork(res.cover || '');
   npResetSync();
   $('np-title').textContent = res.title || item.title;
+  marqueeFit($('np-title'));
   npFillCredits(item, res);
   $('np-explicit').classList.toggle('hidden', !res.explicit);
   const cover = $('np-cover');
-  cover.parentElement.classList.toggle('empty', !res.cover);
-  cover.src = res.cover || '';
+  // The album's animated artwork (cover.webp beside the track) plays in
+  // place of the still cover; the colours still come from the still one.
+  const motion = npMotionUrl(res);
+  cover.parentElement.classList.toggle('empty', !res.cover && !motion);
+  cover.parentElement.classList.toggle('animated', !!motion);
+  cover.onerror = motion ? () => {
+    cover.onerror = null;
+    cover.parentElement.classList.remove('animated');
+    cover.parentElement.classList.toggle('empty', !res.cover);
+    cover.src = res.cover || '';
+  } : null;
+  cover.src = motion || res.cover || '';
   npApplyColors(res.cover);
+  npShowCanvas(res);
   $('np-tech').textContent = npTechLabel(res);
   $('np-seek').value = 0;
   npPaintSeek();
@@ -10761,6 +11213,12 @@ function npUpdate(time, force) {
       const jumped = Math.abs(time - NP.lastTime) > 0.75;
       npScrollToFocus(focus, NP.first ? 'instant' : (jumped ? 'seek' : 'spring'));
       NP.first = false;
+    } else if (focus < 0 && NP.focus >= 0 && !NP.userScrolling) {
+      // Back before the first line (a seek to the start, or a new track
+      // whose first line comes within its first seconds): the view goes
+      // back to the top instead of staying where the last line left it.
+      npClearMotion();
+      box.scrollTop = 0;
     }
     NP.focus = focus;
   }
@@ -10834,7 +11292,8 @@ function npRenderQueue() {
 
 // ── Player: browse and play a folder ────────────────────────────────────────
 const lib = { items: [], view: [], scan: null, lastScan: 0, shown: 0, loading: false, scanning: false, scanSamples: [], lastLink: 0, started: false, raf: 0, thumbBusy: 0,
-  tab: 'songs', album: null, artist: null, playlist: null, playlists: [], folder: '', cards: 0 };
+  tab: 'songs', album: null, artist: null, playlist: null, playlists: [], folder: '', cards: 0,
+  cardHtml: [], cardsShown: 0 };
 const LIB_PAGE = 150;
 const LIB_FOLDERS_KEY = 'mornye-player-folders';
 //: The folders the library is made of, scanned together into one library.
@@ -11273,6 +11732,7 @@ function libAlbums(items) {
     }
     a.tracks.push(t);
     a.duration += t.duration_s || 0;
+    if ((t.added || 0) > (a.added || 0)) a.added = t.added;
     if (!a.year && t.year) a.year = t.year;
     if (t.format) a.formats.add(t.format);
   }
@@ -11297,11 +11757,47 @@ function libCredited(t) {
   return out;
 }
 function libCredits(t, key) { return libCredited(t).some(n => n.toLowerCase() === key); }
-// Whether `key` is one of the album's own artists, rather than a guest on it.
-function libAlbumIsBy(album, key) {
+// The album's own artists, lower-cased (not the guests on it).
+function libAlbumOwners(album) {
   const t = album.tracks[0] || {};
   const names = t.album_artist_names && t.album_artist_names.length ? t.album_artist_names : [libArtistOf(t)];
-  return names.some(n => n.toLowerCase() === key);
+  return names.map(n => n.toLowerCase());
+}
+// Whether `key` is one of the album's own artists, rather than a guest on it.
+function libAlbumIsBy(album, key) {
+  return libAlbumOwners(album).includes(key);
+}
+
+// The whole library grouped into albums and artists, kept until the list of
+// tracks changes. Every tab switch used to group 40,000 tracks again (twice)
+// before showing anything. lib.items only grows by push or is replaced,
+// never edited in place, so the same array at the same length is the same
+// library.
+const libCache = { items: null, length: -1, albums: [], artists: [], covers: null };
+function libAll() {
+  if (libCache.items !== lib.items || libCache.length !== lib.items.length) {
+    libCache.items = lib.items;
+    libCache.length = lib.items.length;
+    libCache.albums = libAlbums(lib.items);
+    libCache.artists = libArtists(lib.items);
+    libCache.covers = null;
+  }
+  return libCache;
+}
+// The albums of `items`: the cached ones for the whole library.
+function libAlbumsFor(items) { return items === lib.items ? libAll().albums : libAlbums(items); }
+function libArtistsFor(items) { return items === lib.items ? libAll().artists : libArtists(items); }
+// Each artist's first own album, in album order: the cover of their card.
+// One pass, where each card used to search every album.
+function libArtistCover(key) {
+  const c = libAll();
+  if (!c.covers) {
+    c.covers = new Map();
+    for (const al of c.albums) {
+      for (const k of libAlbumOwners(al)) if (!c.covers.has(k)) c.covers.set(k, al);
+    }
+  }
+  return c.covers.get(key);
 }
 function libAlbumsOf(allAlbums, key) {
   const own = [], guest = [];
@@ -11350,6 +11846,69 @@ function setPlayerTab(tab) {
   playerScrollTop();
 }
 
+// ── Library in the sidebar ───────────────────────────────────────────────────
+// Each page of the library (Recently Added, Artists, Albums, Songs) and each
+// playlist is a row of its own in the sidebar, the way a music app lays it
+// out, instead of tabs at the top of one Player page. The phone bar keeps a
+// single Player button and those tabs.
+const LIB_TITLES = { recent: 'Recently Added', artists: 'Artists', albums: 'Albums', songs: 'Songs', playlists: 'Playlists' };
+const LIB_RECENT_MAX = 100;  // albums on Recently Added
+
+// Switches to the Player first; a page with unsaved changes may keep it.
+function enterLibrary() {
+  switchView('player');
+  return !!$('view-player')?.classList.contains('active');
+}
+function openLibrary(tab) {
+  if (enterLibrary()) setPlayerTab(tab);
+}
+function openLibraryPlaylist(id) {
+  if (enterLibrary()) openPlayerPlaylist(id);
+}
+function newLibraryPlaylist() {
+  if (!enterLibrary()) return;
+  setPlayerTab('playlists');
+  openPlayerPlaylistEditor();
+}
+
+// Highlights the row of the page the Player shows, and names the page.
+function syncLibraryNav() {
+  const on = !!$('view-player')?.classList.contains('active');
+  const tab = lib.tab || 'songs';
+  const inPlaylist = tab === 'playlists' && !!lib.playlist;
+  document.querySelectorAll('#sidebar .nav-lib').forEach(b => {
+    b.classList.toggle('active', on && !inPlaylist && b.id === 'nav-lib-' + tab);
+  });
+  document.querySelectorAll('#sb-playlist-list .nav-btn').forEach(b => {
+    const current = on && inPlaylist && b.dataset.id === lib.playlist;
+    b.classList.toggle('active', current);
+    if (current) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
+  const title = $('player-title');
+  if (title) title.textContent = LIB_TITLES[tab] || 'Player';
+}
+
+function renderSidebarPlaylists() {
+  const box = $('sb-playlist-list');
+  if (!box) return;
+  const icon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15V6"/><path d="M18.5 18a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/><path d="M12 12H3"/><path d="M16 6H3"/><path d="M12 18H3"/></svg>';
+  box.innerHTML = lib.playlists.map(p =>
+    `<button type="button" class="nav-btn sb-pl-item" role="listitem" data-id="${escHtml(p.id)}" title="${escHtml(p.name)}"`
+    + ` data-onclick="openLibraryPlaylist(this.dataset.id)">${icon}<span class="nav-label">${escHtml(p.name)}</span></button>`).join('');
+  syncLibraryNav();
+}
+
+// The sidebar lists the playlists from the start, before the Player has
+// been opened (which loads them again, with the library).
+async function loadSidebarPlaylists() {
+  try {
+    const res = await window.pywebview?.api?.get_player_playlists?.();
+    if (res?.status !== 'ok' || lib.started) return;
+    lib.playlists = res.playlists || [];
+    renderSidebarPlaylists();
+  } catch (e) { /* the rows come with the Player */ }
+}
+
 // The music scrolls in its own box (the whole page on a phone): a new page
 // of the library starts at its top in both.
 function playerScrollTop() {
@@ -11358,7 +11917,8 @@ function playerScrollTop() {
 }
 
 function openPlayerAlbum(key) {
-  lib.tab = 'albums';
+  // Back from an album opened on Recently Added goes back there.
+  lib.tab = lib.tab === 'recent' ? 'recent' : 'albums';
   lib.album = key;
   lib.playlist = null;
   document.querySelectorAll('.player-tabs .seg-tab').forEach(b => {
@@ -11417,6 +11977,7 @@ async function refreshPlayerPlaylists(selectedId) {
     if (lib.playlists.some(p => p.id === current)) select.value = current;
   }
   $('ptab-count-playlists').textContent = lib.playlists.length.toLocaleString();
+  renderSidebarPlaylists();
   filterPlayerLibrary(true);
   return true;
 }
@@ -11788,8 +12349,7 @@ function filterPlayerLibrary(keepScroll) {
   const matches = q
     ? lib.items.filter(t => `${t.title} ${t.artist} ${t.album} ${t.album_artist || ''}`.toLowerCase().includes(q))
     : lib.items;
-  const allAlbums = libAlbums(lib.items);
-  const allArtists = libArtists(lib.items);
+  const { albums: allAlbums, artists: allArtists } = libAll();
   const tab = lib.tab || 'songs';
 
   // Library bar and tab counts describe the whole library, not the search.
@@ -11809,9 +12369,11 @@ function filterPlayerLibrary(keepScroll) {
   addSelect.classList.toggle('hidden', tab === 'playlists');
   $('player-play-controls').classList.toggle('hidden', tab === 'playlists' && !lib.playlist);
   $('player-search-wrap').classList.toggle('hidden', tab === 'playlists');
+  // New playlist / Import belong to the list of playlists, not every page.
+  $('player-playlist-tools')?.classList.toggle('hidden', !(tab === 'playlists' && !lib.playlist));
 
   const list = $('player-list'), grid = $('player-grid'), detail = $('player-detail');
-  let rows = null, cards = null, header = '', count = '';
+  let rows = null, cards = null, header = '', count = '', recent = null, shownAlbums = null, shownArtists = null;
 
   if (tab === 'playlists' && lib.playlist) {
     const playlist = lib.playlists.find(p => p.id === lib.playlist);
@@ -11824,7 +12386,7 @@ function filterPlayerLibrary(keepScroll) {
       ? lib.playlists.map(libPlaylistCardHtml)
       : ['<div class="pl-playlist-empty">No playlists yet. Create one or import an M3U/M3U8 file.</div>'];
     count = plural(lib.playlists.length, 'playlist');
-  } else if (tab === 'albums' && lib.album) {
+  } else if ((tab === 'albums' || tab === 'recent') && lib.album) {
     const album = allAlbums.find(a => a.key === lib.album);
     if (!album) { lib.album = null; return filterPlayerLibrary(keepScroll); }
     rows = album.tracks;
@@ -11839,13 +12401,23 @@ function filterPlayerLibrary(keepScroll) {
       cards.push(`<h3 class="pl-grid-head">Appears on</h3>`, ...guest.map(libAlbumCardHtml));
     }
     header = libArtistHeaderHtml(artist, [...own, ...guest]);
+  } else if (tab === 'recent') {
+    // The albums whose newest file arrived last, newest first.
+    recent = libAlbumsFor(matches)
+      .filter(a => a.added)
+      .sort((x, y) => y.added - x.added)
+      .slice(0, LIB_RECENT_MAX);
+    cards = recent.map(libAlbumCardHtml);
+    count = plural(recent.length, 'album');
   } else if (tab === 'albums') {
-    const albums = libAlbums(matches);
+    const albums = libAlbumsFor(matches);
+    shownAlbums = albums;
     cards = albums.map(libAlbumCardHtml);
     count = plural(albums.length, 'album');
   } else if (tab === 'artists') {
-    const artists = libArtists(matches);
-    cards = artists.map(a => libArtistCardHtml(a, allAlbums));
+    const artists = libArtistsFor(matches);
+    shownArtists = artists;
+    cards = artists.map(libArtistCardHtml);
     count = plural(artists.length, 'artist');
   } else {
     rows = matches.slice();
@@ -11867,10 +12439,16 @@ function filterPlayerLibrary(keepScroll) {
     lib.view = [];
     lib.shown = 0;
     list.innerHTML = '';
-    grid.innerHTML = cards.join('');
+    // A page of cards at a time, like the rows: thousands of cards built
+    // (and torn down again on the next tab) at once froze the window.
+    lib.cardHtml = cards;
+    lib.cardsShown = Math.min(cards.length, Math.max(LIB_CARD_PAGE, keepScroll === true ? lib.cardsShown : 0));
+    grid.innerHTML = cards.slice(0, lib.cardsShown).join('') + libCardSentinel();
     grid.classList.remove('hidden');
     libObserve(grid);
   } else {
+    lib.cardHtml = [];
+    lib.cardsShown = 0;
     grid.innerHTML = '';
     grid.classList.add('hidden');
     lib.view = rows || [];
@@ -11883,21 +12461,27 @@ function filterPlayerLibrary(keepScroll) {
   lib.cards = cards ? cards.length : 0;
   // What "Play all" / "Shuffle" in the toolbar play on the current page: the
   // rows when there are rows, otherwise every album shown, in grid order.
+  // Worked out when one of them is pressed (libPlayAll), not on every render.
   if (cards) {
     if (tab === 'artists' && lib.artist) {
-      lib.playAll = libArtistTracks(lib.artist);
+      const key = lib.artist;
+      lib.playAll = () => libArtistTracks(key);
     } else if (tab === 'artists') {
-      const shown = new Set(libArtists(matches).map(a => a.key));
-      lib.playAll = allAlbums.flatMap(a => a.tracks).filter(t => libCredited(t).some(n => shown.has(n.toLowerCase())));
+      const shown = new Set((shownArtists || []).map(a => a.key));
+      lib.playAll = () => allAlbums.flatMap(a => a.tracks).filter(t => libCredited(t).some(n => shown.has(n.toLowerCase())));
     } else if (tab === 'playlists') {
       lib.playAll = null;
+    } else if (recent) {
+      lib.playAll = recent.flatMap(a => a.tracks);
     } else {
-      lib.playAll = allAlbums.filter(a => libAlbums(matches).some(m => m.key === a.key)).flatMap(a => a.tracks);
+      const shown = new Set((shownAlbums || []).map(a => a.key));
+      lib.playAll = () => allAlbums.filter(a => shown.has(a.key)).flatMap(a => a.tracks);
     }
   } else {
     lib.playAll = null;
   }
   renderPlayerEmptyState();
+  syncLibraryNav();
 }
 
 const LIB_PLAY_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
@@ -11906,8 +12490,11 @@ const LIB_BACK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 const LIB_NOTE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
 let playerPlaylistEdit = null;
 
-function libCoverHtml(path, size, extraClass = '') {
-  return `<div class="pl-cover ${extraClass}" data-p="${escHtml(path || '')}" data-size="${size}">
+// `photo` is an artist's name: their own photo replaces the album cover
+// once it arrives (see libLoadPhoto), and the cover stays if none is found.
+function libCoverHtml(path, size, extraClass = '', photo = '') {
+  const photoAttr = photo ? ` data-photo="${escHtml(photo)}"` : '';
+  return `<div class="pl-cover ${extraClass}" data-p="${escHtml(path || '')}" data-size="${size}"${photoAttr}>
     <img alt="" draggable="false"><span class="pl-cover-ph">${LIB_NOTE_SVG}</span></div>`;
 }
 
@@ -11921,11 +12508,11 @@ function libAlbumCardHtml(a) {
   </div>`;
 }
 
-function libArtistCardHtml(a, allAlbums) {
-  const first = allAlbums.find(al => libAlbumIsBy(al, a.key));
+function libArtistCardHtml(a) {
+  const first = libArtistCover(a.key);
   const meta = `${plural(a.albums.size, 'album')} · ${plural(a.tracks.length, 'track')}`;
   return `<div class="pl-card artist" role="listitem" tabindex="0" data-activate data-artist="${escHtml(a.key)}" title="${escHtml(a.name)}">
-    <div class="pl-card-art">${libCoverHtml((first?.tracks[0] || a.tracks[0])?.path, 320)}
+    <div class="pl-card-art">${libCoverHtml((first?.tracks[0] || a.tracks[0])?.path, 320, '', a.name)}
       <button type="button" class="pl-card-play" data-play-artist="${escHtml(a.key)}" aria-label="Play ${escHtml(a.name)}">${LIB_PLAY_SVG}</button></div>
     <div class="pl-card-t">${escHtml(a.name)}</div>
     <div class="pl-card-a">${escHtml(meta)}</div>
@@ -12052,7 +12639,7 @@ function libArtistHeaderHtml(a, albums) {
       </div>
     </section>` : '';
   return `<div class="pl-artist-hero">
-      ${libCoverHtml(heroPath, 400, 'pl-artist-hero-bg')}
+      ${libCoverHtml(heroPath, 400, 'pl-artist-hero-bg', a.name)}
       <button type="button" class="pl-hero-back" data-onclick="playerBack()" aria-label="Back to artists" title="Artists">${LIB_BACK_SVG}</button>
       <div class="pl-artist-hero-body">
         <h2 class="pl-artist-name">${escHtml(a.name)}</h2>
@@ -12128,6 +12715,25 @@ function renderPlayerEmptyState() {
   }
 }
 
+const LIB_CARD_PAGE = 120;
+function libCardSentinel() {
+  return lib.cardsShown < lib.cardHtml.length ? '<div id="player-grid-sentinel" class="pl-more">Loading more…</div>' : '';
+}
+function libAppendCards() {
+  const grid = $('player-grid');
+  grid.querySelector('#player-grid-sentinel')?.remove();
+  const from = lib.cardsShown;
+  lib.cardsShown = Math.min(lib.cardHtml.length, from + LIB_CARD_PAGE);
+  grid.insertAdjacentHTML('beforeend', lib.cardHtml.slice(from, lib.cardsShown).join('') + libCardSentinel());
+  libObserve(grid);
+}
+
+// "Play all" on a page of cards is worked out when pressed.
+function libPlayAll() {
+  if (typeof lib.playAll === 'function') lib.playAll = lib.playAll();
+  return lib.playAll || [];
+}
+
 function libAppendRows() {
   const list = $('player-list');
   const from = list.querySelectorAll('.pl-row').length;
@@ -12146,6 +12752,7 @@ const libIO = typeof IntersectionObserver === 'function' ? new IntersectionObser
     if (!en.isIntersecting) return;
     const el = en.target;
     if (el.id === 'player-sentinel') { libIO.unobserve(el); libAppendRows(); return; }
+    if (el.id === 'player-grid-sentinel') { libIO.unobserve(el); libAppendCards(); return; }
     libIO.unobserve(el);
     libLoadThumb(el);
   });
@@ -12155,7 +12762,7 @@ function libObserve(root) {
   const targets = root.querySelectorAll('.pl-row:not([data-th]), .pl-cover:not([data-th])');
   if (!libIO) { targets.forEach(libLoadThumb); return; }
   targets.forEach(r => libIO.observe(r));
-  const s = root.querySelector('#player-sentinel');
+  const s = root.querySelector('#player-sentinel, #player-grid-sentinel');
   if (s) libIO.observe(s);
 }
 
@@ -12166,6 +12773,7 @@ const libThumbQueue = [];
 let libThumbPumpQueued = false;
 function libLoadThumb(el) {
   el.dataset.th = '1';
+  if (el.dataset.photo) libLoadPhoto(el);
   if (!el.dataset.p) return;
   const key = `${el.dataset.p}\u0000${el.dataset.size || 0}`;
   if (libThumbCache.has(key)) { libShowThumb(el, libThumbCache.get(key)); return; }
@@ -12178,8 +12786,60 @@ function libLoadThumb(el) {
 function libShowThumb(el, url) {
   const img = el.querySelector('img');
   if (!url || !img) return;
+  el._libCover = url; // the fallback if an artist photo fails to load
+  if (el.classList.contains('has-photo')) return; // the artist's photo is already up
   img.src = url;
   el.classList.add('has-cover');
+}
+
+// Artists' own photos — the ones the text search shows — asked for only
+// for the cards in view, a dozen names a call and one call at a time: the
+// backend searches the ones it has not stored, and a library can have
+// thousands of artists.
+const libPhotoCache = new Map(); // name → URL, '' = none found
+const libPhotoQueue = [];
+let libPhotoBusy = false;
+function libLoadPhoto(el) {
+  const name = el.dataset.photo;
+  if (libPhotoCache.has(name)) { libShowPhoto(el, libPhotoCache.get(name)); return; }
+  libPhotoQueue.push(el);
+  libPumpPhotos();
+}
+function libShowPhoto(el, url) {
+  const img = el.querySelector('img');
+  if (!url || !img) return;
+  el.classList.add('has-cover', 'has-photo');
+  img.onerror = () => { // an image that no longer loads: back to the album cover
+    img.onerror = null;
+    el.classList.remove('has-photo');
+    if (el._libCover) img.src = el._libCover;
+    else { img.removeAttribute('src'); el.classList.remove('has-cover'); }
+  };
+  img.src = url;
+}
+async function libPumpPhotos() {
+  const api = window.pywebview?.api;
+  if (libPhotoBusy || !api?.get_artist_photos) return;
+  const batch = [];
+  const names = new Set();
+  while (names.size < 12 && libPhotoQueue.length) {
+    const el = libPhotoQueue.pop();
+    if (!el.isConnected) continue;
+    const name = el.dataset.photo;
+    if (libPhotoCache.has(name)) { libShowPhoto(el, libPhotoCache.get(name)); continue; }
+    if (!libThumbNear(el)) { delete el.dataset.th; libIO?.observe(el); continue; } // ask again when it comes back
+    batch.push(el);
+    names.add(name);
+  }
+  if (!batch.length) return;
+  libPhotoBusy = true;
+  try {
+    const urls = (await api.get_artist_photos([...names])) || {};
+    names.forEach(n => libPhotoCache.set(n, urls[n] || ''));
+    batch.forEach(el => { if (el.isConnected) libShowPhoto(el, libPhotoCache.get(el.dataset.photo)); });
+  } catch (e) { /* the album cover stays */ }
+  libPhotoBusy = false;
+  libPumpPhotos();
 }
 // Covers are asked for in batches the backend reads side by side, the rows
 // seen last first: scrolling fast through a long list should not leave the
@@ -12229,7 +12889,7 @@ function libQueueItems(tracks) {
 }
 
 function playFromLibrary(index, shuffle) {
-  const tracks = lib.view.length ? lib.view : (lib.playAll || []);
+  const tracks = lib.view.length ? lib.view : libPlayAll();
   const chosen = tracks[index];
   if (chosen && chosen.downloaded === false) {
     toastMgr.info('This song is not downloaded yet.');
@@ -12245,7 +12905,7 @@ function playFromLibrary(index, shuffle) {
 // The toolbar's "Play all" / "Shuffle": every playable song on the page,
 // skipping the ones not downloaded wherever they sit in the list.
 function playAllFromLibrary(shuffle) {
-  const tracks = lib.view.length ? lib.view : (lib.playAll || []);
+  const tracks = lib.view.length ? lib.view : libPlayAll();
   const playable = tracks.filter(t => t.downloaded !== false);
   if (playable.length) startPlayback(libQueueItems(playable), 0, !!shuffle, false);
   else if (tracks.length) toastMgr.info('None of these songs is downloaded yet.');
@@ -12254,13 +12914,13 @@ function playAllFromLibrary(shuffle) {
 // An artist plays album by album, each in track order: their own albums
 // whole, then the tracks they appear on elsewhere.
 function libArtistTracks(key) {
-  const { own, guest } = libAlbumsOf(libAlbums(lib.items), key);
+  const { own, guest } = libAlbumsOf(libAll().albums, key);
   return [...own.flatMap(a => a.tracks), ...guest.flatMap(a => a.tracks.filter(t => libCredits(t, key)))];
 }
 
 function playLibraryGroup(kind, key, shuffle) {
   let tracks = [];
-  if (kind === 'album') tracks = libAlbums(lib.items).find(a => a.key === key)?.tracks || [];
+  if (kind === 'album') tracks = libAll().albums.find(a => a.key === key)?.tracks || [];
   else {
     tracks = libArtistTracks(key);
   }
@@ -12360,15 +13020,28 @@ function markPlayingRow() {
   audio.addEventListener('pause', () => $('player-list').classList.add('paused'));
 })();
 
+// Every file with a match, rows on screen or not.
 function toggleAllLocal(cb) {
-    document.querySelectorAll('.local-cb:not([disabled])').forEach(c => c.checked = cb.checked);
+    for (const item of localScanData) {
+        if (localHasMatch(item)) localList.picked.set(item.file_path, cb.checked);
+    }
+    for (const row of localList.rows.values()) {
+        const box = row.querySelector('.local-cb');
+        if (box && !box.disabled) box.checked = cb.checked;
+    }
     updateLocalSelection();
 }
 
+// Counted from the results, since only the files near the top have a row.
 function updateLocalSelection() {
-    const checked = document.querySelectorAll('.local-cb:checked').length;
-    const total = document.querySelectorAll('.local-cb:not([disabled])').length;
-    
+    let checked = 0;
+    let total = 0;
+    for (const item of localScanData) {
+        if (!localHasMatch(item) || localList.applied.has(item.file_path)) continue;
+        total += 1;
+        if (localIsPicked(item)) checked += 1;
+    }
+
     const checkAll = $('check-all-local');
     if (checkAll) {
         checkAll.checked = total > 0 && checked === total;
@@ -12382,7 +13055,7 @@ function updateLocalSelection() {
 }
 
 function applyLocalTags() {
-    const selectedIdx = Array.from(document.querySelectorAll('.local-cb:checked')).map(cb => parseInt(cb.value));
+    const selectedIdx = localPickedIndices();
     if (!selectedIdx.length) return;
     
     const itemsToApply = selectedIdx.map(i => {
@@ -12436,14 +13109,15 @@ window.app_local_apply_finished = function(payload) {
     
     // Automatically deselect checkboxes for successful ones so the user knows they are done
     payload.results.forEach((res) => {
-        if (res.success && res.file_path) {
-            const cb = document.querySelector(`.local-cb[data-file-path="${CSS.escape(res.file_path)}"]`);
-            if (cb) {
-                cb.checked = false;
-                cb.disabled = true;
-            }
-        }
+        if (res.success && res.file_path) localList.applied.add(res.file_path);
     });
+    for (const row of localList.rows.values()) {
+        const cb = row.querySelector('.local-cb');
+        if (cb && localList.applied.has(cb.dataset.filePath)) {
+            cb.checked = false;
+            cb.disabled = true;
+        }
+    }
     updateLocalSelection();
 };
 

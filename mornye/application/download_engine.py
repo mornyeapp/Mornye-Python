@@ -844,6 +844,13 @@ def transcode_target_path(
     """
     if not opts.transcode_to:
         return None
+    # Dolby audio is never transcoded (core/transcode.py keeps it as it
+    # arrives), so an Atmos download has no transcoded file to look for.
+    # Looked for anyway, the ALAC .m4a of the same track's Hi-Res download
+    # answered "already downloaded as ALAC" and the Atmos request was skipped
+    # before any provider was asked.
+    if normalize_quality(opts.quality) == "DOLBY_ATMOS":
+        return None
 
     extension = extension_for(opts.transcode_to)
     if opts.output_path:
@@ -1199,6 +1206,114 @@ def _strict_atmos_providers(providers: list[Any], opts: Any) -> list[Any]:
     return kept
 
 
+_TIER_LABELS = {
+    "DOLBY_ATMOS": "Dolby Atmos",
+    "HI_RES_LOSSLESS": "Hi-Res Lossless",
+    "HI_RES": "Hi-Res",
+    "LOSSLESS": "Lossless",
+}
+_HI_RES_OPTION_IDS = {"HI_RES_LOSSLESS", "HI_RES"}
+_HI_RES_OPTION_HINTS = ("hi-res", "hires", "24-bit", "24bit")
+
+
+def _quality_passes(opts: DownloadOptions) -> list[str] | None:
+    """The tiers to try one after the other, every service at each, when
+    quality fallback is on and there is something to fall back to.
+
+    None leaves the track to a single pass, as before: fallback off (every
+    service at the requested tier only), or a request with no lower tier.
+    """
+    if not opts.allow_fallback:
+        return None
+    chain = quality_fallback_chain(opts.quality)
+    return chain if len(chain) > 1 else None
+
+
+def _offers_tier(provider: Any, tier: str, opts: DownloadOptions) -> bool:
+    """Whether a strict pass at `tier` should ask `provider` at all.
+
+    Only a service that declares its qualities and has none at that tier is
+    left out — asked anyway it would serve its best (a 16-bit file for a
+    Hi-Res request) only for the file to be thrown away. A service that
+    declares nothing, or for which the user picked a quality, is asked.
+    Dolby Atmos is narrowed inside the pass (_strict_atmos_providers).
+    """
+    if tier not in _HI_RES_OPTION_IDS or _extension_quality_override(provider, opts):
+        return True
+    options = getattr(provider, "quality_options", None)
+    if not isinstance(options, list) or not options:
+        return True
+    for option in options:
+        if not isinstance(option, dict):
+            continue
+        option_id = str(option.get("id") or "").upper()
+        label = str(option.get("label") or "").lower()
+        if option_id in _HI_RES_OPTION_IDS or any(
+            h in label for h in _HI_RES_OPTION_HINTS
+        ):
+            return True
+    return False
+
+
+async def _download_by_tier_async(
+    metadata: TrackMetadata,
+    output_dir: str,
+    providers: list[BaseProvider],
+    opts: DownloadOptions,
+    position: int,
+    is_album: bool,
+    snapshot: TrackMetadata,
+    tiers: list[str],
+) -> DownloadResult:
+    """Quality fallback, best tier first across every service.
+
+    Hi-Res Lossless is asked of Tidal, Qobuz, Amazon and Deezer in turn, and
+    only when none of them has it does the track go back to the first
+    service for Lossless, and so on down the tiers. Each tier but the last
+    is strict (a quieter file is discarded, as with fallback off), so a
+    16-bit file from the first service never wins over a 24-bit one from
+    the second. The last tier keeps the fallback the services do themselves.
+    """
+    failures: list[str] = []
+    for index, tier in enumerate(tiers):
+        last = index == len(tiers) - 1
+        if index:
+            # The previous pass's providers wrote their findings onto the
+            # shared TrackMetadata; this pass gets the request, not those.
+            _restore_metadata(metadata, snapshot)
+            previous = _TIER_LABELS.get(tiers[index - 1], tiers[index - 1])
+            current = _TIER_LABELS.get(tier, tier)
+            safe_tqdm_write(
+                f"  ↓  [#{position}] No service has '{metadata.title}' in "
+                f"{previous} — trying {current} from the first service.",
+            )
+            logger.info(
+                "[quality] %s — %s: no %s on any service, trying %s",
+                metadata.artists,
+                metadata.title,
+                previous,
+                current,
+            )
+        pass_providers = (
+            providers if last else [p for p in providers if _offers_tier(p, tier, opts)]
+        )
+        if not pass_providers:
+            failures.append(f"{_TIER_LABELS.get(tier, tier)}: no service offers it")
+            continue
+        result = await _download_one_pass_async(
+            metadata,
+            output_dir,
+            pass_providers,
+            replace(opts, quality=tier, allow_fallback=last),
+            position,
+            is_album,
+        )
+        if result.success:
+            return result
+        failures.append(f"{_TIER_LABELS.get(tier, tier)}: {result.error}")
+    return DownloadResult.fail("none", " | ".join(failures))
+
+
 def _required_tier(quality: str) -> str | None:
     """The minimum delivered tier a strict (no-fallback) run accepts, or
     None when the request is not one the file itself can be checked
@@ -1373,6 +1488,18 @@ async def _download_one_pass_async(
             "none",
             "No enabled provider offers Dolby Atmos (quality fallback is off)",
         )
+    # A strict Hi-Res run (fallback off, or one of the tiers DownloadService
+    # walks) does not download from a service that declares no Hi-Res option
+    # only to throw its 16-bit file away.
+    requested_tier = normalize_quality(opts.quality)
+    if not opts.allow_fallback and requested_tier in _HI_RES_OPTION_IDS:
+        providers = [p for p in providers if _offers_tier(p, requested_tier, opts)]
+        if not providers:
+            return DownloadResult.fail(
+                "none",
+                f"No enabled provider offers {_TIER_LABELS[requested_tier]} "
+                "(quality fallback is off)",
+            )
     errors: dict[str, str] = {}
     #: Providers that answered "not there" (see _definitive_failure).
     settled: set[str] = set()
@@ -2046,14 +2173,27 @@ async def download_one_async(
     # the request rather than the rejected download's version of it.
     snapshot = metadata.model_copy(deep=True)
 
-    result = await _download_one_pass_async(
-        metadata,
-        output_dir,
-        providers,
-        opts,
-        position,
-        is_album,
-    )
+    tiers = _quality_passes(opts)
+    if tiers:
+        result = await _download_by_tier_async(
+            metadata,
+            output_dir,
+            providers,
+            opts,
+            position,
+            is_album,
+            snapshot,
+            tiers,
+        )
+    else:
+        result = await _download_one_pass_async(
+            metadata,
+            output_dir,
+            providers,
+            opts,
+            position,
+            is_album,
+        )
 
     if not _fake_hires_redownload_applies(opts, result):
         return result
@@ -2495,6 +2635,14 @@ async def _match_in_libraries_async(
 # ---------------------------------------------------------------------------
 # MornyeDownloader
 # ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _PlaylistFolder:
+    """What the M3U writer reads off a worker, for a run that downloads nothing."""
+
+    output_dir: str
+    completed_paths: dict[str, str] = field(default_factory=dict)
 
 
 class MornyeDownloader:
@@ -3628,17 +3776,18 @@ class MornyeDownloader:
         *,
         playlist_tracks: list[TrackMetadata] | None = None,
         existing_paths: dict[str, Path] | None = None,
-    ) -> None:
+    ) -> tuple[Path, int] | None:
         """Writes the M3U for a playlist run. Never fails the download.
 
         Paths are relative to the playlist file, so a track that is already
         in another playlist's folder is listed as ``../Other/Track.flac``
-        rather than downloaded again (issue #267).
+        rather than downloaded again (issue #267). Returns the file and how
+        many tracks it lists, or None when nothing was written.
         """
         fmt = (opts.m3u_format or "").lower()
         base_out = worker.output_dir
         if fmt not in M3U_FORMATS or opts.output_path or not base_out:
-            return
+            return None
         from .download_worker import _inside, bring_into_library
 
         completed: dict[str, str] = {}
@@ -3659,7 +3808,7 @@ class MornyeDownloader:
             if completed.get(track.id)
         ]
         if not entries and mode != "rewrite":
-            return
+            return None
         name = collection_name.strip() or Path(base_out).name
         safe_name = re.sub(r'[<>:"/\\|?*]', "_", name).strip() or "playlist"
         target = Path(base_out) / f"{safe_name}.{fmt}"
@@ -3677,6 +3826,50 @@ class MornyeDownloader:
                 logger.info("[m3u] Wrote %d track(s) to %s", len(entries), target)
         except (OSError, UnicodeDecodeError) as exc:
             logger.warning("[m3u] Could not write %s: %s", target, exc)
+            return None
+        return target, len(entries)
+
+    @classmethod
+    async def write_playlist_m3u_async(
+        cls,
+        opts: DownloadOptions,
+        collection_name: str,
+        tracks: list[TrackMetadata],
+    ) -> tuple[Path | None, int]:
+        """Writes a playlist's M3U from the files already on disk.
+
+        Downloads nothing: a deleted or never-written M3U is rebuilt from the
+        tracks found in `opts.output_dir` (the whole library, every playlist
+        folder included) and in `opts.library_scan_dirs`, in the playlist's
+        own order and exactly where a download of the playlist would have put
+        it — ``<library>/<Playlist>/<Playlist>.m3u8``, with a track another
+        playlist holds listed as ``../Other/Track.flac``. Returns the file
+        (None when no track was found, so no empty playlist is left behind)
+        and how many tracks it lists.
+        """
+        base = Path(opts.output_dir)
+        folder = (
+            base / safe_dir_name(collection_name)
+            if collection_name.strip() and opts.create_playlist_subfolders
+            else base
+        )
+        found = await _match_in_libraries_async(
+            [str(base), *(opts.library_scan_dirs or [])], tracks, opts
+        )
+        if not found:
+            return None, 0
+        await asyncio.to_thread(folder.mkdir, parents=True, exist_ok=True)
+        written = await cls._write_run_playlist_file_async(
+            # library_dir: a track found outside the library is brought
+            # beside the playlist, as a download run does (issue #277).
+            replace(opts, library_dir=str(base), output_path=None),
+            "rewrite",
+            collection_name,
+            tracks,
+            _PlaylistFolder(str(folder)),  # type: ignore[arg-type]
+            existing_paths=found,
+        )
+        return written if written is not None else (None, 0)
 
     async def _run_once_async(
         self,

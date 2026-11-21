@@ -418,3 +418,20 @@ test('native engine: volume, mute and speed set before any file wait for the fir
     ['command', 'speed', 1.5],
   ]);
 });
+
+test('native engine: a late update from the last file does not move the next one', () => {
+  // The lyrics of the next track used to start at the last track's minute.
+  const { eng, tick } = nativeRig();
+  eng.load('/m/a.flac');
+  eng.receive({ type: 'timeupdate', time: 22 });
+  tick(500);
+  eng.load('/m/b.flac');
+  tick(100);
+  eng.receive({ type: 'timeupdate', time: 22.6 }); // a.flac's, arriving late
+  assert.ok(eng.currentTime < 1, 'the new track stays at its start');
+  eng.receive({ type: 'timeupdate', time: 0.2 });
+  assert.ok(Math.abs(eng.currentTime - 0.2) < 1e-9);
+  tick(2000);
+  eng.receive({ type: 'timeupdate', time: 22.5 }); // later on: a real position
+  assert.equal(eng.currentTime, 22.5);
+});

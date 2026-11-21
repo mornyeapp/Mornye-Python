@@ -358,14 +358,22 @@ def find_existing_track(
     buckets = (
         isrc_index.get(normalized_isrc, ()) if isinstance(isrc_index, dict) else ()
     )
-    if not buckets:
-        buckets = (
-            identity_index.get(
-                _identity_key(track.title, track.first_artist, track.album), ()
-            )
-            if isinstance(identity_index, dict)
-            else ()
+    if not buckets and isinstance(identity_index, dict):
+        # The ARTIST tag holds every credited artist and reads back joined
+        # ("Lead, Guest"), so the lead artist alone never matches a
+        # collaboration. A followed playlist's listing has no ISRC, so this
+        # is the lookup that keeps those tracks in its rewritten M3U.
+        credits = (
+            track.first_artist,
+            track.artists,
+            ", ".join(track.artist_names),
         )
+        for artist in dict.fromkeys(credits):
+            buckets = identity_index.get(
+                _identity_key(track.title, artist, track.album), ()
+            )
+            if buckets:
+                break
     if not buckets:
         return find_existing(index, stem, transcode_to)
 
