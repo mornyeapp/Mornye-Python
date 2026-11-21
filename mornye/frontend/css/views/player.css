@@ -754,6 +754,9 @@
 }
 .pl-card:hover { background: var(--raised); }
 .pl-card:focus-visible { outline: 2px solid var(--signal-strong); outline-offset: 0; }
+/* Moved to with the arrow keys (keynav.js): scrolled into view with room
+   for the focus ring. */
+.pl-card, .pl-row { scroll-margin-block: var(--space-2); }
 .pl-card-art { position: relative; margin-bottom: 6px; }
 .pl-card-art .pl-cover { aspect-ratio: 1; width: 100%; box-shadow: 0 1px 0 var(--rule); }
 .pl-card-play {
