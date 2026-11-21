@@ -219,7 +219,12 @@ def mpv_properties(options: PlayerOptions) -> dict[str, Any]:
         "audio-device": options.audio_device or "auto",
         "audio-spdif": ",".join(options.spdif),
         "audio-exclusive": options.exclusive,
-        "gapless-audio": "yes" if options.gapless else "no",
+        # "weak", not "yes": "yes" keeps the output as the first file opened
+        # it, so after a PCM track an AC-3 one was decoded to PCM instead of
+        # going out as bitstream (and a PCM track after a bitstreamed one hit
+        # an output still in S/PDIF mode). "weak" stays gapless between files
+        # of one format and reopens the output when the format changes.
+        "gapless-audio": "weak" if options.gapless else "no",
         "replaygain": options.replaygain,
         "replaygain-preamp": options.replaygain_preamp,
         "replaygain-clip": options.replaygain_clip,
@@ -806,11 +811,19 @@ class NativePlayer:
                 ).start()
         elif kind == "end-file":
             reason = data.get("reason")
+            # Only a file that was going out as bitstream can blame the
+            # output for refusing it. A PCM file (ALAC, FLAC, AAC...) that
+            # fails is a real error: blaming bitstream for it switched
+            # passthrough off for the rest of the session, so every AC-3
+            # track after it played as PCM. An unknown codec keeps the
+            # benefit of the doubt.
+            codec = self._state.get("audio-codec-name")
             if (
                 reason == "error"
                 and self._options.spdif
                 and not self._spdif_failed
                 and self._current is not None
+                and (not codec or is_bitstreamed(codec, self._options.spdif))
             ):
                 # The output would not take the compressed stream (a device
                 # without passthrough, a shared-mode WASAPI endpoint): carry

@@ -450,6 +450,26 @@ def test_a_refused_bitstream_falls_back_to_pcm_instead_of_stopping():
     player.close()
 
 
+def test_gapless_reopens_the_output_when_the_format_changes():
+    # "yes" kept the output as the first file opened it: after a PCM track
+    # an AC-3 one went out decoded to PCM instead of as bitstream.
+    assert mpv_properties(PlayerOptions(gapless=True))["gapless-audio"] == "weak"
+
+
+def test_a_pcm_track_that_fails_does_not_switch_bitstream_off():
+    player, events, fakes = make_player(PlayerOptions(spdif=["ac3"]))
+    player.load("/m/stereo.m4a")
+    fake = fakes[0]
+    fake.change("audio-codec-name", "alac")
+    fake.event(event="end-file", reason="error", file_error="audio output failed")
+    assert wait_for(events, "error")[0]["message"] == "audio output failed"
+    assert not [e for e in events if e["type"] == "warning"]
+    # The next AC-3 track still goes out as bitstream.
+    player.load("/m/dolby.m4a")
+    assert fake.props["audio-spdif"] == "ac3"
+    player.close()
+
+
 def test_set_options_without_mpv_only_stores():
     player, _events, fakes = make_player()
     player.set_options({"engine": "browser"})
