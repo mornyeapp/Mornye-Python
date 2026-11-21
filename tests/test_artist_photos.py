@@ -35,7 +35,12 @@ def test_spelling_differences_still_match():
     results = [_art("The Beatles", "https://img/x"), _art("Beyoncé", "https://img/b")]
     assert ap.best_match("beatles", results) == "https://img/x"
     assert ap.best_match("Beyonce", results) == "https://img/b"
-    assert ap.best_match("Simon and Garfunkel", [_art("Simon & Garfunkel", "https://img/s")]) == "https://img/s"
+    assert (
+        ap.best_match(
+            "Simon and Garfunkel", [_art("Simon & Garfunkel", "https://img/s")]
+        )
+        == "https://img/s"
+    )
 
 
 def test_no_close_result_means_no_photo():
@@ -71,7 +76,11 @@ def test_photos_and_misses_are_cached_on_disk(tmp_path):
 
     ap.reset_for_tests()  # a new run reads the file
     again = ap.artist_photos(["Low", "Nobody At All", "LOW"], search=search)
-    assert again == {"Low": "https://img/low", "Nobody At All": "", "LOW": "https://img/low"}
+    assert again == {
+        "Low": "https://img/low",
+        "Nobody At All": "",
+        "LOW": "https://img/low",
+    }
     assert len(calls) == 2
 
 
@@ -81,9 +90,9 @@ def test_a_failed_search_is_not_recorded():
 
     assert ap.artist_photos(["Low"], search=broken) == {"Low": ""}
     assert ap.cached("Low") is None
-    assert ap.artist_photos(["Low"], search=lambda n: [_art("Low", "https://img/low")]) == {
-        "Low": "https://img/low"
-    }
+    assert ap.artist_photos(
+        ["Low"], search=lambda n: [_art("Low", "https://img/low")]
+    ) == {"Low": "https://img/low"}
 
 
 def test_old_answers_are_asked_again():
@@ -121,5 +130,7 @@ def test_api_method_answers_from_the_cache(monkeypatch):
     from mornye.api_mixins.library_tools import LibraryToolsMixin
 
     monkeypatch.setattr(ap, "_spotify_search", lambda n: [_art(n, f"https://img/{n}")])
-    assert LibraryToolsMixin.get_artist_photos(object(), ["Low"]) == {"Low": "https://img/Low"}
+    assert LibraryToolsMixin.get_artist_photos(object(), ["Low"]) == {
+        "Low": "https://img/Low"
+    }
     assert LibraryToolsMixin.get_artist_photos(object(), "Low") == {}

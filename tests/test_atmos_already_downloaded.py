@@ -43,19 +43,33 @@ def resolve(output_path):
 
 
 @pytest.mark.parametrize(
-    "quality", ["DOLBY_ATMOS", "dolby_atmos", "ATMOS", "atmos", "DOLBY", "EAC3", "EC3", "EAC3_JOC"]
+    "quality",
+    [
+        "DOLBY_ATMOS",
+        "dolby_atmos",
+        "ATMOS",
+        "atmos",
+        "DOLBY",
+        "EAC3",
+        "EC3",
+        "EAC3_JOC",
+    ],
 )
 def test_every_name_of_the_atmos_tier_is_recognised(quality):
     assert _is_atmos_quality(quality)
     assert _quality_to_ext(quality) == ".m4a"
 
 
-@pytest.mark.parametrize("quality", ["HI_RES_LOSSLESS", "LOSSLESS", "FLAC", "MP3_320", "AAC"])
+@pytest.mark.parametrize(
+    "quality", ["HI_RES_LOSSLESS", "LOSSLESS", "FLAC", "MP3_320", "AAC"]
+)
 def test_stereo_tiers_are_not_atmos(quality):
     assert not _is_atmos_quality(quality)
 
 
-def test_hi_res_flac_of_the_same_track_does_not_count_as_the_atmos_download(tmp_path, codecs):
+def test_hi_res_flac_of_the_same_track_does_not_count_as_the_atmos_download(
+    tmp_path, codecs
+):
     _touch(tmp_path / "Song - Artist.flac")
     target, existing = resolve(tmp_path / "Song - Artist.flac")
     assert existing is None
@@ -77,7 +91,9 @@ def test_amazon_ac4_mp4_already_there_is_skipped(tmp_path, codecs):
     assert existing == atmos
 
 
-def test_a_stereo_m4a_keeps_its_name_and_the_atmos_download_gets_its_own(tmp_path, codecs):
+def test_a_stereo_m4a_keeps_its_name_and_the_atmos_download_gets_its_own(
+    tmp_path, codecs
+):
     stereo = _touch(tmp_path / "Song - Artist.m4a")
     codecs[stereo.name] = "alac"
     target, existing = resolve(tmp_path / "Song - Artist.m4a")
@@ -106,12 +122,19 @@ def test_an_atmos_request_has_no_transcoded_file_to_skip_on(tmp_path):
     # Dolby audio is kept as it arrives, never transcoded: with ALAC as the
     # transcode target, the Hi-Res download's ALAC .m4a answered "already
     # downloaded as ALAC" and the Atmos request never reached a provider.
-    from mornye.application.download_engine import DownloadOptions, transcode_target_path
+    from mornye.application.download_engine import (
+        DownloadOptions,
+        transcode_target_path,
+    )
 
-    atmos = DownloadOptions(output_dir=str(tmp_path), quality="DOLBY_ATMOS", transcode_to="alac")
+    atmos = DownloadOptions(
+        output_dir=str(tmp_path), quality="DOLBY_ATMOS", transcode_to="alac"
+    )
     assert transcode_target_path(_track(), str(tmp_path), atmos) is None
 
-    hires = DownloadOptions(output_dir=str(tmp_path), quality="HI_RES_LOSSLESS", transcode_to="alac")
+    hires = DownloadOptions(
+        output_dir=str(tmp_path), quality="HI_RES_LOSSLESS", transcode_to="alac"
+    )
     assert transcode_target_path(_track(), str(tmp_path), hires) is not None
 
 

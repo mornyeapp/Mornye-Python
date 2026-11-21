@@ -1248,7 +1248,9 @@ def _offers_tier(provider: Any, tier: str, opts: DownloadOptions) -> bool:
             continue
         option_id = str(option.get("id") or "").upper()
         label = str(option.get("label") or "").lower()
-        if option_id in _HI_RES_OPTION_IDS or any(h in label for h in _HI_RES_OPTION_HINTS):
+        if option_id in _HI_RES_OPTION_IDS or any(
+            h in label for h in _HI_RES_OPTION_HINTS
+        ):
             return True
     return False
 

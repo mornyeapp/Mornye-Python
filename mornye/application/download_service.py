@@ -46,7 +46,6 @@ from mornye.core.retry import RetryPolicy
 logger = logging.getLogger(__name__)
 
 
-
 def _quality_attempts(
     request: Any, candidates: list[Any], executor: Any
 ) -> list[tuple[Any, str | None, bool]]:
@@ -82,6 +81,7 @@ def _quality_attempts(
         for index, tier in enumerate(tiers)
         for candidate in candidates
     ]
+
 
 class DownloadService:
     """Application-layer orchestrator for the refactor baseline.

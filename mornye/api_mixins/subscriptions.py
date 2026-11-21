@@ -286,7 +286,11 @@ class SubscriptionsMixin:
             settings = dict(config or sub.download_config or {})
             if result.error:
                 continue
-            if sub.kind == "playlist" and result.playlist_tracks and not result.new_tracks:
+            if (
+                sub.kind == "playlist"
+                and result.playlist_tracks
+                and not result.new_tracks
+            ):
                 # Nothing to download, but the playlist may have lost or
                 # reordered tracks since the last check: its M3U follows the
                 # current listing, as the download job does when tracks were

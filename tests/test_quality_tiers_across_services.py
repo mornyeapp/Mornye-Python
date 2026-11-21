@@ -34,7 +34,9 @@ def _run(monkeypatch, *, quality, allow_fallback, has):
             runs.append((service, wanted, self.options.allow_fallback))
             good = rank[has[service]] >= rank.get(wanted, 1)
             if good or self.options.allow_fallback:
-                return DownloadResult.ok(service, f"/music/{service}.flac", source=source)
+                return DownloadResult.ok(
+                    service, f"/music/{service}.flac", source=source
+                )
             return DownloadResult.fail(service, "Quality below requested")
 
     monkeypatch.setattr(download_engine, "MornyeDownloader", FakeDownloader)

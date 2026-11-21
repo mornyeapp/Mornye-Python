@@ -18,10 +18,17 @@ from mornye import app as app_module
 FRONTEND = Path(app_module.__file__).parent / "frontend" / "app.js"
 
 
-@pytest.mark.parametrize(("value", "expected"), [
-    ("builtin", True), ("BUILTIN", True), (" builtin ", True),
-    ("", False), ("native", False), ("1", False),
-])
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("builtin", True),
+        ("BUILTIN", True),
+        (" builtin ", True),
+        ("", False),
+        ("native", False),
+        ("1", False),
+    ],
+)
 def test_the_variable_decides(monkeypatch, value, expected):
     monkeypatch.setenv(app_module.FOLDER_DIALOG_ENV, value)
     assert app_module.folder_dialog_is_builtin() is expected
@@ -61,8 +68,11 @@ def test_without_the_variable_the_native_dialog_is_used(monkeypatch):
 
 def test_the_page_has_the_handler_and_ends_in_set_download_dir():
     source = FRONTEND.read_text(encoding="utf-8")
-    assert "window.openDownloadFolderBrowser = () => openFolderBrowser('download')" in source
+    assert (
+        "window.openDownloadFolderBrowser = () => openFolderBrowser('download')"
+        in source
+    )
     start = source.index("function applyFolderBrowserChoice(path)")
-    body = source[start:source.index("\n}\n", start)]
+    body = source[start : source.index("\n}\n", start)]
     assert "folderBrowserTarget === 'download'" in body
     assert "set_download_dir" in body

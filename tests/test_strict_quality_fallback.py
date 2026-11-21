@@ -182,7 +182,9 @@ def test_a_service_with_no_hi_res_option_waits_for_the_lossless_pass(
         "ext:no-hi-res",
         tmp_path / "d.flac",
         log,
-        quality_options=[{"id": "LOSSLESS", "label": "FLAC 16-bit", "kind": "lossless"}],
+        quality_options=[
+            {"id": "LOSSLESS", "label": "FLAC 16-bit", "kind": "lossless"}
+        ],
     )
     hi_res = _LoggingProvider("ext:hi-res", tmp_path / "a.flac", log)
 

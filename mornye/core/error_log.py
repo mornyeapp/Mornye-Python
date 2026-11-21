@@ -41,7 +41,11 @@ def error_log_handler() -> logging.Handler | None:
         path = error_log_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         handler = RotatingFileHandler(
-            path, maxBytes=_MAX_BYTES, backupCount=_BACKUPS, encoding="utf-8", delay=True
+            path,
+            maxBytes=_MAX_BYTES,
+            backupCount=_BACKUPS,
+            encoding="utf-8",
+            delay=True,
         )
     except OSError:
         return None
