@@ -63,7 +63,9 @@ def _quality_attempts(
     """
     from mornye.core.quality import quality_fallback_chain
 
-    plain = [(candidate, None, True) for candidate in candidates]
+    plain: list[tuple[Any, str | None, bool]] = [
+        (candidate, None, True) for candidate in candidates
+    ]
     download = request.config.download
     if (
         len(candidates) < 2
@@ -383,12 +385,21 @@ class DownloadService:
                         )
                     )
                 provider_executor = legacy_adapter
+            quality_adapter = (
+                provider_executor
+                if isinstance(provider_executor, LegacyDownloadAdapter)
+                else None
+            )
             attempts = _quality_attempts(request, candidates, provider_executor)
             tier_shown: str | None = None
             for candidate, tier, permissive in attempts:
                 provider = candidate.name
                 if tier is not None:
-                    provider_executor.use_quality(tier, permissive)
+                    if quality_adapter is None:
+                        raise RuntimeError(
+                            "Quality tiers require a legacy download adapter"
+                        )
+                    quality_adapter.use_quality(tier, permissive)
                     if tier_shown is not None and tier != tier_shown:
                         logger.info(
                             "[quality] %s: no %s on any service, trying %s "
@@ -463,7 +474,11 @@ class DownloadService:
                 if not ProviderExecutor.is_retryable(last_error, policy):
                     break
             if attempts and attempts[0][1] is not None:
-                provider_executor.use_quality(None)
+                if quality_adapter is None:
+                    raise RuntimeError(
+                        "Quality tiers require a legacy download adapter"
+                    )
+                quality_adapter.use_quality(None)
             if last_error is not None:
                 result_error = (
                     last_error.result

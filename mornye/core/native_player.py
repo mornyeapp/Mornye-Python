@@ -843,11 +843,11 @@ class NativePlayer:
                 # with no duration: no remaining time, a seek bar that did not
                 # move. When a new value does come in later it still arrives
                 # as "loadedmetadata" and replaces this one.
-                event: dict = {"type": "advanced", "path": current}
+                advanced_event: dict = {"type": "advanced", "path": current}
                 duration = self._state.get("duration")
                 if isinstance(duration, (int, float)) and duration > 0:
-                    event["duration"] = float(duration)
-                self._post(event)
+                    advanced_event["duration"] = float(duration)
+                self._post(advanced_event)
             elif resume is not None:
                 # Off mpv's event thread: a seek from here would wait on it.
                 threading.Thread(
