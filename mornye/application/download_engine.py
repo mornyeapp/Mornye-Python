@@ -1486,6 +1486,18 @@ async def _download_one_pass_async(
             "none",
             "No enabled provider offers Dolby Atmos (quality fallback is off)",
         )
+    # A strict Hi-Res run (fallback off, or one of the tiers DownloadService
+    # walks) does not download from a service that declares no Hi-Res option
+    # only to throw its 16-bit file away.
+    requested_tier = normalize_quality(opts.quality)
+    if not opts.allow_fallback and requested_tier in _HI_RES_OPTION_IDS:
+        providers = [p for p in providers if _offers_tier(p, requested_tier, opts)]
+        if not providers:
+            return DownloadResult.fail(
+                "none",
+                f"No enabled provider offers {_TIER_LABELS[requested_tier]} "
+                "(quality fallback is off)",
+            )
     errors: dict[str, str] = {}
     #: Providers that answered "not there" (see _definitive_failure).
     settled: set[str] = set()
