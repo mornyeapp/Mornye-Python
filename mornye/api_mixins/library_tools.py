@@ -364,11 +364,14 @@ class LibraryToolsMixin:
         if local_url and not native:
             url = get_media_server(self._is_media_path).url_for(served)
         motion = self._animated_cover(path)
-        motion_url = ""
-        if motion and local_url:
+        canvas = self._track_canvas(path)
+        motion_url = canvas_url = ""
+        if local_url:
             # Through the media server even with the native engine playing
-            # the audio: the window still has no other route to the file.
-            motion_url = get_media_server(self._is_media_path).url_for(motion)
+            # the audio: the window still has no other route to the files.
+            server = get_media_server(self._is_media_path)
+            motion_url = server.url_for(motion) if motion else ""
+            canvas_url = server.url_for(canvas) if canvas else ""
         return {
             "status": "ok",
             "path": str(served),
@@ -377,8 +380,30 @@ class LibraryToolsMixin:
             "quality": label,
             "motion_path": str(motion) if motion else "",
             "motion_url": motion_url,
+            "canvas_path": str(canvas) if canvas else "",
+            "canvas_url": canvas_url,
             **self._now_playing(path, info),
         }
+
+    def _track_canvas(self, path: str) -> Path | None:
+        """The track's Spotify Canvas, saved beside it under the same name
+        (``Song.mp4`` for ``Song.flac``, see download_engine
+        _write_canvas_sidecars_async), for the full-screen player to loop
+        behind the lyrics. Videos only: a still canvas adds nothing to the
+        cover. None when the track has none."""
+        from ..core.canvas import _VIDEO_SUFFIXES
+
+        audio = Path(path)
+        for suffix in _VIDEO_SUFFIXES:
+            candidate = audio.with_suffix(suffix)
+            if candidate == audio:
+                continue
+            try:
+                if candidate.is_file() and candidate.stat().st_size > 0:
+                    return candidate
+            except OSError:
+                continue
+        return None
 
     def _animated_cover(self, path: str) -> Path | None:
         """The album's animated artwork, saved as ``cover.webp`` in the

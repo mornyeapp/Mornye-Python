@@ -1459,6 +1459,13 @@
         </div>
 
         <div class="tc" id="tc-player" data-title="Player">
+          <div class="s-section">
+            <div class="s-title">Now Playing</div>
+            <div class="s-row">
+              <span class="s-label">Canvas<small>Loops the short video saved with a track (Save Spotify Canvas) in place of its cover, as Spotify does. Saved on this device.</small></span>
+              <label class="toggle"><input type="checkbox" id="np-canvas-enabled" checked data-onchange="setCanvasEnabled(this.checked)"><span class="toggle-sl"></span></label>
+            </div>
+          </div>
           <div id="np-engine-note" class="s-section np-engine-note hidden" role="status"></div>
           <div class="s-section">
             <div class="s-title">Audio engine</div>
@@ -2219,7 +2226,7 @@
     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg>
   </div>
   <div class="np-left">
-    <div class="np-cover-wrap"><img id="np-cover" alt="Cover"><div id="np-cover-empty" class="np-cover-empty">🎵</div></div>
+    <div class="np-cover-wrap"><img id="np-cover" alt="Cover"><div id="np-cover-empty" class="np-cover-empty">🎵</div><!-- The track's Spotify Canvas plays in the cover's place (Settings → Player → Canvas; npShowCanvas in app.js). --><video id="np-canvas" muted loop playsinline preload="auto" aria-hidden="true" tabindex="-1"></video></div>
     <div class="np-meta">
       <div class="np-title-row"><span id="np-title" class="np-title"></span><span id="np-explicit" class="np-e hidden">E</span></div>
       <div id="np-artist" class="np-artist"></div>

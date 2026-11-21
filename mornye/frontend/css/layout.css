@@ -642,6 +642,14 @@ body {
 #np-view > * { position: relative; z-index: 1; }
 #np-view > #np-bg { position: absolute; }
 #np-view > #np-bg { inset: 0; z-index: 0; }
+/* The Canvas plays in the cover's square, over the still cover, cropped to
+   it (a canvas is 9:16); it fades in once it has a frame to show. */
+.np-cover-wrap { position: relative; }
+.np-cover-wrap > #np-canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; pointer-events: none; opacity: 0; transition: opacity .6s ease;
+}
+#np-view.has-canvas .np-cover-wrap > #np-canvas { opacity: 1; }
 /* The full-screen player covers the titlebar, which is the only place the
    frameless desktop window can be dragged from. This strip along its top
    takes over that job; it sits under the close and volume controls (later

@@ -10043,6 +10043,10 @@ playerEngine.addEventListener('timeupdate', () => {
 });
 playerEngine.addEventListener('advanced', (d) => playerOnAdvanced(d?.path));
 playerEngine.addEventListener('output', playerShowQuality);
+// The Canvas moves only while the music does, as in Spotify.
+playerEngine.addEventListener('play', () => npCanvasSync());
+playerEngine.addEventListener('pause', () => npCanvasSync());
+{ const box = $('np-canvas-enabled'); if (box) box.checked = canvasEnabled(); }
 playerEngine.addEventListener('warning', (d) => { if (d?.message) toastMgr.warning(d.message); });
 
 (function initPlayer() {
@@ -10428,9 +10432,10 @@ function npResetSync() {
 function openNowPlaying() {
   $('np-view').classList.remove('hidden');
   npStartTick();
+  npCanvasSync();
   if (npLines.length) { npLayoutLyrics(); NP.focus = -2; NP.first = true; npUpdate(npLyricsTime(playerEngine.currentTime), true); }
 }
-function closeNowPlaying() { $('np-view').classList.add('hidden'); }
+function closeNowPlaying() { $('np-view').classList.add('hidden'); npCanvasSync(); }
 
 function npShow(which) {
   $('np-lyrics').classList.toggle('hidden', which !== 'lyrics');
@@ -10691,6 +10696,57 @@ function npMotionUrl(res) {
   return res.motion_url || ('/api/media?path=' + encodeURIComponent(res.motion_path));
 }
 
+// ── Canvas ──────────────────────────────────────────────────────────────────
+// The short looping video Spotify shows with a track, saved beside the file
+// by "Save Spotify Canvas", plays in the cover's square of the full-screen
+// player, as in Spotify's Now Playing panel. On by
+// default and switched off in Settings → Player → Canvas; the choice is per
+// device, like the sidebar's.
+const NP_CANVAS_KEY = 'mornye-np-canvas';
+let npCanvasRes = null;
+function canvasEnabled() {
+  try { return localStorage.getItem(NP_CANVAS_KEY) !== 'off'; } catch (e) { return true; }
+}
+function setCanvasEnabled(on) {
+  try { localStorage.setItem(NP_CANVAS_KEY, on ? 'on' : 'off'); } catch (e) {}
+  npShowCanvas(npCanvasRes);
+}
+function npCanvasUrl(res) {
+  if (!res?.canvas_path && !res?.canvas_url) return '';
+  return res.canvas_url || ('/api/media?path=' + encodeURIComponent(res.canvas_path));
+}
+function npShowCanvas(res) {
+  npCanvasRes = res;
+  const video = $('np-canvas'), view = $('np-view');
+  if (!video || !view) return;
+  const url = canvasEnabled() ? npCanvasUrl(res) : '';
+  if (!url) {
+    view.classList.remove('has-canvas');
+    video.pause();
+    if (video.dataset.src) { delete video.dataset.src; video.removeAttribute('src'); video.load(); }
+    return;
+  }
+  if (video.dataset.src !== url) {
+    // The last track's frame fades out; this one fades in once it can show.
+    view.classList.remove('has-canvas');
+    video.onloadeddata = () => view.classList.add('has-canvas');
+    video.onerror = () => view.classList.remove('has-canvas');
+    video.dataset.src = url;
+    video.src = url;
+  } else if (video.readyState >= 2) {
+    view.classList.add('has-canvas');
+  }
+  npCanvasSync();
+}
+// Plays only while the view is open and the music is playing.
+function npCanvasSync() {
+  const video = $('np-canvas');
+  if (!video?.dataset.src) return;
+  const open = !$('np-view').classList.contains('hidden');
+  if (open && !playerEngine.paused) video.play().catch(() => {});
+  else video.pause();
+}
+
 function fillNowPlaying(item, res) {
   setPlayerArtwork(res.cover || '');
   npResetSync();
@@ -10712,6 +10768,7 @@ function fillNowPlaying(item, res) {
   } : null;
   cover.src = motion || res.cover || '';
   npApplyColors(res.cover);
+  npShowCanvas(res);
   $('np-tech').textContent = npTechLabel(res);
   $('np-seek').value = 0;
   npPaintSeek();

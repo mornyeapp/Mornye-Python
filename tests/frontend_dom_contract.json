@@ -211,6 +211,8 @@
  "network-destination-username",
  "np-artist",
  "np-bg",
+ "np-canvas",
+ "np-canvas-enabled",
  "np-cover",
  "np-cur",
  "np-engine-note",
