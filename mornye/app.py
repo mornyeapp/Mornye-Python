@@ -187,9 +187,17 @@ def configure_console_logging(level: int) -> None:
             else _CONSOLE_LOG_FORMAT
         )
     )
+    # The tracebacks the console leaves out go to errors.log (ERROR only).
+    from .core.error_log import error_log_handler
+
+    handlers: list[logging.Handler] = [handler]
+    file_handler = error_log_handler()
+    if file_handler is not None:
+        handlers.append(file_handler)
     # force=True: this also runs from _download_task when the picker changed
     # the level, and basicConfig is otherwise a no-op once root has handlers.
-    logging.basicConfig(level=level, handlers=[handler], force=True)
+    # force also closes the errors.log handler the previous call installed.
+    logging.basicConfig(level=level, handlers=handlers, force=True)
     logging.getLogger("pywebview").setLevel(logging.WARNING)
     _quiet_noisy_libraries(level)
 

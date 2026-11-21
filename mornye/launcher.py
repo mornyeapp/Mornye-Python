@@ -3367,7 +3367,14 @@ async def amain() -> None:
     )
     _cli_handler = logging.StreamHandler(sys.stdout)
     _cli_handler.setFormatter(_CleanConsoleFormatter(log_format))
-    logging.basicConfig(level=log_level, handlers=[_cli_handler])
+    # The tracebacks the console leaves out go to errors.log (ERROR only).
+    from .core.error_log import error_log_handler
+
+    _cli_handlers: list[logging.Handler] = [_cli_handler]
+    _error_file = error_log_handler()
+    if _error_file is not None:
+        _cli_handlers.append(_error_file)
+    logging.basicConfig(level=log_level, handlers=_cli_handlers)
     _quiet_noisy_libraries(log_level)
 
     async def _run_once() -> None:
