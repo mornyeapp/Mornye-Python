@@ -727,3 +727,17 @@ class LibraryToolsMixin:
         with ThreadPoolExecutor(max_workers=min(8, len(wanted))) as pool:
             urls = list(pool.map(lambda p: self.get_track_thumb(p, size), wanted))
         return dict(zip(wanted, urls, strict=True))
+
+    def get_artist_photos(self, names: list) -> dict:
+        """The artists' own photos for the Player's artist cards and header:
+        {name: image URL or ""}, from the same Spotify artist search the
+        text search uses, cached on disk (core/artist_photos.py). "" means
+        the card keeps the album cover it already shows.
+        """
+        from ..core.artist_photos import artist_photos
+
+        try:
+            return artist_photos(names if isinstance(names, list) else [])
+        except Exception as exc:
+            self.log(f"get_artist_photos error: {exc}", "error")
+            return {}

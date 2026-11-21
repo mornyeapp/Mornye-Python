@@ -198,6 +198,7 @@ ALLOWED_METHODS: set[str] = {
     "cancel_local_scan",
     "get_track_thumb",
     "get_track_thumbs",
+    "get_artist_photos",
     "get_player_playlists",
     "create_player_playlist",
     "update_player_playlist",

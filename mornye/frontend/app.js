@@ -12488,8 +12488,11 @@ const LIB_BACK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 const LIB_NOTE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
 let playerPlaylistEdit = null;
 
-function libCoverHtml(path, size, extraClass = '') {
-  return `<div class="pl-cover ${extraClass}" data-p="${escHtml(path || '')}" data-size="${size}">
+// `photo` is an artist's name: their own photo replaces the album cover
+// once it arrives (see libLoadPhoto), and the cover stays if none is found.
+function libCoverHtml(path, size, extraClass = '', photo = '') {
+  const photoAttr = photo ? ` data-photo="${escHtml(photo)}"` : '';
+  return `<div class="pl-cover ${extraClass}" data-p="${escHtml(path || '')}" data-size="${size}"${photoAttr}>
     <img alt="" draggable="false"><span class="pl-cover-ph">${LIB_NOTE_SVG}</span></div>`;
 }
 
@@ -12507,7 +12510,7 @@ function libArtistCardHtml(a) {
   const first = libArtistCover(a.key);
   const meta = `${plural(a.albums.size, 'album')} · ${plural(a.tracks.length, 'track')}`;
   return `<div class="pl-card artist" role="listitem" tabindex="0" data-activate data-artist="${escHtml(a.key)}" title="${escHtml(a.name)}">
-    <div class="pl-card-art">${libCoverHtml((first?.tracks[0] || a.tracks[0])?.path, 320)}
+    <div class="pl-card-art">${libCoverHtml((first?.tracks[0] || a.tracks[0])?.path, 320, '', a.name)}
       <button type="button" class="pl-card-play" data-play-artist="${escHtml(a.key)}" aria-label="Play ${escHtml(a.name)}">${LIB_PLAY_SVG}</button></div>
     <div class="pl-card-t">${escHtml(a.name)}</div>
     <div class="pl-card-a">${escHtml(meta)}</div>
@@ -12634,7 +12637,7 @@ function libArtistHeaderHtml(a, albums) {
       </div>
     </section>` : '';
   return `<div class="pl-artist-hero">
-      ${libCoverHtml(heroPath, 400, 'pl-artist-hero-bg')}
+      ${libCoverHtml(heroPath, 400, 'pl-artist-hero-bg', a.name)}
       <button type="button" class="pl-hero-back" data-onclick="playerBack()" aria-label="Back to artists" title="Artists">${LIB_BACK_SVG}</button>
       <div class="pl-artist-hero-body">
         <h2 class="pl-artist-name">${escHtml(a.name)}</h2>
@@ -12768,6 +12771,7 @@ const libThumbQueue = [];
 let libThumbPumpQueued = false;
 function libLoadThumb(el) {
   el.dataset.th = '1';
+  if (el.dataset.photo) libLoadPhoto(el);
   if (!el.dataset.p) return;
   const key = `${el.dataset.p}\u0000${el.dataset.size || 0}`;
   if (libThumbCache.has(key)) { libShowThumb(el, libThumbCache.get(key)); return; }
@@ -12780,8 +12784,60 @@ function libLoadThumb(el) {
 function libShowThumb(el, url) {
   const img = el.querySelector('img');
   if (!url || !img) return;
+  el._libCover = url; // the fallback if an artist photo fails to load
+  if (el.classList.contains('has-photo')) return; // the artist's photo is already up
   img.src = url;
   el.classList.add('has-cover');
+}
+
+// Artists' own photos — the ones the text search shows — asked for only
+// for the cards in view, a dozen names a call and one call at a time: the
+// backend searches the ones it has not stored, and a library can have
+// thousands of artists.
+const libPhotoCache = new Map(); // name → URL, '' = none found
+const libPhotoQueue = [];
+let libPhotoBusy = false;
+function libLoadPhoto(el) {
+  const name = el.dataset.photo;
+  if (libPhotoCache.has(name)) { libShowPhoto(el, libPhotoCache.get(name)); return; }
+  libPhotoQueue.push(el);
+  libPumpPhotos();
+}
+function libShowPhoto(el, url) {
+  const img = el.querySelector('img');
+  if (!url || !img) return;
+  el.classList.add('has-cover', 'has-photo');
+  img.onerror = () => { // an image that no longer loads: back to the album cover
+    img.onerror = null;
+    el.classList.remove('has-photo');
+    if (el._libCover) img.src = el._libCover;
+    else { img.removeAttribute('src'); el.classList.remove('has-cover'); }
+  };
+  img.src = url;
+}
+async function libPumpPhotos() {
+  const api = window.pywebview?.api;
+  if (libPhotoBusy || !api?.get_artist_photos) return;
+  const batch = [];
+  const names = new Set();
+  while (names.size < 12 && libPhotoQueue.length) {
+    const el = libPhotoQueue.pop();
+    if (!el.isConnected) continue;
+    const name = el.dataset.photo;
+    if (libPhotoCache.has(name)) { libShowPhoto(el, libPhotoCache.get(name)); continue; }
+    if (!libThumbNear(el)) { delete el.dataset.th; libIO?.observe(el); continue; } // ask again when it comes back
+    batch.push(el);
+    names.add(name);
+  }
+  if (!batch.length) return;
+  libPhotoBusy = true;
+  try {
+    const urls = (await api.get_artist_photos([...names])) || {};
+    names.forEach(n => libPhotoCache.set(n, urls[n] || ''));
+    batch.forEach(el => { if (el.isConnected) libShowPhoto(el, libPhotoCache.get(el.dataset.photo)); });
+  } catch (e) { /* the album cover stays */ }
+  libPhotoBusy = false;
+  libPumpPhotos();
 }
 // Covers are asked for in batches the backend reads side by side, the rows
 // seen last first: scrolling fast through a long list should not leave the
