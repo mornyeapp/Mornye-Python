@@ -10657,7 +10657,7 @@ function npGoArtist(name) {
   const key = String(name || '').trim().toLowerCase();
   if (!key) return;
   npShowInLibrary();
-  if (libArtists(lib.items).some(a => a.key === key)) {
+  if (libAll().artists.some(a => a.key === key)) {
     $('player-search').value = '';
     openPlayerArtist(key);
   } else {
@@ -10668,7 +10668,7 @@ function npGoArtist(name) {
 
 function npGoAlbum() {
   npShowInLibrary();
-  if (NP.albumKey && libAlbums(lib.items).some(a => a.key === NP.albumKey)) {
+  if (NP.albumKey && libAll().albums.some(a => a.key === NP.albumKey)) {
     $('player-search').value = '';
     openPlayerAlbum(NP.albumKey);
   } else if (NP.albumName) {
@@ -11042,7 +11042,8 @@ function npRenderQueue() {
 
 // ── Player: browse and play a folder ────────────────────────────────────────
 const lib = { items: [], view: [], scan: null, lastScan: 0, shown: 0, loading: false, scanning: false, scanSamples: [], lastLink: 0, started: false, raf: 0, thumbBusy: 0,
-  tab: 'songs', album: null, artist: null, playlist: null, playlists: [], folder: '', cards: 0 };
+  tab: 'songs', album: null, artist: null, playlist: null, playlists: [], folder: '', cards: 0,
+  cardHtml: [], cardsShown: 0 };
 const LIB_PAGE = 150;
 const LIB_FOLDERS_KEY = 'mornye-player-folders';
 //: The folders the library is made of, scanned together into one library.
@@ -11506,11 +11507,47 @@ function libCredited(t) {
   return out;
 }
 function libCredits(t, key) { return libCredited(t).some(n => n.toLowerCase() === key); }
-// Whether `key` is one of the album's own artists, rather than a guest on it.
-function libAlbumIsBy(album, key) {
+// The album's own artists, lower-cased (not the guests on it).
+function libAlbumOwners(album) {
   const t = album.tracks[0] || {};
   const names = t.album_artist_names && t.album_artist_names.length ? t.album_artist_names : [libArtistOf(t)];
-  return names.some(n => n.toLowerCase() === key);
+  return names.map(n => n.toLowerCase());
+}
+// Whether `key` is one of the album's own artists, rather than a guest on it.
+function libAlbumIsBy(album, key) {
+  return libAlbumOwners(album).includes(key);
+}
+
+// The whole library grouped into albums and artists, kept until the list of
+// tracks changes. Every tab switch used to group 40,000 tracks again (twice)
+// before showing anything. lib.items only grows by push or is replaced,
+// never edited in place, so the same array at the same length is the same
+// library.
+const libCache = { items: null, length: -1, albums: [], artists: [], covers: null };
+function libAll() {
+  if (libCache.items !== lib.items || libCache.length !== lib.items.length) {
+    libCache.items = lib.items;
+    libCache.length = lib.items.length;
+    libCache.albums = libAlbums(lib.items);
+    libCache.artists = libArtists(lib.items);
+    libCache.covers = null;
+  }
+  return libCache;
+}
+// The albums of `items`: the cached ones for the whole library.
+function libAlbumsFor(items) { return items === lib.items ? libAll().albums : libAlbums(items); }
+function libArtistsFor(items) { return items === lib.items ? libAll().artists : libArtists(items); }
+// Each artist's first own album, in album order: the cover of their card.
+// One pass, where each card used to search every album.
+function libArtistCover(key) {
+  const c = libAll();
+  if (!c.covers) {
+    c.covers = new Map();
+    for (const al of c.albums) {
+      for (const k of libAlbumOwners(al)) if (!c.covers.has(k)) c.covers.set(k, al);
+    }
+  }
+  return c.covers.get(key);
 }
 function libAlbumsOf(allAlbums, key) {
   const own = [], guest = [];
@@ -12062,8 +12099,7 @@ function filterPlayerLibrary(keepScroll) {
   const matches = q
     ? lib.items.filter(t => `${t.title} ${t.artist} ${t.album} ${t.album_artist || ''}`.toLowerCase().includes(q))
     : lib.items;
-  const allAlbums = libAlbums(lib.items);
-  const allArtists = libArtists(lib.items);
+  const { albums: allAlbums, artists: allArtists } = libAll();
   const tab = lib.tab || 'songs';
 
   // Library bar and tab counts describe the whole library, not the search.
@@ -12087,7 +12123,7 @@ function filterPlayerLibrary(keepScroll) {
   $('player-playlist-tools')?.classList.toggle('hidden', !(tab === 'playlists' && !lib.playlist));
 
   const list = $('player-list'), grid = $('player-grid'), detail = $('player-detail');
-  let rows = null, cards = null, header = '', count = '', recent = null;
+  let rows = null, cards = null, header = '', count = '', recent = null, shownAlbums = null, shownArtists = null;
 
   if (tab === 'playlists' && lib.playlist) {
     const playlist = lib.playlists.find(p => p.id === lib.playlist);
@@ -12117,19 +12153,21 @@ function filterPlayerLibrary(keepScroll) {
     header = libArtistHeaderHtml(artist, [...own, ...guest]);
   } else if (tab === 'recent') {
     // The albums whose newest file arrived last, newest first.
-    recent = libAlbums(matches)
+    recent = libAlbumsFor(matches)
       .filter(a => a.added)
       .sort((x, y) => y.added - x.added)
       .slice(0, LIB_RECENT_MAX);
     cards = recent.map(libAlbumCardHtml);
     count = plural(recent.length, 'album');
   } else if (tab === 'albums') {
-    const albums = libAlbums(matches);
+    const albums = libAlbumsFor(matches);
+    shownAlbums = albums;
     cards = albums.map(libAlbumCardHtml);
     count = plural(albums.length, 'album');
   } else if (tab === 'artists') {
-    const artists = libArtists(matches);
-    cards = artists.map(a => libArtistCardHtml(a, allAlbums));
+    const artists = libArtistsFor(matches);
+    shownArtists = artists;
+    cards = artists.map(libArtistCardHtml);
     count = plural(artists.length, 'artist');
   } else {
     rows = matches.slice();
@@ -12151,10 +12189,16 @@ function filterPlayerLibrary(keepScroll) {
     lib.view = [];
     lib.shown = 0;
     list.innerHTML = '';
-    grid.innerHTML = cards.join('');
+    // A page of cards at a time, like the rows: thousands of cards built
+    // (and torn down again on the next tab) at once froze the window.
+    lib.cardHtml = cards;
+    lib.cardsShown = Math.min(cards.length, Math.max(LIB_CARD_PAGE, keepScroll === true ? lib.cardsShown : 0));
+    grid.innerHTML = cards.slice(0, lib.cardsShown).join('') + libCardSentinel();
     grid.classList.remove('hidden');
     libObserve(grid);
   } else {
+    lib.cardHtml = [];
+    lib.cardsShown = 0;
     grid.innerHTML = '';
     grid.classList.add('hidden');
     lib.view = rows || [];
@@ -12167,18 +12211,21 @@ function filterPlayerLibrary(keepScroll) {
   lib.cards = cards ? cards.length : 0;
   // What "Play all" / "Shuffle" in the toolbar play on the current page: the
   // rows when there are rows, otherwise every album shown, in grid order.
+  // Worked out when one of them is pressed (libPlayAll), not on every render.
   if (cards) {
     if (tab === 'artists' && lib.artist) {
-      lib.playAll = libArtistTracks(lib.artist);
+      const key = lib.artist;
+      lib.playAll = () => libArtistTracks(key);
     } else if (tab === 'artists') {
-      const shown = new Set(libArtists(matches).map(a => a.key));
-      lib.playAll = allAlbums.flatMap(a => a.tracks).filter(t => libCredited(t).some(n => shown.has(n.toLowerCase())));
+      const shown = new Set((shownArtists || []).map(a => a.key));
+      lib.playAll = () => allAlbums.flatMap(a => a.tracks).filter(t => libCredited(t).some(n => shown.has(n.toLowerCase())));
     } else if (tab === 'playlists') {
       lib.playAll = null;
     } else if (recent) {
       lib.playAll = recent.flatMap(a => a.tracks);
     } else {
-      lib.playAll = allAlbums.filter(a => libAlbums(matches).some(m => m.key === a.key)).flatMap(a => a.tracks);
+      const shown = new Set((shownAlbums || []).map(a => a.key));
+      lib.playAll = () => allAlbums.filter(a => shown.has(a.key)).flatMap(a => a.tracks);
     }
   } else {
     lib.playAll = null;
@@ -12208,8 +12255,8 @@ function libAlbumCardHtml(a) {
   </div>`;
 }
 
-function libArtistCardHtml(a, allAlbums) {
-  const first = allAlbums.find(al => libAlbumIsBy(al, a.key));
+function libArtistCardHtml(a) {
+  const first = libArtistCover(a.key);
   const meta = `${plural(a.albums.size, 'album')} · ${plural(a.tracks.length, 'track')}`;
   return `<div class="pl-card artist" role="listitem" tabindex="0" data-activate data-artist="${escHtml(a.key)}" title="${escHtml(a.name)}">
     <div class="pl-card-art">${libCoverHtml((first?.tracks[0] || a.tracks[0])?.path, 320)}
@@ -12415,6 +12462,25 @@ function renderPlayerEmptyState() {
   }
 }
 
+const LIB_CARD_PAGE = 120;
+function libCardSentinel() {
+  return lib.cardsShown < lib.cardHtml.length ? '<div id="player-grid-sentinel" class="pl-more">Loading more…</div>' : '';
+}
+function libAppendCards() {
+  const grid = $('player-grid');
+  grid.querySelector('#player-grid-sentinel')?.remove();
+  const from = lib.cardsShown;
+  lib.cardsShown = Math.min(lib.cardHtml.length, from + LIB_CARD_PAGE);
+  grid.insertAdjacentHTML('beforeend', lib.cardHtml.slice(from, lib.cardsShown).join('') + libCardSentinel());
+  libObserve(grid);
+}
+
+// "Play all" on a page of cards is worked out when pressed.
+function libPlayAll() {
+  if (typeof lib.playAll === 'function') lib.playAll = lib.playAll();
+  return lib.playAll || [];
+}
+
 function libAppendRows() {
   const list = $('player-list');
   const from = list.querySelectorAll('.pl-row').length;
@@ -12433,6 +12499,7 @@ const libIO = typeof IntersectionObserver === 'function' ? new IntersectionObser
     if (!en.isIntersecting) return;
     const el = en.target;
     if (el.id === 'player-sentinel') { libIO.unobserve(el); libAppendRows(); return; }
+    if (el.id === 'player-grid-sentinel') { libIO.unobserve(el); libAppendCards(); return; }
     libIO.unobserve(el);
     libLoadThumb(el);
   });
@@ -12442,7 +12509,7 @@ function libObserve(root) {
   const targets = root.querySelectorAll('.pl-row:not([data-th]), .pl-cover:not([data-th])');
   if (!libIO) { targets.forEach(libLoadThumb); return; }
   targets.forEach(r => libIO.observe(r));
-  const s = root.querySelector('#player-sentinel');
+  const s = root.querySelector('#player-sentinel, #player-grid-sentinel');
   if (s) libIO.observe(s);
 }
 
@@ -12516,7 +12583,7 @@ function libQueueItems(tracks) {
 }
 
 function playFromLibrary(index, shuffle) {
-  const tracks = lib.view.length ? lib.view : (lib.playAll || []);
+  const tracks = lib.view.length ? lib.view : libPlayAll();
   const chosen = tracks[index];
   if (chosen && chosen.downloaded === false) {
     toastMgr.info('This song is not downloaded yet.');
@@ -12532,7 +12599,7 @@ function playFromLibrary(index, shuffle) {
 // The toolbar's "Play all" / "Shuffle": every playable song on the page,
 // skipping the ones not downloaded wherever they sit in the list.
 function playAllFromLibrary(shuffle) {
-  const tracks = lib.view.length ? lib.view : (lib.playAll || []);
+  const tracks = lib.view.length ? lib.view : libPlayAll();
   const playable = tracks.filter(t => t.downloaded !== false);
   if (playable.length) startPlayback(libQueueItems(playable), 0, !!shuffle, false);
   else if (tracks.length) toastMgr.info('None of these songs is downloaded yet.');
@@ -12541,13 +12608,13 @@ function playAllFromLibrary(shuffle) {
 // An artist plays album by album, each in track order: their own albums
 // whole, then the tracks they appear on elsewhere.
 function libArtistTracks(key) {
-  const { own, guest } = libAlbumsOf(libAlbums(lib.items), key);
+  const { own, guest } = libAlbumsOf(libAll().albums, key);
   return [...own.flatMap(a => a.tracks), ...guest.flatMap(a => a.tracks.filter(t => libCredits(t, key)))];
 }
 
 function playLibraryGroup(kind, key, shuffle) {
   let tracks = [];
-  if (kind === 'album') tracks = libAlbums(lib.items).find(a => a.key === key)?.tracks || [];
+  if (kind === 'album') tracks = libAll().albums.find(a => a.key === key)?.tracks || [];
   else {
     tracks = libArtistTracks(key);
   }
