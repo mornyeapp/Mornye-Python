@@ -8429,6 +8429,11 @@ async function startLocalScan() {
     localScan.pending.clear();
     if (localScan.raf) { cancelAnimationFrame(localScan.raf); localScan.raf = 0; }
     $('local-track-rows').innerHTML = '';
+    localList.view = [];
+    localList.shown = 0;
+    localList.rows.clear();
+    localList.picked.clear();
+    localList.applied.clear();
     localScan.id = null;
     localScan.path = path;
     paintScanBar('local-scan', { phase: 'listing', done: 0, total: 0 }, localScan);
@@ -8500,61 +8505,145 @@ function mergeLocalResults(current, incoming) {
   return { items, touched };
 }
 
-// Re-renders the whole list, keeping the boxes the user ticked or
-// unticked while results were still coming in. Only for a list that
-// shrank (files gone from the folder): new results are painted row by
-// row (paintLocalRows), since rebuilding thousands of rows with their
-// covers for every batch is what made the window stutter.
-function renderLocalTracksKeepingChoices() {
-  const picked = new Map([...document.querySelectorAll('#local-track-rows .local-cb')]
-    .map(cb => [cb.dataset.filePath, cb.checked]));
-  localScan.pending.clear();
-  renderLocalTracks();
-  for (const cb of document.querySelectorAll('#local-track-rows .local-cb')) {
-    if (!cb.disabled && picked.has(cb.dataset.filePath)) cb.checked = picked.get(cb.dataset.filePath);
-  }
-  $('local-results-wrap').classList.remove('hidden');
-  $('local-footer').classList.remove('hidden');
+//: Rows of the list in the page at a time; the next ones are added as the
+//: end of the list scrolls into view. Every file used to get a row, and
+//: laying out a list of thousands of rows again after each batch of
+//: results (~40 ms a batch at 3,000 files, growing with the folder) is
+//: what kept the window stalling for as long as a scan ran.
+const LOCAL_PAGE = 120;
+
+// What the list shows. `view` is the indices of localScanData that pass
+// the filter, in order; the first `shown` of them have a row, kept in
+// `rows` by index. The ticks are kept here by file, not in the rows, since
+// most files have no row: `picked` is what the user chose (a file not in
+// it is ticked when its match is safe), `applied` the files already tagged.
+const localList = { view: [], shown: 0, rows: new Map(), picked: new Map(), applied: new Set() };
+
+function localHasMatch(item) {
+  return !!(item && item.candidates && item.candidates[0]);
+}
+
+function localIsPicked(item) {
+  if (!localHasMatch(item) || localList.applied.has(item.file_path)) return false;
+  const choice = localList.picked.get(item.file_path);
+  return choice === undefined ? !!item.candidates[0].is_safe : choice;
+}
+
+// The indices of the ticked files, rows on screen or not.
+function localPickedIndices() {
+  const out = [];
+  localScanData.forEach((item, i) => { if (localIsPicked(item)) out.push(i); });
+  return out;
+}
+
+// A row's box was ticked or unticked.
+function localPick(cb) {
+  const item = localScanData[Number(cb.value)];
+  if (item) localList.picked.set(item.file_path, cb.checked);
   updateLocalSelection();
 }
 
-//: Rows built per animation frame while results come in.
-const LOCAL_ROWS_PER_FRAME = 150;
+function localViewIndices() {
+  const out = [];
+  localScanData.forEach((item, i) => {
+    if (item && (!localFilter || localRowState(item) === localFilter)) out.push(i);
+  });
+  return out;
+}
+
+// Watches the "Loading more" marker against the list itself, which scrolls
+// on its own: against the window, the page around the list hides the
+// marker and the next rows would never come.
+let localIO = null;
+function localObserver(container) {
+  if (!localIO && typeof IntersectionObserver === 'function') {
+    localIO = new IntersectionObserver(entries => {
+      for (const en of entries) {
+        if (en.isIntersecting && en.target.isConnected) localAppendRows(LOCAL_PAGE);
+      }
+    }, { root: container, rootMargin: '300px' });
+  }
+  return localIO;
+}
+
+// Adds rows for the next `count` files of the view, then the "Loading
+// more" marker when some are still without a row.
+function localAppendRows(count) {
+  const container = $('local-track-rows');
+  if (!container) return;
+  if (!localObserver(container)) count = Infinity;
+  let more = container.querySelector(':scope > .local-more');
+  const from = localList.shown;
+  const to = Math.min(localList.view.length, from + count);
+  if (to > from) {
+    const frag = document.createDocumentFragment();
+    for (let k = from; k < to; k++) {
+      const i = localList.view[k];
+      const row = localRowElement(localScanData[i], i);
+      localList.rows.set(i, row);
+      frag.appendChild(row);
+    }
+    container.insertBefore(frag, more);
+  }
+  localList.shown = to;
+  const left = to < localList.view.length;
+  if (left && !more) {
+    more = document.createElement('div');
+    more.className = 'local-more';
+    more.textContent = 'Loading more…';
+    container.appendChild(more);
+    localIO.observe(more);
+  } else if (!left && more) {
+    localIO?.unobserve(more);
+    more.remove();
+  } else if (left && to > from) {
+    // Observed again so that a marker still in view after this page
+    // (the user is at the bottom) asks for the next one.
+    localIO.unobserve(more);
+    localIO.observe(more);
+  }
+}
 
 function scheduleLocalRows() {
   if (!localScan.raf) localScan.raf = requestAnimationFrame(paintLocalRows);
 }
 
-// Paints the rows of the results that came in since the last frame: a
-// changed one replaces its row (keeping its box as the user left it), a
-// new one is appended. At most LOCAL_ROWS_PER_FRAME a frame, the rest next.
+// Brings the list up to date with the results that came in since the last
+// frame: a changed file that has a row gets a new one, and new files get a
+// row while the list is still short of a page (else the "Loading more"
+// marker adds them as the user scrolls). If the rows on screen are no
+// longer the first of the view (a file changed state under a filter), the
+// rows are built again.
 function paintLocalRows() {
   localScan.raf = 0;
   const container = $('local-track-rows');
   if (!container) return;
-  if (!container.querySelector(':scope > [data-index]')) container.innerHTML = '';  // the "no files" note
-  const order = [...localScan.pending].sort((a, b) => a - b).slice(0, LOCAL_ROWS_PER_FRAME);
-  const added = document.createDocumentFragment();
-  for (const i of order) {
-    localScan.pending.delete(i);
-    const item = localScanData[i];
-    if (!item) continue;
-    const row = localRowElement(item, i);
-    const old = container.children[i];
-    if (old && old.dataset.index === String(i)) {
-      const was = old.querySelector('.local-cb');
-      const cb = row.querySelector('.local-cb');
-      if (was && cb && !cb.disabled && was.dataset.filePath === cb.dataset.filePath) cb.checked = was.checked;
-      old.replaceWith(row);
-    } else {
-      added.appendChild(row);
-    }
-  }
-  container.appendChild(added);
+  const touched = localScan.pending;
+  localScan.pending = new Set();
+  const view = localViewIndices();
+  const same = localList.shown <= view.length
+    && localList.view.slice(0, localList.shown).every((i, k) => view[k] === i);
+  const fresh = !localList.shown;
   $('local-results-wrap').classList.remove('hidden');
   $('local-footer').classList.remove('hidden');
+  // The first results of a scan start at the top: the list was hidden
+  // when the scan began, and a hidden list keeps the old scroll position.
+  if (fresh) container.scrollTop = 0;
+  if (!same) {
+    renderLocalTracks(true);
+  } else {
+    if (fresh) container.innerHTML = '';  // the "no files" note
+    localList.view = view;
+    for (const i of touched) {
+      const old = localList.rows.get(i);
+      if (!old) continue;
+      const row = localRowElement(localScanData[i], i);
+      old.replaceWith(row);
+      localList.rows.set(i, row);
+    }
+    localAppendRows(Math.max(0, LOCAL_PAGE - localList.shown));
+  }
   scheduleLocalSummary();
-  if (localScan.pending.size) scheduleLocalRows();
 }
 
 // Results arrive in parts: those stored by an earlier scan of the folder
@@ -8604,7 +8693,10 @@ window.app_local_scan_done = function(p) {
     // Rows leave the list: indices shift, so it is drawn again whole.
     localScanData = localScanData.filter(e => !gone.has(e.file_path));
     if (localScan.raf) { cancelAnimationFrame(localScan.raf); localScan.raf = 0; }
-    renderLocalTracksKeepingChoices();
+    renderLocalTracks(true);
+    $('local-results-wrap').classList.remove('hidden');
+    $('local-footer').classList.remove('hidden');
+    updateLocalSelection();
   }
   paintScanBar('local-scan', null, localScan);
   setTaBtnState($('btn-scan-local'), 'default');
@@ -8623,16 +8715,27 @@ window.app_local_scan_error = function(err) {
     toastMgr.error("Scan failed: " + err);
 };
 
-function renderLocalTracks() {
+// Builds the rows again from the first file of the view. `keepPlace`
+// keeps as many rows as there were and where the list was scrolled to (a
+// file was edited, converted or moved); otherwise it starts from the top
+// (the filter changed).
+function renderLocalTracks(keepPlace = false) {
     const container = $('local-track-rows');
+    const top = container.scrollTop;
+    const count = keepPlace ? Math.max(LOCAL_PAGE, localList.shown) : LOCAL_PAGE;
+    localScan.pending.clear();
+    localList.rows.clear();
+    localList.shown = 0;
+    localList.view = localViewIndices();
     container.innerHTML = '';
-    
+
     if (!localScanData.length) {
         container.innerHTML = '<div class="u-p-40-20 u-ta-center u-c-muted u-fs-14">No supported audio files found in this folder (FLAC, MP3, M4A/AAC, OGG, Opus, WAV, AIFF, WMA, WavPack, APE and more).</div>';
         return;
     }
-    
-    localScanData.forEach((item, i) => container.appendChild(localRowElement(item, i)));
+
+    localAppendRows(count);
+    container.scrollTop = keepPlace ? top : 0;
     renderLocalSummary();
 }
 
@@ -8654,6 +8757,7 @@ function localRowElement(item, i) {
         let newCol = `<div class="u-c-muted u-fs-12_5 u-fst-italic">No match found</div>`;
         let scoreCol = `<span class="local-badge err">No Match</span>`;
         let checkbox = `<input type="checkbox" class="local-cb" value="${i}" data-file-path="${escHtml(item.file_path)}" disabled>`;
+        const done = localList.applied.has(item.file_path);
 
         if (hasMatch) {
             const newCover = best.metadata.cover_url || best.metadata.cover || '';
@@ -8700,7 +8804,7 @@ function localRowElement(item, i) {
                 }
                 scoreCol = `<span class="local-badge ${isSafe ? 'ok' : 'warn'}" title="${escHtml(why)}">${best.confidence}%</span>`;
             }
-            checkbox = `<input type="checkbox" class="local-cb" value="${i}" data-file-path="${escHtml(item.file_path)}" ${isSafe ? 'checked' : ''} data-onchange="updateLocalSelection()">`;
+            checkbox = `<input type="checkbox" class="local-cb" value="${i}" data-file-path="${escHtml(item.file_path)}" ${localIsPicked(item) ? 'checked' : ''} ${done ? 'disabled' : ''} data-onchange="localPick(this)">`;
         } else if (item.error) {
             scoreCol = `<span class="local-badge err">Error</span>`;
             newCol = `<div class="u-c-red u-fs-11">${escHtml(item.error)}</div>`;
@@ -8767,25 +8871,16 @@ function renderLocalSummary() {
         ['none', 'No match', counts.none],
         ['error', 'Errors', counts.error],
     ].filter(([state, , n]) => state === '' || n > 0);
-    if (localFilter && !chips.some(([state]) => state === localFilter)) localFilter = '';
+    const lost = localFilter && !chips.some(([state]) => state === localFilter);
+    if (lost) localFilter = '';
     box.innerHTML = total ? chips.map(([state, label, n]) =>
         `<button type="button" class="local-chip ${state || 'all'}${localFilter === state ? ' active' : ''}" data-state="${state}" aria-pressed="${localFilter === state}">`
         + (state ? `<span class="local-chip-n">${n}</span> ` : '') + `${escHtml(label)}</button>`).join('') : '';
     box.querySelectorAll('.local-chip').forEach(btn => btn.addEventListener('click', () => {
         localFilter = btn.dataset.state === localFilter ? '' : btn.dataset.state;
-        renderLocalSummary();
+        renderLocalTracks();
     }));
-    applyLocalFilter();
-}
-
-// One attribute on the list, not a class on each of its rows: the rows
-// that do not match are hidden by local.css. Toggling a class on thousands
-// of rows one by one is what froze the window for minutes on "Check".
-function applyLocalFilter() {
-    const container = $('local-track-rows');
-    if (!container) return;
-    if (localFilter) container.dataset.filter = localFilter;
-    else delete container.dataset.filter;
+    if (lost) renderLocalTracks();  // its last file changed state
 }
 
 //: Pending timer for the summary and selection count while a scan paints.
@@ -8809,7 +8904,7 @@ let convertFormats = null;
 async function openConvertDialog(indices) {
   const idx = Array.isArray(indices)
     ? indices
-    : Array.from(document.querySelectorAll('.local-cb:checked')).map(cb => parseInt(cb.value));
+    : localPickedIndices();
   convertPaths = idx.map(i => localScanData[i]?.file_path).filter(Boolean);
   if (!convertPaths.length) {
     toastMgr.info('Tick at least one file to convert.');
@@ -12795,15 +12890,28 @@ function markPlayingRow() {
   audio.addEventListener('pause', () => $('player-list').classList.add('paused'));
 })();
 
+// Every file with a match, rows on screen or not.
 function toggleAllLocal(cb) {
-    document.querySelectorAll('.local-cb:not([disabled])').forEach(c => c.checked = cb.checked);
+    for (const item of localScanData) {
+        if (localHasMatch(item)) localList.picked.set(item.file_path, cb.checked);
+    }
+    for (const row of localList.rows.values()) {
+        const box = row.querySelector('.local-cb');
+        if (box && !box.disabled) box.checked = cb.checked;
+    }
     updateLocalSelection();
 }
 
+// Counted from the results, since only the files near the top have a row.
 function updateLocalSelection() {
-    const checked = document.querySelectorAll('.local-cb:checked').length;
-    const total = document.querySelectorAll('.local-cb:not([disabled])').length;
-    
+    let checked = 0;
+    let total = 0;
+    for (const item of localScanData) {
+        if (!localHasMatch(item) || localList.applied.has(item.file_path)) continue;
+        total += 1;
+        if (localIsPicked(item)) checked += 1;
+    }
+
     const checkAll = $('check-all-local');
     if (checkAll) {
         checkAll.checked = total > 0 && checked === total;
@@ -12817,7 +12925,7 @@ function updateLocalSelection() {
 }
 
 function applyLocalTags() {
-    const selectedIdx = Array.from(document.querySelectorAll('.local-cb:checked')).map(cb => parseInt(cb.value));
+    const selectedIdx = localPickedIndices();
     if (!selectedIdx.length) return;
     
     const itemsToApply = selectedIdx.map(i => {
@@ -12871,14 +12979,15 @@ window.app_local_apply_finished = function(payload) {
     
     // Automatically deselect checkboxes for successful ones so the user knows they are done
     payload.results.forEach((res) => {
-        if (res.success && res.file_path) {
-            const cb = document.querySelector(`.local-cb[data-file-path="${CSS.escape(res.file_path)}"]`);
-            if (cb) {
-                cb.checked = false;
-                cb.disabled = true;
-            }
-        }
+        if (res.success && res.file_path) localList.applied.add(res.file_path);
     });
+    for (const row of localList.rows.values()) {
+        const cb = row.querySelector('.local-cb');
+        if (cb && localList.applied.has(cb.dataset.filePath)) {
+            cb.checked = false;
+            cb.disabled = true;
+        }
+    }
     updateLocalSelection();
 };
 

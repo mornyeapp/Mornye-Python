@@ -47,20 +47,55 @@ test('a result is Ready, Check, No match or Error from its best candidate', () =
     'a match wins over an error, as the row shows it');
 });
 
-test('a filter chip hides rows with one attribute, not a class on every row', () => {
-  // Toggling .hidden on each of thousands of rows froze the window for
-  // minutes on "Check"; the list now carries data-filter and CSS does the rest.
+const safe = (path) => ({ file_path: path, candidates: [{ is_safe: true }] });
+const unsure = (path) => ({ file_path: path, candidates: [{ is_safe: false }] });
+const none = (path) => ({ file_path: path, candidates: [] });
+const localNames = ['localHasMatch', 'localIsPicked', 'localPickedIndices', 'localViewIndices', 'localRowState'];
+const freshList = () => ({ view: [], shown: 0, rows: new Map(), picked: new Map(), applied: new Set() });
+
+test('a file is ticked when its match is safe, until the user says otherwise', () => {
+  const localScanData = [safe('/a'), unsure('/b'), none('/c'), safe('/d')];
+  const localList = freshList();
+  const f = pick(localNames, { localScanData, localList, localFilter: '' });
+  assert.deepEqual([...f.localPickedIndices()], [0, 3]);
+  localList.picked.set('/a', false);
+  localList.picked.set('/b', true);
+  localList.picked.set('/c', true);  // no match: nothing to apply, never ticked
+  assert.deepEqual([...f.localPickedIndices()], [1, 3]);
+  localList.applied.add('/d');  // already tagged
+  assert.deepEqual([...f.localPickedIndices()], [1]);
+});
+
+test('the ticks and the filter work on the results, not on the rows on screen', () => {
+  // Only the first files of a long list have a row (LOCAL_PAGE), so a tick
+  // or a filter that read the rows would miss the rest of the folder.
+  const localScanData = [safe('/a'), unsure('/b'), none('/c'), unsure('/d')];
+  const f = pick(localNames, { localScanData, localList: freshList(), localFilter: 'review' });
+  assert.deepEqual([...f.localViewIndices()], [1, 3]);
+  const all = pick(localNames, { localScanData, localList: freshList(), localFilter: '' });
+  assert.deepEqual([...all.localViewIndices()], [0, 1, 2, 3]);
   const app = source('app.js');
-  const start = app.indexOf('function applyLocalFilter()');
-  const body = app.slice(start, app.indexOf('\n}\n', start));
-  assert.match(body, /container\.dataset\.filter = localFilter/);
-  assert.doesNotMatch(body, /querySelectorAll/);
-  const css = source('css/views/local.css');
-  for (const state of ['matched', 'review', 'none', 'error']) {
-    assert.match(css, new RegExp(
-      `#local-track-rows\\[data-filter="${state}"\\] > \\[data-state\\]:not\\(\\[data-state="${state}"\\]\\)`
-    ), state);
+  for (const name of ['updateLocalSelection', 'toggleAllLocal', 'applyLocalTags']) {
+    const start = app.indexOf(`function ${name}(`);
+    const body = app.slice(start, app.indexOf('\n}\n', start));
+    assert.doesNotMatch(body, /querySelectorAll\('\.local-cb/, name);
   }
+});
+
+test('the list has rows for a page of files, and more as its end scrolls into view', () => {
+  // A row for each of thousands of files made every batch of a scan lay
+  // the whole list out again (~40 ms a batch at 3,000 files).
+  const app = source('app.js');
+  assert.match(app, /^const LOCAL_PAGE = \d+;/m);
+  const start = app.indexOf('function renderLocalTracks(');
+  const body = app.slice(start, app.indexOf('\n}\n', start));
+  assert.doesNotMatch(body, /localScanData\.forEach/);
+  assert.match(body, /localAppendRows\(/);
+  // Watched against the list, which scrolls on its own inside the page.
+  assert.match(app, /root: container, rootMargin/);
+  const css = source('css/views/local.css');
+  assert.match(css, /#local-track-rows > \.local-more/);
+  assert.doesNotMatch(css, /data-filter/);
 });
 
 test('while a scan paints, the summary is counted from the data a few times a second', () => {
