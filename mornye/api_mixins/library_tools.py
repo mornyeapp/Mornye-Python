@@ -469,7 +469,7 @@ class LibraryToolsMixin:
             stored = player_library.stored_rows(roots)
             if stored:
                 rows = sorted(
-                    (s.row for s in stored.values()),
+                    (player_library.with_added(s) for s in stored.values()),
                     key=lambda r: str(r.get("path", "")).lower(),
                 )
                 for start in range(0, len(rows), 500):
@@ -532,7 +532,7 @@ class LibraryToolsMixin:
                     and "genre" in known.row
                 ):
                     continue
-                row = read_track_row(path)
+                row = {**read_track_row(path), "added": player_library.added_at(st)}
                 batch.append(row)
                 to_store.append((str(path), st.st_mtime_ns, st.st_size, row))
                 if len(to_store) >= 200:

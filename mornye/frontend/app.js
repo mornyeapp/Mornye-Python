@@ -204,6 +204,7 @@ function switchView(name) {
   if (name === 'history') loadHistory();
   if (name === 'following') loadWeeklyReleases(false);
   if (name === 'player') initPlayerView();
+  syncLibraryNav();
 }
 
 // Mounted network shares as one-click picks under the library path field:
@@ -7942,6 +7943,7 @@ window.addEventListener('pywebviewready', async () => {
   // different capitalisations.
   loadHistoryAndProfiles();
   loadStaged();  // the sidebar's waiting-count badge
+  loadSidebarPlaylists();
   playerSetupEngine();  // the native engine in the desktop app, when libmpv is there
   checkAuthStatus();
   // The real download folder (MORNYE_DOWNLOAD_DIR in a container, the
@@ -11479,6 +11481,7 @@ function libAlbums(items) {
     }
     a.tracks.push(t);
     a.duration += t.duration_s || 0;
+    if ((t.added || 0) > (a.added || 0)) a.added = t.added;
     if (!a.year && t.year) a.year = t.year;
     if (t.format) a.formats.add(t.format);
   }
@@ -11556,6 +11559,69 @@ function setPlayerTab(tab) {
   playerScrollTop();
 }
 
+// ── Library in the sidebar ───────────────────────────────────────────────────
+// Each page of the library (Recently Added, Artists, Albums, Songs) and each
+// playlist is a row of its own in the sidebar, the way a music app lays it
+// out, instead of tabs at the top of one Player page. The phone bar keeps a
+// single Player button and those tabs.
+const LIB_TITLES = { recent: 'Recently Added', artists: 'Artists', albums: 'Albums', songs: 'Songs', playlists: 'Playlists' };
+const LIB_RECENT_MAX = 100;  // albums on Recently Added
+
+// Switches to the Player first; a page with unsaved changes may keep it.
+function enterLibrary() {
+  switchView('player');
+  return !!$('view-player')?.classList.contains('active');
+}
+function openLibrary(tab) {
+  if (enterLibrary()) setPlayerTab(tab);
+}
+function openLibraryPlaylist(id) {
+  if (enterLibrary()) openPlayerPlaylist(id);
+}
+function newLibraryPlaylist() {
+  if (!enterLibrary()) return;
+  setPlayerTab('playlists');
+  openPlayerPlaylistEditor();
+}
+
+// Highlights the row of the page the Player shows, and names the page.
+function syncLibraryNav() {
+  const on = !!$('view-player')?.classList.contains('active');
+  const tab = lib.tab || 'songs';
+  const inPlaylist = tab === 'playlists' && !!lib.playlist;
+  document.querySelectorAll('#sidebar .nav-lib').forEach(b => {
+    b.classList.toggle('active', on && !inPlaylist && b.id === 'nav-lib-' + tab);
+  });
+  document.querySelectorAll('#sb-playlist-list .nav-btn').forEach(b => {
+    const current = on && inPlaylist && b.dataset.id === lib.playlist;
+    b.classList.toggle('active', current);
+    if (current) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
+  const title = $('player-title');
+  if (title) title.textContent = LIB_TITLES[tab] || 'Player';
+}
+
+function renderSidebarPlaylists() {
+  const box = $('sb-playlist-list');
+  if (!box) return;
+  const icon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15V6"/><path d="M18.5 18a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/><path d="M12 12H3"/><path d="M16 6H3"/><path d="M12 18H3"/></svg>';
+  box.innerHTML = lib.playlists.map(p =>
+    `<button type="button" class="nav-btn sb-pl-item" role="listitem" data-id="${escHtml(p.id)}" title="${escHtml(p.name)}"`
+    + ` data-onclick="openLibraryPlaylist(this.dataset.id)">${icon}<span class="nav-label">${escHtml(p.name)}</span></button>`).join('');
+  syncLibraryNav();
+}
+
+// The sidebar lists the playlists from the start, before the Player has
+// been opened (which loads them again, with the library).
+async function loadSidebarPlaylists() {
+  try {
+    const res = await window.pywebview?.api?.get_player_playlists?.();
+    if (res?.status !== 'ok' || lib.started) return;
+    lib.playlists = res.playlists || [];
+    renderSidebarPlaylists();
+  } catch (e) { /* the rows come with the Player */ }
+}
+
 // The music scrolls in its own box (the whole page on a phone): a new page
 // of the library starts at its top in both.
 function playerScrollTop() {
@@ -11564,7 +11630,8 @@ function playerScrollTop() {
 }
 
 function openPlayerAlbum(key) {
-  lib.tab = 'albums';
+  // Back from an album opened on Recently Added goes back there.
+  lib.tab = lib.tab === 'recent' ? 'recent' : 'albums';
   lib.album = key;
   lib.playlist = null;
   document.querySelectorAll('.player-tabs .seg-tab').forEach(b => {
@@ -11623,6 +11690,7 @@ async function refreshPlayerPlaylists(selectedId) {
     if (lib.playlists.some(p => p.id === current)) select.value = current;
   }
   $('ptab-count-playlists').textContent = lib.playlists.length.toLocaleString();
+  renderSidebarPlaylists();
   filterPlayerLibrary(true);
   return true;
 }
@@ -12015,9 +12083,11 @@ function filterPlayerLibrary(keepScroll) {
   addSelect.classList.toggle('hidden', tab === 'playlists');
   $('player-play-controls').classList.toggle('hidden', tab === 'playlists' && !lib.playlist);
   $('player-search-wrap').classList.toggle('hidden', tab === 'playlists');
+  // New playlist / Import belong to the list of playlists, not every page.
+  $('player-playlist-tools')?.classList.toggle('hidden', !(tab === 'playlists' && !lib.playlist));
 
   const list = $('player-list'), grid = $('player-grid'), detail = $('player-detail');
-  let rows = null, cards = null, header = '', count = '';
+  let rows = null, cards = null, header = '', count = '', recent = null;
 
   if (tab === 'playlists' && lib.playlist) {
     const playlist = lib.playlists.find(p => p.id === lib.playlist);
@@ -12030,7 +12100,7 @@ function filterPlayerLibrary(keepScroll) {
       ? lib.playlists.map(libPlaylistCardHtml)
       : ['<div class="pl-playlist-empty">No playlists yet. Create one or import an M3U/M3U8 file.</div>'];
     count = plural(lib.playlists.length, 'playlist');
-  } else if (tab === 'albums' && lib.album) {
+  } else if ((tab === 'albums' || tab === 'recent') && lib.album) {
     const album = allAlbums.find(a => a.key === lib.album);
     if (!album) { lib.album = null; return filterPlayerLibrary(keepScroll); }
     rows = album.tracks;
@@ -12045,6 +12115,14 @@ function filterPlayerLibrary(keepScroll) {
       cards.push(`<h3 class="pl-grid-head">Appears on</h3>`, ...guest.map(libAlbumCardHtml));
     }
     header = libArtistHeaderHtml(artist, [...own, ...guest]);
+  } else if (tab === 'recent') {
+    // The albums whose newest file arrived last, newest first.
+    recent = libAlbums(matches)
+      .filter(a => a.added)
+      .sort((x, y) => y.added - x.added)
+      .slice(0, LIB_RECENT_MAX);
+    cards = recent.map(libAlbumCardHtml);
+    count = plural(recent.length, 'album');
   } else if (tab === 'albums') {
     const albums = libAlbums(matches);
     cards = albums.map(libAlbumCardHtml);
@@ -12097,6 +12175,8 @@ function filterPlayerLibrary(keepScroll) {
       lib.playAll = allAlbums.flatMap(a => a.tracks).filter(t => libCredited(t).some(n => shown.has(n.toLowerCase())));
     } else if (tab === 'playlists') {
       lib.playAll = null;
+    } else if (recent) {
+      lib.playAll = recent.flatMap(a => a.tracks);
     } else {
       lib.playAll = allAlbums.filter(a => libAlbums(matches).some(m => m.key === a.key)).flatMap(a => a.tracks);
     }
@@ -12104,6 +12184,7 @@ function filterPlayerLibrary(keepScroll) {
     lib.playAll = null;
   }
   renderPlayerEmptyState();
+  syncLibraryNav();
 }
 
 const LIB_PLAY_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
