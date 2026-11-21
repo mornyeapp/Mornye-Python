@@ -943,3 +943,20 @@
   .pl-round.primary { width: 68px; height: 68px; }
 }
 @media (prefers-reduced-motion: reduce) { .pl-round { transition: none; } .pl-round:hover { transform: none; } }
+
+/* Player lines too long for their box (artists · album, the title, the
+   player bar's "title — artist") scroll to their end and back rather than
+   ending in "…"; see marqueeFit() in app.js. The inner span is inline until
+   it has to move, so a line that fits renders exactly as before. */
+.marquee { text-overflow: clip; }
+.marquee > .marquee-inner { display: inline-block; animation: marquee-pingpong var(--marquee-dur, 8s) ease-in-out infinite alternate; will-change: transform; }
+/* Held still under the pointer, so a moving artist or album link can be clicked. */
+.marquee:hover > .marquee-inner { animation-play-state: paused; }
+@keyframes marquee-pingpong {
+  0%, 18% { transform: translateX(0); }
+  82%, 100% { transform: translateX(var(--marquee-shift, 0px)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .marquee { text-overflow: ellipsis; }
+  .marquee > .marquee-inner { display: inline; animation: none; }
+}

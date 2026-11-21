@@ -9769,6 +9769,7 @@ async function loadPlayerTrack(index, { advanced = false } = {}) {
   setPlayerArtwork('');
   const artist = displayArtists(item.artist);
   $('pl-title').textContent = artist ? `${item.title} — ${artist}` : item.title;
+  marqueeFit($('pl-title'));
   if (!advanced) $('pl-quality').textContent = 'Preparing…';
   markPlayingRow();
   playerAbReset();
@@ -10521,6 +10522,44 @@ function npApplyColors(src) {
   img.src = src;
 }
 
+// A line in the player too long for its box scrolls slowly to its end and
+// back instead of being cut off with "…". The text is moved into an inner
+// span (the delegated data-onclick links keep working), and a ResizeObserver
+// measures again whenever the box changes size — including when the Now
+// Playing view, filled while hidden, is opened.
+const marqueeObserver = typeof ResizeObserver === 'function'
+  ? new ResizeObserver(entries => entries.forEach(e => marqueeMeasure(e.target)))
+  : null;
+
+function marqueeFit(el) {
+  if (!el) return;
+  let inner = el.firstElementChild;
+  if (!(inner && inner.classList.contains('marquee-inner') && el.childNodes.length === 1)) {
+    inner = document.createElement('span');
+    inner.className = 'marquee-inner';
+    while (el.firstChild) inner.appendChild(el.firstChild);
+    el.appendChild(inner);
+  }
+  if (marqueeObserver && !el.dataset.marquee) {
+    el.dataset.marquee = '1';
+    marqueeObserver.observe(el);
+  }
+  marqueeMeasure(el);
+}
+
+function marqueeMeasure(el) {
+  const inner = el.firstElementChild;
+  if (!inner || !inner.classList.contains('marquee-inner')) return;
+  el.classList.remove('marquee');
+  const overflow = el.scrollWidth - el.clientWidth;
+  if (el.clientWidth > 0 && overflow > 2) {
+    el.style.setProperty('--marquee-shift', `${-overflow}px`);
+    // About 30px a second, never so short the text flickers past.
+    el.style.setProperty('--marquee-dur', `${Math.max(6, overflow / 30 + 4).toFixed(1)}s`);
+    el.classList.add('marquee');
+  }
+}
+
 // The artist and album under the title, as links into the library: an
 // artist with a page of their own opens it, anyone else (a featured artist
 // is rarely an album artist) opens the songs that name them; the album
@@ -10542,6 +10581,7 @@ function npFillCredits(item, res) {
   if (artists) parts.push(artists);
   if (album) parts.push(`<button type="button" class="np-link" data-onclick="npGoAlbum()">${escHtml(album)}</button>`);
   $('np-artist').innerHTML = parts.join(' · ');
+  marqueeFit($('np-artist'));
 }
 
 function npShowInLibrary() {
@@ -10577,6 +10617,7 @@ function fillNowPlaying(item, res) {
   setPlayerArtwork(res.cover || '');
   npResetSync();
   $('np-title').textContent = res.title || item.title;
+  marqueeFit($('np-title'));
   npFillCredits(item, res);
   $('np-explicit').classList.toggle('hidden', !res.explicit);
   const cover = $('np-cover');
