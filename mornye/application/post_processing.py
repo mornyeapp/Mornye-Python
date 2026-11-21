@@ -258,7 +258,17 @@ async def _write_animated_artwork_sidecar(
 
     try:
         if destination.exists():
+            logger.info(
+                "[animated-artwork] already saved for %s — %s",
+                metadata.first_album_artist,
+                metadata.album,
+            )
             return
+        logger.info(
+            "[animated-artwork] looking for %s — %s",
+            metadata.first_album_artist,
+            metadata.album,
+        )
         written = await download_animated_artwork_async(
             metadata.first_album_artist,
             metadata.album,
@@ -266,7 +276,13 @@ async def _write_animated_artwork_sidecar(
             api_url=getattr(options, "animated_artwork_api_url", None),
         )
         if written:
-            logger.info("[animated-artwork] wrote %s", destination)
+            logger.info("[animated-artwork] found and saved %s", destination)
+        else:
+            logger.info(
+                "[animated-artwork] none found for %s — %s",
+                metadata.first_album_artist,
+                metadata.album,
+            )
     except (AnimatedArtworkError, OSError) as exc:
         logger.warning(
             "[animated-artwork] could not save artwork for %s: %s",
