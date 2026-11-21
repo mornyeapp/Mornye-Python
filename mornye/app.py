@@ -1811,6 +1811,18 @@ class MornyeAPI(
         tracks = [t for t in listed if isinstance(t, TrackMetadata)]
         if not (playlist_name or "").strip() or not tracks:
             return {"ok": False, "error": "Open a playlist first."}
+        return self._write_playlist_m3u(config, playlist_name, tracks)
+
+    def _write_playlist_m3u(
+        self, config: dict, playlist_name: str, tracks: list, *, quiet: bool = False
+    ) -> dict:
+        """Rewrites a playlist's M3U to `tracks`, from the files on disk.
+
+        Shared by "Save .m3u8" and the followed-playlist check, which calls
+        it with the playlist's full current listing so a track that left the
+        playlist leaves its M3U too (issue #280). `quiet` keeps a scheduled
+        check's success out of the toasts.
+        """
         fmt = str(config.get("m3u_format") or "m3u8").lower()
         if fmt == "none":
             return {
@@ -1852,7 +1864,10 @@ class MornyeAPI(
                 "error": "None of this playlist's tracks are in the download "
                 "folder yet: download it first.",
             }
-        self.log(f"Playlist file written: {target} ({count} track(s))", "ok")
+        self.log(
+            f"Playlist file written: {target} ({count} track(s))",
+            "debug" if quiet else "ok",
+        )
         return {"ok": True, "path": str(target), "found": count, "total": len(tracks)}
 
     def _download_job_payload(

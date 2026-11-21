@@ -256,3 +256,84 @@ def test_many_refused_releases_are_summed_up_in_one_error() -> None:
     errors = [message for level, message in api.logs if level == "error"]
     assert len(errors) == 1
     assert errors[0].startswith("60 new release(s) could not be queued")
+
+
+# ---------------------------------------------------------------------------
+# Issue #280: every check keeps a followed playlist's M3U on its current listing
+# ---------------------------------------------------------------------------
+
+
+class M3uRecordingApi(FakeApi):
+    def __init__(self) -> None:
+        super().__init__()
+        self.m3u_writes: list[tuple] = []
+
+    def _write_playlist_m3u(self, config, playlist_name, tracks, *, quiet=False):
+        self.m3u_writes.append((playlist_name, [t.id for t in tracks], quiet))
+        return {"ok": True}
+
+
+def test_a_check_with_only_removed_tracks_rewrites_the_m3u(playlist):
+    api = M3uRecordingApi()
+    playlist.append(_track("t2"))
+    sub = subs.add(PLAYLIST_URL, interval_minutes=15)
+    api._run_scheduled_check(sub)  # the baseline
+
+    playlist.pop(0)  # t1 left the chart, nothing was added
+    api._run_scheduled_check(subs.get(sub.id))
+
+    assert api.jobs == []
+    assert api.m3u_writes[-1] == ("My Playlist", ["t2"], True)
+
+
+def test_check_for_new_only_leaves_the_m3u_alone(playlist):
+    api = M3uRecordingApi()
+    subs.add(PLAYLIST_URL)
+    api._check_subscriptions_thread(False)
+
+    assert api.m3u_writes == []
+
+
+def test_added_tracks_still_go_through_the_download_job(playlist):
+    api = M3uRecordingApi()
+    sub = subs.add(PLAYLIST_URL, interval_minutes=15)
+    api._run_scheduled_check(sub)
+    api.m3u_writes.clear()
+
+    playlist.append(_track("t2"))
+    api._run_scheduled_check(subs.get(sub.id))
+
+    # The job rewrites the M3U itself, once the new track is on disk.
+    [job] = api.jobs
+    assert [t["id"] for t in job["playlist_tracks"]] == ["t1", "t2"]
+    assert api.m3u_writes == []
+
+
+def test_the_m3u_on_disk_drops_a_track_that_left_the_playlist(playlist, tmp_path):
+    from mornye.app import MornyeAPI
+
+    folder = tmp_path / "My Playlist"
+    folder.mkdir()
+    (folder / "Song t1 - Artist.flac").write_bytes(b"audio")
+    (folder / "Song t2 - Artist.flac").write_bytes(b"audio")
+    m3u = folder / "My Playlist.m3u8"
+    m3u.write_text(
+        "#EXTM3U\n#EXTINF:-1,Artist - Song t1\nSong t1 - Artist.flac\n"
+        "#EXTINF:-1,Artist - Song t2\nSong t2 - Artist.flac\n",
+        encoding="utf-8",
+    )
+    api = FakeApi()
+    api.download_dir = str(tmp_path)
+    api._write_playlist_m3u = MornyeAPI._write_playlist_m3u.__get__(api)  # type: ignore[attr-defined]
+    playlist.append(_track("t2"))
+    sub = subs.add(PLAYLIST_URL, interval_minutes=15)
+    api._run_scheduled_check(sub)
+
+    playlist.pop(0)
+    api._run_scheduled_check(subs.get(sub.id))
+
+    assert m3u.read_text(encoding="utf-8").splitlines() == [
+        "#EXTM3U",
+        "#EXTINF:-1,Artist - Song t2",
+        "Song t2 - Artist.flac",
+    ]
