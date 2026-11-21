@@ -9653,7 +9653,7 @@ function playerNativeEngine(api, clock = () => performance.now()) {
   let emit = () => {};
   let chain = Promise.resolve();
   let src = '', paused = true, ended = false, time = 0, at = 0, duration = NaN;
-  let volume = 1, muted = false, rate = 1, seekUntil = 0, output = null, loadGuardUntil = 0;
+  let volume = 1, muted = false, rate = 1, seekUntil = 0, output = null, loadGuardUntil = 0, staleAt = NaN;
   let floor = 0; // the position never shows less than this until the next settle
   const DRIFT_MAX_S = 1;
   const call = (name, ...args) => {
@@ -9681,6 +9681,8 @@ function playerNativeEngine(api, clock = () => performance.now()) {
     // mpv starts playing as soon as it opens the file, so a load is a play.
     load(path, next) {
       const wasPaused = paused;
+      // Where the last file was: a late update from it says about this.
+      staleAt = src ? position() : NaN;
       src = path; paused = false; ended = false; duration = NaN; output = null;
       settle(0);
       loadGuardUntil = now() + 1500;
@@ -9745,7 +9747,7 @@ function playerNativeEngine(api, clock = () => performance.now()) {
           // A position the last file sent just before the change can arrive
           // after the new one was opened; it would put the new track (and
           // its lyrics) at the old track's minute.
-          if (now() < loadGuardUntil && evt.time > position() + 2) return;
+          if (now() < loadGuardUntil && Math.abs(evt.time - staleAt) < 1.5) return;
           {
             const shown = position();
             settle(evt.time);
