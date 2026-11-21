@@ -10677,6 +10677,15 @@ function npGoAlbum() {
   }
 }
 
+// Where the animated artwork is served from: the desktop window gets a
+// media-server URL, the web UI streams the file through /api/media like the
+// audio. None with Reduce Motion on, where the still cover stays.
+function npMotionUrl(res) {
+  if (!res?.motion_path && !res?.motion_url) return '';
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return '';
+  return res.motion_url || ('/api/media?path=' + encodeURIComponent(res.motion_path));
+}
+
 function fillNowPlaying(item, res) {
   setPlayerArtwork(res.cover || '');
   npResetSync();
@@ -10685,8 +10694,18 @@ function fillNowPlaying(item, res) {
   npFillCredits(item, res);
   $('np-explicit').classList.toggle('hidden', !res.explicit);
   const cover = $('np-cover');
-  cover.parentElement.classList.toggle('empty', !res.cover);
-  cover.src = res.cover || '';
+  // The album's animated artwork (cover.webp beside the track) plays in
+  // place of the still cover; the colours still come from the still one.
+  const motion = npMotionUrl(res);
+  cover.parentElement.classList.toggle('empty', !res.cover && !motion);
+  cover.parentElement.classList.toggle('animated', !!motion);
+  cover.onerror = motion ? () => {
+    cover.onerror = null;
+    cover.parentElement.classList.remove('animated');
+    cover.parentElement.classList.toggle('empty', !res.cover);
+    cover.src = res.cover || '';
+  } : null;
+  cover.src = motion || res.cover || '';
   npApplyColors(res.cover);
   $('np-tech').textContent = npTechLabel(res);
   $('np-seek').value = 0;

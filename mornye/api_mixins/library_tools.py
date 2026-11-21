@@ -363,14 +363,35 @@ class LibraryToolsMixin:
         url = ""
         if local_url and not native:
             url = get_media_server(self._is_media_path).url_for(served)
+        motion = self._animated_cover(path)
+        motion_url = ""
+        if motion and local_url:
+            # Through the media server even with the native engine playing
+            # the audio: the window still has no other route to the file.
+            motion_url = get_media_server(self._is_media_path).url_for(motion)
         return {
             "status": "ok",
             "path": str(served),
             "url": url,
             "mode": mode,
             "quality": label,
+            "motion_path": str(motion) if motion else "",
+            "motion_url": motion_url,
             **self._now_playing(path, info),
         }
+
+    def _animated_cover(self, path: str) -> Path | None:
+        """The album's animated artwork, saved as ``cover.webp`` in the
+        track's folder by the download (post_processing.
+        _write_animated_artwork_sidecar), for the full-screen player to show
+        in place of the still cover. None when the folder has none."""
+        candidate = Path(path).parent / "cover.webp"
+        try:
+            if candidate.is_file() and candidate.stat().st_size > 0:
+                return candidate
+        except OSError:
+            pass
+        return None
 
     def _now_playing(self, path: str, info: dict) -> dict:
         """What the full-screen player shows: tags, cover and lyrics.
