@@ -4602,6 +4602,7 @@ async function importPlayerPlaylistSearchResult(button) {
 // or a search: the Player gets the same name, description, cover and every
 // song. Songs not in the library are kept and labelled "Not downloaded".
 function renderImportPlaylistButton() {
+  renderSaveM3uButton();
   document.getElementById('import-playlist-btn')?.remove();
   const actions = $('album-actions');
   if (!actions || detectUrlType(currentUrl) !== 'playlist') return;
@@ -4617,6 +4618,54 @@ function renderImportPlaylistButton() {
   btn.onclick = () => importFetchedPlaylist(btn);
   const cli = actions.querySelector('[data-onclick*="CliCommand"], .cli-btn');
   cli ? actions.insertBefore(btn, cli) : actions.appendChild(btn);
+}
+
+// "Save .m3u8" beside Download All, on a playlist: rebuilds the playlist file
+// (deleted by mistake, or never written) from the tracks already in the
+// download folder, where a download would have put it — nothing is fetched.
+function renderSaveM3uButton() {
+  document.getElementById('save-m3u-btn')?.remove();
+  const actions = $('album-actions');
+  if (!actions || detectUrlType(currentUrl) !== 'playlist') return;
+  const btn = document.createElement('button');
+  btn.id = 'save-m3u-btn';
+  btn.type = 'button';
+  btn.className = 'act-btn secondary';
+  btn.setAttribute('aria-label', 'Write this playlist\u2019s .m3u8 file from the tracks already downloaded');
+  btn.dataset.tip = 'Save the playlist file (.m3u8)';
+  btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg> Save .m3u8`;
+  btn.onclick = () => savePlaylistM3u(btn);
+  const cli = actions.querySelector('[data-onclick*="CliCommand"], .cli-btn');
+  cli ? actions.insertBefore(btn, cli) : actions.appendChild(btn);
+}
+
+async function savePlaylistM3u(btn) {
+  if (!currentTracks.length) {
+    toastMgr.error('Wait for the playlist\u2019s tracks to load.');
+    return;
+  }
+  if (!window.pywebview?.api?.save_playlist_m3u) return;
+  setTaBtnState(btn, 'loading');
+  try {
+    const res = await window.pywebview.api.save_playlist_m3u(
+      buildConfig(), currentTracks[0]?.list_id ?? null);
+    if (res?.ok) {
+      setTaBtnState(btn, 'success');
+      const missing = (res.total || 0) - (res.found || 0);
+      toastMgr.success(missing > 0
+        ? `Playlist file saved with ${res.found} of ${res.total} tracks (${missing} not downloaded yet).`
+        : `Playlist file saved with all ${res.found} tracks.`);
+      logMessage(`Playlist file saved: ${res.path}`, 'ok');
+    } else {
+      setTaBtnState(btn, 'error');
+      toastMgr.error(res?.error || 'Could not write the playlist file.');
+    }
+  } catch (e) {
+    setTaBtnState(btn, 'error');
+    toastMgr.error('Could not write the playlist file: ' + e);
+  } finally {
+    resetTaBtnAfter(btn, 2500);
+  }
 }
 
 async function importFetchedPlaylist(button) {

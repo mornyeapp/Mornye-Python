@@ -2504,6 +2504,14 @@ async def _match_in_libraries_async(
 # ---------------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class _PlaylistFolder:
+    """What the M3U writer reads off a worker, for a run that downloads nothing."""
+
+    output_dir: str
+    completed_paths: dict[str, str] = field(default_factory=dict)
+
+
 class MornyeDownloader:
     def __init__(self, opts: DownloadOptions) -> None:
         self._opts = opts
@@ -3635,17 +3643,18 @@ class MornyeDownloader:
         *,
         playlist_tracks: list[TrackMetadata] | None = None,
         existing_paths: dict[str, Path] | None = None,
-    ) -> None:
+    ) -> tuple[Path, int] | None:
         """Writes the M3U for a playlist run. Never fails the download.
 
         Paths are relative to the playlist file, so a track that is already
         in another playlist's folder is listed as ``../Other/Track.flac``
-        rather than downloaded again (issue #267).
+        rather than downloaded again (issue #267). Returns the file and how
+        many tracks it lists, or None when nothing was written.
         """
         fmt = (opts.m3u_format or "").lower()
         base_out = worker.output_dir
         if fmt not in M3U_FORMATS or opts.output_path or not base_out:
-            return
+            return None
         from .download_worker import _inside, bring_into_library
 
         completed: dict[str, str] = {}
@@ -3666,7 +3675,7 @@ class MornyeDownloader:
             if completed.get(track.id)
         ]
         if not entries and mode != "rewrite":
-            return
+            return None
         name = collection_name.strip() or Path(base_out).name
         safe_name = re.sub(r'[<>:"/\\|?*]', "_", name).strip() or "playlist"
         target = Path(base_out) / f"{safe_name}.{fmt}"
@@ -3684,6 +3693,50 @@ class MornyeDownloader:
                 logger.info("[m3u] Wrote %d track(s) to %s", len(entries), target)
         except (OSError, UnicodeDecodeError) as exc:
             logger.warning("[m3u] Could not write %s: %s", target, exc)
+            return None
+        return target, len(entries)
+
+    @classmethod
+    async def write_playlist_m3u_async(
+        cls,
+        opts: DownloadOptions,
+        collection_name: str,
+        tracks: list[TrackMetadata],
+    ) -> tuple[Path | None, int]:
+        """Writes a playlist's M3U from the files already on disk.
+
+        Downloads nothing: a deleted or never-written M3U is rebuilt from the
+        tracks found in `opts.output_dir` (the whole library, every playlist
+        folder included) and in `opts.library_scan_dirs`, in the playlist's
+        own order and exactly where a download of the playlist would have put
+        it — ``<library>/<Playlist>/<Playlist>.m3u8``, with a track another
+        playlist holds listed as ``../Other/Track.flac``. Returns the file
+        (None when no track was found, so no empty playlist is left behind)
+        and how many tracks it lists.
+        """
+        base = Path(opts.output_dir)
+        folder = (
+            base / safe_dir_name(collection_name)
+            if collection_name.strip() and opts.create_playlist_subfolders
+            else base
+        )
+        found = await _match_in_libraries_async(
+            [str(base), *(opts.library_scan_dirs or [])], tracks, opts
+        )
+        if not found:
+            return None, 0
+        await asyncio.to_thread(folder.mkdir, parents=True, exist_ok=True)
+        written = await cls._write_run_playlist_file_async(
+            # library_dir: a track found outside the library is brought
+            # beside the playlist, as a download run does (issue #277).
+            replace(opts, library_dir=str(base), output_path=None),
+            "rewrite",
+            collection_name,
+            tracks,
+            _PlaylistFolder(str(folder)),  # type: ignore[arg-type]
+            existing_paths=found,
+        )
+        return written if written is not None else (None, 0)
 
     async def _run_once_async(
         self,

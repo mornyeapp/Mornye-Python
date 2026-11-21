@@ -170,6 +170,7 @@ ALLOWED_METHODS: set[str] = {
     "download_album_cover",
     "download_all_covers",
     "download_all_lyrics",
+    "save_playlist_m3u",
     "get_track_preview",
     "fetch_metadata",
     "download_tracks",
