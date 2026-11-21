@@ -228,6 +228,43 @@ def test_mpv_is_created_on_first_use_with_options_applied():
     assert fake.terminated
 
 
+def test_media_keys_go_to_the_page_not_to_mpvs_playlist():
+    # mpv's default bindings are off, so without these the keyboard's media
+    # keys and the Now Playing commands did nothing with the native engine.
+    player, events, fakes = make_player()
+    player.load("/music/a.flac")
+    (fake,) = fakes
+    binds = {c[1]: c[2] for c in fake.commands if c[0] == "keybind"}
+    assert binds["PLAYPAUSE"] == "script-message mornye-media toggle"
+    assert binds["PLAY"] == "script-message mornye-media toggle"
+    assert binds["PAUSEONLY"] == "script-message mornye-media pause"
+    assert binds["NEXT"] == "script-message mornye-media nexttrack"
+    assert binds["PREV"] == "script-message mornye-media previoustrack"
+    fake.event(event="client-message", args=["mornye-media", "nexttrack"])
+    fake.event(event="client-message", args=["mornye-media", "rm -rf"])
+    fake.event(event="client-message", args=["other-script", "toggle"])
+    assert wait_for(events, "media") == [{"type": "media", "action": "nexttrack"}]
+    player.close()
+
+
+def test_an_mpv_without_keybind_still_starts():
+    def factory(**kw):
+        fake = FakeMPV(**kw)
+        original = fake.command
+
+        def command(*args):
+            if args[0] == "keybind":
+                raise SystemError("unknown command")
+            original(*args)
+
+        fake.command = command
+        return fake
+
+    player = NativePlayer(lambda e: None, options=PlayerOptions(), mpv_factory=factory)
+    player.load("/music/a.flac")
+    player.close()
+
+
 def test_an_mpv_without_media_controls_still_starts():
     made = []
 

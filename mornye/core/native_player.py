@@ -390,6 +390,27 @@ _OBSERVED = (
 )
 
 
+#: The system's media keys, as mpv names them, and what the page does for
+#: each. The macOS Now Playing commands, the Windows media overlay and a
+#: keyboard's media keys reach mpv as these keys; its own bindings for them
+#: are off (input_default_bindings), and they would only walk mpv's
+#: two-entry playlist anyway. The page owns the queue, so each key goes to
+#: it. PLAY and PAUSE toggle, as in mpv's input.conf.
+_MEDIA_KEYS = {
+    "PLAY": "toggle",
+    "PAUSE": "toggle",
+    "PLAYPAUSE": "toggle",
+    "PLAYONLY": "play",
+    "PAUSEONLY": "pause",
+    "STOP": "stop",
+    "NEXT": "nexttrack",
+    "PREV": "previoustrack",
+    "FORWARD": "seekforward",
+    "REWIND": "seekbackward",
+}
+_MEDIA_MESSAGE = "mornye-media"
+
+
 #: Properties fixed when mpv opens the audio output (see NativePlayer._reopen).
 _OUTPUT_PROPERTIES = ("audio-spdif", "audio-exclusive", "audio-device")
 
@@ -479,8 +500,20 @@ class NativePlayer:
             for name in _OBSERVED:
                 player.observe_property(name, self._on_property)
             player.register_event_callback(self._on_event)
+            self._bind_media_keys(player)
             self._start_sender()
             return player
+
+    @staticmethod
+    def _bind_media_keys(player: Any) -> None:
+        for key, action in _MEDIA_KEYS.items():
+            try:
+                player.command(
+                    "keybind", key, f"script-message {_MEDIA_MESSAGE} {action}"
+                )
+            except Exception:  # an mpv without `keybind`: the keys stay mpv's
+                logger.debug("mpv keybind %s failed", key, exc_info=True)
+                return
 
     def _start_sender(self) -> None:
         if self._sender is not None:
@@ -846,6 +879,14 @@ class NativePlayer:
                     self._advancing = queued
                 if not queued:
                     self._post({"type": "ended"})
+        elif kind == "client-message":
+            args = data.get("args") or []
+            if (
+                len(args) == 2
+                and args[0] == _MEDIA_MESSAGE
+                and args[1] in _MEDIA_KEYS.values()
+            ):
+                self._post({"type": "media", "action": args[1]})
         elif kind == "playback-restart":
             self._post({"type": "seeked", "time": self._time()})
 

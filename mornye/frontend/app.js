@@ -9615,6 +9615,8 @@ function playerNativeEngine(api, clock = () => performance.now()) {
           emit('error', { message: evt.message }); return;
         case 'warning':
           emit('warning', { message: evt.message }); return;
+        case 'media': // a media key or Now Playing command that reached mpv
+          emit('media', { action: evt.action }); return;
       }
     },
   };
@@ -9802,8 +9804,17 @@ async function loadPlayerTrack(index, { advanced = false } = {}) {
 // to, in the desktop window (WebView2, WebKit) as in a browser tab. With the
 // native engine the window plays nothing, so the system talks to mpv instead
 // (its media-controls) and the page's handlers are taken off: both at once
-// would answer every key twice.
+// would answer every key twice. mpv hands each key back to the page (a
+// 'media' event), since the page owns the queue. Where a key also arrives as
+// a keydown (WebView2 or GTK with the window focused, some browsers), the
+// same press can come twice: from the keydown and from the system, so an
+// echo from another source within PLAYER_MEDIA_ECHO_MS is dropped.
+// The volume keys are left to the system: on macOS they never reach the
+// window, and where they do the system volume moves anyway, so moving
+// Mornye's slider too would apply every press twice.
 let playerMediaSessionOn = true;
+const PLAYER_MEDIA_ECHO_MS = 400;
+let playerMediaLast = { family: '', source: '', at: -Infinity };
 
 function playerMediaMetadata(item, res, artist) {
   if (!('mediaSession' in navigator) || !playerMediaSessionOn) return;
@@ -9832,6 +9843,44 @@ function playerMediaPosition() {
   } catch (e) { /* position past the end while a track changes */ }
 }
 
+// The keydown keys that are media keys, as Media Session actions.
+function playerMediaKeyAction(key) {
+  switch (key) {
+    case 'MediaPlayPause': return 'toggle';
+    case 'MediaPlay': return 'play';
+    case 'MediaPause': return 'pause';
+    case 'MediaStop': return 'stop';
+    case 'MediaTrackNext': return 'nexttrack';
+    case 'MediaTrackPrevious': return 'previoustrack';
+    default: return null;
+  }
+}
+
+// Play, pause and toggle are one key: the system turns a toggle into play
+// or pause.
+function playerMediaFamily(action) {
+  return ['toggle', 'play', 'pause'].includes(action) ? 'playpause' : action;
+}
+
+// True when `action` from `source` is the same press already handled from
+// another source (a keydown and the system's command for one key).
+function playerMediaIsEcho(last, action, source, now) {
+  return last.family === playerMediaFamily(action) && last.source !== source
+    && now - last.at < PLAYER_MEDIA_ECHO_MS;
+}
+
+// Every media key, whichever way it came: 'session' (Media Session),
+// 'native' (mpv) or 'key' (a keydown).
+function playerMediaAction(action, source, detail) {
+  const handler = playerMediaHandlers()[action];
+  if (!handler) return false;
+  const now = performance.now();
+  if (playerMediaIsEcho(playerMediaLast, action, source, now)) return true;
+  playerMediaLast = { family: playerMediaFamily(action), source, at: now };
+  handler(detail);
+  return true;
+}
+
 function playerMediaHandlers() {
   const audio = playerEngine;
   const seekBy = (offset) => {
@@ -9840,6 +9889,7 @@ function playerMediaHandlers() {
     playerMediaPosition();
   };
   return {
+    toggle: () => playerToggle(),
     play: () => { if (audio.hasSource) audio.play(); },
     pause: () => audio.pause(),
     stop: () => { audio.pause(); if (audio.hasSource) audio.currentTime = 0; },
@@ -9859,13 +9909,25 @@ function playerMediaSessionActive(on) {
   playerMediaSessionOn = on;
   if (!('mediaSession' in navigator)) return;
   const session = navigator.mediaSession;
-  for (const [action, handler] of Object.entries(playerMediaHandlers())) {
+  for (const action of Object.keys(playerMediaHandlers())) {
+    if (action === 'toggle') continue; // not a Media Session action
+    const handler = (d) => playerMediaAction(action, 'session', d);
     try { session.setActionHandler(action, on ? handler : null); } catch (e) { /* not supported here */ }
   }
   if (!on) {
     try { session.metadata = null; session.playbackState = 'none'; } catch (e) { /* read-only here */ }
   }
 }
+
+playerEngine.addEventListener('media', (d) => playerMediaAction(d?.action, 'native'));
+
+// Media keys that arrive as keys (with the window focused). Never typed
+// text, so a focused field does not keep them from the player.
+document.addEventListener('keydown', (e) => {
+  const action = playerMediaKeyAction(e.key);
+  if (!action || e.defaultPrevented) return;
+  if (playerMediaAction(action, 'key')) e.preventDefault();
+});
 
 (function initMediaSession() {
   const audio = playerEngine;
