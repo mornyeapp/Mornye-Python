@@ -9592,7 +9592,7 @@ function playerNativeEngine(api, clock = () => performance.now()) {
   let emit = () => {};
   let chain = Promise.resolve();
   let src = '', paused = true, ended = false, time = 0, at = 0, duration = NaN;
-  let volume = 1, muted = false, rate = 1, seekUntil = 0, output = null;
+  let volume = 1, muted = false, rate = 1, seekUntil = 0, output = null, loadGuardUntil = 0;
   let floor = 0; // the position never shows less than this until the next settle
   const DRIFT_MAX_S = 1;
   const call = (name, ...args) => {
@@ -9622,6 +9622,7 @@ function playerNativeEngine(api, clock = () => performance.now()) {
       const wasPaused = paused;
       src = path; paused = false; ended = false; duration = NaN; output = null;
       settle(0);
+      loadGuardUntil = now() + 1500;
       call('native_player_load', path, next || null)
         .catch(e => { paused = true; emit('pause'); emit('error', { message: e.message }); });
       // Set while nothing was loaded (mpv starts only on the first file).
@@ -9680,6 +9681,10 @@ function playerNativeEngine(api, clock = () => performance.now()) {
       switch (evt?.type) {
         case 'timeupdate':
           if (now() < seekUntil || paused) return;
+          // A position the last file sent just before the change can arrive
+          // after the new one was opened; it would put the new track (and
+          // its lyrics) at the old track's minute.
+          if (now() < loadGuardUntil && evt.time > position() + 2) return;
           {
             const shown = position();
             settle(evt.time);
@@ -11145,6 +11150,12 @@ function npUpdate(time, force) {
       const jumped = Math.abs(time - NP.lastTime) > 0.75;
       npScrollToFocus(focus, NP.first ? 'instant' : (jumped ? 'seek' : 'spring'));
       NP.first = false;
+    } else if (focus < 0 && NP.focus >= 0 && !NP.userScrolling) {
+      // Back before the first line (a seek to the start, or a new track
+      // whose first line comes within its first seconds): the view goes
+      // back to the top instead of staying where the last line left it.
+      npClearMotion();
+      box.scrollTop = 0;
     }
     NP.focus = focus;
   }
