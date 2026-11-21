@@ -6,6 +6,7 @@ under the same name and skipped the download.
 """
 
 import asyncio
+from pathlib import Path
 
 import pytest
 
@@ -27,7 +28,7 @@ def codecs(monkeypatch):
     table: dict[str, str] = {}
 
     async def fake_codec(filepath: str) -> str:
-        return table.get(filepath.rsplit("/", 1)[-1], "flac")
+        return table.get(Path(filepath).name, "flac")
 
     monkeypatch.setattr(provider_module, "_get_codec_async", fake_codec)
     return table
