@@ -50,13 +50,17 @@ test('a result is Ready, Check, No match or Error from its best candidate', () =
 const safe = (path) => ({ file_path: path, candidates: [{ is_safe: true }] });
 const unsure = (path) => ({ file_path: path, candidates: [{ is_safe: false }] });
 const none = (path) => ({ file_path: path, candidates: [] });
-const localNames = ['localHasMatch', 'localIsPicked', 'localPickedIndices', 'localViewIndices', 'localRowState'];
+const localNames = ['localHasMatch', 'localIsPicked', 'localPickedIndices', 'localViewIndices', 'localRowState',
+  'localSearchTerms', 'localMatchesSearch'];
 const freshList = () => ({ view: [], shown: 0, rows: new Map(), picked: new Map(), applied: new Set() });
+const localGlobals = (localScanData, more = {}) => ({
+  localScanData, localList: freshList(), localFilter: '', localQuery: '', localSearchText: new WeakMap(), ...more,
+});
 
 test('a file is ticked when its match is safe, until the user says otherwise', () => {
   const localScanData = [safe('/a'), unsure('/b'), none('/c'), safe('/d')];
   const localList = freshList();
-  const f = pick(localNames, { localScanData, localList, localFilter: '' });
+  const f = pick(localNames, localGlobals(localScanData, { localList }));
   assert.deepEqual([...f.localPickedIndices()], [0, 3]);
   localList.picked.set('/a', false);
   localList.picked.set('/b', true);
@@ -70,9 +74,9 @@ test('the ticks and the filter work on the results, not on the rows on screen', 
   // Only the first files of a long list have a row (LOCAL_PAGE), so a tick
   // or a filter that read the rows would miss the rest of the folder.
   const localScanData = [safe('/a'), unsure('/b'), none('/c'), unsure('/d')];
-  const f = pick(localNames, { localScanData, localList: freshList(), localFilter: 'review' });
+  const f = pick(localNames, localGlobals(localScanData, { localFilter: 'review' }));
   assert.deepEqual([...f.localViewIndices()], [1, 3]);
-  const all = pick(localNames, { localScanData, localList: freshList(), localFilter: '' });
+  const all = pick(localNames, localGlobals(localScanData));
   assert.deepEqual([...all.localViewIndices()], [0, 1, 2, 3]);
   const app = source('app.js');
   for (const name of ['updateLocalSelection', 'toggleAllLocal', 'applyLocalTags']) {
@@ -80,6 +84,29 @@ test('the ticks and the filter work on the results, not on the rows on screen', 
     const body = app.slice(start, app.indexOf('\n}\n', start));
     assert.doesNotMatch(body, /querySelectorAll\('\.local-cb/, name);
   }
+});
+
+test('the search finds a song by every word, in its tags, file name or match', () => {
+  const song = (path, title, artist, match) => ({
+    file_path: path, old_title: title, old_artist: artist,
+    candidates: match ? [{ is_safe: true, metadata: { title: match, first_artist: 'Queen' } }] : [],
+  });
+  const localScanData = [
+    song('/m/01 track.flac', 'Bohemian Rhapsody', 'Queen'),
+    song('/m/02 Under Pressure.mp3', '', ''),
+    song('/m/03 x.flac', 'untitled', '', "Don't Stop Me Now"),
+    song('/m/04 y.flac', 'Rhapsody in Blue', 'Gershwin'),
+  ];
+  const view = (query, localFilter = '') =>
+    [...pick(localNames, localGlobals(localScanData, { localQuery: query, localFilter })).localViewIndices()];
+  assert.deepEqual(view('queen bohemian'), [0], 'words in any order, across title and artist');
+  assert.deepEqual(view('RHAPSODY'), [0, 3], 'case does not matter');
+  assert.deepEqual(view('pressure'), [1], 'by the file name when the tags are empty');
+  assert.deepEqual(view('stop me'), [2], 'by the match it would get');
+  assert.deepEqual(view('rhapsody', 'matched'), [], 'together with the filter chips');
+  assert.deepEqual(view('  '), [0, 1, 2, 3], 'blank shows every file');
+  const html = source('index.html');
+  assert.match(html, /id="local-search"[^>]*data-oninput="filterLocalSearch\(\)"/);
 });
 
 test('the list has rows for a page of files, and more as its end scrolls into view', () => {

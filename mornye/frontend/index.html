@@ -620,6 +620,11 @@
              the panel, a 0 basis left the list no height at all, so a scan
              showed its column header and "1 file(s) selected" but no rows. -->
         <div id="local-results-wrap" class="hidden u-dir-column u-minh-0" style="display:flex;flex:1 0 min(68vh, 640px);">
+          <label class="local-search" id="local-search-wrap">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="search" id="local-search" placeholder="Find a song: title, artist or file name" aria-label="Find a song in the scanned files" data-oninput="filterLocalSearch()" autocomplete="off" spellcheck="false">
+            <button type="button" class="local-search-clear hidden" id="local-search-clear" data-onclick="clearLocalSearch()" aria-label="Clear search">×</button>
+          </label>
           <div class="local-summary" id="local-summary" role="group" aria-label="Filter the scanned files"></div>
           <div class="track-table-header u-cols-24-1fr-80-1fr u-mb-8">
             <div><input id="check-all-local" type="checkbox" checked data-onchange="toggleAllLocal(this)"></div>

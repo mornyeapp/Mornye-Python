@@ -175,6 +175,8 @@
  "local-results-wrap",
  "local-scan",
  "local-scan-stop",
+ "local-search",
+ "local-search-clear",
  "local-selected-count",
  "local-summary",
  "local-track-rows",

@@ -8544,11 +8544,70 @@ function localPick(cb) {
 }
 
 function localViewIndices() {
+  const terms = localSearchTerms(localQuery);
   const out = [];
   localScanData.forEach((item, i) => {
-    if (item && (!localFilter || localRowState(item) === localFilter)) out.push(i);
+    if (item && (!localFilter || localRowState(item) === localFilter)
+        && (!terms.length || localMatchesSearch(item, terms))) out.push(i);
   });
   return out;
+}
+
+//: What the search box above the list asks for; '' shows every file.
+let localQuery = '';
+let localSearchTimer = 0;
+
+function localSearchTerms(query) {
+  return String(query || '').toLowerCase().split(/\s+/).filter(Boolean);
+}
+
+// The text a file is found by: its tags (or what its name gave), its file
+// name and the match it would get. Kept per result, since a scan asks
+// again every frame while results arrive; a changed result is a new object.
+const localSearchText = new WeakMap();
+
+// Every word of the search is somewhere in it, in any order: "queen
+// bohemian" finds "Bohemian Rhapsody" by Queen.
+function localMatchesSearch(item, terms) {
+  let text = localSearchText.get(item);
+  if (text === undefined) {
+    const meta = (item.candidates && item.candidates[0] && item.candidates[0].metadata) || {};
+    text = [
+      item.old_title, item.old_artist, item.old_album, item.guessed_title, item.guessed_artist,
+      String(item.file_path || '').split(/[\\/]/).pop(), meta.title, meta.first_artist, meta.album,
+    ].filter(Boolean).join(' ').toLowerCase();
+    localSearchText.set(item, text);
+  }
+  return terms.every(t => text.includes(t));
+}
+
+// Typing in the search box: the list follows once the typing pauses.
+function filterLocalSearch() {
+  clearTimeout(localSearchTimer);
+  localSearchTimer = setTimeout(() => {
+    localQuery = ($('local-search')?.value || '').trim();
+    $('local-search-clear')?.classList.toggle('hidden', !localQuery);
+    renderLocalTracks();
+  }, 120);
+}
+
+function clearLocalSearch() {
+  const input = $('local-search');
+  if (input) input.value = '';
+  clearTimeout(localSearchTimer);
+  localQuery = '';
+  $('local-search-clear')?.classList.add('hidden');
+  renderLocalTracks();
+  input?.focus();
+}
+
+// Said in the list when the search or the filter leaves no file to show.
+function localNoMatchNote(container) {
+  if (localList.view.length || !localScanData.length || container.querySelector(':scope > .local-nomatch')) return;
+  const note = document.createElement('div');
+  note.className = 'local-nomatch u-p-40-20 u-ta-center u-c-muted u-fs-14';
+  note.textContent = localQuery ? `No file matches "${localQuery}".` : 'No file in this group.';
+  container.appendChild(note);
 }
 
 // Watches the "Loading more" marker against the list itself, which scrolls
@@ -8632,7 +8691,7 @@ function paintLocalRows() {
   if (!same) {
     renderLocalTracks(true);
   } else {
-    if (fresh) container.innerHTML = '';  // the "no files" note
+    if (fresh && view.length) container.innerHTML = '';  // the "no files" or "no match" note
     localList.view = view;
     for (const i of touched) {
       const old = localList.rows.get(i);
@@ -8642,6 +8701,7 @@ function paintLocalRows() {
       localList.rows.set(i, row);
     }
     localAppendRows(Math.max(0, LOCAL_PAGE - localList.shown));
+    localNoMatchNote(container);
   }
   scheduleLocalSummary();
 }
@@ -8735,6 +8795,7 @@ function renderLocalTracks(keepPlace = false) {
     }
 
     localAppendRows(count);
+    localNoMatchNote(container);
     container.scrollTop = keepPlace ? top : 0;
     renderLocalSummary();
 }
