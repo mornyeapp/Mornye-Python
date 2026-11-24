@@ -59,3 +59,47 @@ def test_folder_names():
     assert safe_dir_name("AC/DC: Live?") == "AC_DC_ Live_"
     assert safe_dir_name("  ...  ") == "Unknown"
     assert len(safe_dir_name("専" * 200).encode()) <= MAX_DIRNAME_BYTES
+
+
+# ── {explicit} (issue #290) ──────────────────────────────────────────────────
+
+
+def test_explicit_placeholder_marks_an_explicit_track():
+    from mornye.core.models import TrackMetadata, build_filename
+
+    track = TrackMetadata(
+        id="x",
+        album="x",
+        album_artist="x",
+        title="See You Again",
+        artists="Tyler",
+        track_number=4,
+        disc_number=1,
+        is_explicit=True,
+    )
+
+    assert (
+        build_filename(track, "{disc} - {track} - {title}{explicit}")
+        == "1 - 04 - See You Again (Explicit).flac"
+    )
+
+
+def test_explicit_placeholder_is_empty_for_a_clean_track():
+    from mornye.core.models import TrackMetadata, build_filename
+
+    track = TrackMetadata(
+        id="x", album="x", album_artist="x", title="See You Again", artists="Tyler"
+    )
+
+    assert build_filename(track, "{title}{explicit}") == "See You Again.flac"
+
+
+def test_reorganize_template_accepts_explicit():
+    from mornye.core.library_reorganize import _render, validate_template
+
+    assert validate_template("{artist}/{title}{explicit}") is None
+    assert (
+        _render("{title}{explicit}", {"TITLE": "Song", "ITUNESADVISORY": "1"}, "x")
+        == "Song (Explicit)"
+    )
+    assert _render("{title}{explicit}", {"TITLE": "Song"}, "x") == "Song"

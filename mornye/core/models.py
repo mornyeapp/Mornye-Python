@@ -420,7 +420,10 @@ def build_filename(
     or a user-supplied function.
 
     Supported placeholders: {title}, {artist}, {album}, {album_artist}, {year},
-    {date}, {disc}, {isrc}, {track}, {position}, {platform}, {id}.
+    {date}, {disc}, {isrc}, {track}, {position}, {platform}, {id}, {explicit}.
+
+    {explicit} is " (Explicit)" for a track marked explicit and nothing
+    otherwise, so "{title}{explicit}" reads right either way (issue #290).
 
     {platform} is the name of the provider/extension that will serve this file
     (e.g. "ext:tidal-web"); {id} is that provider's own native ID for the
@@ -509,6 +512,7 @@ def build_filename(
             .replace("{position}", f"{position:02d}")
             .replace("{platform}", sanitize(platform, fallback=""))
             .replace("{id}", sanitize(native_id, fallback=""))
+            .replace("{explicit}", " (Explicit)" if metadata.is_explicit else "")
         )
 
         if metadata.track_number > 0:

@@ -74,6 +74,7 @@ When customizing the `filename_format` string, you can use the following dynamic
 - `{date}` — Full release date (e.g., `YYYY-MM-DD`)
 - `{year}` — Release year (e.g., `YYYY`)
 - `{isrc}` — Track ISRC code
+- `{explicit}` — ` (Explicit)` when the track is explicit, nothing otherwise (e.g. `{title}{explicit}`)
 - `{platform}` — Source platform (e.g., `"tidal"`, `"soundcloud"`, `"youtube"`) — *the extension/service that provided the download*
 - `{id}` — Platform-specific track ID (e.g., Tidal track ID, SoundCloud user ID, YouTube video ID) — useful for tracing a file back to its origin
 
