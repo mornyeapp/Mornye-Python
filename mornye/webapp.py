@@ -1343,7 +1343,9 @@ def _register_frontend(app: FastAPI) -> None:
     app.mount("/", StaticFiles(directory=str(FRONTEND_DIR)), name="frontend")
 
 
-def queued_url_config(queue_config: dict, download_dir: str):
+def queued_url_config(
+    queue_config: dict, download_dir: str, saved_settings: dict | None = None
+):
     """The config a queued POST /api/v1/downloads job runs with.
 
     The job starts from the account's own download folder. MornyeConfig()
@@ -1352,11 +1354,16 @@ def queued_url_config(queue_config: dict, download_dir: str):
     account landed in a shared /app/Downloads instead of the account's folder
     the Web UI uses (issue #288). The route already drops a request's
     output_dir in multi-user mode; one that does reach here wins.
+
+    Its folder layout and filename format are the saved Settings, so a REST
+    client (an Apple Shortcut) gets the same Artist/Album folders as the Web
+    UI rather than every file loose in the folder.
     """
-    from .core.config import MornyeConfig
+    from .core.config import MornyeConfig, apply_output_layout
 
     config = MornyeConfig()
     config.output.directory = Path(download_dir).expanduser()
+    apply_output_layout(config.output, saved_settings)
     if "quality" in queue_config:
         config.download.quality = queue_config["quality"]
     if "output_dir" in queue_config:
@@ -1437,7 +1444,9 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
                 from .core.config import DownloadRequest
 
                 config = queued_url_config(
-                    payload.get("config") or {}, owner_api.download_dir
+                    payload.get("config") or {},
+                    owner_api.download_dir,
+                    owner_api.load_settings(),
                 )
                 request = DownloadRequest(
                     sources=[payload["url"]],

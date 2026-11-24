@@ -281,6 +281,20 @@ def _metadata_routes(router: APIRouter) -> None:
         )
 
 
+def _saved_layout(api: Any) -> dict[str, Any]:
+    """The folder layout of the Settings page, for a download made without it.
+
+    A REST request names a URL and a quality, never Artist/Album subfolders:
+    without this, a Shortcut's files landed loose in the download folder
+    while the Web UI's went into Artist/Album folders.
+    """
+    from ..core.config import saved_output_layout
+
+    load = getattr(api, "load_settings", None)
+    settings = load() if callable(load) else {}
+    return saved_output_layout(settings)
+
+
 def _download_routes(router: APIRouter, deps: ApiDeps) -> None:
     """Downloads: jobs, their history and statistics. Split out of build_v1_router (M2)."""
     # ── Downloads ─────────────────────────────────────────────────────────
@@ -310,6 +324,7 @@ def _download_routes(router: APIRouter, deps: ApiDeps) -> None:
                     "services": payload.services,
                     "output_dir": payload.output_dir,
                     "network_destination_id": payload.network_destination_id,
+                    "output_layout": _saved_layout(api),
                 }
             )
             return JobOut(
@@ -372,10 +387,15 @@ def _download_routes(router: APIRouter, deps: ApiDeps) -> None:
         # the CLI/client/GUI use. This keeps the REST boundary aligned with the
         # refactored app contract rather than doing a legacy side-path call.
         if deps.download_service is not None:
-            from ..core.config import DownloadRequest, MornyeConfig
+            from ..core.config import (
+                DownloadRequest,
+                MornyeConfig,
+                apply_output_layout,
+            )
 
             download_config = MornyeConfig()
             download_config.download.quality = payload.quality
+            apply_output_layout(download_config.output, _saved_layout(api))
             download_config.output.network_destination_id = (
                 payload.network_destination_id
             )
