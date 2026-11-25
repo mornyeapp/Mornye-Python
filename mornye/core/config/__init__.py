@@ -20,6 +20,7 @@ class OutputConfig:
     filename_format: str = "{title} - {artist}"
     artist_subfolders: bool = False
     album_subfolders: bool = False
+    album_folder_year: bool = False
     playlist_subfolders: bool = True
 
 
@@ -122,6 +123,7 @@ class MornyeConfig:
             options, "use_artist_subfolders", False
         )
         config.output.album_subfolders = getattr(options, "use_album_subfolders", False)
+        config.output.album_folder_year = getattr(options, "album_folder_year", False)
         config.output.playlist_subfolders = getattr(
             options, "create_playlist_subfolders", True
         )
@@ -181,6 +183,52 @@ class MornyeConfig:
         config.queue.retry_on_error = True
 
         return config
+
+
+#: The folder-layout keys of gui-settings.json, with the values the Settings
+#: page starts from (frontend/app.js) when they were never saved.
+_SAVED_LAYOUT_DEFAULTS: dict[str, Any] = {
+    "filename_format": "{title} - {artist}",
+    "use_artist_subfolders": True,
+    "use_album_subfolders": True,
+    "album_folder_year": False,
+    "create_playlist_subfolders": True,
+}
+
+
+def saved_output_layout(settings: Any) -> dict[str, Any]:
+    """The folder layout and filename format out of the saved GUI settings.
+
+    Only those keys, so a caller can hand the result on (or persist it with a
+    job) without carrying the rest of gui-settings.json — API keys included.
+    A key never saved takes the Settings page's own default, so a download
+    without the page matches a download from it.
+    """
+    source = settings if isinstance(settings, dict) else {}
+    layout = dict(_SAVED_LAYOUT_DEFAULTS)
+    for key, default in _SAVED_LAYOUT_DEFAULTS.items():
+        value = source.get(key)
+        if isinstance(default, bool):
+            if isinstance(value, bool):
+                layout[key] = value
+        elif isinstance(value, str) and value.strip():
+            layout[key] = value.strip()
+    return layout
+
+
+def apply_output_layout(output: OutputConfig, layout: Any) -> None:
+    """Sets `output`'s folder layout from the saved GUI settings.
+
+    For downloads that arrive without the Settings page (a REST client, an
+    Apple Shortcut): MornyeConfig() alone writes every file loose into the
+    download folder, while the page sends Artist/Album subfolders (issue #288).
+    """
+    resolved = saved_output_layout(layout)
+    output.filename_format = resolved["filename_format"]
+    output.artist_subfolders = resolved["use_artist_subfolders"]
+    output.album_subfolders = resolved["use_album_subfolders"]
+    output.album_folder_year = resolved["album_folder_year"]
+    output.playlist_subfolders = resolved["create_playlist_subfolders"]
 
 
 @dataclass

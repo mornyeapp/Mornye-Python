@@ -61,6 +61,7 @@
  "config-acoustid-key",
  "config-album-sub",
  "config-album-track-numbers",
+ "config-album-year",
  "config-animated-artwork",
  "config-animated-artwork-api-display",
  "config-animated-artwork-api-url",

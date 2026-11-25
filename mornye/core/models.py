@@ -356,6 +356,18 @@ def safe_dir_name(value: str, fallback: str = "Unknown") -> str:
     return fit_name_bytes(cleaned, MAX_DIRNAME_BYTES).strip(" .") or fallback
 
 
+def album_dir_name(track: TrackMetadata, with_year: bool = False) -> str:
+    """The album subfolder of `track`: "Flower Boy", or "Flower Boy [2017]".
+
+    The year tells two editions of one album apart, which otherwise share a
+    folder (issue #291). Without a known year it is the plain album name.
+    """
+    album = (track.album or "").strip()
+    if with_year and track.year and album:
+        album = f"{album} [{track.year}]"
+    return safe_dir_name(album)
+
+
 def split_credit(value: str, known: list[str] | None = None) -> list[str]:
     """A joined credit string broken back into the artists it names.
 
@@ -420,7 +432,10 @@ def build_filename(
     or a user-supplied function.
 
     Supported placeholders: {title}, {artist}, {album}, {album_artist}, {year},
-    {date}, {disc}, {isrc}, {track}, {position}, {platform}, {id}.
+    {date}, {disc}, {isrc}, {track}, {position}, {platform}, {id}, {explicit}.
+
+    {explicit} is " (Explicit)" for a track marked explicit and nothing
+    otherwise, so "{title}{explicit}" reads right either way (issue #290).
 
     {platform} is the name of the provider/extension that will serve this file
     (e.g. "ext:tidal-web"); {id} is that provider's own native ID for the
@@ -509,6 +524,7 @@ def build_filename(
             .replace("{position}", f"{position:02d}")
             .replace("{platform}", sanitize(platform, fallback=""))
             .replace("{id}", sanitize(native_id, fallback=""))
+            .replace("{explicit}", " (Explicit)" if metadata.is_explicit else "")
         )
 
         if metadata.track_number > 0:

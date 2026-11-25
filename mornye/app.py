@@ -2342,6 +2342,7 @@ class MornyeAPI(
             use_album_track_numbers = config.get("use_album_track_numbers", False)
             use_artist_subfolders = config.get("use_artist_subfolders", False)
             use_album_subfolders = config.get("use_album_subfolders", False)
+            album_folder_year = config.get("album_folder_year") is True
             # The CLI and the interactive picker both default this on;
             # the GUI had no toggle at all and never passed the option,
             # so client.Mornye's own False default applied and every
@@ -2630,6 +2631,7 @@ class MornyeAPI(
                 use_album_track_numbers=use_album_track_numbers,
                 use_artist_subfolders=use_artist_subfolders,
                 use_album_subfolders=use_album_subfolders,
+                album_folder_year=album_folder_year,
                 create_playlist_subfolders=create_playlist_subfolders,
                 m3u_format=str(config.get("m3u_format") or "m3u8"),
                 m3u_playlist_tracks=playlist_tracks or None,

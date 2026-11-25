@@ -29,6 +29,7 @@ PLACEHOLDERS = (
     "disc",
     "year",
     "genre",
+    "explicit",
 )
 _FIELD_RE = re.compile(r"\{(\w+)\}")
 #: Files that travel with a track and share its stem.
@@ -70,6 +71,10 @@ def _render(template: str, tags: dict[str, str], fallback_title: str) -> str:
         "disc": _num(tags.get("DISCNUMBER", ""), 1),
         "year": (tags.get("DATE") or tags.get("YEAR") or "")[:4],
         "genre": tags.get("GENRE", ""),
+        # Same as filename_format's {explicit} (issue #290).
+        "explicit": (
+            " (Explicit)" if str(tags.get("ITUNESADVISORY", "")).strip() == "1" else ""
+        ),
     }
     parts = []
     for segment in template.replace("\\", "/").split("/"):

@@ -1220,7 +1220,7 @@
           </div>
           <div class="s-section">
             <div class="s-title">Filename Format</div>
-            <div class="s-row"><span class="s-label u-fs-11 u-c-muted">{title} {artist} {album} {album_artist} {year} {track} {disc} {isrc} {position}</span></div>
+            <div class="s-row"><span class="s-label u-fs-11 u-c-muted">{title} {artist} {album} {album_artist} {year} {track} {disc} {isrc} {position} {explicit}</span></div>
             <input type="text" id="config-filename" class="full u-w-100pct u-mb-8" value="{title} - {artist}">
             <div class="s-sep"></div>
             <div class="s-row">
@@ -1252,6 +1252,13 @@
               <span class="s-label">Album subfolders</span>
               <label class="toggle">
                 <input type="checkbox" id="config-album-sub">
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Year in album folder name</span>
+              <label class="toggle">
+                <input type="checkbox" id="config-album-year">
                 <span class="toggle-sl"></span>
               </label>
             </div>

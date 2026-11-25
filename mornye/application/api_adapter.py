@@ -6,7 +6,7 @@ from pathlib import Path
 
 from mornye.application.job_service import JobService
 from mornye.application.event_bus import EventBus
-from mornye.core.config import MornyeConfig, DownloadRequest
+from mornye.core.config import MornyeConfig, DownloadRequest, apply_output_layout
 
 
 class ApiAdapter:
@@ -38,6 +38,8 @@ class ApiAdapter:
         if output_dir:
             config.output.directory = Path(str(output_dir)).expanduser()
         config.output.network_destination_id = payload.get("network_destination_id")
+        if "output_layout" in payload:
+            apply_output_layout(config.output, payload["output_layout"])
 
         sources = payload.get("sources") or []
         if not sources and payload.get("url"):

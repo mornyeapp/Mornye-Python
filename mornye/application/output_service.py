@@ -31,7 +31,10 @@ class OutputService:
             if self._config.artist_subfolders:
                 directory = directory / self._safe_component(track.first_artist)
             if self._config.album_subfolders:
-                directory = directory / self._safe_component(track.album)
+                album = track.album
+                if self._config.album_folder_year and track.year and album:
+                    album = f"{album} [{track.year}]"
+                directory = directory / self._safe_component(album)
         directory = self._confined(directory)
         directory.mkdir(parents=True, exist_ok=True)
         return directory
