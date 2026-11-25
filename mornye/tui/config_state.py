@@ -155,6 +155,7 @@ class ConfigState:
     use_album_track_numbers: bool = False
     use_artist_subfolders: bool = False
     use_album_subfolders: bool = False
+    album_folder_year: bool = False
     create_playlist_subfolders: bool = True
     # Folders of music already owned (issue #272); set from profiles and
     # MORNYE_LIBRARY_SCAN_DIRS, not edited in the TUI.
@@ -375,6 +376,7 @@ class ConfigState:
         if state.use_track_numbers:
             state.use_artist_subfolders = False
             state.use_album_subfolders = False
+            state.album_folder_year = False
             state.first_artist_only = False
         else:
             state.use_album_track_numbers = False
@@ -477,6 +479,7 @@ class ConfigState:
             "use_album_track_numbers": state.use_album_track_numbers,
             "use_artist_subfolders": state.use_artist_subfolders,
             "use_album_subfolders": state.use_album_subfolders,
+            "album_folder_year": state.album_folder_year,
             "create_playlist_subfolders": state.create_playlist_subfolders,
             "library_scan_dirs": list(state.library_scan_dirs),
             "first_artist_only": state.first_artist_only,

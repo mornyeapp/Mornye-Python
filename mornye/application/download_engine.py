@@ -50,6 +50,7 @@ from ..core.isrc_helper import IsrcHelper
 from ..core.models import (
     DownloadResult,
     TrackMetadata,
+    album_dir_name,
     build_filename,
     fit_name_bytes,
     safe_dir_name,
@@ -190,6 +191,8 @@ class DownloadOptions:
     use_album_track_numbers: bool = False
     use_artist_subfolders: bool = False
     use_album_subfolders: bool = False
+    #: "Album [2017]" for the album subfolder when the year is known (#291).
+    album_folder_year: bool = False
     create_playlist_subfolders: bool = True
     first_artist_only: bool = False
     artist_separator: str | None = None
@@ -2567,7 +2570,12 @@ class LegacyDownloadWorker:
             if self._opts.use_artist_subfolders:
                 out = os.path.join(out, safe_dir_name(track.first_artist))
             if self._opts.use_album_subfolders:
-                out = os.path.join(out, safe_dir_name(track.album))
+                out = os.path.join(
+                    out,
+                    album_dir_name(
+                        track, getattr(self._opts, "album_folder_year", False)
+                    ),
+                )
             os.makedirs(out, exist_ok=True)
             return out
 

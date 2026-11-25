@@ -452,6 +452,13 @@ class ConfigPanel(VerticalScroll):
                 ),
             )
             yield Row(
+                "Year in album folder name",
+                Switch(
+                    value=state.album_folder_year,
+                    id=_field_id("album_folder_year"),
+                ),
+            )
+            yield Row(
                 "Playlist subfolders",
                 Switch(
                     value=state.create_playlist_subfolders,
@@ -926,6 +933,7 @@ class ConfigPanel(VerticalScroll):
         for name in (
             "use_artist_subfolders",
             "use_album_subfolders",
+            "album_folder_year",
             "first_artist_only",
         ):
             self._set_enabled(name, state.subfolders_apply)

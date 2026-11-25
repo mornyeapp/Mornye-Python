@@ -109,6 +109,7 @@ class LegacyDownloadAdapter(ProviderExecutor):
             filename_format=config.output.filename_format,
             use_artist_subfolders=config.output.artist_subfolders,
             use_album_subfolders=config.output.album_subfolders,
+            album_folder_year=config.output.album_folder_year,
             create_playlist_subfolders=config.output.playlist_subfolders,
             quality=config.download.quality,
             allow_fallback=config.download.allow_fallback,

@@ -626,6 +626,13 @@ def parse_args(profile_defaults: dict | None = None) -> argparse.Namespace:
         default=pd.get("use_album_subfolders", False),
     )
     parser.add_argument(
+        "--album-folder-year",
+        action="store_true",
+        dest="album_folder_year",
+        default=pd.get("album_folder_year", False),
+        help='Name album subfolders "Album [2017]" when the year is known.',
+    )
+    parser.add_argument(
         "--playlist-subfolders",
         action="store_true",
         dest="create_playlist_subfolders",
@@ -1576,6 +1583,7 @@ def _subscription_downloader(profile_defaults: dict, output_dir_override: str | 
             use_album_track_numbers=pd.get("use_album_track_numbers", False),
             use_artist_subfolders=pd.get("use_artist_subfolders", False),
             use_album_subfolders=pd.get("use_album_subfolders", False),
+            album_folder_year=pd.get("album_folder_year", False),
             create_playlist_subfolders=pd.get("create_playlist_subfolders", True),
             library_scan_dirs=library_scan_dirs_from(pd.get("library_scan_dirs")),
             loop=None,
@@ -1870,6 +1878,7 @@ async def _run_download_async(
     quality: str,
     first_artist_only: bool,
     artist_separator: str | None = None,
+    album_folder_year: bool = False,
     include_featuring: bool,
     log_level: int,
     output_path: str | None,
@@ -2035,6 +2044,7 @@ async def _run_download_async(
         use_artist_subfolders=use_artist_subfolders,
         allow_fallback=allow_fallback,
         use_album_subfolders=use_album_subfolders,
+        album_folder_year=album_folder_year,
         create_playlist_subfolders=create_playlist_subfolders,
         library_scan_dirs=library_scan_dirs_from(library_scan_dirs),
         quality=quality,
@@ -2289,6 +2299,7 @@ async def run_download_from_cfg(
             use_album_track_numbers=cfg.get("use_album_track_numbers", False),
             use_artist_subfolders=cfg.get("use_artist_subfolders", False),
             use_album_subfolders=cfg.get("use_album_subfolders", False),
+            album_folder_year=cfg.get("album_folder_year", False),
             create_playlist_subfolders=cfg.get("create_playlist_subfolders", True),
             library_scan_dirs=library_scan_dirs_from(cfg.get("library_scan_dirs")),
             quality=cfg.get("quality", "LOSSLESS"),
@@ -3387,6 +3398,7 @@ async def amain() -> None:
             use_album_track_numbers=args.use_album_track_numbers,
             use_artist_subfolders=args.use_artist_subfolders,
             use_album_subfolders=args.use_album_subfolders,
+            album_folder_year=args.album_folder_year,
             create_playlist_subfolders=args.create_playlist_subfolders,
             library_scan_dirs=library_scan_dirs_from(
                 args.library_scan_dirs
@@ -3479,6 +3491,7 @@ async def amain() -> None:
                 "use_album_track_numbers": args.use_album_track_numbers,
                 "use_artist_subfolders": args.use_artist_subfolders,
                 "use_album_subfolders": args.use_album_subfolders,
+                "album_folder_year": args.album_folder_year,
                 "create_playlist_subfolders": args.create_playlist_subfolders,
                 "first_artist_only": args.first_artist_only,
                 "artist_separator": args.artist_separator,

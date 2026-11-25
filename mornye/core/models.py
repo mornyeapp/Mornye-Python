@@ -356,6 +356,18 @@ def safe_dir_name(value: str, fallback: str = "Unknown") -> str:
     return fit_name_bytes(cleaned, MAX_DIRNAME_BYTES).strip(" .") or fallback
 
 
+def album_dir_name(track: TrackMetadata, with_year: bool = False) -> str:
+    """The album subfolder of `track`: "Flower Boy", or "Flower Boy [2017]".
+
+    The year tells two editions of one album apart, which otherwise share a
+    folder (issue #291). Without a known year it is the plain album name.
+    """
+    album = (track.album or "").strip()
+    if with_year and track.year and album:
+        album = f"{album} [{track.year}]"
+    return safe_dir_name(album)
+
+
 def split_credit(value: str, known: list[str] | None = None) -> list[str]:
     """A joined credit string broken back into the artists it names.
 

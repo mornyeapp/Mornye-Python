@@ -20,6 +20,7 @@ class OutputConfig:
     filename_format: str = "{title} - {artist}"
     artist_subfolders: bool = False
     album_subfolders: bool = False
+    album_folder_year: bool = False
     playlist_subfolders: bool = True
 
 
@@ -122,6 +123,7 @@ class MornyeConfig:
             options, "use_artist_subfolders", False
         )
         config.output.album_subfolders = getattr(options, "use_album_subfolders", False)
+        config.output.album_folder_year = getattr(options, "album_folder_year", False)
         config.output.playlist_subfolders = getattr(
             options, "create_playlist_subfolders", True
         )
@@ -189,6 +191,7 @@ _SAVED_LAYOUT_DEFAULTS: dict[str, Any] = {
     "filename_format": "{title} - {artist}",
     "use_artist_subfolders": True,
     "use_album_subfolders": True,
+    "album_folder_year": False,
     "create_playlist_subfolders": True,
 }
 
@@ -224,6 +227,7 @@ def apply_output_layout(output: OutputConfig, layout: Any) -> None:
     output.filename_format = resolved["filename_format"]
     output.artist_subfolders = resolved["use_artist_subfolders"]
     output.album_subfolders = resolved["use_album_subfolders"]
+    output.album_folder_year = resolved["album_folder_year"]
     output.playlist_subfolders = resolved["create_playlist_subfolders"]
 
 

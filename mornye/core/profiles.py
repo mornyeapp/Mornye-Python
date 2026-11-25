@@ -41,6 +41,7 @@ class ProfileConfig(BaseModel):
     use_album_track_numbers: bool = False
     use_artist_subfolders: bool = False
     use_album_subfolders: bool = False
+    album_folder_year: bool = False
     first_artist_only: bool = False
     artist_separator: str | None = None
     allow_fallback: bool = True

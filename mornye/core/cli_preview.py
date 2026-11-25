@@ -67,6 +67,8 @@ def build_command_parts(cfg: dict) -> list[str]:
         parts.append("--use-artist-subfolders")
     if cfg["use_album_subfolders"]:
         parts.append("--use-album-subfolders")
+    if cfg.get("album_folder_year"):
+        parts.append("--album-folder-year")
 
     # Check if URL is a playlist before appending the CLI flag
     is_playlist = is_playlist_url(cfg["url"])
