@@ -313,6 +313,11 @@ ALLOWED_METHODS: set[str] = {
     "connect_resolve",
     "connect_speaker_status",
     "connect_speaker_set",
+    # Settings › Storage (api_mixins/storage.py). Clearing and compacting are
+    # admin-only in multi-user mode (STORAGE_ADMIN_METHODS).
+    "storage_usage",
+    "storage_clear",
+    "storage_compact",
     "get_extension_settings",
     # Extensions that supply lyrics (core/extension_lyrics.py): read-only.
     "get_lyrics_extensions",
@@ -344,6 +349,11 @@ LINK_ADMIN_METHODS = {
 #: it can read (core/connect/speaker.py): turning it on is the admin's call.
 CONNECT_ADMIN_METHODS = {
     "connect_speaker_set",
+}
+
+STORAGE_ADMIN_METHODS = {
+    "storage_clear",
+    "storage_compact",
 }
 
 EXTENSION_SETTINGS_ADMIN_METHODS = {
@@ -1006,6 +1016,7 @@ def _register_method_dispatch(
             NETWORK_DESTINATION_ADMIN_METHODS
             | EXTENSION_SETTINGS_ADMIN_METHODS
             | LINK_ADMIN_METHODS
+            | STORAGE_ADMIN_METHODS
             | CONNECT_ADMIN_METHODS
         ):
             from .core.web_users import is_admin

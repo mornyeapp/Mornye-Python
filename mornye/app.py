@@ -39,6 +39,7 @@ from .api_mixins.native_player import NativePlayerMixin
 from .api_mixins.personal import PersonalMixin
 from .api_mixins.cast import CastMixin
 from .api_mixins.connect import ConnectMixin
+from .api_mixins.storage import StorageMixin
 from .api_mixins.search import SearchMixin
 from .api_mixins.signed_sessions import SignedSessionsMixin
 from .api_mixins.stats import StatsMixin
@@ -283,6 +284,7 @@ class MornyeAPI(
     PersonalMixin,
     CastMixin,
     ConnectMixin,
+    StorageMixin,
 ):
     """pywebview/`--web` bridge — every method here (plus the two mixins
     above) becomes a callable the frontend invokes as `pywebview.api.<name>`
