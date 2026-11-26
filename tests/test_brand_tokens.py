@@ -18,12 +18,13 @@ from mornye import branding_tokens as bt
 
 FRONTEND = Path(__file__).resolve().parents[1] / "mornye" / "frontend"
 TOKENS_CSS = (FRONTEND / "css" / "tokens.css").read_text(encoding="utf-8")
-#: The GUI's own sheets: everything under css/ but the generated tokens and
-#: the accent presets, which define values rather than use them.
+#: The GUI's own sheets: everything under css/ but the generated tokens, the
+#: accent presets and the music look's values, which define values rather
+#: than use them.
 SHEETS = {
     str(p.relative_to(FRONTEND)): p.read_text(encoding="utf-8")
     for p in sorted((FRONTEND / "css").rglob("*.css"))
-    if p.name not in ("tokens.css", "accents.css")
+    if p.name not in ("tokens.css", "accents.css", "music-tokens.css")
 }
 V2_NAMES = set(bt.V2_SEMANTIC["dark"]) | {
     *bt.V2_SPACE,

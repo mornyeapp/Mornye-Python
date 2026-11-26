@@ -104,10 +104,12 @@ def test_textual_theme_builds(mode: str) -> None:
 #: Fase 3 files that restyle the app (layout, legacy controls, views).
 #: accents.css is left out with tokens.css: like it, it defines token values
 #: (the --signal of each accent choice, voce 28) rather than using them.
+#: music-tokens.css likewise: the token values of the music look (Settings →
+#: Interface Style), which css/music.css builds on.
 SHEETS = sorted(
     str(p.relative_to(TOKENS_CSS.parent))
     for p in TOKENS_CSS.parent.rglob("*.css")
-    if p.name not in ("tokens.css", "accents.css")
+    if p.name not in ("tokens.css", "accents.css", "music-tokens.css")
 )
 
 
@@ -145,6 +147,13 @@ def test_every_token_a_stylesheet_names_exists(sheet: str) -> None:
         re.findall(
             r"--([\w-]+):",
             (TOKENS_CSS.parent / "layout.css").read_text(encoding="utf-8"),
+        )
+    )
+    # The music look's own names (--m-*), defined with its token values.
+    defined |= set(
+        re.findall(
+            r"--([\w-]+):",
+            (TOKENS_CSS.parent / "music-tokens.css").read_text(encoding="utf-8"),
         )
     )
     script = (TOKENS_CSS.parent.parent / "app.js").read_text(encoding="utf-8")

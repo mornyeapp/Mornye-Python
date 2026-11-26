@@ -45,6 +45,8 @@ EXCEPTIONS: dict[str, set[str]] = {
             "ce-tidal",
             "ce-qobuz",
             "ce-qobuz-key",
+            "ce-amazon",
+            "ce-amazon-key",
             "registry-url-input",
             "directory-url-input",
             "trust-key-name-input",

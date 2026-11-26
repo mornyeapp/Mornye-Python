@@ -28,6 +28,11 @@ document.write('<link rel="stylesheet" href="css/views/player.css?_=' + Date.now
 document.write('<link rel="stylesheet" href="css/views/logs.css?_=' + Date.now() + '">');
 // css/utilities.css: the u-* classes and the status tones, last so they win.
 document.write('<link rel="stylesheet" href="css/utilities.css?_=' + Date.now() + '">');
+// The music-app look (Settings → General → Interface Style): its token
+// values and its rules, both scoped to data-style="music", so they change
+// nothing in the console look. Last, so they win the ties.
+document.write('<link rel="stylesheet" href="css/music-tokens.css?_=' + Date.now() + '">');
+document.write('<link rel="stylesheet" href="css/music.css?_=' + Date.now() + '">');
 // Theme, applied before the first paint. app.js used to do this only from
 // its 'pywebviewready' handler, which meant the window painted light and
 // then flipped — and in --web mode that event never fires until you are
@@ -74,7 +79,11 @@ document.write('<link rel="stylesheet" href="css/utilities.css?_=' + Date.now() 
   // Density (N4), for the same reason: the rows would jump once
   // applyDensity() runs. boot-body.js copies it onto <body>.
   try {
+    if (localStorage.getItem('mornye-style') === 'music') document.documentElement.setAttribute('data-style', 'music');
+  } catch (e) {}
+  try {
     var _d = localStorage.getItem('mornye-density');
-    if (_d === 'compact' || _d === 'large') document.documentElement.setAttribute('data-density', _d);
+    if (_d === 'compact' || _d === 'extra-compact') document.documentElement.setAttribute('data-density', 'compact');
+    else if (_d === 'large' || _d === 'extra-large') document.documentElement.setAttribute('data-density', 'large');
   } catch (e) {}
 })();

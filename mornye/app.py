@@ -914,7 +914,7 @@ class MornyeAPI(
             return {"ok": False, "error": str(e)}
 
     #: Row and gap density of the GUI (N4): frontend/css/layout.css.
-    DENSITIES = ("comfortable", "compact", "large")
+    DENSITIES = ("extra-compact", "compact", "comfortable", "large", "extra-large")
 
     def set_page_zoom(self, factor: float) -> dict:
         """Zoom the whole page natively (the 'large' density).
@@ -954,6 +954,23 @@ class MornyeAPI(
             return {"ok": True, "density": density}
         except Exception as e:
             self.log(f"Failed to save density: {e}", "error")
+            return {"ok": False, "error": str(e)}
+
+    #: The look of the GUI: "console" is the monospace console look,
+    #: "music" the music-app look (frontend/css/music-tokens.css and
+    #: music.css, keyed off data-style="music" on <html> and <body>).
+    STYLES = ("console", "music")
+
+    def save_style(self, style: str) -> dict:
+        """Persists the interface style, same reasoning as save_theme()."""
+        style = str(style or "console")
+        if style not in self.STYLES:
+            return {"ok": False, "error": f"unknown style: {style}"}
+        try:
+            self._update_settings({"style": style})
+            return {"ok": True, "style": style}
+        except Exception as e:
+            self.log(f"Failed to save style: {e}", "error")
             return {"ok": False, "error": str(e)}
 
     def load_settings(self) -> dict:
@@ -1482,6 +1499,37 @@ class MornyeAPI(
             self.log(f"Opened config folder: {config_dir}", "ok")
         except Exception as e:
             self.log(f"Failed opening config folder: {e}", "error")
+
+    def reveal_in_folder(self, path) -> dict:
+        """Shows a music file selected in the system file manager (Finder,
+        Explorer; on Linux its folder opens).
+
+        Desktop window only: it is left out of the web interface's allowed
+        methods (webapp.py), where it would open a window on the server.
+        Only an existing audio file is accepted, and it is shown, never
+        opened, so nothing the path names can run.
+        """
+        from .core.playlist_sync import AUDIO_EXTENSIONS
+
+        try:
+            p = Path(str(path or "")).expanduser()
+            if not p.is_absolute() or not p.is_file():
+                return {
+                    "ok": False,
+                    "error": "That file is not on this computer any more.",
+                }
+            if p.suffix.lower() not in AUDIO_EXTENSIONS:
+                return {"ok": False, "error": "Only music files can be shown."}
+            if sys.platform == "darwin":
+                subprocess.Popen(["open", "-R", str(p)])
+            elif sys.platform == "win32":
+                subprocess.Popen(["explorer", f"/select,{p}"])
+            else:
+                subprocess.Popen(["xdg-open", str(p.parent)])
+            return {"ok": True}
+        except Exception as e:
+            self.log(f"Failed showing {path}: {e}", "error")
+            return {"ok": False, "error": str(e)}
 
     def open_url(self, url) -> None:
         """Opens an http(s) URL in the user's browser.

@@ -132,3 +132,24 @@
   -webkit-mask-image: repeating-linear-gradient(90deg, black 0 calc(5% - 2px), transparent calc(5% - 2px) 5%);
           mask-image: repeating-linear-gradient(90deg, black 0 calc(5% - 2px), transparent calc(5% - 2px) 5%);
 }
+
+/* ── Listener profile (Stats → Listening; renderListenerProfile) ─────── */
+.stats-tabs { margin-bottom: var(--space-4); }
+.profile-traits { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2);
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.profile-traits li {
+  display: flex; flex-direction: column; gap: 2px; padding: var(--space-3);
+  border: 1px solid var(--rule); border-radius: var(--radius-1); background: var(--raised);
+}
+.profile-traits strong { color: var(--signal-text, var(--signal)); font-size: var(--text-md, 15px); }
+.profile-traits span { color: var(--text-2); font-size: var(--text-sm); }
+.profile-cols {
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); align-items: end;
+  gap: 2px; height: 64px; margin-top: var(--space-3);
+}
+.profile-col {
+  display: block; height: calc(4% + var(--v, 0) * 96%); min-height: 2px;
+  border-radius: 2px 2px 0 0; background: var(--signal); opacity: calc(.35 + var(--v, 0) * .65);
+}
+.profile-axis { display: flex; justify-content: space-between; margin: 4px 0 var(--space-3);
+  color: var(--text-muted); font-size: var(--text-xs); }

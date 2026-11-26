@@ -1,0 +1,1436 @@
+/* frontend/css/music.css — the music-app look (Settings → General →
+   Interface Style → Music).
+
+   Every rule is scoped to html[data-style="music"], so the console look is
+   untouched. The values come from css/music-tokens.css (the --m-* names and
+   the music values of the shared semantic tokens); this sheet names no
+   colour of its own, like every sheet built on tokens.css.
+
+   Most of the look arrives through the tokens alone — the system font,
+   rounder corners, the page and text colours — so the rules here are for
+   what changes shape: the sidebar, Home (a page title, the fetch field, the
+   recommendations moved in from Explore by mountHomeFeed() in app.js), the
+   album page tinted by its cover, zebra track rows, the player and the
+   download dock as floating pills, grouped Settings rows. */
+
+/* ── Page & sidebar ──────────────────────────────────────────────────── */
+html[data-style="music"] body { letter-spacing: normal; -webkit-font-smoothing: antialiased; }
+
+html[data-style="music"] #sidebar {
+  width: var(--rail-w);
+  padding: 22px 13px 14px 20px;
+  gap: 0;
+  background: var(--m-sidebar);
+  -webkit-backdrop-filter: saturate(2.2) blur(16px);
+  backdrop-filter: saturate(2.2) blur(16px);
+  border-right: 1px solid var(--rule);
+}
+html[data-style="music"] .sb-brand { padding: 0 6px 16px; min-height: 0; gap: 8px; }
+html[data-style="music"] .sb-logo { width: 28px; height: 28px; border-radius: 7px; padding: 2px; }
+html[data-style="music"] .sb-name { font-family: var(--font-display); font-size: 23px; font-weight: 700; letter-spacing: -.03em; text-transform: none; }
+html[data-style="music"] .sb-version { background: var(--m-fill); color: var(--text-2); border-radius: 10px; font-size: 11px; }
+html[data-style="music"] .sb-group { padding: 14px 6px 4px; font-size: 11px; font-weight: 600; color: var(--text-muted); }
+html[data-style="music"] .nav-btn {
+  height: 36px; padding: 0 6px; gap: 8px;
+  border: 0; border-radius: 8px;
+  font-size: 14px; font-weight: 400; color: var(--text);
+  background: transparent;
+}
+html[data-style="music"] .nav-btn svg { width: 22px; height: 22px; color: var(--m-nav-icon); }
+html[data-style="music"] .nav-btn:hover { background: var(--m-sel); color: var(--text); }
+html[data-style="music"] .nav-btn:hover svg { color: var(--m-nav-icon); }
+html[data-style="music"] .nav-btn.active { background: var(--m-sel); font-weight: 500; }
+html[data-style="music"] .nav-btn.active svg { color: var(--m-nav-icon); }
+html[data-style="music"] .nav-btn.active::before { display: none; }
+html[data-style="music"] .nav-badge { background: var(--signal); color: var(--signal-ink); border-radius: 10px; }
+html[data-style="music"] body.sidebar-collapsed #sidebar { padding: 22px 8px 14px; }
+html[data-style="music"] body.sidebar-collapsed .nav-btn { justify-content: center; padding: 0; height: 40px; }
+
+/* Page headings everywhere: the large bold title of a music app. */
+html[data-style="music"] .s-header h1,
+html[data-style="music"] #explore-greeting {
+  font-family: var(--font-display); font-size: 34px; font-weight: 700;
+  letter-spacing: -.02em; line-height: 1.15;
+}
+html[data-style="music"] .s-header { padding: 32px 40px 18px; }
+
+/* Buttons: pills. The primary action is the white pill (dark) or the
+   signal pill (light), as a music app's Play/Preview. */
+html[data-style="music"] .act-btn,
+html[data-style="music"] .page-btn {
+  height: 32px; min-height: 32px; padding: 0 14px;
+  border: 0; border-radius: 16px;
+  background: var(--m-fill-2); color: var(--text);
+  font-size: 13px; font-weight: 600;
+}
+html[data-style="music"] .act-btn:hover,
+html[data-style="music"] .page-btn:hover { background: var(--selected); border-color: transparent; }
+html[data-style="music"] .act-btn.primary,
+html[data-style="music"] .act-btn.primary:hover {
+  height: 36px; min-height: 36px; padding: 0 22px; border-radius: 24px;
+  background: var(--m-key); color: var(--m-key-ink); border: 0;
+  font-size: 15px;
+}
+html[data-style="music"] .act-btn.primary:hover { filter: brightness(.92); }
+
+/* Segmented controls (queue filters and the like). */
+html[data-style="music"] .seg-tab {
+  height: 28px; border: 0; border-radius: 7px;
+  background: var(--m-fill); color: var(--text-2); font-size: 13px; font-weight: 500;
+}
+html[data-style="music"] .seg-tab.active { background: var(--m-fill-2); color: var(--text); box-shadow: 0 1px 3px rgba(var(--shade-rgb), .25); }
+
+/* ── Home: title, fetch field, recommendations ──────────────────────── */
+html[data-style="music"] #home-hero { display: none; }
+html[data-style="music"] #search-bar { padding: 20px 40px 8px; border-bottom: 0; }
+html[data-style="music"] .search-container { gap: 10px; }
+html[data-style="music"] #urlInput {
+  height: 40px; border-radius: 10px;
+  background: var(--m-fill); border: 1px solid var(--rule);
+  font-family: var(--font); font-size: 14px;
+}
+html[data-style="music"] #urlInput:focus { border-color: var(--rule-strong); }
+html[data-style="music"] .mode-btn {
+  height: 40px; border-radius: 10px; border: 0;
+  background: var(--m-fill); color: var(--text-2);
+}
+html[data-style="music"] .mode-btn:hover,
+html[data-style="music"] .mode-btn.active { background: var(--m-fill-2); color: var(--text); }
+html[data-style="music"] #fetchBtn {
+  width: auto; min-width: 40px; height: 40px; padding: 0 14px;
+  border: 0; border-radius: 20px;
+  background: var(--m-key); color: var(--m-key-ink);
+}
+html[data-style="music"] #main-split { padding: 0 40px; }
+html[data-style="music"] #status-bar { margin: 8px 40px 0; border-radius: 10px; }
+
+/* Recent fetches and the feed share #recent-wrap: shelf titles in the
+   17px bold of a music app, artwork with rounded corners. */
+html[data-style="music"] #recent-wrap { padding: 8px 0 120px; }
+html[data-style="music"] .recent-label,
+html[data-style="music"] .explore-section-title {
+  margin: 34px 0 10px; padding: 0; border: 0;
+  font-family: var(--font); font-size: 17px; font-weight: 700;
+  letter-spacing: normal; text-transform: none; color: var(--text);
+}
+html[data-style="music"] #recent-grid,
+html[data-style="music"] .explore-grid {
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 22px 20px;
+}
+html[data-style="music"] .recent-card,
+html[data-style="music"] .recent-card:hover { border: 0; background: transparent; }
+html[data-style="music"] .recent-card img,
+html[data-style="music"] .explore-card img,
+html[data-style="music"] .explore-cover-blank {
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px var(--rule);
+}
+/* Hover brightens the artwork instead of scaling the card: a scaled card
+   pokes past the shelf's clipping edge and loses its left side. */
+html[data-style="music"] .explore-card img { transition: filter var(--motion) var(--ease); }
+html[data-style="music"] .explore-card:hover img { filter: brightness(1.08); }
+html[data-style="music"] .explore-card img { margin-bottom: 8px; }
+html[data-style="music"] .explore-card-title { font-size: 13px; color: var(--text); }
+html[data-style="music"] .explore-card-subtitle { font-size: 13px; color: var(--text-2); }
+
+/* The feed on Home: a greeting with the source picker beside it… */
+html[data-style="music"] #recent-wrap #explore-feed { margin-top: 18px; }
+html[data-style="music"] #recent-wrap .explore-head { margin-bottom: 0; }
+html[data-style="music"] #recent-wrap #explore-greeting { font-size: 22px; }
+html[data-style="music"] #explore-feed .explore-head select {
+  height: 30px; border-radius: 8px; border: 1px solid var(--rule); background: var(--m-fill);
+}
+/* …and its first shelf drawn as Top Picks: taller cards, the artwork on
+   top and a panel under it with what the item is. */
+html[data-style="music"] #recent-wrap #explore-sections > div:first-child .explore-grid {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+html[data-style="music"] #recent-wrap #explore-sections > div:first-child .explore-card {
+  overflow: hidden; border-radius: 10px;
+  background: var(--surface); box-shadow: 0 0 0 1px var(--rule);
+}
+html[data-style="music"] #recent-wrap #explore-sections > div:first-child .explore-card img,
+html[data-style="music"] #recent-wrap #explore-sections > div:first-child .explore-cover-blank {
+  margin: 0; border-radius: 0; box-shadow: none;
+}
+html[data-style="music"] #recent-wrap #explore-sections > div:first-child .explore-card-title { padding: 10px 12px 0; font-weight: 600; }
+html[data-style="music"] #recent-wrap #explore-sections > div:first-child .explore-card-subtitle { padding: 2px 12px 14px; }
+
+/* ── Album page (a fetch result) ─────────────────────────────────────── */
+/* The page takes the cover's colour (--album-glow, sampled in app.js) and
+   lets it fade into the page, instead of a bordered card. */
+html[data-style="music"] #album-card {
+  margin: 18px 0 0; padding: 26px 26px 22px; gap: 34px;
+  border: 0; border-radius: 14px;
+  background: linear-gradient(180deg, var(--album-glow, var(--m-fill)) 0%, transparent 100%);
+}
+html[data-style="music"] #album-card::before { display: none; }
+/* The playlist header is a grid of seven rows (home.css): the 34px gap above
+   is meant for the flex card's columns, and as a row gap it opened every
+   empty row too, pushing the text apart and the cover to the bottom. */
+html[data-style="music"] #album-card.playlist-mode { row-gap: 0; column-gap: var(--space-5); }
+html[data-style="music"] #album-cover {
+  width: 238px; height: 238px; border: 0; border-radius: 6px;
+  box-shadow: var(--m-shadow-art);
+}
+html[data-style="music"] #album-type-badge {
+  font-size: 11px; font-weight: 600; color: var(--m-meta);
+  letter-spacing: normal; text-transform: none;
+}
+html[data-style="music"] #album-title {
+  font-family: var(--font-display); font-size: 26px; line-height: 30px; font-weight: 700; letter-spacing: -.01em;
+}
+html[data-style="music"] #album-meta,
+html[data-style="music"] #album-artist { font-size: 26px; line-height: 30px; font-weight: 400; color: var(--text); }
+html[data-style="music"] body.light-theme #album-artist { color: var(--signal-text); }
+html[data-style="music"] .album-meta-details { font-size: 11px; font-weight: 600; color: var(--m-meta); }
+html[data-style="music"] .album-description { font-size: 13px; line-height: 16px; color: var(--text); max-width: 520px; }
+html[data-style="music"] #album-actions { gap: 10px; }
+/* The facts column: a frosted panel over the cover's tint (a grey fill
+   read as dirty on it), with the same margin on every side; the barcode
+   keeps its white paper, rounded, inside that margin. */
+html[data-style="music"] #album-tech {
+  box-sizing: border-box; padding: 14px 16px; border: 1px solid var(--m-pill-edge); border-left-width: 1px;
+  border-radius: 12px; background: var(--m-panel);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4);
+}
+html[data-style="music"] #album-tech .tech-barcode { box-sizing: border-box; border-radius: 8px; }
+html[data-style="music"] #album-card:not(.artist-mode) #album-tech { margin-top: 18px; }
+/* An artist's page is its photo banner: no tinted card behind it. */
+html[data-style="music"] #album-card.artist-mode { padding: 0; border-radius: 0; background: none; }
+
+/* Track list: zebra rows, no rules between them. */
+html[data-style="music"] #track-controls { margin-top: 18px; }
+html[data-style="music"] #trackSearch,
+html[data-style="music"] #sort-select { border-radius: 8px; background: var(--m-fill); border-color: var(--rule); }
+html[data-style="music"] .track-table-header {
+  border: 0; font-size: 11px; font-weight: 600; color: var(--text-muted);
+  letter-spacing: normal; text-transform: none;
+}
+html[data-style="music"] .track-row { min-height: 46px; border: 0; border-radius: 6px; }
+html[data-style="music"] #track-rows > .track-row:nth-child(even) { background: var(--m-zebra); }
+html[data-style="music"] #track-rows > .track-row:hover { background: var(--m-fill-2); }
+html[data-style="music"] .tr-thumb { border-radius: 4px; }
+
+/* ── Player: a floating pill over the page ───────────────────────────── */
+html[data-style="music"] #player-bar {
+  left: calc(var(--rail-w) + (100% - var(--rail-w)) / 2); right: auto; bottom: 18px;
+  transform: translateX(-50%);
+  width: min(720px, calc(100% - var(--rail-w) - 48px)); height: 56px;
+  padding: 0 14px; gap: 12px;
+  border: 1px solid var(--m-pill-edge); border-radius: 1000px;
+  background: var(--m-pill);
+  -webkit-backdrop-filter: blur(60px) saturate(2); backdrop-filter: blur(60px) saturate(2);
+  box-shadow: var(--m-shadow);
+}
+html[data-style="music"] #player-bar .pl-info { width: 200px; }
+html[data-style="music"] #player-bar .pl-artwork { border-radius: 4px; overflow: hidden; }
+html[data-style="music"] .pl-btn:hover { background: var(--m-fill); }
+html[data-style="music"] #player-bar .pl-btn.pl-main { background: transparent; color: var(--text); }
+html[data-style="music"] .pl-vol { width: 70px; }
+html[data-style="music"] body.has-player #app-body { margin-bottom: 0; }
+html[data-style="music"] body.has-player #content { padding-bottom: 96px; }
+
+/* The download dock: the same pill, above the player when both show. */
+html[data-style="music"] #queue-dock {
+  left: calc(var(--rail-w) + (100% - var(--rail-w)) / 2); right: auto; bottom: 18px;
+  transform: translateX(-50%);
+  width: min(720px, calc(100% - var(--rail-w) - 48px));
+  border: 1px solid var(--m-pill-edge); border-radius: 16px;
+  background: var(--m-pill);
+  -webkit-backdrop-filter: blur(60px) saturate(2); backdrop-filter: blur(60px) saturate(2);
+  box-shadow: var(--m-shadow);
+}
+html[data-style="music"] #queue-dock:hover { background: var(--m-pill); filter: brightness(1.06); }
+html[data-style="music"] body.has-player #queue-dock { bottom: 84px; }
+html[data-style="music"] body.has-dock #content { padding-bottom: 90px; }
+html[data-style="music"] body.has-dock.has-player #content { padding-bottom: 156px; }
+html[data-style="music"] #queue-dock .qd-label { font-size: 12px; font-weight: 600; letter-spacing: normal; text-transform: none; color: var(--text); }
+html[data-style="music"] #queue-dock .qd-bar {
+  width: 200px; height: 4px; border-radius: 2px; background: var(--m-fill-2);
+}
+html[data-style="music"] #queue-dock .qd-bar > i { background: var(--signal); border-radius: 2px; transition: width var(--motion) var(--ease); }
+html[data-style="music"] #queue-dock.done .qd-bar > i { background: var(--ok); }
+
+/* ── Now playing ─────────────────────────────────────────────────────── */
+html[data-style="music"] .np-cover-wrap { border-radius: 12px; box-shadow: 0 30px 60px rgba(var(--shade-rgb), .45); }
+html[data-style="music"] #np-cover { border-radius: 12px; }
+html[data-style="music"] #np-bg { filter: saturate(1.4); }
+html[data-style="music"] .np-title { font-family: var(--font-display); }
+
+/* ── Settings: grouped rows on a rounded panel ───────────────────────── */
+html[data-style="music"] .tab-bar {
+  display: inline-flex; width: auto; margin: 0 40px 6px; padding: 2px; gap: 0;
+  border: 0; border-radius: 9px; background: var(--m-fill);
+}
+html[data-style="music"] .stab {
+  min-height: 0; padding: 5px 12px; border: 0; border-radius: 7px;
+  font-size: 13px; font-weight: 500; color: var(--text-2); background: transparent;
+}
+html[data-style="music"] .stab svg { width: 15px; height: 15px; }
+html[data-style="music"] .stab:hover { background: transparent; color: var(--text); }
+html[data-style="music"] .stab.active { background: var(--m-fill-2); color: var(--text); box-shadow: 0 1px 3px rgba(var(--shade-rgb), .25); }
+html[data-style="music"] #view-settings .s-body { padding-left: 40px; padding-right: 40px; }
+html[data-style="music"] #view-settings .s-section {
+  padding: 4px 16px; margin-bottom: 22px;
+  border: 1px solid var(--rule); border-radius: 12px; background: var(--m-fill);
+}
+html[data-style="music"] .s-title {
+  margin: 0; padding: 12px 0 6px;
+  font-size: 13px; font-weight: 600; color: var(--text-2);
+  letter-spacing: normal; text-transform: none;
+}
+html[data-style="music"] .s-row { min-height: 46px; margin: 0; padding: 6px 0; }
+html[data-style="music"] .s-section > .s-row + .s-row { border-top: 1px solid var(--rule); }
+html[data-style="music"] .s-label small { color: var(--text-2); }
+
+/* Switches: a music app's rounded switch, signal when on. */
+html[data-style="music"] .toggle { width: 38px; height: 22px; }
+html[data-style="music"] .toggle-sl { border: 0; border-radius: 11px; background: var(--m-fill-2); }
+html[data-style="music"] .toggle-sl::before {
+  width: 18px; height: 18px; left: 2px; border-radius: 50%;
+  background: var(--m-glass-ink); box-shadow: 0 1px 3px rgba(var(--shade-rgb), .3);
+}
+html[data-style="music"] .toggle input:checked + .toggle-sl { background: var(--signal); border-color: transparent; }
+html[data-style="music"] .toggle input:checked + .toggle-sl::before { transform: translateX(16px) translateY(-50%); background: var(--m-glass-ink); }
+
+/* ── Lists in Queue, History and the Library ─────────────────────────── */
+html[data-style="music"] .queue-item { border-bottom: 1px solid var(--rule); }
+html[data-style="music"] .metric { border-radius: 12px; }
+html[data-style="music"] .status-pill { border-radius: 10px; }
+
+/* ══ Parity with the mockup (docs/mocks/music-style/) ══════════════════ */
+
+/* Sidebar: a search field on top, no Discover / System headings, Logs and
+   Settings at the foot with the version under them; the Player entry and
+   New Playlist (both reached from the Library pages) and the collapse and
+   bug-report buttons are left to the console look. */
+html[data-style="music"] .nav-btn.m-search {
+  display: flex; height: 32px; margin: 0 0 10px; padding: 0 8px; gap: 8px;
+  border: 1px solid var(--rule); border-radius: 8px;
+  background: var(--m-fill); color: var(--text-muted); font-size: 13px;
+}
+html[data-style="music"] .nav-btn.m-search svg { width: 15px; height: 15px; color: var(--text-muted); }
+html[data-style="music"] .nav-btn.m-search:hover { background: var(--m-fill-2); }
+html[data-style="music"] #sidebar > .sb-group:has(+ #nav-home),
+html[data-style="music"] #sidebar > .sb-group:has(+ #nav-logs),
+html[data-style="music"] #nav-player,
+html[data-style="music"] #nav-lib-new,
+html[data-style="music"] #sidebar .sb-collapse,
+html[data-style="music"] #sidebar > .nav-btn[title="Report a Bug on GitHub"],
+html[data-style="music"] #sidebar > .nav-spacer { display: none; }
+/* Logs opens from Settings → General in this look (the Terminal Logs row). */
+html[data-style="music"] #nav-logs { display: none; }
+html[data-style="music"] #nav-settings { margin-top: auto; }
+/* The version, moved under Settings by placeVersion() in app.js. */
+html[data-style="music"] #sidebar > .sb-version {
+  display: block; align-self: flex-start; margin: 4px 0 0; padding: 6px 6px 0;
+  background: transparent; color: var(--text-muted); font-size: 12px; font-weight: 400; letter-spacing: normal;
+}
+html[data-style="music"] body.sidebar-collapsed #sidebar > .sb-version { display: none; }
+
+/* Home: the title row with the feed's source beside it. */
+html[data-style="music"] .m-home-head {
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 16px;
+  padding: 32px 40px 0;
+}
+html[data-style="music"] .m-home-head h1 {
+  margin: 0; font-family: var(--font-display); font-size: 34px; font-weight: 700; letter-spacing: -.02em; color: var(--text);
+}
+html[data-style="music"] .m-feed-pick { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); }
+html[data-style="music"] .m-feed-pick select {
+  height: 30px; padding: 0 28px 0 10px; border-radius: 8px; border: 1px solid var(--rule);
+  background-color: var(--m-fill); color: var(--text); font-size: 13px;
+}
+/* The feed's own header (greeting, "Feed" picker) has an inline display,
+   hence the !important; its picker already sits beside Home's title. */
+html[data-style="music"] #recent-wrap .explore-head { display: none !important; }
+
+/* Link / Search / CSV, and a Fetch pill with its word. */
+html[data-style="music"] #searchModeToggle,
+html[data-style="music"] #csvBtn,
+html[data-style="music"] #fetchBtn > svg { display: none; }
+html[data-style="music"] .m-seg {
+  display: inline-flex; align-items: center; height: 40px; padding: 3px; gap: 0;
+  border-radius: 10px; background: var(--m-fill); flex: none;
+}
+html[data-style="music"] .m-seg button {
+  height: 100%; padding: 0 14px; border: 0; border-radius: 7px;
+  background: transparent; color: var(--text-2); font: 500 13px var(--font); cursor: pointer;
+}
+html[data-style="music"] .m-seg button:hover { color: var(--text); }
+html[data-style="music"] .m-seg button.on { background: var(--m-fill-2); color: var(--text); box-shadow: 0 1px 3px rgba(var(--shade-rgb), .25); }
+html[data-style="music"] .m-fetch-label { display: inline; }
+html[data-style="music"] #fetchBtn { padding: 0 22px; font: 600 15px var(--font); }
+
+/* The download dock on Home: the "Downloading …" line under the fetch
+   bar, instead of the floating pill it is on every other page. */
+html[data-style="music"] #view-home #queue-dock {
+  position: relative; left: auto; right: auto; bottom: auto; transform: none;
+  width: auto; margin: 4px 40px 0; height: 52px;
+  background: var(--m-fill); border: 1px solid var(--rule); border-radius: 12px;
+  -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none;
+}
+html[data-style="music"] #view-home #queue-dock:hover { background: var(--m-fill-2); filter: none; }
+html[data-style="music"] #view-home #queue-dock .qd-bar { width: 220px; }
+
+/* Shelf titles carry the music app's chevron. */
+html[data-style="music"] .explore-section-title::after,
+html[data-style="music"] .recent-label::after { content: " \203A"; color: var(--text-2); font-weight: 600; }
+html[data-style="music"] .m-shelf-link { cursor: pointer; }
+
+/* Top Picks: a label above each card, the artwork, then a panel in the
+   artwork's colour (--pick-bg, from tintPickCard) with the name. */
+html[data-style="music"] .m-pick-why {
+  display: block; margin-bottom: 6px;
+  font-size: 11px; font-weight: 600; color: var(--text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+html[data-style="music"] #recent-wrap #explore-sections > div:first-child .explore-card {
+  overflow: visible; border-radius: 0; background: transparent; box-shadow: none;
+}
+html[data-style="music"] #recent-wrap #explore-sections > div:first-child .explore-card img,
+html[data-style="music"] #recent-wrap #explore-sections > div:first-child .explore-cover-blank {
+  border-radius: 10px 10px 0 0; box-shadow: none;
+}
+html[data-style="music"] #recent-wrap #explore-sections > div:first-child .explore-card-title,
+html[data-style="music"] #recent-wrap #explore-sections > div:first-child .explore-card-subtitle {
+  background: var(--pick-bg, var(--surface));
+}
+html[data-style="music"] #recent-wrap #explore-sections > div:first-child .explore-card-subtitle {
+  min-height: 46px; border-radius: 0 0 10px 10px; font-size: 12px; line-height: 16px;
+  white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+html[data-style="music"] #recent-wrap #explore-sections > div:first-child .explore-card.m-tinted .explore-card-title { color: var(--m-glass-ink); }
+html[data-style="music"] #recent-wrap #explore-sections > div:first-child .explore-card.m-tinted .explore-card-subtitle { color: color-mix(in srgb, var(--m-glass-ink) 82%, transparent); }
+/* No red hover outline on artwork in the music style. */
+html[data-style="music"] .explore-card img,
+html[data-style="music"] .explore-cover-blank,
+html[data-style="music"] .explore-card:hover img,
+html[data-style="music"] .explore-card:hover .explore-cover-blank { outline: 0; }
+
+/* Recently Added: three columns of three songs. */
+html[data-style="music"] #m-recent-songs { display: block; }
+html[data-style="music"] #m-recent-songs.hidden { display: none; }
+html[data-style="music"] .m-songs {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(3, auto);
+  grid-auto-flow: column; column-gap: 28px;
+}
+html[data-style="music"] .m-song {
+  display: flex; align-items: center; gap: 12px; min-width: 0;
+  padding: 7px 14px 7px 0; border-top: 1px solid var(--rule);
+}
+html[data-style="music"] .m-song-art { width: 40px; height: 40px; flex: none; border-radius: 4px; object-fit: cover; }
+html[data-style="music"] .m-song-blank { display: grid; place-items: center; background: var(--m-fill-2); color: var(--text-muted); }
+html[data-style="music"] .m-song-text { flex: 1; min-width: 0; }
+html[data-style="music"] .m-song-title,
+html[data-style="music"] .m-song-artist { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html[data-style="music"] .m-song-title { font-size: 13px; line-height: 16px; color: var(--text); }
+html[data-style="music"] .m-song-artist { font-size: 12px; line-height: 15px; color: var(--text-2); }
+html[data-style="music"] .m-song-q {
+  flex: none; padding: 1px 5px; border: 1px solid var(--rule); border-radius: 4px;
+  font-size: 11px; font-weight: 600; color: var(--text-muted);
+}
+
+/* Player: controls on the left, a display in the middle (artwork, title,
+   and the seek bar as a thin line along its foot), the rest on the right. */
+html[data-style="music"] #player-bar {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto auto; align-items: center;
+}
+html[data-style="music"] #player-bar .pl-controls { grid-column: 1; grid-row: 1; gap: 2px; }
+html[data-style="music"] #player-bar .pl-info {
+  grid-column: 2; grid-row: 1; width: auto; min-width: 0; height: 42px;
+  display: flex; align-items: center; gap: 10px; padding: 0 12px 0 4px;
+  border-radius: 8px; background: var(--m-fill); overflow: hidden;
+}
+html[data-style="music"] #player-bar .pl-artwork { width: 34px; height: 34px; flex: none; }
+html[data-style="music"] #player-bar .pl-track-meta { flex: 1; text-align: center; }
+html[data-style="music"] #player-bar .pl-title { font-size: 12px; }
+html[data-style="music"] #player-bar .pl-seek {
+  grid-column: 2; grid-row: 1; align-self: end; z-index: 1;
+  margin: 0 8px 4px 46px; gap: 0;
+}
+html[data-style="music"] #player-bar .pl-seek .am-range { height: 8px; --am-h: 2px; }
+html[data-style="music"] #player-bar .pl-seek .am-range:hover { --am-h: 4px; }
+html[data-style="music"] #player-bar .pl-time { display: none; }
+
+/* Shelves are one row that scrolls sideways, six across (Top Picks five),
+   as on a music app's Home. */
+html[data-style="music"] #recent-wrap .explore-grid {
+  grid-template-columns: none; grid-auto-flow: column;
+  grid-auto-columns: max(150px, calc((100% - 5 * 20px) / 6));
+  overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
+  padding-bottom: 4px; margin-bottom: 0;
+}
+html[data-style="music"] #recent-wrap .explore-grid::-webkit-scrollbar { display: none; }
+/* A shelf opened from its title: every card, wrapped into rows. */
+html[data-style="music"] #recent-wrap #explore-sections > .show-all .explore-grid {
+  grid-auto-flow: row; grid-auto-columns: auto; overflow-x: visible;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+html[data-style="music"] #recent-wrap #explore-sections > .show-all:first-child .explore-grid {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+}
+html[data-style="music"] .explore-section-title.m-shelf-link::after {
+  /* inline-block (so it can turn) drops the content's leading space:
+     the gap comes from the margin instead. */
+  content: "\203A"; display: inline-block; margin-left: 0.3em; transition: transform var(--motion) var(--ease); }
+html[data-style="music"] .show-all > .explore-section-title::after { transform: rotate(90deg); }
+html[data-style="music"] #recent-wrap #explore-sections > div:first-child .explore-grid {
+  grid-template-columns: none; grid-auto-columns: max(180px, calc((100% - 4 * 20px) / 5));
+}
+
+/* The brand mark: the music look's red tile. */
+html[data-style="music"] .sb-logo { background: var(--signal); }
+
+/* Recent fetches line up with the shelves above them. */
+html[data-style="music"] #recent-wrap .recent-container { padding-left: 0; padding-right: 0; }
+
+/* Settings: one column, the sections as a segmented control on top (the
+   phone layout's arrangement), the search field at its end. */
+html[data-style="music"] #view-settings.active {
+  grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr);
+}
+html[data-style="music"] #view-settings > .tab-bar {
+  grid-row: 2; grid-column: 1; justify-self: start;
+  display: inline-flex; flex-direction: row; align-items: center; gap: 0;
+  max-width: calc(100% - 80px); margin: 0 40px 10px; padding: 3px;
+  border: 0; border-radius: 10px; background: var(--m-fill);
+  overflow-x: auto; scrollbar-width: none;
+}
+html[data-style="music"] #view-settings > .tab-bar .stab {
+  width: auto; padding: 5px 12px; border: 0; border-radius: 7px; font-weight: 500;
+}
+html[data-style="music"] #view-settings > .tab-bar .stab.active { background: var(--m-fill-2); font-weight: 500; }
+html[data-style="music"] #view-settings > .tab-bar .stab.active svg { color: var(--text); }
+html[data-style="music"] #view-settings > .tab-bar .s-search {
+  order: 99; min-width: 170px; margin: 0 0 0 6px; height: 28px;
+  border: 0; border-radius: 7px; background: var(--m-fill-2);
+}
+html[data-style="music"] #view-settings > .s-body { grid-row: 3; grid-column: 1; padding: 6px 40px 40px; }
+html[data-style="music"] #view-settings > .s-body > .tc { max-width: none; }
+
+/* Lists (History, Queue, playlists): rows of a music app, a hairline
+   between them, the artwork rounded, a soft hover. */
+html[data-style="music"] .page-row { padding: 8px 12px; border-bottom: 1px solid var(--rule); border-radius: 8px; }
+html[data-style="music"] .page-row:hover { background: var(--m-fill); }
+html[data-style="music"] .pr-cover { width: 44px; height: 44px; border-radius: 6px; background: var(--m-fill-2); }
+html[data-style="music"] .pr-title { font-size: 13px; font-weight: 500; }
+html[data-style="music"] .pr-sub { font-size: 12px; color: var(--text-2); }
+html[data-style="music"] .pr-meta { font-size: 11px; color: var(--text-muted); }
+
+/* Fix Local Files: the drop zone is a dashed tile, as in the mockup. */
+html[data-style="music"] #local-drop-zone {
+  border: 2px dashed var(--rule-strong); border-radius: 14px; background: transparent;
+}
+
+/* Top Picks, one continuous panel under the artwork: no gaps between the
+   artwork, the name and the description, the name on one line, the
+   description held to two whole lines. */
+html[data-style="music"] #recent-wrap #explore-sections > div:first-child .explore-card-title {
+  margin: 0; height: auto; padding: 10px 12px 2px;
+  font-size: 13px; line-height: 18px; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+html[data-style="music"] #recent-wrap #explore-sections > div:first-child .explore-card-subtitle {
+  /* The space under the text is a border in the panel's colour, not
+     padding: overflow clips at the padding edge, so a clamped third line
+     would still show through padding. */
+  margin: 0; height: auto; min-height: 32px; max-height: none; padding: 0 12px; box-sizing: content-box;
+  border-bottom: 12px solid var(--pick-bg, var(--surface));
+  font-size: 12px; line-height: 16px;
+  display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  white-space: normal;
+}
+
+/* The fetch row stays one line, as in the mockup: Link/Search/CSV, the
+   field (taking the room), paste, Fetch. The console look's narrow-window
+   rule wraps it into three rows; this look only does so on a phone. */
+html[data-style="music"] .search-container { flex-wrap: nowrap; }
+html[data-style="music"] .search-container > .mode-wrap { order: 0; flex: none; }
+html[data-style="music"] .search-container > .url-wrap { order: 0; flex: 1 1 auto; width: auto; min-width: 0; }
+html[data-style="music"] .search-container > #pasteBtn { order: 0; flex: none; width: 40px; height: 40px; border: 0; border-radius: 10px; background: var(--m-fill); }
+html[data-style="music"] .search-container > #fetchBtn { order: 0; flex: none; }
+@media (max-width: 700px) {
+  html[data-style="music"] .search-container { flex-wrap: wrap; }
+  html[data-style="music"] .search-container > .url-wrap { flex-basis: 100%; order: -1; }
+  html[data-style="music"] .search-container > #fetchBtn { flex: 1 1 auto; }
+}
+
+/* Settings like the mockup: tabs without icons, each section's title above
+   its panel, the accent as colour swatches. */
+html[data-style="music"] #view-settings > .tab-bar .stab svg { display: none; }
+html[data-style="music"] #view-settings .s-section { position: relative; overflow: visible; margin-top: 34px; }
+html[data-style="music"] #view-settings .s-section > .s-title {
+  position: absolute; left: 4px; top: -26px; margin: 0; padding: 0;
+}
+html[data-style="music"] #view-settings .s-section > .s-title + .s-row { border-top: 0; }
+/* A section's intro paragraph sits inside the card, so it gets the same
+   vertical padding as a row instead of the legacy negative top margin that
+   pressed it against the card's top border. */
+html[data-style="music"] #view-settings .s-section > .s-title + p { margin: 0; padding: 10px 0; }
+html[data-style="music"] #view-settings .s-section > .s-title + p + .s-row { border-top: 1px solid var(--rule); }
+html[data-style="music"] .s-row.m-logs-row { display: flex; }
+html[data-style="music"] .m-swatches { display: flex; align-items: center; gap: 8px; }
+html[data-style="music"] .m-swatches button {
+  width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%;
+  background: var(--sw); box-shadow: inset 0 0 0 1px rgba(var(--shade-rgb), .2); cursor: pointer;
+}
+html[data-style="music"] .m-swatches button.on { outline: 2px solid var(--text-2); outline-offset: 2px; }
+html[data-style="music"] .m-swatches ~ .accent-dot,
+html[data-style="music"] .m-swatches ~ #config-accent { display: none; }
+
+/* Narrow windows. Recently Added in two columns; and the sidebar folded to
+   icons (collapsed, or a narrow desktop window): the search is an icon like
+   the rest, the version goes. */
+@media (max-width: 1100px) {
+  html[data-style="music"] .m-songs { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(5, auto); }
+}
+html[data-style="music"] body.sidebar-collapsed .nav-btn.m-search {
+  width: 40px; height: 40px; margin: 0 auto 10px; padding: 0; justify-content: center;
+}
+@media (min-width: 701px) and (max-width: 900px) {
+  html[data-style="music"] body:not(.web-mode) .nav-btn.m-search {
+    width: 40px; height: 40px; margin: 0 auto 10px; padding: 0; justify-content: center;
+  }
+  html[data-style="music"] body:not(.web-mode) #sidebar > .sb-version { display: none; }
+}
+
+/* ══ The other pages (docs/mocks/music-style/) ═════════════════════════ */
+
+/* Texts only one look has: .m-alt is inline text of the music look (a
+   title it words differently), .m-hide what it leaves out. */
+html[data-style="music"] .m-only.m-alt { display: inline; }
+html[data-style="music"] .m-hide { display: none; }
+
+/* Page heads: the big title, a line under it, the actions at the right on
+   the title's baseline. */
+html[data-style="music"] :is(#view-local, #view-following, #view-stats, #view-queue, #view-history) > .s-header {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; column-gap: 16px;
+  padding: 32px 40px 22px;
+}
+html[data-style="music"] :is(#view-local, #view-following, #view-stats, #view-queue, #view-history) > .s-header > h1 { grid-column: 1; grid-row: 1; margin: 0; }
+html[data-style="music"] :is(#view-local, #view-following, #view-stats, #view-queue, #view-history) > .s-header > .s-actions {
+  grid-column: 2; grid-row: 1 / span 2; align-self: end; display: flex; gap: 8px; align-items: center;
+}
+html[data-style="music"] .s-header > .m-sub,
+html[data-style="music"] #view-history #hist-totals {
+  display: block; grid-column: 1; grid-row: 2; margin: 4px 0 0;
+  font-size: 15px; font-weight: 400; color: var(--text-2); letter-spacing: normal; text-transform: none;
+}
+html[data-style="music"] .s-header > .m-sub:empty { display: none; }
+/* History's totals are its subtitle: its actions box only holds them. */
+html[data-style="music"] #view-history > .s-header > .s-actions { display: contents; }
+html[data-style="music"] .player-heading p { font-size: 15px; color: var(--text-2); }
+html[data-style="music"] .s-header .act-btn.secondary { height: 28px; min-height: 28px; padding: 0 12px; border-radius: 14px; }
+html[data-style="music"] .s-header .act-btn.primary { height: 28px; min-height: 28px; padding: 0 12px; border-radius: 14px; font-size: 13px; }
+
+/* Page bodies line up with the 40px of the heads. */
+html[data-style="music"] :is(#view-queue, #view-history) > .page-body { padding: 0 40px 40px; max-width: none; }
+html[data-style="music"] :is(#view-local, #view-following, #view-stats) > .s-body { padding: 0 40px 40px; }
+
+/* Toolbars: search fields and selects of a music app. */
+html[data-style="music"] .tb-field,
+html[data-style="music"] .pt-search,
+html[data-style="music"] .pt-sort,
+html[data-style="music"] .player-add-select select {
+  height: 32px; border: 1px solid var(--rule); border-radius: 8px; background: var(--m-fill);
+}
+html[data-style="music"] .tb-field.tb-search { width: 260px; flex: none; }
+html[data-style="music"] .page-toolbar { gap: 10px; margin-bottom: 18px; }
+html[data-style="music"] .seg-tabs {
+  display: inline-flex; width: auto; gap: 0; padding: 2px; margin-bottom: 14px;
+  border: 0; border-radius: 9px; background: var(--m-fill);
+}
+html[data-style="music"] .seg-tabs .seg-tab { height: 28px; padding: 0 14px; background: transparent; }
+html[data-style="music"] .seg-tabs .seg-tab svg { display: none; }
+html[data-style="music"] .seg-tabs .seg-tab.active { background: var(--m-fill-2); }
+html[data-style="music"] .seg-count { margin-left: 4px; background: transparent; color: var(--text-muted); font-weight: 400; }
+html[data-style="music"] .act-btn.danger { background: var(--m-fill-2); color: var(--text); border: 0; }
+
+/* Row lists (Queue, History): a hairline between rows, rounded artwork. */
+html[data-style="music"] .page-list { gap: 0; }
+html[data-style="music"] .page-row { border-bottom: 0; border-top: 1px solid var(--rule); border-radius: 0; padding: 10px 12px; }
+html[data-style="music"] .page-row:first-child,
+html[data-style="music"] .m-group-label + .page-row { border-top: 0; }
+html[data-style="music"] .page-row:hover { background: var(--m-fill); border-color: var(--rule); }
+html[data-style="music"] .pr-cover { width: 48px; height: 48px; border-radius: 6px; overflow: hidden; color: var(--text-muted); }
+html[data-style="music"] .pr-title { font-size: 13px; font-weight: 400; color: var(--text); }
+html[data-style="music"] .pr-sub { font-size: 13px; color: var(--text-2); }
+html[data-style="music"] .status-pill { text-transform: none; letter-spacing: normal; font-size: 13px; font-weight: 400; gap: 6px; }
+html[data-style="music"] .status-pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+html[data-style="music"] .status-pill .pill-spinner + * { display: none; }
+html[data-style="music"] .row-btn { border-radius: 50%; }
+html[data-style="music"] .m-group-label {
+  display: block; margin: 24px 0 6px 12px;
+  font-size: 13px; font-weight: 600; color: var(--text-2);
+}
+html[data-style="music"] .m-group-label:first-child { margin-top: 4px; }
+
+/* ── History: title & artist, album, format, size, time, remove ─────── */
+html[data-style="music"] #hist-list .page-row {
+  grid-template-columns: 48px minmax(0, 1.4fr) minmax(0, 1fr) 70px 70px 80px auto;
+}
+html[data-style="music"] #hist-list .pr-sub,
+html[data-style="music"] #hist-list .pr-meta,
+html[data-style="music"] #hist-list .status-pill { display: none; }
+html[data-style="music"] #hist-list .m-h-artist {
+  display: block; font-size: 13px; color: var(--text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+html[data-style="music"] #hist-list .m-h-album {
+  display: block; min-width: 0; font-size: 13px; color: var(--text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+html[data-style="music"] #hist-list .m-h-q { display: block; }
+html[data-style="music"] #hist-list :is(.m-h-size, .m-h-when) {
+  display: block; text-align: right; font-size: 13px; color: var(--text-2);
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+html[data-style="music"] #hist-list .m-h-size.failed { color: var(--error); }
+html[data-style="music"] .page-row.status-failed { box-shadow: none; }
+html[data-style="music"] .m-q {
+  display: inline-block; padding: 1px 5px; border: 1px solid var(--rule); border-radius: 4px;
+  font-size: 11px; font-weight: 600; color: var(--text-muted); white-space: nowrap;
+}
+/* Fetches keep their two lines: what it was, and when. */
+html[data-style="music"] #hist-list .page-row.clickable { grid-template-columns: 48px minmax(0, 1fr) auto; }
+html[data-style="music"] #hist-list .page-row.clickable .pr-sub { display: block; }
+html[data-style="music"] #view-history .act-btn.danger { background: transparent; color: var(--text); font-weight: 600; }
+html[data-style="music"] #view-history .act-btn.danger svg { display: none; }
+html[data-style="music"] #view-history .tb-search.tb-grow { flex: 0 0 260px; margin-left: auto; min-width: 0; }
+html[data-style="music"] #view-history .page-body { display: flex; flex-direction: column; }
+html[data-style="music"] #view-history .page-body > .seg-tabs { align-self: flex-start; margin-bottom: -50px; }
+html[data-style="music"] #view-history .page-toolbar { justify-content: flex-end; }
+
+/* ── Queue: the numbers as tiles, the missing tracks as a banner, then
+   the queue and what is downloading now ─────────────────────────────── */
+html[data-style="music"] #view-queue .page-body { display: flex; flex-direction: column; }
+html[data-style="music"] #view-queue #queue-drawer,
+html[data-style="music"] #view-queue .queue-panel,
+html[data-style="music"] #view-queue .live-head { display: contents; }
+html[data-style="music"] #view-queue .live-metrics {
+  order: -3; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 28px;
+}
+html[data-style="music"] #view-queue .metric {
+  min-width: 0; padding: 14px 16px; border: 1px solid var(--rule); border-radius: 12px; background: var(--m-fill);
+}
+html[data-style="music"] #view-queue .metric-label { order: -1; font-size: 12px; font-weight: 600; color: var(--text-2); letter-spacing: normal; text-transform: none; }
+html[data-style="music"] #view-queue .metric strong {
+  margin-top: 4px; font-family: var(--font-display); font-size: 26px; line-height: 1.1; font-weight: 700;
+  letter-spacing: -.02em; color: var(--text); font-variant-numeric: tabular-nums;
+}
+html[data-style="music"] #view-queue #failed-panel { order: -2; }
+html[data-style="music"] #view-queue #failed-panel.hidden { display: none; }
+html[data-style="music"] #view-queue .failed-panel {
+  margin: 0 0 28px; padding: 14px 18px;
+  border: 1px solid color-mix(in srgb, var(--error) 35%, transparent); border-radius: 12px;
+  background: color-mix(in srgb, var(--error) 9%, transparent);
+}
+html[data-style="music"] #view-queue .fp-head { gap: 14px; }
+html[data-style="music"] #view-queue .fp-text strong { font-size: 13px; font-weight: 600; color: var(--text); text-transform: none; letter-spacing: normal; }
+html[data-style="music"] #view-queue .fp-sub { font-size: 13px; color: var(--text-2); }
+html[data-style="music"] #view-queue #fp-retry { background: var(--m-key); color: var(--m-key-ink); }
+html[data-style="music"] #view-queue .page-section-title,
+html[data-style="music"] #view-queue .live-filters,
+html[data-style="music"] #view-queue .live-actions,
+html[data-style="music"] #view-queue .queue-content,
+html[data-style="music"] #view-queue #queue-counter { order: 1; }
+html[data-style="music"] #view-queue .page-section-title {
+  margin: 24px 0 6px 12px; font-size: 13px; font-weight: 600; color: var(--text-2);
+  letter-spacing: normal; text-transform: none;
+}
+html[data-style="music"] #view-queue .live-filters { padding: 0 0 10px; border: 0; }
+html[data-style="music"] #view-queue .queue-summary .qs-item {
+  height: 28px; border: 0; border-radius: 14px; background: var(--m-fill); font-size: 13px;
+}
+html[data-style="music"] #view-queue .queue-summary .qs-item.is-filtering { background: var(--m-fill-2); color: var(--text); }
+html[data-style="music"] #view-queue .live-actions { align-self: flex-end; margin-top: -38px; }
+html[data-style="music"] #view-queue .queue-content { padding: 0; }
+html[data-style="music"] #view-queue #queue-counter { border-top: 1px solid var(--rule); padding: 10px 12px; }
+html[data-style="music"] #view-queue .queue-item {
+  padding: 10px 12px; border: 0; border-top: 1px solid var(--rule); border-radius: 0; background: transparent;
+}
+html[data-style="music"] #view-queue .queue-item:first-child { border-top: 0; }
+html[data-style="music"] #view-queue .qi-title { font-size: 13px; font-weight: 400; color: var(--text); }
+html[data-style="music"] #view-queue .qi-artist { font-size: 13px; color: var(--text-2); }
+html[data-style="music"] #view-queue .qi-pill { text-transform: none; letter-spacing: normal; font-size: 13px; background: transparent; border: 0; }
+html[data-style="music"] #view-queue .qi-meter {
+  display: block; height: 4px; width: 230px; border-radius: 2px; overflow: hidden; background: var(--m-fill-2);
+  -webkit-mask-image: none; mask-image: none;
+}
+html[data-style="music"] #view-queue .qi-meter i { display: none; }
+html[data-style="music"] #view-queue .qi-meter {
+  background: linear-gradient(90deg, var(--signal) 0 var(--qi-p, 0%), var(--m-fill-2) var(--qi-p, 0%) 100%);
+}
+html[data-style="music"] #view-queue .queue-empty .q-icon,
+html[data-style="music"] #view-queue #sq-list .es-icon { border-radius: 12px; background: var(--m-fill); }
+html[data-style="music"] #view-queue .page-toolbar .tb-spacer { flex: 1; }
+html[data-style="music"] #view-queue #sq-list .page-row { grid-template-columns: 48px minmax(0, 1fr) 130px auto; }
+html[data-style="music"] #view-queue #sq-list .pr-meta { font-size: 12px; color: var(--text-muted); }
+
+/* ── Library (Songs, Albums, Artists, Playlists) ─────────────────────── */
+html[data-style="music"] #view-player > .s-header { padding: 32px 40px 18px; }
+html[data-style="music"] #view-player #player-body { padding: 0 40px 40px; }
+/* The library's folder: one quiet line, not a panel. */
+html[data-style="music"] .player-libbar {
+  padding: 0; border: 0; background: transparent; box-shadow: none; gap: 10px;
+}
+html[data-style="music"] .player-libbar .plb-icon { display: none; }
+html[data-style="music"] .player-libbar #plb-name { font-size: 13px; font-weight: 400; color: var(--text-2); }
+html[data-style="music"] .player-libbar .plb-stats { font-size: 13px; color: var(--text-muted); }
+html[data-style="music"] .player-libbar .act-btn { height: 28px; min-height: 28px; border-radius: 14px; }
+html[data-style="music"] #view-player .player-source {
+  padding: 16px 20px; border: 1px solid var(--rule); border-radius: 12px; background: var(--m-fill);
+}
+/* Play is the white pill, Shuffle a grey one, apart. */
+html[data-style="music"] .pt-group { gap: 8px; box-shadow: none; }
+html[data-style="music"] .pt-btn,
+html[data-style="music"] .pt-btn:first-child,
+html[data-style="music"] .pt-btn:last-child {
+  height: 28px; padding: 0 12px; gap: 6px; border: 0; border-radius: 14px;
+  background: var(--m-fill-2); color: var(--text); font-size: 13px; font-weight: 600;
+}
+html[data-style="music"] .pt-btn:hover { background: var(--selected); border: 0; }
+html[data-style="music"] .pt-btn.primary,
+html[data-style="music"] .pt-btn.primary:hover { background: var(--m-key); color: var(--m-key-ink); }
+html[data-style="music"] .pt-sort select,
+html[data-style="music"] .pt-search input { font-size: 13px; }
+html[data-style="music"] .player-count { font-size: 13px; color: var(--text-2); }
+/* Songs: zebra rows, no rules, the format as a small outlined tag. */
+html[data-style="music"] .pt-colhead {
+  font-size: 12px; font-weight: 600; letter-spacing: normal; text-transform: none; color: var(--text-muted);
+}
+html[data-style="music"] .pl-row {
+  min-height: 44px; padding: 4px 12px; border-bottom: 0; border-radius: 6px;
+}
+html[data-style="music"] .player-list > .pl-row:nth-child(even) { background: var(--m-zebra); }
+html[data-style="music"] .player-list > .pl-row:hover { background: var(--m-fill-2); }
+html[data-style="music"] .pl-row.playing { box-shadow: none; background: var(--selected); }
+html[data-style="music"] .pl-thumb { width: 36px; height: 36px; border-radius: 4px; }
+html[data-style="music"] .pl-t { font-size: 14px; }
+html[data-style="music"] .pl-a { font-size: 13px; color: var(--text-2); }
+html[data-style="music"] .pl-dur { font-size: 13px; color: var(--text-2); }
+html[data-style="music"] .pl-fmt {
+  justify-self: center; padding: 1px 5px; border: 1px solid var(--rule); border-radius: 4px;
+  font-size: 11px; font-weight: 600; letter-spacing: normal; color: var(--text-muted);
+}
+/* Albums & playlists: covers with rounded corners and nothing around. */
+html[data-style="music"] .player-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 28px 22px; }
+html[data-style="music"] .pl-card { padding: 0; border: 0; background: transparent; }
+html[data-style="music"] .pl-card:hover { background: transparent; }
+html[data-style="music"] .pl-card-art .pl-cover { border-radius: 8px; box-shadow: 0 0 0 1px var(--rule) inset; }
+html[data-style="music"] .pl-card-art { margin-bottom: 8px; }
+html[data-style="music"] .pl-card-play { background: var(--signal); color: var(--signal-ink); border-radius: 50%; }
+html[data-style="music"] .pl-card-t { font-size: 14px; font-weight: 400; color: var(--text); }
+html[data-style="music"] .pl-card-a { font-size: 14px; color: var(--text-2); }
+/* Artists: round photos, the name centred under them. */
+html[data-style="music"] .pl-card.artist { text-align: center; }
+html[data-style="music"] .pl-card.artist .pl-cover { border-radius: 50%; }
+html[data-style="music"] .pl-card.artist .pl-card-t { margin-top: 10px; font-weight: 500; }
+html[data-style="music"] .pl-card.artist .pl-card-a { font-size: 13px; }
+
+/* ── Fix Local Files ─────────────────────────────────────────────────── */
+html[data-style="music"] #view-local .local-target { padding: 0; border: 0; background: transparent; }
+html[data-style="music"] #view-local .local-target > .s-title { display: none; }
+html[data-style="music"] #view-local .local-drop-zone {
+  flex-direction: row; align-items: center; gap: 20px; padding: 28px;
+  border: 2px dashed var(--rule-strong); border-radius: 14px; background: transparent;
+}
+html[data-style="music"] #view-local .local-drop-icon {
+  width: 56px; height: 56px; flex: none; display: grid; place-items: center; border: 0; border-radius: 14px;
+  background: color-mix(in srgb, var(--signal) 14%, transparent); color: var(--signal-text);
+}
+html[data-style="music"] #view-local .local-drop-icon svg { width: 26px; height: 26px; color: currentColor; }
+html[data-style="music"] #view-local .local-drop-zone-text { font-size: 17px; font-weight: 600; color: var(--text); }
+html[data-style="music"] #view-local #local-path-input { height: 40px; border-radius: 10px; background: var(--m-fill); border: 1px solid var(--rule); font-size: 14px; }
+html[data-style="music"] #view-local .local-drop-main .act-btn { height: 36px; min-height: 36px; padding: 0 22px; border-radius: 24px; font-size: 15px; }
+html[data-style="music"] #view-local .local-help { margin-top: 10px; font-size: 13px; color: var(--text-2); }
+html[data-style="music"] #view-local .local-empty {
+  border: 0; background: transparent; color: var(--text-2);
+}
+html[data-style="music"] #view-local .local-empty-icon { border-radius: 14px; background: var(--m-fill); }
+/* The selection and its actions: a bar above the rows. */
+html[data-style="music"] #view-local #local-footer {
+  margin: 0 40px 18px; padding: 10px 12px;
+  border: 1px solid var(--rule); border-radius: 10px; background: var(--m-fill);
+}
+html[data-style="music"] #view-local #local-footer .act-btn.primary { height: 28px; min-height: 28px; padding: 0 12px; border-radius: 14px; font-size: 13px; }
+html[data-style="music"] #view-local .local-search { height: 32px; border: 1px solid var(--rule); border-radius: 8px; background: var(--m-fill); }
+html[data-style="music"] #local-track-rows { gap: 0 !important; }
+html[data-style="music"] #local-track-rows > .local-row { border: 0; border-radius: 6px; padding: 8px 12px; background: transparent; }
+html[data-style="music"] #local-track-rows > .local-row:nth-child(even) { background: var(--m-zebra); }
+html[data-style="music"] #local-track-rows > .local-row:hover { background: var(--m-fill-2); }
+html[data-style="music"] .local-thumb { border-radius: 4px; overflow: hidden; }
+html[data-style="music"] .local-badge { padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+html[data-style="music"] .local-badge.ok { background: color-mix(in srgb, var(--ok) 15%, transparent); }
+html[data-style="music"] .local-badge.warn { color: var(--m-warn); background: color-mix(in srgb, var(--m-warn) 15%, transparent); }
+html[data-style="music"] .local-badge.err { color: var(--text-muted); background: var(--m-fill); }
+html[data-style="music"] .local-convert-btn { border-radius: 10px; background: var(--m-fill); border: 0; }
+html[data-style="music"] #view-local .local-tools,
+html[data-style="music"] #view-local #dedup-results-wrap { border: 1px solid var(--rule); border-radius: 12px; background: var(--m-fill); }
+
+/* ── Stats: tiles with the label on top, the rankings as cards two by two
+   with smooth bars ──────────────────────────────────────────────────── */
+html[data-style="music"] #view-stats .stats-intro { display: none; }
+html[data-style="music"] #view-stats #stats-period,
+html[data-style="music"] #view-stats #stats-smb-destination { height: 28px; min-height: 28px; padding-top: 0; padding-bottom: 0; line-height: 26px; border-radius: 8px; background-color: var(--m-fill); border-color: var(--rule); }
+html[data-style="music"] #view-stats #stats-smb-scan { min-height: 28px; height: 28px; }
+html[data-style="music"] #stats-body {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start;
+}
+html[data-style="music"] #stats-body > :is(.stat-tiles, .stats-source-note, .s-label) { grid-column: 1 / -1; }
+html[data-style="music"] #stats-body > .s-section:only-child { grid-column: 1 / -1; }
+html[data-style="music"] .stat-tiles {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px;
+  margin: 0 0 10px; border: 0; border-radius: 0;
+}
+html[data-style="music"] .stat-tile {
+  display: flex; flex-direction: column; padding: 14px 16px;
+  border: 1px solid var(--rule); border-radius: 12px; background: var(--m-fill);
+}
+html[data-style="music"] .stat-tile:last-child { border-right: 1px solid var(--rule); }
+html[data-style="music"] .stat-tile-label {
+  order: -1; margin: 0 0 4px; font-size: 12px; font-weight: 600; color: var(--text-2);
+  letter-spacing: normal; text-transform: none;
+}
+html[data-style="music"] .stat-tile-label::first-letter { text-transform: uppercase; }
+html[data-style="music"] .stat-tile-value {
+  font-family: var(--font-display); font-size: 26px; line-height: 1.1; font-weight: 700; letter-spacing: -.02em;
+}
+html[data-style="music"] .stat-tile-hint { font-size: 12px; color: var(--text-muted); }
+html[data-style="music"] #view-stats #stats-body > .s-section {
+  margin: 0; padding: 18px 20px; border: 1px solid var(--rule); border-radius: 12px; background: var(--m-fill);
+}
+html[data-style="music"] #view-stats #stats-body > .s-section > .s-title {
+  position: static; margin: 0 0 14px; padding: 0;
+  font-family: var(--font-display); font-size: 17px; font-weight: 700; letter-spacing: -.01em; color: var(--text);
+}
+html[data-style="music"] .stat-bar-row { display: grid; grid-template-columns: minmax(0, 150px) 1fr 40px; gap: 10px; padding: 5px 0; min-height: 0; }
+html[data-style="music"] .stat-bar-label { max-width: none; font-size: 14px; }
+html[data-style="music"] .stat-bar-value { font-size: 14px; color: var(--text-2); }
+html[data-style="music"] .stat-bar-track {
+  height: 8px; border-radius: 4px;
+  background: linear-gradient(90deg, var(--signal) 0 calc(var(--v) * 100%), var(--m-fill-2) calc(var(--v) * 100%) 100%);
+  -webkit-mask-image: none; mask-image: none;
+}
+
+/* ── Following ───────────────────────────────────────────────────────── */
+/* The follow form first, as one card: no paragraphs, the bulk form behind
+   a plain button; then New This Week; then who you follow. */
+html[data-style="music"] #view-following > .s-body { display: flex; flex-direction: column; }
+html[data-style="music"] #view-following .m-follow-card { order: -2; }
+html[data-style="music"] #view-following #weekly-section { order: -1; }
+html[data-style="music"] #view-following .s-section {
+  margin: 0 0 40px; padding: 0; border: 0; background: transparent;
+}
+html[data-style="music"] #view-following .m-follow-card {
+  padding: 18px 20px; border: 1px solid var(--rule); border-radius: 12px; background: var(--m-fill);
+}
+html[data-style="music"] #view-following .m-follow-card > .s-title,
+html[data-style="music"] #view-following .m-follow-card > p { display: none; }
+html[data-style="music"] #view-following .m-follow-card > .s-row { gap: 10px; align-items: center; flex-wrap: nowrap; }
+html[data-style="music"] #view-following #subscription-url-input { height: 40px; border-radius: 10px; background-color: var(--m-fill); border-color: var(--rule); font-size: 14px; }
+html[data-style="music"] #view-following .m-follow-card select { height: 32px; border-radius: 8px; background-color: var(--m-fill); border-color: var(--rule); font-size: 14px; }
+html[data-style="music"] #view-following .m-follow-card > .s-row > .act-btn {
+  height: 36px; min-height: 36px; padding: 0 22px; border-radius: 24px; font-size: 15px;
+  background: var(--m-key); color: var(--m-key-ink);
+}
+html[data-style="music"] .m-bulk-toggle {
+  display: inline-block; margin-top: 10px; padding: 0 6px; height: 28px; border: 0; background: none;
+  font: 600 13px var(--font); color: var(--text); cursor: pointer;
+}
+html[data-style="music"] body.light-theme .m-bulk-toggle { color: var(--signal-text); }
+html[data-style="music"] #view-following .bulk-follow { display: none; border-top: 0; margin-top: 8px; }
+html[data-style="music"] #view-following .bulk-follow.m-open { display: block; }
+html[data-style="music"] #view-following .s-title {
+  margin: 0 0 10px; padding: 0; font-size: 17px; font-weight: 700; color: var(--text);
+}
+html[data-style="music"] #weekly-section > .s-row { margin-bottom: 10px; }
+html[data-style="music"] #weekly-section #weekly-days { height: 28px; border-radius: 8px; background-color: var(--m-fill); border-color: var(--rule); }
+html[data-style="music"] #weekly-status { font-size: 13px; color: var(--text-2); }
+html[data-style="music"] #weekly-list {
+  display: grid !important; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px;
+}
+html[data-style="music"] #weekly-list .weekly-row {
+  padding: 12px 14px; border: 1px solid var(--rule); border-radius: 12px; background: var(--m-fill);
+}
+html[data-style="music"] #weekly-list .weekly-day { min-width: 0; font-size: 11px; font-weight: 600; color: var(--signal-text); }
+html[data-style="music"] #weekly-list .weekly-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 2px; }
+html[data-style="music"] #weekly-list .weekly-day { grid-column: 1 / -1; }
+html[data-style="music"] #weekly-list .weekly-title { font-size: 14px; }
+html[data-style="music"] #weekly-list .weekly-artist { font-size: 13px; color: var(--text-2); }
+html[data-style="music"] #weekly-list .act-btn { height: 28px; min-height: 28px; border-radius: 14px; }
+/* Followed artists and playlists: round photos (square covers for
+   playlists) in a grid, the controls under each. */
+html[data-style="music"] #subscription-list.sort-list {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 28px 22px;
+}
+html[data-style="music"] .sub-row {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0;
+  border: 0; text-align: center;
+}
+html[data-style="music"] .sub-row:hover { background: transparent; }
+html[data-style="music"] .sub-art { width: 100%; height: auto; aspect-ratio: 1; border: 0; box-shadow: 0 0 0 1px var(--rule) inset; background: var(--m-fill-2); }
+html[data-style="music"] .sub-art.is-playlist { border-radius: 10px; }
+html[data-style="music"] .sub-art svg { width: 40px; height: 40px; }
+html[data-style="music"] .sub-main { align-items: center; width: 100%; margin-top: 4px; }
+html[data-style="music"] .sub-name-row { justify-content: center; }
+html[data-style="music"] .sub-kind { display: none; }
+html[data-style="music"] .sub-name { font-size: 14px; font-weight: 500; }
+html[data-style="music"] .sub-state { border-radius: 8px; letter-spacing: normal; text-transform: none; }
+html[data-style="music"] .sub-facts,
+html[data-style="music"] .sub-meta { font-size: 12px; color: var(--text-2); white-space: normal; }
+html[data-style="music"] .sub-meta { color: var(--text-muted); }
+html[data-style="music"] .sub-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+html[data-style="music"] .sub-actions select { width: 100%; height: 28px; border-radius: 8px; background-color: var(--m-fill); border-color: var(--rule); font-size: 12px; }
+html[data-style="music"] .sub-actions .sub-btn { height: 24px; min-height: 24px; padding: 0 10px; border-radius: 12px; font-size: 12px; }
+
+@media (max-width: 1100px) {
+  html[data-style="music"] #stats-body { grid-template-columns: minmax(0, 1fr); }
+  html[data-style="music"] #hist-list .page-row { grid-template-columns: 48px minmax(0, 1fr) 70px 80px auto; }
+  html[data-style="music"] #hist-list :is(.m-h-album, .m-h-q) { display: none; }
+}
+@media (max-width: 700px) {
+  html[data-style="music"] :is(#view-local, #view-following, #view-stats, #view-queue, #view-history) > .s-header { padding: 20px 16px 14px; grid-template-columns: minmax(0, 1fr); }
+  html[data-style="music"] :is(#view-local, #view-following, #view-stats, #view-queue, #view-history) > .s-header > .s-actions { grid-column: 1; grid-row: 3; margin-top: 10px; flex-wrap: wrap; }
+  html[data-style="music"] :is(#view-queue, #view-history) > .page-body,
+  html[data-style="music"] :is(#view-local, #view-following, #view-stats) > .s-body,
+  html[data-style="music"] #view-player #player-body { padding: 0 16px 32px; }
+  html[data-style="music"] #view-local .local-drop-zone { flex-direction: column; align-items: stretch; }
+  html[data-style="music"] #view-following .m-follow-card > .s-row { flex-wrap: wrap; }
+  html[data-style="music"] #view-history .page-body > .seg-tabs { margin-bottom: 14px; }
+  html[data-style="music"] #view-history .tb-search.tb-grow { flex: 1 1 auto; margin-left: 0; }
+}
+
+/* Empty states: centred, a sentence-case title, a rounded tile. */
+html[data-style="music"] .empty-state { align-items: center; text-align: center; padding: 44px 24px; }
+html[data-style="music"] .empty-state .es-icon { border: 0; border-radius: 12px; background: var(--m-fill); color: var(--text-2); }
+html[data-style="music"] .empty-state .es-title {
+  font-family: var(--font); font-size: 15px; font-weight: 600; color: var(--text);
+  letter-spacing: normal; text-transform: none;
+}
+html[data-style="music"] .empty-state .es-hint { font-size: 13px; color: var(--text-2); }
+html[data-style="music"] #subscription-list > :is(.empty-state, .s-label) { grid-column: 1 / -1; }
+html[data-style="music"] #view-queue .queue-summary .qs-item { text-transform: none; letter-spacing: normal; }
+html[data-style="music"] #view-following .s-section > .s-row { border-top: 0; }
+html[data-style="music"] .player-grid:has(> .pl-card.artist) { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+
+/* ── Settings › Status, like the mockup ──────────────────────────────── */
+/* Each list is its own panel under a section title; the run button and
+   the overall readout sit on the first title's line as plain text; each
+   source is a row with its logo, its name and a coloured dot + word. */
+html[data-style="music"] #tc-status .status-panel {
+  padding: 0; border: 0; background: transparent; margin-top: 30px;
+}
+html[data-style="music"] #tc-status .status-panel-header {
+  position: absolute; top: -6px; right: 4px; margin: 0;
+}
+html[data-style="music"] #tc-status .status-panel-header > div:first-child { display: none; }
+html[data-style="music"] #tc-status .status-toolbar { gap: 12px; flex-wrap: nowrap; }
+html[data-style="music"] #tc-status .status-check-all {
+  height: auto; padding: 0; border: 0; background: transparent;
+  color: var(--text); font-size: 13px; font-weight: 600;
+}
+html[data-style="music"] #tc-status .status-check-all:hover { background: transparent; color: var(--signal-text, var(--signal)); }
+html[data-style="music"] #tc-status .status-overall,
+html[data-style="music"] #tc-status .status-overall.online,
+html[data-style="music"] #tc-status .status-overall.offline {
+  order: -1; height: auto; padding: 0; border: 0;
+  color: var(--text-muted); font-size: 12px; font-weight: 400;
+  letter-spacing: normal; text-transform: none;
+}
+html[data-style="music"] #tc-status .status-overall-icon { display: none; }
+html[data-style="music"] #tc-status .status-section-title {
+  margin: 22px 4px 8px; padding: 0; border: 0;
+  font-size: 13px; font-weight: 600; color: var(--text-2);
+}
+html[data-style="music"] #tc-status .status-panel-header + .status-section-title { margin-top: 0; }
+html[data-style="music"] #tc-status .status-section-hint { font-size: 12px; color: var(--text-muted); }
+html[data-style="music"] #tc-status .status-grid {
+  display: block; margin: 0; padding: 0 16px;
+  border: 1px solid var(--rule); border-radius: 12px; background: var(--m-fill);
+}
+html[data-style="music"] #tc-status .status-grid > .s-label { padding: 13px 0; color: var(--text-2); }
+html[data-style="music"] #tc-status .status-card {
+  padding: 9px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none;
+}
+html[data-style="music"] #tc-status .status-card + .status-card { border-top: 1px solid var(--rule); }
+html[data-style="music"] #tc-status .status-card-left { gap: 12px; }
+html[data-style="music"] #tc-status .status-card-name { font-size: 13px; font-weight: 500; }
+html[data-style="music"] #tc-status .status-card .svc-icon {
+  width: 28px; height: 28px; border-radius: 7px; font-size: 12px;
+}
+html[data-style="music"] #tc-status .status-card > .s-label {
+  padding: 2px 0 0 40px; font-size: 12px; color: var(--text-muted);
+}
+html[data-style="music"] #tc-status .status-icon-dot {
+  display: inline-flex; align-items: center; gap: 6px;
+  width: auto; height: auto; padding: 0; border: 0; background: transparent;
+  font-size: 0; color: var(--text-muted);
+}
+html[data-style="music"] #tc-status .status-icon-dot::before {
+  content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor;
+}
+html[data-style="music"] #tc-status .status-icon-dot::after { content: "Not checked"; font-size: 12px; color: var(--text-2); }
+html[data-style="music"] #tc-status .status-icon-dot.online { color: var(--ok); }
+html[data-style="music"] #tc-status .status-icon-dot.online::after { content: "Online"; }
+html[data-style="music"] #tc-status .status-icon-dot.offline { color: var(--error); }
+html[data-style="music"] #tc-status .status-icon-dot.offline::after { content: "Offline"; }
+html[data-style="music"] #tc-status .status-icon-dot.checking { color: var(--text-2); }
+html[data-style="music"] #tc-status .status-icon-dot.checking::after { content: "Checking…"; }
+
+/* ── Settings › Extensions, like the mockup ──────────────────────────── */
+/* The list leads each panel, its rows split by hairlines; Refresh and the
+   like move up to the section title's line as plain text buttons; the
+   explanation drops to a small footnote at the bottom of the panel. */
+html[data-style="music"] #tc-extensions .s-section { display: flex; flex-direction: column; padding: 0 16px; }
+html[data-style="music"] #tc-extensions .s-section > .sort-list { order: 1; margin: 0; gap: 0; }
+html[data-style="music"] #tc-extensions .s-section > .s-row { order: 2; border-top: 1px solid var(--rule); }
+html[data-style="music"] #tc-extensions .s-section > p {
+  order: 3; margin: 0; padding: 10px 0 12px; border-top: 1px solid var(--rule);
+  font-size: 12px; line-height: 1.45; color: var(--text-muted);
+}
+html[data-style="music"] #tc-extensions .s-section > p + .s-row:not(:has(input)) {
+  position: absolute; top: -30px; right: 4px;
+  min-height: 0; padding: 0; gap: 14px; border: 0;
+}
+html[data-style="music"] #tc-extensions .s-section > p + .s-row:not(:has(input)) .act-btn {
+  height: auto; min-height: 0; padding: 0; border: 0; background: transparent;
+  color: var(--text); font-size: 13px; font-weight: 600; box-shadow: none;
+}
+html[data-style="music"] #tc-extensions .s-section > p + .s-row:not(:has(input)) .act-btn:hover { color: var(--signal-text, var(--signal)); }
+html[data-style="music"] #tc-extensions .s-section > .s-row:has(input) input { height: 32px; border-radius: 8px; }
+html[data-style="music"] #tc-extensions .s-section > .s-row .act-btn { height: 28px; min-height: 28px; padding: 0 12px; border-radius: 14px; }
+html[data-style="music"] #tc-extensions .sort-list > .sort-item {
+  margin: 0; padding: 10px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none;
+}
+html[data-style="music"] #tc-extensions .sort-list > .sort-item:hover { background: transparent; }
+html[data-style="music"] #tc-extensions .sort-list > * + * { border-top: 1px solid var(--rule); }
+html[data-style="music"] #tc-extensions .sort-list > .s-label { padding: 13px 0; font-size: 13px; color: var(--text-2); }
+html[data-style="music"] #tc-extensions .sort-list:empty { display: none; }
+html[data-style="music"] #tc-extensions .reg-url { font-size: 13px; }
+/* The footnote is shown whole: clamping it to two lines let the clipped
+   third line show through the panel's bottom padding, and hid the half of
+   the explanation that says what "never tried" means. */
+html[data-style="music"] #tc-extensions .s-section > .s-row .act-btn.primary {
+  border: 0; background: var(--m-fill-2); color: var(--text); font-weight: 500;
+}
+/* Playlist / album head: Play, Shuffle, Edit and Export as separate pills. */
+html[data-style="music"] .pl-detail-actions { gap: 8px; flex-wrap: wrap; }
+/* Selects squeezed to 28–32px keep their text whole: no vertical padding,
+   the line centred by its own height. */
+html[data-style="music"] :is(#weekly-days, #subscription-groups, #subscription-interval) {
+  padding-top: 0; padding-bottom: 0; line-height: normal;
+}
+
+/* ── Now Playing, like the mockup ────────────────────────────────────── */
+/* The cover itself, blurred and saturated, is the backdrop (the average
+   colour of a dark cover came out almost black), dimmed a little so white
+   text stays readable on a pale one. */
+html[data-style="music"] #np-view > #np-bg {
+  inset: -80px; transform: scale(1.2);
+  background: var(--np-art, none) center / cover no-repeat, var(--np-bg, linear-gradient(135deg, var(--media-tint-from), var(--media-tint-to)));
+  filter: blur(70px) saturate(1.6);
+}
+html[data-style="music"] #np-bg::after { content: ""; position: absolute; inset: 0; background: rgba(var(--shade-rgb), .28); }
+
+/* Close: a round translucent button with a chevron down. */
+html[data-style="music"] .np-close {
+  top: 22px; left: 24px; width: 34px; height: 34px; padding: 0; border-radius: 50%;
+  display: grid; place-items: center; font-size: 0;
+  background: rgba(var(--media-ink-rgb), .14);
+}
+/* Centred on its own: the button still holds the console look's "✕" (font
+   size 0), which as a grid item took a row of its own and pushed the
+   chevron 4px up. */
+html[data-style="music"] .np-close::before {
+  content: ""; position: absolute; inset: 0; margin: auto;
+  width: 18px; height: 18px; background: var(--media-ink);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+/* Volume, Lyrics sync and the Lyrics / Queue switch stay, without panels. */
+html[data-style="music"] .np-volume { top: 22px; right: 28px; padding: 6px 0; background: transparent; opacity: .7; }
+html[data-style="music"] .np-volume:hover { opacity: 1; }
+html[data-style="music"] .np-volume input { width: 150px; }
+html[data-style="music"] .np-sync-controls > summary {
+  border: 0; border-radius: 14px; background: rgba(var(--media-ink-rgb), .12); opacity: .75;
+}
+html[data-style="music"] .np-sync-controls > summary:hover,
+html[data-style="music"] .np-sync-controls[open] > summary { opacity: 1; }
+html[data-style="music"] .np-sync-panel { border-radius: 12px; }
+html[data-style="music"] .np-tabs { gap: 2px; padding: 4px; border-radius: 22px; background: rgba(var(--media-ink-rgb), .1); }
+html[data-style="music"] .np-tab { width: 34px; height: 34px; border-radius: 50%; }
+
+/* The cover's halo, and the column under it as wide as the cover. */
+html[data-style="music"] .np-cover-wrap { box-shadow: 0 30px 60px rgba(var(--shade-rgb), .45); }
+html[data-style="music"] :is(.np-meta, .np-seek-wrap, .np-times, .np-controls) {
+  width: min(100%, max(160px, 100dvh - 340px)); align-self: center;
+}
+html[data-style="music"] .np-sep::before { content: " \2014  "; }
+
+/* Seek: a thin white line. */
+html[data-style="music"] .np-seek {
+  height: 5px;
+  background: linear-gradient(to right,
+    rgba(var(--media-ink-rgb), .85) 0 var(--p, 0%),
+    rgba(var(--media-ink-rgb), .25) var(--p, 0%) 100%);
+}
+html[data-style="music"] .np-seek-wrap:hover .np-seek,
+html[data-style="music"] .np-seek.dragging { height: 9px; }
+
+/* The format as a small outlined pill, in plain case. */
+html[data-style="music"] #np-tech {
+  padding: 1px 8px; border: 1px solid rgba(var(--media-ink-rgb), .3); border-radius: 6px;
+  font-family: inherit; font-size: 12px; font-weight: 500; letter-spacing: normal; text-transform: none;
+  color: rgba(var(--media-ink-rgb), .78);
+}
+html[data-style="music"] #np-tech:empty { display: none; }
+html[data-style="music"] #np-title { font-family: var(--font-display); }
+
+/* Transport: bare glyphs, Shuffle and Repeat on the cover's edges; a mode
+   that is on is full white with a dot under it. */
+html[data-style="music"] .np-controls { justify-content: space-between; gap: 0; margin-top: 10px; }
+html[data-style="music"] .np-btn,
+html[data-style="music"] .np-btn.np-play { padding: 6px; border-radius: 50%; background: transparent; color: var(--media-ink); }
+html[data-style="music"] .np-btn:hover { background: rgba(var(--media-ink-rgb), .1); }
+html[data-style="music"] .np-mode { opacity: .7; }
+html[data-style="music"] .np-mode.on { opacity: 1; background: transparent; }
+html[data-style="music"] .np-mode.on::after {
+  content: ""; position: absolute; left: 50%; bottom: -4px; width: 4px; height: 4px; margin-left: -2px;
+  border-radius: 50%; background: currentColor;
+}
+
+/* Lyrics: sharp lines, every line still being sung white (two overlap at a
+   hand-over, as npUpdate marks them) and the rest dimmed. The sung line is
+   scrolled to npInset() (34-56px) from the top, its glyphs 9px lower: the fade ends at 40px so it
+   stays whole, while the line above it is hidden instead of sliced. */
+html[data-style="music"] .np-line { filter: none; color: rgba(var(--media-ink-rgb), .38); transition: color .3s ease; }
+html[data-style="music"] .np-line.active { color: var(--media-ink); }
+html[data-style="music"] :is(.np-lyrics, .np-queue) {
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, transparent 26px, var(--ink) 40px, var(--ink) calc(100% - 90px), transparent 100%);
+          mask-image: linear-gradient(180deg, transparent 0, transparent 26px, var(--ink) 40px, var(--ink) calc(100% - 90px), transparent 100%);
+}
+
+/* ── Player pill, like the mockup ────────────────────────────────────── */
+/* Bare round controls: no square frames, no red borders (those are the
+   console look's, from layout.css); a mode that is on takes the signal
+   colour. On the right Lyrics, Up Next and the volume; the statistics and
+   the full-player button give way to them (I and the display still open
+   both). */
+html[data-style="music"] #player-bar { grid-template-columns: auto minmax(0, 1fr) repeat(6, auto); gap: 10px; }
+html[data-style="music"] #player-bar .pl-btn,
+html[data-style="music"] #player-bar .pl-btn:hover,
+html[data-style="music"] #player-bar .pl-btn.pl-mode.on,
+html[data-style="music"] #player-bar .pl-btn.pl-mode.on:hover,
+html[data-style="music"] #player-bar .pl-btn.pl-main {
+  width: 30px; height: 30px; border: 0; border-radius: 50%; background: transparent; box-shadow: none;
+}
+html[data-style="music"] #player-bar .pl-btn { color: var(--text-2); }
+html[data-style="music"] #player-bar .pl-btn:hover { background: var(--m-fill); color: var(--text); }
+html[data-style="music"] #player-bar .pl-controls > .pl-btn:not(.pl-mode) { color: var(--text); }
+html[data-style="music"] #player-bar .pl-btn.pl-main { width: 34px; height: 34px; }
+html[data-style="music"] #player-bar .pl-btn.pl-mode.on { color: var(--signal); }
+html[data-style="music"] #player-bar .pl-btn:focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; }
+html[data-style="music"] #player-bar .m-only { display: inline-flex; }
+html[data-style="music"] #player-bar .pl-vol-icon { color: var(--text-2); flex: none; margin-right: -4px; }
+html[data-style="music"] #player-bar :is(#pl-stats-btn, .pl-btn[aria-label="Open the full player"]) { display: none; }
+html[data-style="music"] #player-bar .pl-btn[aria-label="Close player"] { width: 24px; height: 24px; font-size: 12px; color: var(--text-muted); }
+html[data-style="music"] #player-bar .pl-quality {
+  display: inline-block; margin-top: 1px; padding: 0 5px; border: 1px solid var(--rule-strong); border-radius: 4px;
+  font-size: 10px; color: var(--text-2);
+}
+html[data-style="music"] #player-bar .pl-quality:empty { display: none; }
+
+/* ── Action menus, music look: a frosted rounded panel ───────────────── */
+html[data-style="music"] .action-menu {
+  padding: 6px; border: 1px solid var(--m-pill-edge); border-radius: 12px;
+  background: var(--m-pill); box-shadow: var(--m-shadow);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8); backdrop-filter: blur(40px) saturate(1.8);
+}
+html[data-style="music"] .am-item { min-height: 28px; border-radius: 7px; font-size: 13px; }
+html[data-style="music"] .am-item:hover:not(:disabled),
+html[data-style="music"] .am-item:focus-visible { background: var(--signal); color: var(--signal-ink); }
+html[data-style="music"] .am-item:hover:not(:disabled)::after,
+html[data-style="music"] .am-item:hover:not(:disabled)::before { color: inherit; }
+html[data-style="music"] .am-sep { margin: 5px 8px; }
+
+/* Rows: "+" and "…" as bare round glyphs that show on hover; moving and
+   removing a playlist's songs live in the "…" menu. */
+html[data-style="music"] .pl-row .pl-row-actions { display: none; }
+html[data-style="music"] .pl-row-action {
+  flex-basis: 28px; border: 0; border-radius: 50%; background: transparent; color: var(--text-2); opacity: 0;
+}
+html[data-style="music"] .pl-row:hover .pl-row-action,
+html[data-style="music"] .pl-row-action:focus-visible,
+html[data-style="music"] .pl-row-action[aria-expanded="true"] { opacity: 1; }
+html[data-style="music"] .pl-row-action:hover { background: var(--m-fill-2); color: var(--text); }
+html[data-style="music"] .pl-row-more { color: var(--signal); }
+html[data-style="music"] .pl-detail-actions .pl-more-btn {
+  width: 28px; padding: 0; justify-content: center; border-radius: 50%; color: var(--signal);
+}
+
+/* Now Playing: the "…" sits at the title's right. */
+html[data-style="music"] .np-more { border-radius: 50%; }
+
+/* ── Artist page, as a music app shows one ───────────────────────────── */
+/* The photo runs edge to edge from the top of the page, the name and the
+   round buttons (Shuffle, a white Play, "…") at its foot; under it Latest
+   Release beside Top Songs (three rows, scrolling sideways), then shelves. */
+html[data-style="music"] #view-player.is-artist-page > .s-header,
+html[data-style="music"] #view-player.is-artist-page #player-toolbar,
+html[data-style="music"] #view-player.is-artist-page #player-libbar { display: none; }
+html[data-style="music"] #view-player.is-artist-page #player-scroll { margin: 0 -40px; padding: 0 40px; }
+html[data-style="music"] #view-player.is-artist-page .pl-artist-hero {
+  margin: 0 -40px; min-height: min(62vh, 560px);
+  place-items: end center; padding: 72px 40px 34px; border-radius: 0;
+}
+html[data-style="music"] .pl-artist-hero .pl-artist-hero-bg { inset: 0; filter: saturate(1.05) brightness(.8); transform: none; }
+html[data-style="music"] .pl-artist-hero::after {
+  background: linear-gradient(180deg, rgba(var(--shade-rgb), .25) 0%, rgba(var(--shade-rgb), 0) 35%, rgba(var(--shade-rgb), .7) 100%);
+}
+html[data-style="music"] .pl-artist-name { font-family: var(--font-display); font-size: clamp(36px, 6vw, 72px); font-weight: 800; }
+html[data-style="music"] .pl-artist-actions { gap: 18px; margin-top: 12px; }
+html[data-style="music"] .pl-round { width: 40px; height: 40px; background: rgba(var(--media-ink-rgb), .2); }
+html[data-style="music"] .pl-round svg { width: 18px; height: 18px; }
+html[data-style="music"] .pl-round.primary { width: 56px; height: 56px; background: var(--media-ink); color: var(--media-ink-inverse); }
+html[data-style="music"] .pl-round.primary svg { width: 24px; height: 24px; margin-left: 2px; }
+html[data-style="music"] .pl-round.primary:hover { background: var(--media-ink); }
+html[data-style="music"] .pl-sec-title { font-family: var(--font-display); font-size: 20px; font-weight: 700; }
+html[data-style="music"] .pl-sec-link span { color: var(--text-2); }
+html[data-style="music"] .pl-artist-cols { grid-template-columns: minmax(220px, 1fr) minmax(0, 2.6fr); gap: 36px; padding-top: 28px; }
+html[data-style="music"] .pl-latest { grid-template-columns: 150px minmax(0, 1fr); align-items: end; padding: 0; background: transparent; }
+html[data-style="music"] .pl-latest:hover { background: transparent; }
+html[data-style="music"] .pl-latest-cover { width: 150px; border-radius: 6px; overflow: hidden; }
+html[data-style="music"] .pl-latest-date { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-2); }
+html[data-style="music"] .pl-latest-title { font-size: 14px; }
+html[data-style="music"] .pl-top-list {
+  grid-auto-flow: column; grid-template-rows: repeat(3, auto);
+  grid-auto-columns: minmax(260px, calc((100% - 24px) / 2)); column-gap: 24px;
+  overflow-x: auto; scrollbar-width: none;
+}
+html[data-style="music"] .pl-top-list::-webkit-scrollbar { display: none; }
+html[data-style="music"] .pl-top-row { grid-template-columns: 44px minmax(0, 1fr) auto; padding: 6px 0; border-radius: 0; }
+html[data-style="music"] .pl-top-row:hover { background: transparent; }
+html[data-style="music"] .pl-top-row:hover .pl-top-t { color: var(--signal); }
+html[data-style="music"] .pl-top-cover { width: 44px; border-radius: 4px; overflow: hidden; }
+html[data-style="music"] .pl-top-dur { display: none; }
+html[data-style="music"] .pl-top-more { color: var(--signal); border-radius: 50%; }
+html[data-style="music"] .pl-shelf { padding-top: 30px; }
+html[data-style="music"] .pl-shelf-row {
+  grid-auto-columns: max(150px, calc((100% - 5 * 20px) / 6)); gap: 20px; scrollbar-width: none;
+}
+html[data-style="music"] .pl-shelf-row::-webkit-scrollbar { display: none; }
+html[data-style="music"] .pl-shelf.artists .pl-shelf-row { grid-auto-columns: max(130px, calc((100% - 6 * 20px) / 7)); }
+/* In a shelf a card is exactly its column: the grid's negative card margin
+   (for its hover wash) would push the first one under the row's edge. */
+html[data-style="music"] .pl-shelf-row > .pl-card { margin: 0; padding: 0; background: transparent; }
+
+/* Playlists toolbar: the link field as a music app's search field. */
+html[data-style="music"] #view-player .ppt-link {
+  height: 32px; border: 1px solid var(--rule); border-radius: 8px; background: var(--m-fill);
+}
+html[data-style="music"] #view-player .ppt-link:focus-within { border-color: var(--rule-strong); }
+html[data-style="music"] #view-player .ppt-link input[type="url"] { font-size: 13px; }
+html[data-style="music"] #view-player .ppt-link-go { height: 24px; border-radius: 12px; background: var(--m-fill-2); font-size: 12px; }
+html[data-style="music"] #view-player .ppt-link-go:hover:not(:disabled) { background: var(--signal); color: var(--signal-ink); }
+html[data-style="music"] #view-player .player-playlist-tools .act-btn { height: 32px; min-height: 32px; }
+
+/* The fetch loader: rounder bars, a little larger, the label in the music
+   look's own size. */
+html[data-style="music"] .fetch-loader { padding-top: 96px; }
+html[data-style="music"] .fl-bars { height: 40px; gap: 6px; }
+html[data-style="music"] .fl-bars i { width: 7px; border-radius: 4px; }
+html[data-style="music"] .fl-label { font-size: 13px; font-weight: 500; }
+
+/* ── Artist tint ──────────────────────────────────────────────────────
+   As music.apple.com does with --artist-joe-color: while an Apple Music
+   artist is open on Home, the sidebar and the top of the page take the
+   colour its header video was graded in (--artist-tint, set from the
+   preview frame's bgColor by setArtistExpression in app.js). Light theme
+   keeps a faint wash so dark text still reads. */
+html[data-style="music"] #sidebar,
+html[data-style="music"] #content { transition: background-color var(--motion) ease, background var(--motion) ease; }
+html[data-style="music"][data-artist-tint]:has(#view-home.active #album-card.artist-mode:not(.hidden)) #sidebar {
+  background: color-mix(in srgb, var(--artist-tint) 55%, var(--m-sidebar));
+}
+html[data-style="music"][data-artist-tint]:has(#view-home.active #album-card.artist-mode:not(.hidden)) #content {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--artist-tint) 60%, var(--ground)) 0, var(--ground) 720px);
+}
+html[data-style="music"][data-artist-tint]:has(#view-home.active #album-card.artist-mode:not(.hidden)) body.light-theme #sidebar {
+  background: color-mix(in srgb, var(--artist-tint) 12%, var(--m-sidebar));
+}
+html[data-style="music"][data-artist-tint]:has(#view-home.active #album-card.artist-mode:not(.hidden)) body.light-theme #content {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--artist-tint) 14%, var(--ground)) 0, var(--ground) 720px);
+}
+
+/* ── Songs, as docs/mocks/music-style/ draws it ──────────────────────────
+   The title with the count and length under it and Play / Shuffle at its
+   right; one toolbar (search, Add to, the folder with Rescan, sort); then
+   a table: cover, Title, Artist, Album, Format, Time, "…". The page's
+   boxes step aside (display: contents) so these all line up in one
+   wrapping row of the view; everything else keeps a full line. */
+html[data-style="music"] #view-player.is-songs {
+  flex-flow: row wrap; align-content: flex-start; align-items: center; column-gap: 10px;
+  padding: 32px 40px 40px;
+}
+html[data-style="music"] #view-player.is-songs :is(#player-body, #player-toolbar, #player-toolbar > .pt-row) { display: contents; }
+html[data-style="music"] #view-player.is-songs > *,
+html[data-style="music"] #view-player.is-songs :where(#player-body, #player-toolbar, #player-toolbar > .pt-row) > * { flex: 0 0 100%; min-width: 0; order: 2; }
+/* The line break between the title line and the toolbar. */
+html[data-style="music"] #view-player.is-songs::before { content: ""; flex: 0 0 100%; order: 2; height: 0; }
+html[data-style="music"] #view-player.is-songs > .s-header { flex: 1 1 0; order: 0; padding: 0; margin-bottom: 18px; }
+html[data-style="music"] #view-player.is-songs .player-heading p { display: none; }
+html[data-style="music"] #view-player.is-songs #player-msub { display: block; margin-top: 2px; font-size: 15px; color: var(--text-2); }
+html[data-style="music"] #view-player.is-songs #player-msub:empty { display: none; }
+html[data-style="music"] #view-player.is-songs #player-play-controls { flex: none; order: 1; align-self: center; margin-bottom: 18px; }
+/* The toolbar line. */
+html[data-style="music"] #view-player.is-songs :is(#player-search-wrap, #player-add-select-wrap, #player-libbar, #player-sort-wrap) {
+  flex: none; order: 3; margin-bottom: 14px;
+}
+html[data-style="music"] #view-player.is-songs #player-search-wrap { flex: 0 1 220px; }
+html[data-style="music"] #view-player.is-songs #player-libbar { order: 4; margin-left: auto; }
+html[data-style="music"] #view-player.is-songs #player-sort-wrap { order: 5; }
+html[data-style="music"] #view-player.is-songs #player-count,
+html[data-style="music"] #view-player.is-songs #plb-stats { display: none; }
+/* A scan's progress needs the whole line. */
+html[data-style="music"] #view-player.is-songs #player-libbar:has(#plb-scan:not(.hidden)) { flex: 0 0 100%; margin-left: 0; }
+html[data-style="music"] #view-player.is-songs #player-colhead { order: 6; }
+/* The page scrolls, not a box inside it. */
+html[data-style="music"] #view-player.is-songs #player-scroll { order: 7; flex: 0 0 100%; min-height: 0; overflow: visible; margin: 0; padding: 0; }
+/* The table. */
+html[data-style="music"] #view-player.is-songs :is(.pl-row, .pt-colhead) {
+  grid-template-columns: 36px minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 1.3fr) 60px 50px 28px 28px;
+  gap: 0 14px; padding: 4px 12px;
+}
+html[data-style="music"] #view-player.is-songs .pt-colhead {
+  min-height: 30px; align-items: center; margin-bottom: 4px; padding-block: 0;
+  border-bottom: 1px solid var(--rule); border-radius: 0;
+}
+html[data-style="music"] #view-player.is-songs :is(.pl-num, .pt-colhead .c-num, .pl-a) { display: none; }
+html[data-style="music"] #view-player.is-songs .pl-main { display: contents; }
+html[data-style="music"] #view-player.is-songs :is(.pl-c-artist, .pl-c-album, .c-artist, .c-album) {
+  display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+html[data-style="music"] #view-player.is-songs :is(.pl-c-artist, .pl-c-album) { font-size: 14px; color: var(--text-2); }
+html[data-style="music"] #view-player.is-songs :is(.pl-thumb, .c-art) { order: 1; }
+html[data-style="music"] #view-player.is-songs :is(.pl-main-info, .c-title) { order: 2; min-width: 0; margin-right: 0; overflow: hidden; }
+html[data-style="music"] #view-player.is-songs :is(.pl-c-artist, .c-artist) { order: 3; }
+html[data-style="music"] #view-player.is-songs :is(.pl-c-album, .c-album) { order: 4; }
+html[data-style="music"] #view-player.is-songs :is(.pl-fmt, .c-fmt) { order: 5; justify-self: start; text-align: left; }
+html[data-style="music"] #view-player.is-songs :is(.pl-dur, .c-dur) { order: 6; text-align: right; }
+html[data-style="music"] #view-player.is-songs .pl-row-action { order: 7; justify-self: center; width: 28px; height: 28px; }
+html[data-style="music"] #view-player.is-songs .pl-row-more { order: 8; opacity: 1; color: var(--text-2); }
+html[data-style="music"] #view-player.is-songs .pl-row-more:hover { color: var(--text); }
+@media (max-width: 900px) {
+  html[data-style="music"] #view-player.is-songs :is(.pl-row, .pt-colhead) { grid-template-columns: 36px minmax(0, 1fr) 50px 28px 28px; }
+  html[data-style="music"] #view-player.is-songs :is(.pl-c-artist, .pl-c-album, .c-artist, .c-album, .pl-fmt, .c-fmt) { display: none; }
+  html[data-style="music"] #view-player.is-songs .pl-a { display: block; }
+}
+@media (max-width: 700px) {
+  html[data-style="music"] #view-player.is-songs { padding: 20px 16px 32px; }
+  html[data-style="music"] #view-player.is-songs #player-libbar { order: 3; margin-left: 0; }
+}
