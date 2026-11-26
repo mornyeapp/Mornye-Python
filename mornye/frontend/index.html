@@ -1822,6 +1822,32 @@
               <span class="svc-status" id="discord-status" role="status"><span class="svc-dot"></span><span class="svc-text">Off</span></span>
             </div>
           </div>
+          <!-- Last.fm scrobbling (core/scrobbler.py). Desktop only; drawn by
+               loadIntegrationSettings(). The secret is never sent back. -->
+          <div class="s-section hidden" id="lastfm-section">
+            <div class="s-title">Last.fm</div>
+            <div class="s-row">
+              <span class="s-label">Scrobble to Last.fm<small>A song is scrobbled once you have heard half of it or four minutes, and never one under thirty seconds. Scrobbles that cannot be sent are kept and tried again.</small></span>
+              <label class="toggle"><input type="checkbox" id="lastfm-enabled" data-onchange="saveLastFm('enabled', this.checked)"><span class="toggle-sl"></span></label>
+            </div>
+            <div class="s-row">
+              <span class="s-label">API key<small><a href="#" data-onclick="openServiceUrl('https://www.last.fm/api/account/create'); return false">Create an API account</a> on Last.fm (any name will do) and paste its API key and shared secret.</small></span>
+              <input type="text" class="full" id="lastfm-key" autocomplete="off" spellcheck="false" data-onchange="saveLastFm('api_key', this.value)">
+            </div>
+            <div class="s-row">
+              <span class="s-label">Shared secret</span>
+              <input type="password" class="full" id="lastfm-secret" autocomplete="off" placeholder="Not set" data-onchange="saveLastFm('secret', this.value)">
+            </div>
+            <div class="s-row">
+              <span class="s-label">Account<small id="lastfm-pending" class="hidden"></small></span>
+              <div class="svc-actions">
+                <span class="svc-status" id="lastfm-status" role="status"><span class="svc-dot"></span><span class="svc-text">Off</span></span>
+                <button class="act-btn secondary u-p-5-12 u-fs-11_5" type="button" id="lastfm-connect" data-onclick="connectLastFm()">Connect…</button>
+                <button class="act-btn secondary u-p-5-12 u-fs-11_5 hidden" type="button" id="lastfm-disconnect" data-onclick="disconnectLastFm()">Disconnect</button>
+                <button class="act-btn secondary u-p-5-12 u-fs-11_5 hidden" type="button" id="lastfm-retry" data-onclick="retryLastFm()">Retry now</button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="tc" id="tc-extensions" data-title="Extensions">

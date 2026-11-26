@@ -403,11 +403,13 @@ EXTENSION_SETTINGS_ADMIN_METHODS = {
 #       Mornye Connect's server speaker (core/connect/speaker.py): off until
 #       an admin turns it on, and offered to admin accounts only.
 #
-#   set_now_playing / get_discord_presence / save_discord_presence
+#   set_now_playing / get_discord_presence / save_discord_presence /
+#   get_lastfm / save_lastfm / connect_lastfm / disconnect_lastfm /
+#   retry_lastfm
 #       (api_mixins/integrations.py) Discord Rich Presence talks to the
-#       Discord client of the machine running Mornye. Over --web that is
-#       the server's, not the listener's, and its settings are one per
-#       install, not per user.
+#       Discord client of the machine running Mornye, and Last.fm signs in
+#       one account per install. Over --web both would be the server's,
+#       not the listener's (record_listening skips the scrobble there too).
 
 
 class LoginRateLimiter:

@@ -11663,7 +11663,7 @@ function playerShowQuality() {
 var listenState = null;
 
 function listenNew(item, quality) {
-  return { item, quality: quality || '', duration: 0, ms: 0, sent: 0, counted: false, last: null, playing: false, ended: false };
+  return { item, quality: quality || '', duration: 0, ms: 0, sent: 0, counted: false, last: null, playing: false, ended: false, started: Date.now() / 1000 };
 }
 
 // Adds the time since the last tick while playing; a gap longer than
@@ -11694,7 +11694,11 @@ function listenPiece(state, final = false, playMs = 30000) {
   state.sent += ms;
   if (play) state.counted = true;
   const it = state.item || {};
-  return { path: it.path || '', title: it.title || '', artist: it.artist || '', album: it.album || '', quality: state.quality, ms, play, outcome };
+  const piece = { path: it.path || '', title: it.title || '', artist: it.artist || '', album: it.album || '', quality: state.quality, ms, play, outcome };
+  // The final piece also carries what a Last.fm scrobble needs: the whole
+  // time heard, the song's length and when it started (core/scrobbler.py).
+  if (outcome) Object.assign(piece, { heard: state.ms / 1000, duration: state.duration || 0, started: state.started || 0 });
+  return piece;
 }
 
 function listenSend(final = false) {
@@ -12354,7 +12358,7 @@ let g_linkPinShown = '';
 
 function stopLinkPolling() { clearInterval(g_linkPoll); g_linkPoll = null; stopIntegrationPolling(); }
 
-// ── Services: Discord (api_mixins/integrations.py) ─────────────────────────
+// ── Services: Discord and Last.fm (api_mixins/integrations.py) ────────────
 // Desktop only. A connection is made in the background, so the status is
 // asked again every few seconds while Settings › Player is open.
 var g_integrationPoll = null;
@@ -12390,10 +12394,62 @@ async function loadIntegrationSettings() {
   const api = window.pywebview?.api;
   const available = !window.__MORNYE_WEB_MODE__ && !!api?.get_discord_presence;
   $('discord-section')?.classList.toggle('hidden', !available);
+  $('lastfm-section')?.classList.toggle('hidden', !available || !api?.get_lastfm);
   if (!available) return;
   renderDiscordPresence(await linkCall('get_discord_presence'));
+  renderLastFm(await linkCall('get_lastfm'));
   if (!g_integrationPoll) g_integrationPoll = setInterval(loadIntegrationSettings, 4000);
 }
+
+// ── Services: Last.fm (core/scrobbler.py) ──────────────────────────────────
+function renderLastFm(s) {
+  if (!s || s.status !== 'ok') return;
+  const box = $('lastfm-enabled'), key = $('lastfm-key'), secret = $('lastfm-secret');
+  if (box) box.checked = !!s.enabled;
+  if (key && document.activeElement !== key) key.value = s.api_key || '';
+  if (secret && document.activeElement !== secret) {
+    secret.value = '';
+    secret.placeholder = s.has_secret ? 'Saved — type to replace' : 'Not set';
+  }
+  for (const el of [key, secret]) if (el) el.disabled = !s.enabled;
+  const connect = $('lastfm-connect');
+  if (connect) {
+    connect.classList.toggle('hidden', !!s.connected);
+    connect.disabled = !s.enabled || !s.api_key || !s.has_secret || !!s.authorising;
+    connect.textContent = s.authorising ? 'Waiting…' : 'Connect…';
+  }
+  $('lastfm-disconnect')?.classList.toggle('hidden', !s.connected);
+  $('lastfm-retry')?.classList.toggle('hidden', !s.connected || !s.pending);
+  const pending = $('lastfm-pending');
+  if (pending) {
+    pending.classList.toggle('hidden', !s.pending);
+    pending.textContent = s.pending ? `${s.pending} scrobble${s.pending === 1 ? '' : 's'} waiting to be sent` : '';
+  }
+  renderServiceStatus('lastfm-status', s.connected, s.enabled, s.status_text);
+}
+
+async function lastFmCall(name, ...args) {
+  let res = null;
+  try { res = await window.pywebview?.api?.[name]?.(...args); } catch (e) { res = { error: String(e) }; }
+  if (res?.status !== 'ok') { toastMgr.error(res?.error || 'Last.fm did not answer.'); return null; }
+  renderLastFm(res);
+  return res;
+}
+
+function saveLastFm(setting, value) {
+  const changes = { enabled: null, api_key: null, secret: null, [setting]: value };
+  // An emptied secret field means "keep it": the stored one is never shown.
+  if (setting === 'secret' && !String(value || '').trim()) return;
+  return lastFmCall('save_lastfm', changes.enabled, changes.api_key, changes.secret);
+}
+
+async function connectLastFm() {
+  const res = await lastFmCall('connect_lastfm');
+  if (res) toastMgr.info?.('Approve Mornye on the Last.fm page that just opened.');
+}
+
+function disconnectLastFm() { return lastFmCall('disconnect_lastfm'); }
+function retryLastFm() { return lastFmCall('retry_lastfm'); }
 
 async function saveDiscordPresence(setting, value) {
   const changes = { enabled: null, application_id: null, show_artwork: null, [setting]: value };

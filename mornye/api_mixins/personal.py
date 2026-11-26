@@ -23,9 +23,18 @@ class PersonalMixin:
         """One piece of Player listening (core/listening.py `record`)."""
         from ..core import listening
 
-        ok = listening.record(
-            self._personal_owner(), entry if isinstance(entry, dict) else {}
-        )
+        entry = entry if isinstance(entry, dict) else {}
+        ok = listening.record(self._personal_owner(), entry)
+        # The piece sent when a song stops being the current one may make a
+        # Last.fm scrobble. Desktop only: over --web (where _ws_broadcast is
+        # set) the account would be the server's, not the listener's.
+        if entry.get("outcome") and getattr(self, "_ws_broadcast", None) is None:
+            try:
+                from ..core import scrobbler
+
+                scrobbler.service().listened(entry)
+            except Exception:
+                pass
         return {"status": "ok" if ok else "ignored"}
 
     def clear_listening_record(self) -> dict:
