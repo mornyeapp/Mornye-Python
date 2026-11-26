@@ -31,12 +31,14 @@ from .api_mixins.extension_health import ExtensionHealthMixin
 from .api_mixins.extension_settings import ExtensionSettingsMixin
 from .api_mixins.failed_tracks import FailedTracksMixin
 from .api_mixins.library_tools import LibraryToolsMixin
+from .api_mixins.link import LinkMixin
 from .api_mixins.local_tagging import LocalTaggingMixin
 from .api_mixins.player_playlists import PlayerPlaylistsMixin
 from .api_mixins.music_extras import MusicExtrasMixin
 from .api_mixins.native_player import NativePlayerMixin
 from .api_mixins.personal import PersonalMixin
 from .api_mixins.cast import CastMixin
+from .api_mixins.connect import ConnectMixin
 from .api_mixins.search import SearchMixin
 from .api_mixins.signed_sessions import SignedSessionsMixin
 from .api_mixins.stats import StatsMixin
@@ -277,8 +279,10 @@ class MornyeAPI(
     SignedSessionsMixin,
     QueueHistoryMixin,
     NativePlayerMixin,
+    LinkMixin,
     PersonalMixin,
     CastMixin,
+    ConnectMixin,
 ):
     """pywebview/`--web` bridge — every method here (plus the two mixins
     above) becomes a callable the frontend invokes as `pywebview.api.<name>`
@@ -438,6 +442,8 @@ class MornyeAPI(
             self._start_subscription_scheduler()
         except Exception as e:
             self.log(f"Could not start the subscription scheduler: {e}", "warn")
+        # Mornye Link (api_mixins/link.py): back on if it was left on.
+        self._link_autostart()
         app_version = self.app_version
         self._push("loadHistoryAndProfiles")
         self._push("__set_version_label", app_version)

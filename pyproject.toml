@@ -91,6 +91,11 @@ dependencies = [
     # macOS, the distro's libmpv on Linux — see the Player section of the
     # guide). Without libmpv the window's own engine plays.
     "python-mpv>=1.0.8",
+    # Base, not an extra: Mornye Link (link_server.py) advertises this
+    # computer as `_mornye._tcp` so the phone app finds it on the Wi-Fi.
+    # Without it pairing still works, but only by typing the address.
+    # Pure Python with optional compiled speedups (wheels for every OS).
+    "zeroconf>=0.132.0",
 ]
 
 [project.urls]
