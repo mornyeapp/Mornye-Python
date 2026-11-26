@@ -1036,3 +1036,11 @@ input[type="password"].full { width: 100%; }
 .storage-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 .storage-size { min-width: 64px; text-align: right; color: var(--text-2); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
 #storage-list:empty { display: none; }
+
+/* Services (Discord, Last.fm): a dot and a line saying where the connection
+   stands. Green when connected, amber while switched on but not yet. */
+.svc-status { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--text-2); }
+.svc-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); flex: none; }
+.svc-status.waiting .svc-dot { background: var(--signal); }
+.svc-status.on .svc-dot { background: var(--ok); }
+.svc-actions { display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; justify-content: flex-end; }

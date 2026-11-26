@@ -402,6 +402,12 @@ EXTENSION_SETTINGS_ADMIN_METHODS = {
 #       uses the browser engine. The one way to play on the server is
 #       Mornye Connect's server speaker (core/connect/speaker.py): off until
 #       an admin turns it on, and offered to admin accounts only.
+#
+#   set_now_playing / get_discord_presence / save_discord_presence
+#       (api_mixins/integrations.py) Discord Rich Presence talks to the
+#       Discord client of the machine running Mornye. Over --web that is
+#       the server's, not the listener's, and its settings are one per
+#       install, not per user.
 
 
 class LoginRateLimiter:

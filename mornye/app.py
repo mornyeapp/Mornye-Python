@@ -30,6 +30,7 @@ from .api_mixins.discovery import DiscoveryMixin
 from .api_mixins.extension_health import ExtensionHealthMixin
 from .api_mixins.extension_settings import ExtensionSettingsMixin
 from .api_mixins.failed_tracks import FailedTracksMixin
+from .api_mixins.integrations import IntegrationsMixin
 from .api_mixins.library_tools import LibraryToolsMixin
 from .api_mixins.link import LinkMixin
 from .api_mixins.local_tagging import LocalTaggingMixin
@@ -285,6 +286,7 @@ class MornyeAPI(
     CastMixin,
     ConnectMixin,
     StorageMixin,
+    IntegrationsMixin,
 ):
     """pywebview/`--web` bridge — every method here (plus the two mixins
     above) becomes a callable the frontend invokes as `pywebview.api.<name>`

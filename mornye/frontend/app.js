@@ -292,7 +292,7 @@ function switchTab(name, btn) {
     loadExtensionStatusList();
   }
   if (name === 'general') loadStorageUsage();
-  if (name === 'player') { loadPlayerSettings(); loadLinkSettings(); loadConnectSettings(); }
+  if (name === 'player') { loadPlayerSettings(); loadLinkSettings(); loadConnectSettings(); loadIntegrationSettings(); }
   else stopLinkPolling();
   if (name === 'extensions') {
     loadRegistries();
@@ -11715,6 +11715,39 @@ function listenFinish({ ended = false } = {}) {
   if (ended) listenState.ended = true;
   listenSend(true);
   listenState = null;
+  presenceSync();
+}
+
+// ── Now playing, for Discord and Last.fm (api_mixins/integrations.py) ───────
+// Told on every change of song, play/pause and seek, gathered over a moment
+// and only when something changed. Desktop only: over --web the services
+// would be the server's.
+var presenceTimer = null, presenceSent = '';
+
+function presenceInfo() {
+  const it = listenState?.item;
+  if (!it?.title) return null;
+  const duration = Number.isFinite(playerEngine.duration) ? playerEngine.duration : (listenState.duration || 0);
+  return {
+    title: it.title || '', artist: it.artist || '', album: it.album || '',
+    duration: duration || 0, position: playerEngine.currentTime || 0, playing: !playerEngine.paused,
+  };
+}
+
+function presenceSync() {
+  if (window.__MORNYE_WEB_MODE__) return;
+  clearTimeout(presenceTimer);
+  presenceTimer = setTimeout(() => {
+    const info = presenceInfo();
+    // The start time, rounded, so a playing song is not re-sent every
+    // tick; Mornye itself skips what moved by less than a few seconds.
+    const key = info
+      ? [info.title, info.artist, info.album, info.playing, Math.round(Date.now() / 1000 - info.position)].join('|')
+      : '';
+    if (key === presenceSent) return;
+    presenceSent = key;
+    try { window.pywebview?.api?.set_now_playing?.(info); } catch (e) { /* best effort */ }
+  }, 400);
 }
 
 async function loadPlayerTrack(index, { advanced = false } = {}) {
@@ -12052,6 +12085,7 @@ playerEngine.addEventListener('warning', (d) => { if (d?.message) toastMgr.warni
   audio.addEventListener('play', listenTick);
   audio.addEventListener('pause', listenTick);
   window.addEventListener('pagehide', () => { listenTick(); listenSend(false); });
+  for (const type of ['play', 'pause', 'seeked', 'loadedmetadata', 'ended']) audio.addEventListener(type, presenceSync);
   const icon = $('pl-play-icon');
   const PLAY = '<path d="M8 5v14l11-7z"/>', PAUSE = '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>';
   audio.addEventListener('play', () => { icon.innerHTML = PAUSE; });
@@ -12318,7 +12352,56 @@ async function loadPlayerSettings() {
 let g_linkPoll = null;
 let g_linkPinShown = '';
 
-function stopLinkPolling() { clearInterval(g_linkPoll); g_linkPoll = null; }
+function stopLinkPolling() { clearInterval(g_linkPoll); g_linkPoll = null; stopIntegrationPolling(); }
+
+// ── Services: Discord (api_mixins/integrations.py) ─────────────────────────
+// Desktop only. A connection is made in the background, so the status is
+// asked again every few seconds while Settings › Player is open.
+var g_integrationPoll = null;
+
+function stopIntegrationPolling() { clearInterval(g_integrationPoll); g_integrationPoll = null; }
+
+function openServiceUrl(url) {
+  if (window.pywebview?.api?.open_url) window.pywebview.api.open_url(url);
+  else window.open(url, '_blank', 'noopener');
+}
+
+function renderServiceStatus(id, connected, enabled, text) {
+  const el = $(id);
+  if (!el) return;
+  el.classList.toggle('on', !!connected);
+  el.classList.toggle('waiting', !connected && !!enabled);
+  const label = el.querySelector('.svc-text');
+  if (label) label.textContent = text || 'Off';
+}
+
+function renderDiscordPresence(s) {
+  if (!s || s.status !== 'ok') return;
+  const box = $('discord-enabled'), id = $('discord-app-id'), art = $('discord-artwork');
+  if (box) box.checked = !!s.enabled;
+  if (id && document.activeElement !== id) id.value = s.application_id || '';
+  if (art) art.checked = !!s.show_artwork;
+  if (id) id.disabled = !s.enabled;
+  if (art) art.disabled = !s.enabled;
+  renderServiceStatus('discord-status', s.connected, s.enabled, s.status_text);
+}
+
+async function loadIntegrationSettings() {
+  const api = window.pywebview?.api;
+  const available = !window.__MORNYE_WEB_MODE__ && !!api?.get_discord_presence;
+  $('discord-section')?.classList.toggle('hidden', !available);
+  if (!available) return;
+  renderDiscordPresence(await linkCall('get_discord_presence'));
+  if (!g_integrationPoll) g_integrationPoll = setInterval(loadIntegrationSettings, 4000);
+}
+
+async function saveDiscordPresence(setting, value) {
+  const changes = { enabled: null, application_id: null, show_artwork: null, [setting]: value };
+  let res = null;
+  try { res = await window.pywebview?.api?.save_discord_presence?.(changes.enabled, changes.application_id, changes.show_artwork); } catch (e) { res = { error: String(e) }; }
+  if (res?.status !== 'ok') { toastMgr.error(res?.error || 'Could not save the Discord settings.'); return; }
+  renderDiscordPresence(res);
+}
 
 async function linkCall(name, ...args) {
   const api = window.pywebview?.api;

@@ -1801,6 +1801,27 @@
               </label>
             </div>
           </div>
+          <!-- Discord Rich Presence (api_mixins/integrations.py). Desktop only;
+               drawn by loadIntegrationSettings(). -->
+          <div class="s-section hidden" id="discord-section">
+            <div class="s-title">Discord</div>
+            <div class="s-row">
+              <span class="s-label">Show what you're listening to<small>"Listening to Mornye" on your Discord profile, with the song, artist and time. The Discord desktop app has to be running on this computer.</small></span>
+              <label class="toggle"><input type="checkbox" id="discord-enabled" data-onchange="saveDiscordPresence('enabled', this.checked)"><span class="toggle-sl"></span></label>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Application ID<small>Create an application in the <a href="#" data-onclick="openServiceUrl('https://discord.com/developers/applications'); return false">Discord Developer Portal</a>: its name is what Discord shows, so call it Mornye. Paste its Application ID here.</small></span>
+              <input type="text" class="full" id="discord-app-id" inputmode="numeric" autocomplete="off" placeholder="e.g. 1234567890123456789" data-onchange="saveDiscordPresence('application_id', this.value)">
+            </div>
+            <div class="s-row">
+              <span class="s-label">Show album art<small>Looked up on Apple Music by artist and album: Discord can only show a picture from a public address, and a cover inside your files is not one.</small></span>
+              <label class="toggle"><input type="checkbox" id="discord-artwork" data-onchange="saveDiscordPresence('show_artwork', this.checked)"><span class="toggle-sl"></span></label>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Status</span>
+              <span class="svc-status" id="discord-status" role="status"><span class="svc-dot"></span><span class="svc-text">Off</span></span>
+            </div>
+          </div>
         </div>
 
         <div class="tc" id="tc-extensions" data-title="Extensions">
