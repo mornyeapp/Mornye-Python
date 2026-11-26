@@ -200,12 +200,53 @@ def _friendly(comm: str) -> str:
     return os.path.basename(comm) or "Other"
 
 
+def _windows_working_set() -> int:
+    """This process's working set on Windows (GetProcessMemoryInfo), 0 when
+    it cannot be read. Windows has neither `ps` nor `resource`."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class Counters(ctypes.Structure):
+            _fields_ = [
+                ("cb", wintypes.DWORD),
+                ("PageFaultCount", wintypes.DWORD),
+                ("PeakWorkingSetSize", ctypes.c_size_t),
+                ("WorkingSetSize", ctypes.c_size_t),
+                ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                ("PagefileUsage", ctypes.c_size_t),
+                ("PeakPagefileUsage", ctypes.c_size_t),
+            ]
+
+        counters = Counters()
+        counters.cb = ctypes.sizeof(Counters)
+        windll = ctypes.WinDLL  # type: ignore[attr-defined]
+        kernel32 = windll("kernel32", use_last_error=True)
+        psapi = windll("psapi", use_last_error=True)
+        kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+        psapi.GetProcessMemoryInfo.argtypes = [
+            wintypes.HANDLE,
+            ctypes.POINTER(Counters),
+            wintypes.DWORD,
+        ]
+        psapi.GetProcessMemoryInfo.restype = wintypes.BOOL
+        ok = psapi.GetProcessMemoryInfo(
+            kernel32.GetCurrentProcess(), ctypes.byref(counters), counters.cb
+        )
+        return int(counters.WorkingSetSize) if ok else 0
+    except Exception:
+        return 0
+
+
 def _process_memory() -> dict:
     """Resident memory of this process and every process it started.
 
     `ps` rather than psutil (not a dependency): one call lists the whole
-    table and the tree is walked down from our pid. Without `ps` (Windows)
-    only this process's peak is known.
+    table and the tree is walked down from our pid. Without `ps` only this
+    process is measured: its working set on Windows, its peak elsewhere.
     """
     me = os.getpid()
     out = ""
@@ -230,15 +271,16 @@ def _process_memory() -> dict:
         except ValueError:
             continue
     if me not in rows:
-        peak = 0
-        try:
-            import resource
+        peak = _windows_working_set() if os.name == "nt" else 0
+        if not peak:
+            try:
+                import resource
 
-            peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-            if sys.platform != "darwin":
-                peak *= 1024  # KiB on Linux, bytes on macOS
-        except Exception:
-            pass
+                peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+                if sys.platform != "darwin":
+                    peak *= 1024  # KiB on Linux, bytes on macOS
+            except Exception:
+                pass
         return {
             "total_bytes": peak,
             "processes": [{"name": "Mornye", "bytes": peak, "count": 1}],
