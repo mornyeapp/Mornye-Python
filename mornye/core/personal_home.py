@@ -582,13 +582,14 @@ class _Mixes:
         )
         if len(played) < FAVORITES_MIN_PLAYED:
             return None
-        weights: Counter = Counter()
+        # Plays are weighted, so the counts are not whole numbers.
+        weights: dict[str, float] = {}
         for s in played[:50]:
             g = listening.normalize(first_genre(s))
             if g:
-                weights[g] += self.plays(s)
+                weights[g] = weights.get(g, 0.0) + self.plays(s)
         pool = [*played[:100]]
-        for g, _ in weights.most_common(3):
+        for g, _ in sorted(weights.items(), key=lambda e: -e[1])[:3]:
             pool += self.genre_songs.get(g, [])
         if not weights:
             pool += self.songs
@@ -689,11 +690,11 @@ class _Mixes:
         return None
 
     def decade_core(self, decade: int) -> list[dict]:
-        weights: Counter = Counter()
+        weights: dict[str, float] = {}
         for s in self.decade_songs[decade]:
             g = listening.normalize(first_genre(s))
             if g:
-                weights[g] += 1 + self.plays(s)
+                weights[g] = weights.get(g, 0.0) + 1 + self.plays(s)
         top = {g for g, _ in sorted(weights.items(), key=lambda e: (-e[1], e[0]))[:2]}
         return [
             s
@@ -880,9 +881,9 @@ def recently_played(
     since = (now.date() - timedelta(days=60)).isoformat()
     albums: dict[str, dict] = {}
     for r in reversed(listening.rows(owner, since)):
-        s = by_key.get(r["track_key"])
-        if s is not None:
-            albums.setdefault(album_key(s), _album_card(s))
+        song = by_key.get(r["track_key"])
+        if song is not None:
+            albums.setdefault(album_key(song), _album_card(song))
         if len(albums) >= limit:
             break
     return list(albums.values())
@@ -1164,7 +1165,8 @@ def recommended(
     day = now.date().isoformat()
     key = _meta_key("recommended", owner)
     cached = db.loads(db.get_meta(key), {}) or {}
-    tracks = cached.get("tracks") if isinstance(cached.get("tracks"), list) else []
+    stored = cached.get("tracks")
+    tracks: list[dict] = stored if isinstance(stored, list) else []
     if refresh or cached.get("day") != day:
         counts = play_counts(owner, now, 28)
         by_key = {

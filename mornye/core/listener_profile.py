@@ -633,7 +633,8 @@ def collection(owner: str) -> dict:
                 "SELECT COUNT(*) FROM player_playlists WHERE owner = ?", (owner or "",)
             ).fetchone()[0]
         )
-        sql, params = "SELECT COUNT(*) FROM downloads WHERE success = 1", ()
+        sql = "SELECT COUNT(*) FROM downloads WHERE success = 1"
+        params: tuple[str, ...] = ()
         if owner:
             sql, params = sql + " AND owner = ?", (owner,)
         downloads = int(conn.execute(sql, params).fetchone()[0])

@@ -32,6 +32,7 @@ import threading
 import time
 import unicodedata
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -397,7 +398,11 @@ def _seconds(value: Any) -> float:
 class DiscordPresence:
     """Keeps Discord showing what the Player plays. One per process."""
 
-    def __init__(self, ipc_factory=DiscordIpc, artwork=lookup_artwork):
+    def __init__(
+        self,
+        ipc_factory: Callable[[], DiscordIpc] = DiscordIpc,
+        artwork: Callable[..., str | None] = lookup_artwork,
+    ) -> None:
         self._ipc_factory = ipc_factory
         self._artwork = artwork
         self._artwork_cache: dict[str, str] = {}

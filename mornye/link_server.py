@@ -363,7 +363,8 @@ class LinkServer:
 
         async def ready() -> None:
             # `serve()` sets `started` once the socket accepts connections.
-            while not server.started and not server.should_exit:
+            # uvicorn exposes it as a plain flag, with no event to await.
+            while not server.started and not server.should_exit:  # noqa: ASYNC110
                 await asyncio.sleep(0.02)
             self._started.set()
 

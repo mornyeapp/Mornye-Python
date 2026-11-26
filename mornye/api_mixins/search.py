@@ -169,7 +169,7 @@ class AppleMusicSearch:
                 return_exceptions=True,
             )
             results = empty_results()
-            for kind, answer in zip(kinds, answers):
+            for kind, answer in zip(kinds, answers, strict=True):
                 if isinstance(answer, BaseException):
                     logger.debug("Apple Music %s search failed: %s", kind, answer)
                     continue

@@ -200,7 +200,7 @@ def build_link_app(server: LinkServer) -> FastAPI:
             # The phone is a Connect device from here on, and is sent the
             # player's state at once (link_desktop_host.dart).
             await run_in_threadpool(
-                server.connect.phone_connected, device.deviceId, client["name"]
+                server.connect.phone_connected, device.deviceId, str(client["name"])
             )
             while True:
                 text = await ws.receive_text()

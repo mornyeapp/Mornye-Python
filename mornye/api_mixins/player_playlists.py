@@ -10,6 +10,7 @@ import logging
 import math
 import re
 import socket
+from collections.abc import Iterable
 from pathlib import Path, PureWindowsPath
 from typing import TYPE_CHECKING, Any
 from urllib.parse import unquote, urljoin, urlsplit, urlunsplit
@@ -299,7 +300,7 @@ class _SongIndex:
     title with an artist in common and a duration within 10 s all count.
     """
 
-    def __init__(self, tracks: list[dict[str, Any]] = ()) -> None:
+    def __init__(self, tracks: Iterable[dict[str, Any]] = ()) -> None:
         self.isrcs: set[str] = set()
         self.links: set[str] = set()
         self.titles: dict[str, list[tuple[set[str], float]]] = {}

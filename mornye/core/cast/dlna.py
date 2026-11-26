@@ -248,7 +248,7 @@ def seconds(text: str) -> float | None:
     if not m:
         return None
     hours, minutes, secs, frac, bottom = m.groups()
-    total = int(hours) * 3600 + int(minutes) * 60 + int(secs)
+    total: float = int(hours) * 3600 + int(minutes) * 60 + int(secs)
     if frac:
         total += (
             int(frac) / int(bottom)
