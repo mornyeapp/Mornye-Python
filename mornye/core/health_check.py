@@ -72,12 +72,7 @@ async def run_health_check(
     """Check direct lyrics server reachability for configured services."""
     del include_all_endpoints
 
-    from . import get_amazon_endpoint
-
     servers = dict(_SERVERS)
-    amazon_url = get_amazon_endpoint("spotbye1")
-    if amazon_url:
-        servers["amazon"] = f"{amazon_url.rstrip('/')}/lyrics/QM5FT1600115"
 
     if services:
         servers = {name: url for name, url in servers.items() if name in services}
