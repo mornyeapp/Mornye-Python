@@ -319,6 +319,14 @@ EXTENSION_SETTINGS_ADMIN_METHODS = {
 # object (keep this list next to the allowlist so a future "why isn't X
 # exposed?" has an answer here rather than in a commit message):
 #
+#   cast_devices / cast_connect / cast_load / cast_command / cast_status /
+#   cast_disconnect
+#       Casting drives DLNA and FCast receivers on the LAN of the machine
+#       running Mornye (api_mixins/cast.py). Over --web that would let a
+#       remote browser steer the server's network; the web player keeps
+#       playing in the browser. (Receivers reach --web through Mornye
+#       Connect's server speaker switch instead: admin-only, opt-in.)
+#
 #   add_trusted_key / remove_trusted_key
 #       These write ~/.mornye/trusted_keys.json — the Ed25519 root of trust
 #       that decides which registry entries count as "signed" (see

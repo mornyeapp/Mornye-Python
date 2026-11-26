@@ -36,6 +36,7 @@ from .api_mixins.player_playlists import PlayerPlaylistsMixin
 from .api_mixins.music_extras import MusicExtrasMixin
 from .api_mixins.native_player import NativePlayerMixin
 from .api_mixins.personal import PersonalMixin
+from .api_mixins.cast import CastMixin
 from .api_mixins.search import SearchMixin
 from .api_mixins.signed_sessions import SignedSessionsMixin
 from .api_mixins.stats import StatsMixin
@@ -277,6 +278,7 @@ class MornyeAPI(
     QueueHistoryMixin,
     NativePlayerMixin,
     PersonalMixin,
+    CastMixin,
 ):
     """pywebview/`--web` bridge — every method here (plus the two mixins
     above) becomes a callable the frontend invokes as `pywebview.api.<name>`

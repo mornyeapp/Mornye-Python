@@ -8,6 +8,13 @@ support so seeking works without reading the whole file.
 Locked down on three sides: it binds to 127.0.0.1 only, every URL carries a
 random per-run token, and a path is served only if the caller-supplied check
 (the approved music folders) says so.
+
+Casting (core/cast) runs a second one on the LAN address a receiver can
+reach (`get_cast_media_server`): a DLNA/UPnP renderer or an FCast receiver
+plays URLs, not bytes. Renderers probe before they play: a HEAD, a Range,
+an OPTIONS, and the DLNA headers (``getcontentFeatures.dlna.org``,
+``transferMode.dlna.org``), which it answers as Mornye mobile's media server
+does: byte ranges yes, time seeking no (406).
 """
 
 from __future__ import annotations
@@ -50,6 +57,36 @@ def content_type_for(path: Path) -> str:
     )
 
 
+#: DLNA content features of an audio answer: byte ranges but no time
+#: seeking, not transcoded, streaming and background transfer, DLNA 1.5.
+DLNA_FEATURES = (
+    "DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000"
+)
+#: The same for pictures, which are fetched interactively.
+DLNA_IMAGE_FEATURES = (
+    "DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=00F00000000000000000000000000000"
+)
+_TRANSFER_MODES = ("Streaming", "Interactive", "Background")
+
+
+def dlna_features(mime: str) -> str:
+    return DLNA_IMAGE_FEATURES if mime.startswith("image/") else DLNA_FEATURES
+
+
+def dlna_headers(mime: str, asked_mode: str | None) -> dict[str, str]:
+    """The DLNA headers of an answer of type `mime`: the transfer mode the
+    renderer asked for (when it is one), else the fitting one."""
+    fitting = "Interactive" if mime.startswith("image/") else "Streaming"
+    mode = next(
+        (m for m in _TRANSFER_MODES if m.lower() == (asked_mode or "").strip().lower()),
+        fitting,
+    )
+    return {
+        "transferMode.dlna.org": mode,
+        "contentFeatures.dlna.org": dlna_features(mime),
+    }
+
+
 def parse_range(header: str | None, size: int) -> tuple[int, int] | None:
     """(start, end) inclusive for a single ``bytes=`` range, else None.
 
@@ -76,8 +113,18 @@ def parse_range(header: str | None, size: int) -> tuple[int, int] | None:
 
 
 class MediaServer:
-    def __init__(self, is_allowed: Callable[[Path], bool]) -> None:
+    def __init__(
+        self,
+        is_allowed: Callable[[Path], bool],
+        host: str = "127.0.0.1",
+        *,
+        dlna: bool = False,
+    ) -> None:
         self._is_allowed = is_allowed
+        self.host = host
+        # Answer every request as DLNA renderers expect, not only those that
+        # ask with a *.dlna.org header.
+        self._dlna = dlna
         self._token = secrets.token_urlsafe(18)
         self._paths: dict[str, Path] = {}
         self._keys: dict[Path, str] = {}
@@ -114,9 +161,23 @@ class MediaServer:
                     return None
                 return path
 
+            def _dlna_extra(self, mime: str) -> dict[str, str]:
+                asked = any(
+                    k.lower().endswith(".dlna.org") for k in self.headers.keys()
+                )
+                if not (asked or outer._dlna):
+                    return {}
+                return dlna_headers(mime, self.headers.get("transferMode.dlna.org"))
+
             def _serve(self, head_only: bool) -> None:
                 path = self._resolve()
                 if path is None:
+                    return
+                # Only byte ranges are offered; a time range is refused.
+                if self.headers.get("TimeSeekRange.dlna.org"):
+                    self.send_response(406)
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
                     return
                 size = path.stat().st_size
                 try:
@@ -128,10 +189,13 @@ class MediaServer:
                     self.end_headers()
                     return
                 start, end = rng if rng else (0, size - 1)
+                mime = content_type_for(path)
                 self.send_response(206 if rng else 200)
-                self.send_header("Content-Type", content_type_for(path))
+                self.send_header("Content-Type", mime)
                 self.send_header("Accept-Ranges", "bytes")
                 self.send_header("Cache-Control", "no-store")
+                for name, value in self._dlna_extra(mime).items():
+                    self.send_header(name, value)
                 self.send_header("Content-Length", str(max(0, end - start + 1)))
                 if rng:
                     self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
@@ -157,7 +221,15 @@ class MediaServer:
             def do_HEAD(self) -> None:
                 self._serve(True)
 
-        self._httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            def do_OPTIONS(self) -> None:
+                self.send_response(204)
+                self.send_header("Allow", "GET, HEAD, OPTIONS")
+                self.send_header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+                self.send_header("Access-Control-Allow-Headers", "Range")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+        self._httpd = ThreadingHTTPServer((host, 0), Handler)
         self._httpd.daemon_threads = True
         self.port = self._httpd.server_address[1]
         threading.Thread(
@@ -181,7 +253,7 @@ class MediaServer:
                     self._keys.pop(self._paths.pop(old_key), None)
         # The extension is cosmetic (some players sniff it); lookup ignores it.
         return (
-            f"http://127.0.0.1:{self.port}/{self._token}/{key}"
+            f"http://{self.host}:{self.port}/{self._token}/{key}"
             f"{quote(resolved.suffix)}"
         )
 
@@ -201,3 +273,16 @@ def get_media_server(is_allowed: Callable[[Path], bool]) -> MediaServer:
         if _server is None:
             _server = MediaServer(is_allowed)
         return _server
+
+
+_cast_servers: dict[str, MediaServer] = {}
+
+
+def get_cast_media_server(is_allowed: Callable[[Path], bool], host: str) -> MediaServer:
+    """A server on `host`, the LAN address a cast receiver reaches this
+    computer at, answering as DLNA renderers expect. One per address."""
+    with _lock:
+        server = _cast_servers.get(host)
+        if server is None:
+            server = _cast_servers[host] = MediaServer(is_allowed, host, dlna=True)
+        return server
