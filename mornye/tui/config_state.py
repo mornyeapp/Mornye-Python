@@ -148,6 +148,7 @@ class ConfigState:
     # Carried through from a profile/--transcode-max-*; no widget of its own.
     transcode_max_sample_rate: int = 0
     transcode_max_bit_depth: int = 0
+    transcode_dither: str = "tpdf"
 
     # ── Naming and organisation ─────────────────────────────────────────
     filename_format: str = DEFAULT_FILENAME_FORMAT
@@ -474,6 +475,7 @@ class ConfigState:
             "dolby_ac3_keep_original": state.dolby_ac3_keep_original,
             "transcode_max_sample_rate": state.transcode_max_sample_rate,
             "transcode_max_bit_depth": state.transcode_max_bit_depth,
+            "transcode_dither": state.transcode_dither,
             "filename_format": state.filename_format,
             "use_track_numbers": state.use_track_numbers,
             "use_album_track_numbers": state.use_album_track_numbers,

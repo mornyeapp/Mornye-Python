@@ -79,6 +79,7 @@ SETTINGS: dict[str, str] = {
     "dolby_ac3_keep_original": "bool",
     "transcode_max_sample_rate": "int",
     "transcode_max_bit_depth": "int",
+    "transcode_dither": "str",
     "verify_hires": "bool",
     "redownload_fake_hires": "bool",
 }

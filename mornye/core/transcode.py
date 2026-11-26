@@ -537,6 +537,28 @@ _SAMPLE_FMT: Mapping[str, Mapping[int, str]] = {
 }
 
 
+#: The dither added when a conversion drops bits, as Mornye mobile 5.4.5
+#: offers it: plain TPDF spreads the added noise evenly across all
+#: frequencies; high-pass TPDF moves it up where it is harder to hear.
+#: Values are the setting (`transcode_dither`), mapped to aresample's
+#: dither_method.
+DITHER_METHODS: Mapping[str, str] = {"tpdf": "triangular", "tpdf_hp": "triangular_hp"}
+DEFAULT_DITHER = "tpdf"
+
+
+def normalize_dither(value: object) -> str:
+    """`tpdf` or `tpdf_hp`; ffmpeg's own names and loose spellings
+    ("TPDF HP", "triangular_hp", "high-pass") are understood too."""
+    text = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if text in DITHER_METHODS:
+        return text
+    if text in ("triangular_hp", "tpdfhp", "hp", "high_pass", "highpass"):
+        return "tpdf_hp"
+    if text in ("triangular", "plain", ""):
+        return DEFAULT_DITHER
+    raise ValueError(f"Unknown dither type: {value!r} (tpdf or tpdf_hp)")
+
+
 def plan_resample(
     spec: FormatSpec,
     source_rate: int,
@@ -721,6 +743,7 @@ def _encode_command(
     sample_rate: int = 0,
     max_sample_rate: int = 0,
     max_bit_depth: int = 0,
+    dither: str = DEFAULT_DITHER,
 ) -> list[str]:
     target_rate, target_depth = plan_resample(
         spec,
@@ -759,14 +782,14 @@ def _encode_command(
     # left alone, the lossless targets stay bit-identical to the source.
     # The rate is chosen explicitly rather than left to ffmpeg, which picks
     # the nearest rate an encoder supports and so turns 88.2 kHz into 48 kHz.
-    # SoXR when this ffmpeg has it, as the mobile app uses; triangular
-    # dither whenever bits are dropped, so the truncation is noise rather
-    # than distortion.
+    # SoXR when this ffmpeg has it, as the mobile app uses; TPDF dither
+    # (plain or high-pass, `dither`) whenever bits are dropped, so the
+    # truncation is noise rather than distortion.
     options: list[str] = []
     if target_rate and soxr_available():
         options += [str(target_rate), "resampler=soxr", f"precision={SOXR_PRECISION}"]
     if target_depth:
-        options.append("dither_method=triangular")
+        options.append(f"dither_method={DITHER_METHODS[normalize_dither(dither)]}")
     if options:
         cmd += ["-af", "aresample=" + ":".join(options)]
     if target_rate:
@@ -791,6 +814,7 @@ async def transcode_file_async(
     keep_original: bool = False,
     max_sample_rate: int = 0,
     max_bit_depth: int = 0,
+    dither: str = DEFAULT_DITHER,
 ) -> Path:
     """Converts `source` to `fmt`, preserving tags, cover art and lyrics.
 
@@ -860,6 +884,7 @@ async def transcode_file_async(
             sample_rate=sample_rate,
             max_sample_rate=max_sample_rate,
             max_bit_depth=max_bit_depth,
+            dither=dither,
         )
     )
 
