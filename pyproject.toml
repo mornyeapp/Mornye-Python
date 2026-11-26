@@ -45,6 +45,9 @@ dependencies = [
     "yt-dlp>=2026.7.4",
     "tqdm>=4.66.3",
     "pywebview>=5.0.0",
+    # The keyboard's media keys and Now Playing with the native player
+    # (core/macos_now_playing.py): libmpv does not register for them on macOS.
+    "pyobjc-framework-MediaPlayer; sys_platform == 'darwin'",
     # Base, not an extra: --tui is the guided mode, so it cannot be the one
     # that might not be installed. Textual is pure Python (rich, markdown-it-py,
     # platformdirs) and lighter than the pywebview line above it, which pulls
