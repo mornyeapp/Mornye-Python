@@ -1254,9 +1254,13 @@ def _offers_tier(provider: Any, tier: str, opts: DownloadOptions) -> bool:
         if not isinstance(option, dict):
             continue
         option_id = str(option.get("id") or "").upper()
-        label = str(option.get("label") or "").lower()
+        # Amazon's "FLAC Best Available" says "up to 24-bit/192kHz" only in
+        # its description, so that is read too.
+        text = " ".join(
+            str(option.get(key) or "") for key in ("label", "description")
+        ).lower()
         if option_id in _HI_RES_OPTION_IDS or any(
-            h in label for h in _HI_RES_OPTION_HINTS
+            h in text for h in _HI_RES_OPTION_HINTS
         ):
             return True
     return False

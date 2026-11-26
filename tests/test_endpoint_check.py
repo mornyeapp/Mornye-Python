@@ -141,12 +141,68 @@ def test_the_api_falls_back_to_the_saved_endpoint_and_key(monkeypatch) -> None:
     api.test_custom_endpoint("qobuz")
     api.test_custom_endpoint("qobuz", "http://typed.test", "typed-key")
     api.test_custom_endpoint("tidal", "")
+    api.test_custom_endpoint("amazon")
     assert calls == [
         ("qobuz", "http://saved.test", "saved-key"),
         ("qobuz", "http://typed.test", "typed-key"),
         ("tidal", "http://saved.test", ""),
+        ("amazon", "http://saved.test", "saved-key"),
     ]
     assert api.test_custom_endpoint("deezer")["ok"] is False
+
+
+def test_a_working_amazon_music_server_passes_with_the_token() -> None:
+    seen: list = []
+    http = client(
+        {
+            "/health": (200, {"status": True, "version": "3.1.0"}),
+            "/session": (
+                200,
+                {
+                    "success": True,
+                    "data": {"tier": "UNLIMITED", "music_territory": "US"},
+                },
+            ),
+        },
+        seen,
+    )
+    result = check_custom_endpoint(
+        "amazon", "http://127.0.0.1:8000/", " jwt ", client=http
+    )
+    assert result["ok"] is True
+    assert result["message"] == "amazon-music API 3.1.0 works. Account: UNLIMITED, US."
+    assert [str(r.url) for r in seen] == [
+        "http://127.0.0.1:8000/health",
+        "http://127.0.0.1:8000/session",
+    ]
+    assert seen[1].headers["Authorization"] == "Bearer jwt"
+
+
+@pytest.mark.parametrize(
+    ("token", "status", "words"),
+    [
+        ("", 200, "no session token"),
+        ("old", 401, "was refused"),
+        ("t", 502, "HTTP 502"),
+    ],
+)
+def test_amazon_music_token_problems_are_named(token, status, words) -> None:
+    http = client(
+        {
+            "/health": (200, {"version": "3.1.0"}),
+            "/session": (status, {"success": status == 200, "data": None}),
+        }
+    )
+    result = check_custom_endpoint("amazon", "http://a.test", token, client=http)
+    assert result["ok"] is False
+    assert words in result["message"]
+
+
+def test_something_that_is_not_amazon_music_is_reported() -> None:
+    http = client({"/health": (200, {"ok": True})})
+    result = check_custom_endpoint("amazon", "http://a.test", "t", client=http)
+    assert result["ok"] is False
+    assert "not like an amazon-music API server" in result["message"]
 
 
 def test_the_test_is_exposed_to_the_web_frontend_for_admins_only() -> None:

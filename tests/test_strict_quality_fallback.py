@@ -476,3 +476,31 @@ def test_a_per_service_dolby_digital_plus_pick_keeps_amazon(
     assert result.success
     assert result.provider == "ext:amazon"
     assert qobuz.calls == []
+
+
+def test_a_hi_res_option_named_only_in_its_description_counts() -> None:
+    """Amazon's "FLAC Best Available" is Hi-Res ("up to 24-bit/192kHz" in
+    its description): a strict Hi-Res pass must still ask Amazon."""
+    amazon = _ExtProvider(
+        "ext:amazon",
+        Path("unused"),
+        [
+            {
+                "id": "best",
+                "label": "FLAC Best Available",
+                "description": "Best available quality (up to 24-bit/192kHz)",
+                "kind": "lossless",
+            },
+            {"id": "opus", "label": "Opus 320kbps", "kind": "lossy"},
+        ],
+    )
+    cd_only = _ExtProvider(
+        "ext:cd",
+        Path("unused"),
+        [{"id": "flac", "label": "FLAC 16-bit", "kind": "lossless"}],
+    )
+    opts = dl.DownloadOptions(
+        output_dir=".", quality="HI_RES_LOSSLESS", allow_fallback=False
+    )
+    assert dl._offers_tier(amazon, "HI_RES_LOSSLESS", opts) is True
+    assert dl._offers_tier(cd_only, "HI_RES_LOSSLESS", opts) is False
