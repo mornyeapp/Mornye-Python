@@ -131,6 +131,24 @@ class MusicExtrasMixin:
             return {"status": "error", "error": str(e)}
         return {"status": "ok", "configured": cfg.configured}
 
+    def track_share_links(self, title: str, artist: str = "", isrc: str = "") -> dict:
+        """Where a song can be found, as {platform: link}, for "Share Link".
+
+        By its ISRC when the file has one (exact recording), otherwise by
+        searching the catalogue for title and artist and keeping a result
+        whose title and artist both agree.
+        """
+        try:
+            links = run_sync(_share_links_async(title, artist, isrc), timeout=60)
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+        if not links:
+            return {
+                "status": "error",
+                "error": "This song was not found on any service.",
+            }
+        return {"status": "ok", "links": links}
+
     def translate_lyrics(self, lyrics: str, language: str) -> dict:
         """Translates `lyrics` (plain or LRC) into `language`, line by line."""
         from ..core.lyrics_translate import translate_lyrics_async
@@ -154,3 +172,47 @@ class MusicExtrasMixin:
         except OSError as e:
             return {"status": "error", "error": str(e)}
         return {"status": "ok", "path": str(target)}
+
+
+#: How close a search result's title must be to the song's to be shared.
+_SHARE_TITLE_RATIO = 0.85
+
+
+async def _share_links_async(title: str, artist: str, isrc: str) -> dict[str, str]:
+    """{platform: link} for one recording; {} when it is not found."""
+    from ..core.isrc_utils import normalize_isrc
+    from ..core.link_resolver import LinkResolver
+    from ..core.text_match import artists_match, ratio
+    from .search import search_metadata_async
+
+    title = str(title or "").strip()
+    artist = str(artist or "").strip()
+    resolver = LinkResolver()
+    links: dict[str, str] = {}
+    code = normalize_isrc(str(isrc or ""))
+    if code:
+        deezer = await resolver._get_deezer_url_by_isrc_async(code)
+        if deezer:
+            links = {
+                "deezer": deezer,
+                **await resolver._get_resolve_links_by_url_async(deezer),
+            }
+    if not links and title:
+        results = await search_metadata_async(f"{title} {artist}".strip(), limit=5)
+        for track in results.get("tracks", []):
+            url = str(track.get("external_url") or "")
+            found_artist = str(track.get("artists") or track.get("artist") or "")
+            if not url.startswith("https://"):
+                continue
+            if ratio(title, str(track.get("name") or "")) < _SHARE_TITLE_RATIO:
+                continue
+            if artist and not artists_match(artist, found_artist):
+                continue
+            links = {
+                "spotify": url,
+                **await resolver._get_resolve_links_by_url_async(url),
+            }
+            break
+    return {
+        k: v for k, v in links.items() if k != "isrc" and str(v).startswith("https://")
+    }

@@ -219,6 +219,7 @@ ALLOWED_METHODS: set[str] = {
     "get_lyrics_ai_config",
     "save_lyrics_ai_config",
     "translate_lyrics",
+    "track_share_links",
     "save_translated_lyrics",
     "get_dedup_status",
     "scan_for_duplicates",
