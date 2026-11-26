@@ -212,6 +212,8 @@ ALLOWED_METHODS: set[str] = {
     "preview_player_playlist_import",
     "import_player_playlist",
     "import_player_playlist_collection",
+    "sync_player_playlist",
+    "set_player_playlist_source",
     "link_player_playlist_tracks",
     "get_weekly_releases",
     "get_lyrics_ai_config",

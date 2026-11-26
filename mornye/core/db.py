@@ -448,6 +448,19 @@ _MIGRATIONS: tuple[tuple[str, ...], ...] = (
         )
         """,
     ),
+    # v16 — imported playlists that follow their source.
+    #
+    # A playlist imported from a provider remembers where it came from, so
+    # songs added there later are added here too. `source_keys` is the JSON
+    # list of every song the source has listed so far: a song is new only
+    # when it is not in it, so one the user removed here stays removed.
+    (
+        "ALTER TABLE player_playlists "
+        "ADD COLUMN source_url TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE player_playlists "
+        "ADD COLUMN source_keys TEXT NOT NULL DEFAULT '[]'",
+        "ALTER TABLE player_playlists " "ADD COLUMN synced_at REAL NOT NULL DEFAULT 0",
+    ),
 )
 
 

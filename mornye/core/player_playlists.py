@@ -10,6 +10,7 @@ entry at its file once the song has been downloaded.
 from __future__ import annotations
 
 import hashlib
+import json
 import time
 import uuid
 from collections.abc import Iterable, Mapping
@@ -63,7 +64,8 @@ def _text(value: Any, limit: int, label: str) -> str:
 
 def _playlist(conn, playlist_id: str, owner: str):
     return conn.execute(
-        "SELECT id, name, description, cover, created_at, updated_at "
+        "SELECT id, name, description, cover, created_at, updated_at, "
+        "source_url, source_keys, synced_at "
         "FROM player_playlists WHERE id = ? AND owner = ?",
         (playlist_id, owner),
     ).fetchone()
@@ -94,7 +96,8 @@ def _tracks_of(conn, playlist_id: str) -> list[dict[str, Any]]:
 def list_playlists(owner: str = "") -> list[dict[str, Any]]:
     conn = db.connection()
     rows = conn.execute(
-        "SELECT id, name, description, cover, created_at, updated_at "
+        "SELECT id, name, description, cover, created_at, updated_at, "
+        "source_url, synced_at "
         "FROM player_playlists WHERE owner = ? "
         "ORDER BY updated_at DESC, name COLLATE NOCASE",
         (owner,),
@@ -117,6 +120,8 @@ def list_playlists(owner: str = "") -> list[dict[str, Any]]:
             "cover": row["cover"],
             "created_at": float(row["created_at"]),
             "updated_at": float(row["updated_at"]),
+            "source_url": row["source_url"] or "",
+            "synced_at": float(row["synced_at"] or 0),
             "tracks": tracks[row["id"]],
         }
         for row in rows
@@ -176,7 +181,12 @@ def create_playlist(
     cover: str = "",
     tracks: Iterable[Mapping[str, Any]] = (),
     owner: str = "",
+    *,
+    source_url: str = "",
+    source_keys: Iterable[str] = (),
 ) -> dict[str, Any]:
+    """`source_url` is the provider playlist this one follows (see
+    :func:`record_source_sync`), with `source_keys` the songs it listed."""
     title = _text(name, MAX_NAME_LENGTH, "Playlist name")
     if not title:
         raise ValueError("Playlist name cannot be empty.")
@@ -191,9 +201,21 @@ def create_playlist(
     with db.transaction() as conn:
         conn.execute(
             "INSERT INTO player_playlists "
-            "(id, owner, name, description, cover, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (playlist_id, owner, title, summary, cover, now, now),
+            "(id, owner, name, description, cover, created_at, updated_at, "
+            "source_url, source_keys, synced_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                playlist_id,
+                owner,
+                title,
+                summary,
+                cover,
+                now,
+                now,
+                str(source_url or ""),
+                json.dumps(sorted(set(source_keys))),
+                now if source_url else 0.0,
+            ),
         )
         _replace_tracks(conn, playlist_id, entries)
     playlist = get_playlist(playlist_id, owner)
@@ -344,3 +366,103 @@ def link_tracks(owner: str, links: Mapping[str, Mapping[str, Any]]) -> int:
             _replace_tracks(conn, playlist_id, updated)
             _touch(conn, playlist_id)
     return changed
+
+
+def playlist_source(playlist_id: str, owner: str) -> tuple[str, set[str]] | None:
+    """The provider playlist `playlist_id` follows and the songs it has
+    listed so far, or None when there is no such playlist. The URL is
+    empty for a playlist that follows nothing."""
+    row = _playlist(db.connection(), playlist_id, owner)
+    if row is None:
+        return None
+    try:
+        keys = json.loads(row["source_keys"] or "[]")
+    except ValueError:
+        keys = []
+    return row["source_url"] or "", {str(key) for key in keys if key}
+
+
+def set_playlist_source(
+    playlist_id: str, owner: str, url: str, source_keys: Iterable[str] = ()
+) -> bool:
+    """Make a playlist follow `url` (or nothing, when it is empty).
+
+    `source_keys` are the songs counted as already seen: for a playlist
+    imported before following existed, the ones it lists now. False when
+    there is no such playlist.
+    """
+    with db.transaction() as conn:
+        cursor = conn.execute(
+            "UPDATE player_playlists SET source_url = ?, source_keys = ?, "
+            "synced_at = 0 WHERE id = ? AND owner = ?",
+            (
+                str(url or ""),
+                json.dumps(sorted(set(source_keys)) if url else []),
+                playlist_id,
+                owner,
+            ),
+        )
+    return bool(cursor.rowcount)
+
+
+def record_source_sync(
+    playlist_id: str,
+    owner: str,
+    source_keys: Iterable[str],
+    tracks: Iterable[Mapping[str, Any]] = (),
+    drop: Iterable[str] = (),
+) -> dict[str, Any] | None:
+    """Append the songs the source added and remember what it lists.
+
+    `tracks` are appended (a path already in the playlist is skipped) and
+    `source_keys` joins the songs seen before, so a song the user removed
+    here is not brought back by the next sync. The entries whose path is in
+    `drop` are removed first. Returns the playlist.
+    """
+    entries = list(tracks)
+    dropped = {str(path) for path in drop}
+    with db.transaction() as conn:
+        row = _playlist(conn, playlist_id, owner)
+        if row is None:
+            return None
+        try:
+            known = set(json.loads(row["source_keys"] or "[]"))
+        except ValueError:
+            known = set()
+        if dropped:
+            _replace_tracks(
+                conn,
+                playlist_id,
+                [t for t in _tracks_of(conn, playlist_id) if t["path"] not in dropped],
+            )
+        paths = {
+            r["path"]
+            for r in conn.execute(
+                "SELECT path FROM player_playlist_tracks WHERE playlist_id = ?",
+                (playlist_id,),
+            ).fetchall()
+        }
+        fresh = [t for t in entries if str(t["path"]) not in paths]
+        if len(paths) + len(fresh) > MAX_TRACKS:
+            raise ValueError(f"A playlist can contain at most {MAX_TRACKS} tracks.")
+        position = len(paths)
+        for track in fresh:
+            path = str(track["path"])
+            if path in paths:
+                continue
+            _insert_track(conn, playlist_id, position, track)
+            paths.add(path)
+            position += 1
+        now = time.time()
+        conn.execute(
+            "UPDATE player_playlists SET source_keys = ?, synced_at = ?"
+            + (", updated_at = ?" if fresh or dropped else "")
+            + " WHERE id = ?",
+            (
+                json.dumps(sorted(known | set(source_keys))),
+                now,
+                *((now,) if fresh or dropped else ()),
+                playlist_id,
+            ),
+        )
+    return get_playlist(playlist_id, owner)
