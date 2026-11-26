@@ -243,3 +243,48 @@ def test_the_gui_api_still_offers_both_entry_points() -> None:
     assert issubclass(MornyeAPI, SearchMixin)
     assert callable(MornyeAPI.search_provider)
     assert callable(MornyeAPI.search_provider_async)
+
+
+def test_apple_music_search_returns_artists_and_playlists(monkeypatch) -> None:
+    """The apple-music extension only searches tracks; the built-in client
+    is asked for each kind on its own, so artists and playlists come back."""
+    import mornye.core.apple_music_metadata as apple_module
+
+    asked: list[str | None] = []
+
+    class _Apple:
+        async def search_async(self, query, limit=20, storefront="", kind=None):
+            asked.append(kind)
+            item = {"id": kind, "name": f"{query} {kind}", "external_url": "u"}
+            return {kind: [item]}
+
+    monkeypatch.setattr(apple_module, "AppleMusicMetadataClient", _Apple)
+    out = asyncio.run(search_metadata_async("drake", 10, "apple-music"))
+    assert sorted(asked) == ["albums", "artists", "playlists", "tracks"]
+    assert out["artists"][0]["name"] == "drake artists"
+    assert out["playlists"][0]["name"] == "drake playlists"
+
+
+def test_apple_music_search_falls_back_to_the_extension(monkeypatch) -> None:
+    import mornye.core.apple_music_metadata as apple_module
+    import mornye.core.extension_metadata as ext_module
+
+    class _Broken:
+        async def search_async(self, *args, **kwargs):
+            raise RuntimeError("no token")
+
+    class _Ext:
+        async def search_async(self, query, limit=50):
+            return {
+                "tracks": [],
+                "albums": [{"id": "a", "name": "From extension"}],
+                "artists": [],
+                "playlists": [],
+            }
+
+    monkeypatch.setattr(apple_module, "AppleMusicMetadataClient", _Broken)
+    monkeypatch.setattr(
+        ext_module.ExtensionMetadataClient, "for_source", staticmethod(lambda s: _Ext())
+    )
+    out = asyncio.run(search_metadata_async("drake", 10, "apple-music"))
+    assert out["albums"][0]["name"] == "From extension"
