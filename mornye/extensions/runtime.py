@@ -426,11 +426,33 @@ class JSRuntime:
                 newline = buf.find(b"\n", start)
             del buf[:start]
 
-        # Empties pending with error
-        err = {"error": "Node.js process terminated unexpectedly"}
+        # Empties pending with error. Say why when Node said anything: the
+        # bare message left a crash mid-download (an extension sleeping out
+        # a 429, an out-of-memory) indistinguishable from a deliberate stop.
+        err = {"error": self._termination_reason(proc)}
         for q in list(self._pending.values()):
             q.put(err)
         self._pending.clear()
+
+    def _termination_reason(self, proc: Any) -> str:
+        reason = "Node.js process terminated unexpectedly"
+        code = None
+        try:
+            code = proc.wait(timeout=1)
+        except Exception:
+            pass
+        if code is not None:
+            reason += f" (exit code {code})"
+        # The drain thread may still be catching the last lines.
+        stderr_tail = getattr(self, "_stderr_tail", None) or ()
+        for _ in range(10):
+            if stderr_tail:
+                break
+            time.sleep(0.05)
+        tail = [line.strip() for line in list(stderr_tail)[-3:] if line.strip()]
+        if tail:
+            reason += ": " + " | ".join(tail)[:300]
+        return reason
 
     def _dispatch(self, msg: dict) -> None:
         if msg.get("type") == "ready":
