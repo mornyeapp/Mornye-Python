@@ -1898,15 +1898,23 @@ class MornyeAPI(
             self.set_progress("Ready for download.")
 
             try:
+                from urllib.parse import urlparse
+
                 from .core.session_memory import add_url_to_history_async
 
                 _lower = url.lower()
+                # By host, not substring: "music.apple.com" may sit anywhere
+                # in a URL that is not Apple's.
+                _host = (urlparse(_lower).hostname or "") if "://" in _lower else ""
+                _apple = _host == "music.apple.com" or _host.endswith(
+                    ".music.apple.com"
+                )
                 if (
                     "/track/" in _lower
                     or _lower.startswith("spotify:track:")
                     or "watch?v=" in _lower
                     or "youtu.be" in _lower
-                    or ("music.apple.com" in _lower and "/song/" in _lower)
+                    or (_apple and "/song/" in _lower)
                     or ("/album/" in _lower and re.search(r"[?&]i=\d+", _lower))
                 ):
                     _url_type = "track"

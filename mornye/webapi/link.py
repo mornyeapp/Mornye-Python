@@ -139,7 +139,11 @@ def build_link_app(server: LinkServer) -> FastAPI:
             status = {"rate_limited": 429, "pairing_closed": 403, "bad_proof": 403}.get(
                 exc.code, 500
             )
-            return _error(status, exc.code, str(exc) if status == 500 else "")
+            if status == 500:
+                # Unexpected: the detail goes to the log, not to the client.
+                logger.warning("[link] pairing failed: %s", exc)
+                return _error(500, exc.code, "Pairing failed on this computer")
+            return _error(status, exc.code)
         logger.info("[link] paired %s (%s)", name, platform)
         return JSONResponse(
             {
