@@ -72,14 +72,14 @@ def lyrics_provider_choices(selected: list[str] | tuple[str, ...] = ()) -> list[
 
 
 #: Enrichment providers.
-ENRICH_PROVIDERS: tuple[str, ...] = ("deezer", "apple", "qobuz", "tidal")
+ENRICH_PROVIDERS: tuple[str, ...] = ("deezer", "apple")
 
 DEFAULT_LYRICS_PROVIDERS: tuple[str, ...] = ("apple", "binilyrics", "lrclib")
 
 #: Where a Spotify Canvas can be looked up, in the order they are tried.
 CANVAS_PROVIDERS: tuple[str, ...] = ("spotify", "paxsenix")
 DEFAULT_CANVAS_PROVIDERS: tuple[str, ...] = ("spotify", "paxsenix")
-DEFAULT_ENRICH_PROVIDERS: tuple[str, ...] = ("deezer", "apple", "qobuz", "tidal")
+DEFAULT_ENRICH_PROVIDERS: tuple[str, ...] = ("deezer", "apple")
 
 POST_DOWNLOAD_ACTIONS: tuple[str, ...] = ("none", "open_folder", "notify", "command")
 

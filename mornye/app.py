@@ -2398,13 +2398,7 @@ class MornyeAPI(
                 "spotify",
                 "paxsenix",
             ]
-            enrich_providers = config.get("enrich_providers") or [
-                "deezer",
-                "apple",
-                "qobuz",
-                "tidal",
-                "soundcloud",
-            ]
+            enrich_providers = config.get("enrich_providers") or ["deezer", "apple"]
             from .core.transcode import is_lossless, normalize_transcode_format
 
             # The GUI sends "none" when conversion is disabled

@@ -53,7 +53,7 @@ DEFAULT_LYRICS_PROVIDERS = [
     "binilyrics",
     "lrclib",
 ]
-DEFAULT_ENRICH_PROVIDERS = ["deezer", "apple", "qobuz", "tidal"]
+DEFAULT_ENRICH_PROVIDERS = ["deezer", "apple"]
 
 
 # ---------------------------------------------------------------------------

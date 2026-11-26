@@ -195,7 +195,7 @@ class AsyncMornye:
             ),
             animated_artwork_api_url=animated_artwork_api_url or artwork_api_url(),
             enrich_metadata=enrich_metadata,
-            enrich_providers=enrich_providers or ["deezer", "apple", "qobuz", "tidal"],
+            enrich_providers=enrich_providers or ["deezer", "apple"],
             qobuz_token=qobuz_token,
             qobuz_local_api_url=qobuz_local_api_url,
             track_max_retries=track_max_retries,

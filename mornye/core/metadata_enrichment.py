@@ -7,13 +7,12 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import functools
 import logging
 import re
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import Any
 
 from .http import NetworkManager
 from .isrc_utils import normalize_isrc
@@ -51,10 +50,9 @@ _CACHE_NAMESPACE = "metadata-enrichment-v2"
 #: returns whatever the digits look like — so taking results[0] on faith
 #: tagged tracks with a stranger's genre and cover art.
 _APPLE_MATCH_MIN = 0.55
-#: Tidal's search is just as eager to answer, so it gets the same bar.
-_TIDAL_MATCH_MIN = _APPLE_MATCH_MIN
-_TIDAL_MAX_APIS = 10
-_TIDAL_MAX_WORKERS = 5
+
+#: The services enrichment can ask, in their default order.
+ENRICH_PROVIDERS: tuple[str, ...] = ("deezer", "apple")
 
 
 def _run_async_sync(coro):
@@ -262,37 +260,6 @@ def _put_cached(isrc: str, data: EnrichedMetadata) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _get_dynamic_python_module(base_name: str) -> Any:
-    """Helper per trovare un modulo Python caricato dal manager."""
-    import sys
-
-    from mornye.extensions.manager import ExtensionManager
-
-    manager = ExtensionManager(auto_install_downloads=False)
-    try:
-        manager.preload_python_modules()
-    except Exception as e:
-        logger.warning("[metadata_enrichment] Failed to preload Python modules: %s", e)
-
-    cand = manager.find_python_extension(base_name)
-    if cand:
-        mod_name = f"mornye.extensions_plugins.{cand.replace('-', '_')}"
-        return sys.modules.get(mod_name)
-    return None
-
-
-def _get_dynamic_python_provider(base_name: str, **kwargs) -> Any:
-    """Helper per istanziare un provider Python caricato dal manager."""
-    from mornye.extensions.manager import ExtensionManager
-    from mornye.extensions.python_provider import PythonExtensionProvider
-
-    manager = ExtensionManager(auto_install_downloads=False)
-    cand = manager.find_python_extension(base_name)
-    if cand:
-        return cast(Any, PythonExtensionProvider)(cand, **kwargs)
-    return None
-
-
 #: Deezer labels every credited person with a role. Most are "Main" or
 #: "Featured"; these are the ones that mean "wrote it".
 _DEEZER_COMPOSER_ROLES = frozenset(
@@ -355,18 +322,6 @@ def _apply_credits(out: EnrichedMetadata, pairs) -> None:
     for field_name, names in buckets.items():
         if not getattr(out, field_name):
             setattr(out, field_name, "; ".join(dict.fromkeys(names)))
-
-
-def _qobuz_performer_pairs(text: Any) -> list[tuple[str, str]]:
-    """Qobuz's `performers` string — "Max Martin, Producer, Composer - Serban
-    Ghenea, MixingEngineer" — as (name, role) pairs."""
-    pairs: list[tuple[str, str]] = []
-    for chunk in str(text or "").split(" - "):
-        parts = [p.strip() for p in chunk.split(",") if p.strip()]
-        if len(parts) < 2:
-            continue
-        pairs.extend((parts[0], role) for role in parts[1:])
-    return pairs
 
 
 def _other_recording(expected: str, found: str) -> bool:
@@ -595,36 +550,6 @@ class _ItunesCandidate:
         )
 
 
-@dataclass
-class _TidalCandidate:
-    """One Tidal search hit, in the shape score_track_match() reads."""
-
-    title: str
-    artists: str
-    first_artist: str
-    album: str
-    duration_ms: int
-
-    @classmethod
-    def of(cls, item: dict[str, Any]) -> _TidalCandidate:
-        names = [
-            str(a.get("name") or "").strip()
-            for a in item.get("artists") or []
-            if isinstance(a, dict)
-        ]
-        names = [n for n in names if n]
-        main = _as_dict(item.get("artist"))
-        first = str(main.get("name") or "") or (names[0] if names else "")
-        album = _as_dict(item.get("album"))
-        return cls(
-            title=str(item.get("title") or ""),
-            artists=", ".join(names) or first,
-            first_artist=first,
-            album=str(album.get("title") or ""),
-            duration_ms=_as_int(item.get("duration")) * 1000,
-        )
-
-
 class _AppleMusicMeta:
     SEARCH = "https://itunes.apple.com/search"
 
@@ -811,290 +736,6 @@ class _AppleMusicMeta:
         return out
 
 
-_TIDAL_APIS_BUILTIN: list[str] = []
-
-
-class _TidalMeta:
-    def __init__(self) -> None:
-        self._client = None
-        self._apis: list[str] = []
-        self._apis_ready = False
-        self._apis_lock = threading.Lock()
-        self._load_apis_from_cache()
-
-    def _load_apis_from_cache(self) -> None:
-        try:
-            mod = _get_dynamic_python_module("tidal")
-            if mod and hasattr(mod, "get_tidal_api_list"):
-                apis = mod.get_tidal_api_list()
-                if apis:
-                    self._apis = apis
-                    self._apis_ready = True
-                    return
-        except Exception:
-            pass
-        self._apis = list(_TIDAL_APIS_BUILTIN)
-        self._apis_ready = True
-        threading.Thread(target=self._refresh_bg, daemon=True).start()
-
-    def _refresh_bg(self) -> None:
-        try:
-            mod = _get_dynamic_python_module("tidal")
-            apis = None
-            if mod and hasattr(mod, "refresh_tidal_api_list"):
-                apis = mod.refresh_tidal_api_list(force=False)
-            elif mod and hasattr(mod, "refresh_tidal_api_list_async"):
-                # tidal-py only has the async one now. Looking for the sync
-                # name alone meant the list was never filled, and Tidal
-                # enrichment answered nothing for every track.
-                apis = run_sync(mod.refresh_tidal_api_list_async(force=False))
-            if apis:
-                with self._apis_lock:
-                    self._apis = apis
-        except Exception as exc:
-            logger.debug("[meta/tidal] refresh background failed: %s", exc)
-
-    def fetch(self, track_name: str, artist_name: str) -> EnrichedMetadata:
-        return _run_async_sync(self.fetch_async(track_name, artist_name))
-
-    def _try_api(self, api: str, query: str) -> list[dict]:
-        return _run_async_sync(self._try_api_async(api, query))
-
-    def _search_parallel(self, title: str, artist: str) -> list[dict]:
-        return _run_async_sync(self._search_parallel_async(title, artist))
-
-    async def _try_api_async(self, api: str, query: str) -> list[dict]:
-        base = api.rstrip("/")
-        client = await NetworkManager.get_async_client_safe()
-        for endpoint in (
-            f"{base}/search/?s={query}&limit=3",
-            f"{base}/search?s={query}&limit=3",
-        ):
-            try:
-                r = await client.get(
-                    endpoint,
-                    timeout=_HTTP_TIMEOUT,
-                    headers={"User-Agent": _UA},
-                )
-                if not r.is_success:
-                    continue
-                data = r.json()
-                items = (
-                    data
-                    if isinstance(data, list)
-                    else data.get("tracks", {}).get("items", [])
-                )
-                items = [item for item in items if isinstance(item, dict)]
-                if items:
-                    return items
-            except Exception:
-                pass
-        return []
-
-    async def _search_parallel_async(self, title: str, artist: str) -> list[dict]:
-        from urllib.parse import quote
-
-        clean = re.sub(r"\s*[\(\[][^\)\]]*[\)\]]", "", title).strip() or title
-        first = artist.split(",", maxsplit=1)[0].strip()
-        query = quote(f"{first} {clean}")
-
-        with self._apis_lock:
-            apis = list(self._apis)
-
-        apis_to_try = apis[:_TIDAL_MAX_APIS]
-        if not apis_to_try:
-            return []
-
-        async def _one(api: str) -> list[dict]:
-            return await self._try_api_async(api, query)
-
-        tasks = [asyncio.create_task(_one(api)) for api in apis_to_try]
-        try:
-            for coro in asyncio.as_completed(tasks):
-                try:
-                    data = await coro
-                    if data:
-                        return data
-                except Exception:
-                    pass
-        finally:
-            for task in tasks:
-                if not task.done():
-                    task.cancel()
-        return []
-
-    async def fetch_async(
-        self,
-        track_name: str,
-        artist_name: str,
-        album_name: str = "",
-        duration_ms: int = 0,
-    ) -> EnrichedMetadata:
-        """Tidal's view of the track, found by searching title and artist.
-
-        A search always answers with *something*, and this used to take the
-        first hit on faith — its cover, its explicit flag and even its ISRC,
-        which then outlived the track in the file. Now every hit is scored
-        the way Apple's are, and nothing is taken below the same threshold.
-        The cover is the release's, so it also needs the release to agree,
-        as Mornye requires before applying release fields.
-        """
-        out = EnrichedMetadata()
-        items = await self._search_parallel_async(track_name, artist_name)
-        best: dict[str, Any] | None = None
-        best_score = 0.0
-        for item in items:
-            candidate = _TidalCandidate.of(item)
-            if _other_length(
-                duration_ms, candidate.duration_ms, track_name, candidate.title
-            ):
-                continue
-            score = score_track_match(
-                title=track_name,
-                artist=artist_name,
-                album=album_name,
-                duration_ms=duration_ms,
-                candidate=candidate,
-            )
-            if score > best_score:
-                best, best_score = item, score
-        if best is None or best_score < _TIDAL_MATCH_MIN:
-            if items:
-                logger.debug(
-                    "[meta/tidal] no result above %.2f for %r / %r (best %.2f)",
-                    _TIDAL_MATCH_MIN,
-                    track_name,
-                    artist_name,
-                    best_score,
-                )
-            return out
-        album = _as_dict(best.get("album"))
-        found_album = str(album.get("title") or "")
-        if not album_name or _same_release(album_name, found_album):
-            out.cover_url_hd = str(album.get("cover") or "")
-        out.explicit = bool(best.get("explicit"))
-        out.isrc = str(best.get("isrc") or "")
-        return out
-
-
-class _QobuzMeta:
-    def __init__(self, qobuz_token: str | None = None) -> None:
-        self._provider: Any = None
-        self._qobuz_token = qobuz_token
-
-    def _get_provider(self) -> Any:
-        if self._provider is None:
-            try:
-                self._provider = _get_dynamic_python_provider(
-                    "qobuz", qobuz_token=self._qobuz_token
-                )
-            except Exception as exc:
-                logger.debug("[meta/qobuz] cannot init provider: %s", exc)
-        return self._provider
-
-    def fetch(self, isrc: str, album_name: str = "") -> EnrichedMetadata:
-        return _run_async_sync(self.fetch_async(isrc, album_name))
-
-    async def fetch_async(
-        self,
-        isrc: str,
-        album_name: str = "",
-        track_name: str = "",
-        duration_ms: int = 0,
-    ) -> EnrichedMetadata:
-        """Qobuz's view of one recording, looked up by ISRC.
-
-        The track Qobuz returns carries far more than was read from it:
-        composer, the ℗ line, the original release date, the album's track
-        and disc counts, and the full performer list with roles. All of it
-        is taken now. As with Deezer, an ISRC can land on a different
-        release, so the release-scoped fields are taken only when the album
-        agrees with `album_name`.
-        """
-        out = EnrichedMetadata()
-        if not isrc:
-            return out
-        try:
-            prov = self._get_provider()
-            if prov is None:
-                return out
-            if hasattr(prov, "_search_by_isrc_async"):
-                track = await prov._search_by_isrc_async(isrc)
-            else:
-                track = None
-            if not track:
-                return out
-            if _other_recording(track_name, str(track.get("title") or "")):
-                logger.debug(
-                    "[meta/qobuz] ISRC %s is %r, not %r — ignored",
-                    isrc,
-                    track.get("title"),
-                    track_name,
-                )
-                return out
-            if _other_isrc(isrc, track.get("isrc")):
-                logger.debug(
-                    "[meta/qobuz] asked for ISRC %s, answered with %s — ignored",
-                    isrc,
-                    track.get("isrc"),
-                )
-                return out
-            if _other_length(
-                duration_ms,
-                _as_int(track.get("duration")) * 1000,
-                track_name,
-                str(track.get("title") or ""),
-            ):
-                logger.debug(
-                    "[meta/qobuz] ISRC %s runs %ss, not ~%ss — ignored",
-                    isrc,
-                    track.get("duration"),
-                    duration_ms // 1000,
-                )
-                return out
-            album = track.get("album", {}) or {}
-            out.genre = (album.get("genre", {}) or {}).get("name", "")
-            out.explicit = bool(track.get("parental_warning"))
-            out.isrc = track.get("isrc", "")
-            composer = track.get("composer")
-            if isinstance(composer, dict):
-                out.composer = str(composer.get("name") or "")
-            _apply_credits(out, _qobuz_performer_pairs(track.get("performers")))
-
-            found_title = str(album.get("title") or "")
-            if not album_name or _same_release(album_name, found_title):
-                out.label = (
-                    album.get("label", {}).get("name", "")
-                    if isinstance(album.get("label"), dict)
-                    else ""
-                )
-                out.cover_url_hd = (album.get("image", {}) or {}).get("large", "")
-                out.upc = album.get("upc", "")
-                out.copyright = str(track.get("copyright") or "")
-                out.release_date = str(
-                    album.get("release_date_original")
-                    or track.get("release_date_original")
-                    or ""
-                )
-                out.total_tracks = _as_int(album.get("tracks_count"))
-                out.total_discs = _as_int(album.get("media_count"))
-            else:
-                logger.debug(
-                    "[meta/qobuz] release mismatch: wanted %r, got %r "
-                    "— keeping recording fields only",
-                    album_name,
-                    found_title,
-                )
-        except Exception as exc:
-            logger.debug("[meta/qobuz] async %s", exc)
-        return out
-
-
-@functools.lru_cache(maxsize=2)
-def _get_qobuz_meta(token: str | None) -> _QobuzMeta:
-    return _QobuzMeta(qobuz_token=token)
-
-
 # ---------------------------------------------------------------------------
 # Singleton provider instances
 # ---------------------------------------------------------------------------
@@ -1102,7 +743,6 @@ def _get_qobuz_meta(token: str | None) -> _QobuzMeta:
 _singleton_lock = threading.Lock()
 _deezer_inst: _DeezerMeta | None = None
 _apple_inst: _AppleMusicMeta | None = None
-_tidal_inst: _TidalMeta | None = None
 
 
 def _get_deezer() -> _DeezerMeta:
@@ -1121,15 +761,6 @@ def _get_apple() -> _AppleMusicMeta:
             if _apple_inst is None:
                 _apple_inst = _AppleMusicMeta()
     return _apple_inst
-
-
-def _get_tidal() -> _TidalMeta:
-    global _tidal_inst
-    if _tidal_inst is None:
-        with _singleton_lock:
-            if _tidal_inst is None:
-                _tidal_inst = _TidalMeta()
-    return _tidal_inst
 
 
 # ---------------------------------------------------------------------------
@@ -1159,26 +790,6 @@ async def _apple_fetch_async(
     )
 
 
-async def _tidal_fetch_async(
-    track_name: str, artist_name: str, album_name: str = "", duration_ms: int = 0
-) -> EnrichedMetadata:
-    return await _get_tidal().fetch_async(
-        track_name, artist_name, album_name, duration_ms
-    )
-
-
-async def _qobuz_fetch_async(
-    isrc: str,
-    qobuz_token: str | None,
-    album_name: str = "",
-    track_name: str = "",
-    duration_ms: int = 0,
-) -> EnrichedMetadata:
-    return await _get_qobuz_meta(qobuz_token).fetch_async(
-        isrc, album_name, track_name, duration_ms
-    )
-
-
 # ---------------------------------------------------------------------------
 # Async enrich_metadata — Phase 2 (new)
 # ---------------------------------------------------------------------------
@@ -1193,6 +804,7 @@ async def enrich_metadata_async(
     qobuz_token: str | None = None,
     album_name: str = "",
     duration_ms: int = 0,
+    skip_extensions: tuple[str, ...] | list[str] = (),
 ) -> EnrichedMetadata:
     """Queries providers in parallel with asyncio.gather + global timeout.
     Replaces the sync version's ThreadPoolExecutor.
@@ -1204,11 +816,15 @@ async def enrich_metadata_async(
     unverified behaviour when the caller has nothing to offer.
     """
     if providers is None:
-        providers = ["deezer", "apple", "qobuz", "tidal"]
-    # SoundCloud is no longer an enrichment source: it has no ISRC, label
-    # or release data to add, only a title search. A saved setting or
-    # profile that still names it is read without it.
-    providers = [p for p in providers if p != "soundcloud"]
+        providers = list(ENRICH_PROVIDERS)
+    # Only Deezer and Apple are enrichment sources now. SoundCloud had no
+    # ISRC, label or release data to add, only a title search. Qobuz and
+    # Tidal had no built-in lookup that worked without a Python extension,
+    # and asking their JavaScript extensions cost a signed session (a
+    # captcha in a hidden browser) plus a search and a lookup per track.
+    # A saved setting or profile that still names any of them is read
+    # without it.
+    providers = [p for p in dict.fromkeys(providers) if p in ENRICH_PROVIDERS]
 
     if isrc:
         cached = _get_cached(isrc)
@@ -1229,18 +845,6 @@ async def enrich_metadata_async(
                     album_name,
                     duration_ms,
                 )
-            if name == "tidal":
-                return name, await _tidal_fetch_async(
-                    track_name, artist_name, album_name, duration_ms
-                )
-            if name == "qobuz":
-                return name, await _qobuz_fetch_async(
-                    isrc,
-                    qobuz_token,
-                    album_name,
-                    track_name=track_name,
-                    duration_ms=duration_ms,
-                )
             logger.warning("[meta/enrich] provider sconosciuto: %s", name)
             return name, EnrichedMetadata()
         except Exception as exc:
@@ -1248,25 +852,27 @@ async def enrich_metadata_async(
             return name, EnrichedMetadata()
 
     # Each service in the list is asked twice where it can be: the built-in
-    # lookup above, then its own JavaScript extensions (tidal-web, qobuz-web,
-    # deezer, apple-music). Every other installed JavaScript extension that
-    # implements enrichTrack is asked as well, whatever its service — the
-    # list chooses the built-in lookups and their order, not whether the
-    # extensions take part. See core/extension_enrichment.py.
+    # lookup above, then its own JavaScript extensions (deezer,
+    # apple-music). Only the services in the list: every other
+    # installed extension used to be asked too, whatever its service, and
+    # for the zarz-backed ones each such ask is a signed session of its own —
+    # a captcha solved in a hidden browser, then a search and a lookup — on
+    # every track, for services the user had not chosen. A Tidal download
+    # woke Qobuz that way. `skip_extensions` names the extension the file
+    # came from: what it knows is already in the caller's source_tags.
+    # See core/extension_enrichment.py.
     from . import extension_enrichment
 
+    skip = {str(e).removeprefix("ext:") for e in (skip_extensions or ()) if e}
     ext_sources: dict[str, list[str]] = {}
-    other_exts: list[str] = []
     if extension_enrichment.extension_enrichment_enabled():
         try:
             for name in providers:
-                ext_sources[name] = extension_enrichment.extensions_for_service(name)
-            claimed = {ext for exts in ext_sources.values() for ext in exts}
-            other_exts = [
-                ext
-                for ext in extension_enrichment.enrichment_extensions()
-                if ext not in claimed
-            ]
+                ext_sources[name] = [
+                    ext
+                    for ext in extension_enrichment.extensions_for_service(name)
+                    if ext not in skip
+                ]
         except Exception as exc:
             logger.debug("[meta/enrich] could not list enriching extensions: %s", exc)
 
@@ -1281,7 +887,6 @@ async def enrich_metadata_async(
             return None
 
     ext_keys = [(name, ext) for name in providers for ext in ext_sources.get(name, [])]
-    ext_keys += [("", ext) for ext in other_exts]
     outcomes = await asyncio.gather(
         *[bounded(run_provider(p), timeout_s, p) for p in providers],
         *[
@@ -1318,13 +923,6 @@ async def enrich_metadata_async(
             data = ext_results.get((name, ext))
             if isinstance(data, EnrichedMetadata):
                 merged.merge(data, f"ext:{ext}")
-    # The extensions of services not in the list come last, so the list's
-    # order still decides every field those services answer.
-    for ext in other_exts:
-        data = ext_results.get(("", ext))
-        if isinstance(data, EnrichedMetadata):
-            merged.merge(data, f"ext:{ext}")
-
     if merged._sources:
         logger.debug("[meta/enrich] async enriched: %s", merged._sources)
 

@@ -66,7 +66,7 @@ class ProfileConfig(BaseModel):
     animated_artwork_api_url: str = Field(default_factory=artwork_api_url)
     enrich_metadata: bool = True
     enrich_providers: list[str] = Field(
-        default_factory=lambda: ["deezer", "apple", "qobuz", "tidal"],
+        default_factory=lambda: ["deezer", "apple"],
     )
     transcode_to: str | None = None
     transcode_bitrate: str = "320k"

@@ -1466,6 +1466,9 @@ class EmbedOptions:
     #: for the genre, where enrichment's English names are preferred.
     #: Applied only when `enrich` is on.
     source_tags: dict[str, str] = field(default_factory=dict)
+    #: The extension the file was downloaded from ("tidal-web"). Enrichment
+    #: does not ask it again: its answer is `source_tags`.
+    source_extension: str = ""
     # When set, ARTIST/ALBUMARTIST are written as a single string joined
     # with this separator (e.g. ", " or " / ") instead of as a multi-value
     # Vorbis Comment field. Multi-value ARTIST fields are the "correct"
@@ -1527,6 +1530,9 @@ async def embed_metadata_async(
                 # to score its hits against.
                 album_name=metadata.album,
                 duration_ms=metadata.duration_ms,
+                skip_extensions=(
+                    (opts.source_extension,) if opts.source_extension else ()
+                ),
             )
             enriched_tags = enriched.as_tags()
             enriched_cover_url = enriched.cover_url_hd

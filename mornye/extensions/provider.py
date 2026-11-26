@@ -1159,6 +1159,23 @@ class JSExtensionProvider(BaseProvider):
 
             fmt = _ext_to_fmt(Path(actual_path).suffix)
 
+            # A strict run (quality fallback off) that got less than it asked
+            # for is deleted by the engine as soon as this returns
+            # (_reject_quality_downgrade_async). Looking it up first cost
+            # MusicBrainz, every enrichment service — each extension's own
+            # signed session and its captcha — and the lyrics servers, for a
+            # file nobody keeps.
+            if not allow_fallback and await asyncio.to_thread(
+                _below_requested_tier, actual_path, quality
+            ):
+                logger.debug(
+                    "[%s] below the requested quality: skipping enrichment "
+                    "and lyrics for a file the host will discard",
+                    self.name,
+                )
+                enrich_metadata = False
+                embed_lyrics = False
+
             # ── MusicBrainz, like in native providers (tidal.py, qobuz.py, etc.) ──
             mb_tags: dict[str, str] = {}
             if enrich_metadata and metadata.isrc:
@@ -1302,6 +1319,7 @@ class JSExtensionProvider(BaseProvider):
                         is_album=is_album,
                         extra_tags=mb_tags,
                         source_tags=source_tags,
+                        source_extension=self.name.removeprefix("ext:"),
                     ),
                 )
             except Exception as e:
@@ -1660,6 +1678,25 @@ def _quality_to_ext(quality: str) -> str:
     if "opus" in q:
         return ".opus"
     return ".flac"
+
+
+def _below_requested_tier(path: str, quality: str) -> bool:
+    """Whether the file delivers less than `quality` asks for — the same
+    test the engine's strict-quality check applies after the download."""
+    from mornye.application.download_engine import (
+        _TIER_RANK,
+        _delivered_tier,
+        _required_tier,
+    )
+
+    try:
+        required = _required_tier(quality)
+        if required is None:
+            return False
+        delivered = _delivered_tier(path)
+        return delivered is not None and _TIER_RANK[delivered[0]] < _TIER_RANK[required]
+    except Exception:
+        return False
 
 
 def _ext_to_fmt(suffix: str) -> str:

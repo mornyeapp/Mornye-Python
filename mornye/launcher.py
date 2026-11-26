@@ -981,12 +981,9 @@ def parse_args(profile_defaults: dict | None = None) -> argparse.Namespace:
     enrich_grp.add_argument(
         "--enrich-providers",
         nargs="+",
-        default=pd.get(
-            "enrich_providers",
-            ["deezer", "apple", "qobuz", "tidal"],
-        ),
+        default=pd.get("enrich_providers", ["deezer", "apple"]),
         dest="enrich_providers",
-        choices=["deezer", "apple", "qobuz", "tidal"],
+        choices=["deezer", "apple"],
     )
     enrich_grp.add_argument(
         "--animated-artwork",
@@ -1618,8 +1615,7 @@ def _subscription_downloader(profile_defaults: dict, output_dir_override: str | 
             canvas_library_dir=pd.get("canvas_library_dir") or None,
             canvas_providers=pd.get("canvas_providers") or ["spotify", "paxsenix"],
             enrich_metadata=pd.get("enrich_metadata", True),
-            enrich_providers=pd.get("enrich_providers")
-            or ["deezer", "apple", "qobuz", "tidal"],
+            enrich_providers=pd.get("enrich_providers") or ["deezer", "apple"],
             qobuz_local_api_url=pd.get("qobuz_local_api_url"),
             tidal_custom_api=pd.get("tidal_custom_api"),
             track_max_retries=pd.get("track_max_retries", 0),
@@ -2334,8 +2330,7 @@ async def run_download_from_cfg(
             canvas_library_dir=cfg.get("canvas_library_dir") or None,
             canvas_providers=cfg.get("canvas_providers") or ["spotify", "paxsenix"],
             enrich_metadata=cfg.get("enrich_metadata", True),
-            enrich_providers=cfg.get("enrich_providers")
-            or ["deezer", "apple", "qobuz", "tidal"],
+            enrich_providers=cfg.get("enrich_providers") or ["deezer", "apple"],
             qobuz_local_api_url=cfg.get("qobuz_local_api_url"),
             tidal_custom_api=cfg.get("tidal_custom_api") or None,
             track_max_retries=cfg.get("track_max_retries", 0),

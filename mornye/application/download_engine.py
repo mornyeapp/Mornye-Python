@@ -258,7 +258,7 @@ class DownloadOptions:
     # SoundCloud isn't checked by default — still selectable (GUI checklist,
     # --enrich-providers, the terminal UI), just opt-in now.
     enrich_providers: list[str] = field(
-        default_factory=lambda: ["deezer", "apple", "qobuz", "tidal"],
+        default_factory=lambda: ["deezer", "apple"],
     )
     qobuz_token: str | None = None
     qobuz_local_api_url: str | None = None
