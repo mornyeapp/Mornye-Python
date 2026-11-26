@@ -169,12 +169,14 @@ Everything is optional except `MORNYE_REGISTRIES`. An empty value is the same as
 | `MORNYE_MIN_TRUST` | `unverified` | Minimum trust tier accepted on install: `unverified`, `checksum-only` or `signed` |
 | `MORNYE_EXT_UPDATE_INTERVAL` | `3600` | Seconds between checks for newer extension versions; `0` = only at start |
 | `MORNYE_ENRICH_EXTENSIONS` | on | `0` stops extensions from contributing metadata |
+| `MORNYE_CLOUD_ENDPOINTS` | off | `1` fetches the published endpoint list instead of reading the local copy |
 
 **Web GUI and automation**
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `MORNYE_WEB_TOKEN` | none | Shared secret for the web GUI (same as `--web-token`) |
+| `MORNYE_CONNECT_SERVER_SPEAKER` | off | `1` lets Mornye Connect play through the server's own audio output (needs libmpv) — see [The Player](player.md#mornye-link-and-mornye-connect) |
 | `MORNYE_NOTIFY_URL`, `MORNYE_NOTIFY_TOKEN` | none | Fallbacks for `--notify-url` / `--notify-token` — see [Automation](automation.md) |
 | `MORNYE_LIBRARY_USER`, `MORNYE_LIBRARY_TOKEN` | none | Music-server credentials for `--library-rescan` — see [Automation](automation.md) |
 | `MORNYE_PROGRESS_BARS` | auto | `0` = plain log lines, `1` = animated bars — see [Logs](#logs-in-headless-environments) |
@@ -276,6 +278,8 @@ Track [3/24] Track Title — Artist Name (Album Name)
 ```
 
 Progress lines are throttled to at most one per 25% and per 10 seconds, so a track costs a handful of lines rather than one per received chunk.
+
+The console shows an expected provider failure as one line, without its traceback. Every error is also written, with its full traceback, to `errors.log` in the cache folder (`$MORNYE_CACHE_DIR`, by default `$MORNYE_DATA_DIR/.cache`), which rotates at 1 MB and keeps two older files.
 
 Set `MORNYE_PROGRESS_BARS` to override the detection in either direction:
 

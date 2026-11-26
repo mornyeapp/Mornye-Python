@@ -2,7 +2,9 @@
 
 The Player page plays the local library: songs, albums, artists and
 playlists, with a queue, shuffle and repeat, synced lyrics and the system's
-media keys.
+media keys. It can also tell Discord and Last.fm what plays, be steered
+from the Mornye phone app, and cast to receivers on the network (see the
+sections at the end).
 
 In the desktop app it can play through two engines:
 
@@ -69,6 +71,10 @@ Applied as soon as they change, and kept in `~/.mornye/player-audio.json`.
   Off by default.
 - **Equalizer**: ten bands (31 Hz – 16 kHz, ±12 dB) with presets. The signal
   is lowered by the largest boost first, so a boost cannot clip.
+  **Parametric** instead takes up to 20 peak and shelf filters with a
+  preamp, and imports and exports the AutoEQ / Equalizer APO format
+  (`Preamp: -6.4 dB`, then lines like
+  `Filter 1: ON PK Fc 105 Hz Gain -3.5 dB Q 0.70`; PK, LSC and HSC).
 
 A bitstreamed format reaches the receiver compressed, so the equalizer,
 normalization, upmix, ReplayGain and the volume do not apply to it.
@@ -105,3 +111,82 @@ read *Dolby Digital* and 5.1, and the statistics *Bitstream: Yes*. If the
 receiver shows PCM, check that the device chosen is the digital output, and
 on Windows that the sound card's own "Dolby Digital Live" or enhancements
 are not re-encoding everything.
+
+## Home and the listening record
+
+While a song plays, the Player records how long it was actually heard
+(seeking does not count): a play after 30 seconds, and whether the song was
+played through (to the end or past half) or skipped. The record stays on
+the computer. From it:
+
+- **Home** (in the music look, Settings › General › Interface Style ›
+  Music) shows songs recommended for you outside the library (once a day,
+  Deezer is asked for songs related to a few you played or added), mixes of
+  library songs, Quick Play, what you pinned, "Finish your collection" and
+  "On repeat". *Edit Home* reorders and hides the sections.
+- **Stats › Listening** shows listening time, plays, streaks, top artists,
+  albums and songs, genres, decades and formats, time of day, the
+  play-through rate and your listener types.
+
+In `--web` multi-user mode each account has its own record.
+
+## Discord
+
+Settings › Player › Discord shows "Listening to Mornye" on your Discord
+profile with the song, artist, album and elapsed time.
+
+1. Create an application in the
+   [Discord Developer Portal](https://discord.com/developers/applications).
+   Its name is what Discord shows, so call it Mornye.
+2. Paste its **Application ID** in Settings and switch it on.
+
+The Discord desktop app has to be running on the same computer; Mornye
+talks to it directly, with no Discord SDK, and keeps trying while it is
+closed. The status line says when it is connected and as whom. **Show
+album art** looks the cover up on Apple Music by artist and album, because
+Discord can only show a picture from a public address. Pausing clears the
+profile.
+
+## Last.fm
+
+Settings › Player › Last.fm scrobbles what you play:
+
+1. [Create an API account](https://www.last.fm/api/account/create) on
+   Last.fm (any name will do) and paste its **API key** and **shared
+   secret**.
+2. Click **Connect…** and approve Mornye on the Last.fm page that opens.
+
+While a song plays Last.fm shows it as "Scrobbling now". It is scrobbled
+once half of it or four minutes has been heard, and a song under thirty
+seconds never is: Last.fm's own rule, measured as listening time, not seek
+position. A scrobble that cannot be sent (no network, Last.fm down) waits
+in `scrobble-queue.json` in the cache folder and is tried again; the
+settings show how many are waiting, with **Retry now**. The key, secret and
+session are kept in `lastfm.json`, readable only by your user. A new key or
+secret signs out.
+
+Discord and Last.fm are **desktop only**: in `--web` they would use the
+server's Discord and the server's Last.fm account, not the listener's, so
+the settings are hidden and nothing is scrobbled from there.
+
+## Mornye Link and Mornye Connect
+
+**Mornye Link** (Settings › Player) pairs the Mornye phone app with this
+computer. Switch it on, click **Show PIN**, and pick the computer in the
+app and type the PIN; check that the code under it matches. The phone finds
+the computer on the same Wi-Fi, or by the address Settings shows. Each
+paired phone gets its own key, which opens the library through the
+Subsonic API, and can be removed from the list.
+
+**Mornye Connect** plays on one device and controls it from the others:
+the Player's **Play on** lists your devices, and moves the queue and
+position to the one picked. Each device's name is set in Settings ›
+Player. In `--web`, an admin can let the server play out loud through its
+own audio output (**Use the server as a speaker**, or
+`MORNYE_CONNECT_SERVER_SPEAKER=1`); it needs libmpv on the server.
+
+## Casting
+
+In the desktop app, **Play on** also lists the DLNA/UPnP renderers and
+FCast receivers found on the network. The music is served to them from
+this computer, and the Player's controls steer them.

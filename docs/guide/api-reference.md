@@ -22,6 +22,7 @@
 | `use_album_track_numbers` | `bool` | `False` | Uses the track's original album number instead of the download queue position. |
 | `use_artist_subfolders` | `bool` | `False` | Automatically organizes downloaded files into subfolders by artist. |
 | `use_album_subfolders` | `bool` | `False` | Automatically organizes downloaded files into subfolders by album. |
+| `album_folder_year` | `bool` | `False` | Names album subfolders `Album [2017]` when the release year is known, so two editions do not share a folder. |
 | `create_playlist_subfolders` | `bool` | `False` | Creates a subfolder per playlist/album when downloading a collection, in addition to any artist/album subfolders. |
 | `first_artist_only` | `bool` | `False` | Uses only the first artist in tags and filename. |
 | `artist_separator` | `str` | `None` | Custom separator (e.g. `", "` or `" / "`) to join multiple artists into a single string in tags, instead of using standard multi-value fields. Useful for players like Rekordbox. |
@@ -161,6 +162,7 @@ Mornye(
 | `--use-album-track-numbers` | | `False` | Use the track's original album number instead of queue position. |
 | `--use-artist-subfolders` | | `False` | Organize files into per-artist subfolders. |
 | `--use-album-subfolders` | | `False` | Organize files into per-album subfolders. |
+| `--album-folder-year` | | `False` | Name album subfolders `Album [2017]` when the year is known (also `MORNYE_ALBUM_FOLDER_YEAR`). |
 | `--playlist-subfolders` | | `True` | Create a subfolder for playlist downloads (enabled by default). |
 | `--no-playlist-subfolders` | | | Keep playlist downloads directly in the output directory instead of a subfolder. |
 | `--library-scan-dir DIR` | | `None` | A folder that already holds music (repeatable; also `MORNYE_LIBRARY_SCAN_DIRS`, comma-separated). Playlist and single tracks found there are not downloaded again and the playlist's M3U links to them. Albums always download in full. |

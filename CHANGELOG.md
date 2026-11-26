@@ -4,6 +4,30 @@
 
 ### Added
 
+- **Discord**: the Player shows "Listening to Mornye" on your Discord profile, with the song, artist, album, elapsed time and the album cover (looked up on Apple Music, only when the artist matches). It talks to the Discord desktop app on the same computer, with no Discord SDK, and waits while Discord is closed. Set up in Settings › Player › Discord with your own application ID from the Discord Developer Portal. Desktop only.
+- **Last.fm scrobbling**: "Scrobbling now" while a song plays, and a scrobble once half of it or four minutes has been heard, never for a song under thirty seconds. Seeking ahead does not count as listening. You sign in with your own API key and shared secret through Last.fm's approval page, and they are kept in a file only your user can read. Scrobbles that cannot be sent wait and are tried again. Settings › Player › Last.fm. Desktop only.
+- **Mornye Link and Mornye Connect**: pair the Mornye phone app with the computer with a PIN (Settings › Player › Mornye Link), so the phone plays the library through the Subsonic API with its own key. With Connect, one device plays and the others control it or take playback over ("Play on"). In `--web` an admin can also let the server play through its own speakers (`MORNYE_CONNECT_SERVER_SPEAKER=1`).
+- **Cast to DLNA/UPnP and FCast receivers** on the network from the Player (desktop).
+- **Personal Home and listener profile**, made from what the Player has played: recommendations, mixes from the library, Quick Play, pinned items, "Finish your collection" and "On repeat", reordered or hidden with Edit Home. Stats › Listening shows listening time, streaks, top artists, albums and songs, taste, time of day and listener types.
+- **The music look**: Settings › General › Interface Style › Music is a music-app look with the recommendations on Home. Console is still the default.
+- **Settings › Storage** shows what Mornye keeps on disk and in memory, and clears what can be rebuilt (caches, thumbnails, decoded copies, scan indexes). Settings, history and extensions are shown but never cleared.
+- **Parametric equalizer** for the native engine: up to 20 peak and shelf filters with a preamp, imported from and exported to AutoEQ.
+- **Media keys and Now Playing on macOS with the native engine**, and the keyboard's media keys control the Player with both engines.
+- **Lyrics translations saved as `.mlrc`**, the Mornye app's lyrics file, next to the song, and read back from there. The song's own tags are not touched.
+- **Share Link**: the song's links on other services, found by ISRC or by title and artist.
+- **Imported playlists follow their source**: songs added to the provider's playlist are appended to the Player playlist, and songs you removed stay removed.
+- **Richer Apple Music** artists, albums and search, with play counts by ISRC.
+- **The library in the sidebar**: Recently Added, Artists, Albums, Songs and each playlist, and the arrow keys move around the sidebar and the Player.
+- **Canvas and animated artwork in the Player**: a track's Spotify Canvas plays in the cover's place (switch in Settings › Player), and the album's animated artwork plays in the full-screen player.
+- **Artist photos** on library artist cards and the artist page.
+- **Save .m3u8** rebuilds a playlist's file from the library without downloading anything.
+- **Fix Local Files**: a search box to find one song in the list, and a list that stays responsive on folders of thousands of files.
+- **`{explicit}` filename placeholder**: ` (Explicit)` for an explicit track, nothing otherwise (#290).
+- **Year in album folder names**: `--album-folder-year` (also in Settings, the TUI, profiles, `MORNYE_ALBUM_FOLDER_YEAR` and REST) names the folder "Flower Boy [2017]", so two editions no longer share one. Off by default (#291).
+- **High-pass TPDF dither** for bit-depth caps: `--transcode-dither tpdf_hp` moves the noise to high frequencies, where it is harder to hear.
+- **Custom endpoint for Amazon Music**, checked like the Tidal and Qobuz ones.
+- **`errors.log`** in the cache folder keeps every error with its full traceback (rotated at 1 MB) for the GUI, the web server and the CLI. The console is unchanged.
+- **`MORNYE_FOLDER_DIALOG=builtin`** picks the download folder in the page instead of the system dialog, for kiosk setups where a second window would open behind the app.
 - **Desktop app downloads**: every release now also ships the GUI packaged as an application — `Mornye-macOS.dmg` (Mornye.app, Apple Silicon), `Mornye-Windows-Setup.exe` (a per-user installer with a Start menu entry and an uninstaller) and `Mornye-Linux-x86_64.AppImage`. They open the window on a double-click, where the command-line binaries, which are still published, print their help. Run from a terminal with arguments, the app's binary is the normal command line. Without a console, start-up output and errors go to `~/.mornye/.cache/desktop.log`. The builds are not code-signed yet, so macOS and Windows ask to confirm the first launch.
 - **Subsonic / OpenSubsonic API** for `--web`, under `/rest`: Symfonium, Feishin, DSub and other Subsonic apps browse, search and stream the library, with stars, play counts, playlists and a saved play queue kept on the server. Off until `MORNYE_SUBSONIC_PASSWORD` (or `MORNYE_SUBSONIC_API_KEY`) is set. See [Subsonic](docs/guide/subsonic.md).
 - **The Player keeps its library between visits**: the page opens with the stored library at once and then reads only the files that are new or changed.
@@ -20,6 +44,12 @@
 
 ### Changed
 
+- **Quality fallback asks every service for Hi-Res first**, then goes back to the first service for Lossless, instead of stepping down inside each service.
+- **The endpoint list is read locally** unless `MORNYE_CLOUD_ENDPOINTS=1`.
+- **Metadata enrichment uses only the services listed** and skips files that were discarded.
+- **A followed playlist's M3U follows its current listing** at every check, so songs that left the playlist or moved leave the file too (#280).
+- **Long lines in the Player scroll** instead of ending in an ellipsis, except with Reduce Motion.
+- The retired Amazon lyrics source was removed.
 - **The sidebar slides when it folds**: Collapse and Expand now narrow and widen the sidebar in a short slide, with the names fading and the group headings folding away, instead of cutting from one layout to the other. The icons stay where they are, and the download bar follows. It is the one animation kept with Reduce Motion on: everything else stays still.
 - **New look: the "studio console"** across the GUI, the web app and the terminal UI. Graphite grounds, one amber signal colour for focus, selection and the one primary action of each screen, green and red only for state, JetBrains Mono throughout, square 2–3 px corners and flat surfaces. Rules and small-caps legends replace cards and shadows; the queue, the dock and Stats draw progress as segmented meters. Every view was rebuilt on a single set of design tokens (`mornye/branding_tokens.py`, generated into `frontend/css/tokens.css`) that the TUI themes are built from too. Phones keep their bottom bar and 44 px controls.
 - **Accent colours change only the signal.** Amber is the new default. Anyone still on the old default (teal, or green from before the 2026 rebrand) moves to amber once; a colour picked afterwards is kept, and now reaches every view rather than only the older ones.
@@ -28,6 +58,13 @@
 
 ### Fixed
 
+- **Collaborations stay in a followed playlist's M3U**: tracks with several artists were missed when the file was rewritten, so a 50-track playlist could come out with 16.
+- **Dolby Atmos is downloaded when the stereo version is already there**: the stereo file was taken for the Atmos one. An Atmos file whose name is taken is saved as "… (Dolby Atmos).m4a".
+- **REST downloads go to the account's folder and use the saved Artist/Album layout** (#288), instead of `./Downloads` with every file loose.
+- **Bitstream survives a stereo track in between** with the native engine, which used to switch passthrough off for the rest of the session.
+- **A non-retryable error moves on to the next provider** instead of failing the track.
+- **Editing a track or disc number keeps its total**, and the remaining time stays right when a track repeats in the native engine.
+- **The lyrics start at the top** when the next track begins.
 - **A track with a long album title hid half its facts**: the facts column beside the cover sized its left half to the whole album title on one line, which pushed Released, ISRC and the UPC barcode out of the card. The left half is now capped and long values end in an ellipsis.
 - **Turning on bitstream while a song plays no longer stops it**: changing bitstream, exclusive mode or the output device mid-song made mpv rebuild the output in place, which on Windows often ended the file with an error. The song now reopens where it was, and an output that refuses bitstream falls back to PCM with a warning.
 - **Mornye logo on the Windows window and taskbar**: older pywebview WinForms backends ignored the icon and showed python.exe's. The window icon is now set directly (WM_SETICON) once the window is shown, at the monitor's DPI.
