@@ -159,12 +159,36 @@ class MusicExtrasMixin:
             return {"status": "error", "error": str(e)}
         return {"status": "ok", "lyrics": text}
 
-    def save_translated_lyrics(self, path: str, language: str, lyrics: str) -> dict:
-        """Writes `lyrics` next to the track as ``<name>.<language>.lrc``."""
+    def save_translated_lyrics(
+        self, path: str, language: str, lyrics: str, original: str | None = None
+    ) -> dict:
+        """Saves a translation next to the track.
+
+        With the `original` lyrics it was made from, as ``<name>.mlrc``: the
+        lyrics with each line's translation tagged under it, the file the
+        player here and the Mornye app both show line by line. Without, or
+        when the lines do not pair up, as ``<name>.<language>.lrc``.
+        """
         import re
+
+        from ..core.lyric_tags import MAX_SIDECAR_BYTES, build_mlrc
 
         if not self._is_approved_path(path):
             return {"status": "error", "error": "Path is outside approved directories"}
+        if not isinstance(lyrics, str) or len(lyrics) > MAX_SIDECAR_BYTES:
+            return {"status": "error", "error": "The translation is not text."}
+        if isinstance(original, str) and original.strip():
+            try:
+                text = build_mlrc(original, lyrics)
+            except ValueError:
+                text = None  # hand-edited out of shape: the plain file below
+            if text is not None:
+                target = Path(path).with_suffix(".mlrc")
+                try:
+                    target.write_text(text, encoding="utf-8")
+                except OSError as e:
+                    return {"status": "error", "error": str(e)}
+                return {"status": "ok", "path": str(target)}
         code = re.sub(r"[^A-Za-z0-9-]", "", language or "")[:12] or "translation"
         target = Path(path).with_suffix(f".{code}.lrc")
         try:
