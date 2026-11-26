@@ -92,6 +92,36 @@ def read_file_tags(path: str | Path) -> FileTags:
     )
 
 
+#: Numbers whose total may ride in the number itself ("3/12").
+_NUMBER_TOTALS = (("TRACKNUMBER", "TRACKTOTAL"), ("DISCNUMBER", "DISCTOTAL"))
+
+
+def keep_number_totals(
+    current: dict[str, str],
+    tags: dict[str, str],
+    edited: set[str] | frozenset = frozenset(),
+) -> dict[str, str]:
+    """A track or disc number written alone keeps the total it had.
+
+    A file may carry its total inside the number (``TRACKNUMBER=3/12``) with
+    no TRACKTOTAL of its own; writing ``4`` over it would drop the 12. As
+    Mornye mobile 5.4.5 does when a connected device sends a new number
+    ("a track or disc number from a connected device keeps its total"), the
+    total moves to its own tag. A total the edit names itself is left as
+    the edit says."""
+    for number, total in _NUMBER_TOTALS:
+        new = str(tags.get(number, "")).strip()
+        old = str(current.get(number, "")).strip()
+        if not new or new == old or "/" in new or total in edited:
+            continue
+        if str(tags.get(total, "")).strip() or "/" not in old:
+            continue
+        had = old.split("/", 1)[1].strip()
+        if had.isdigit() and int(had) > 0:
+            tags[total] = had
+    return tags
+
+
 async def save_file_tags_async(
     path: str | Path,
     edits: dict[str, str],
@@ -110,15 +140,18 @@ async def save_file_tags_async(
     current = await asyncio.to_thread(read_file_tags, p)
 
     tags = dict(current.tags)
+    edited: set[str] = set()
     for key, value in (edits or {}).items():
         key = str(key).strip().upper()
         if not key:
             continue
+        edited.add(key)
         value = str(value).strip()
         if value:
             tags[key] = value
         else:
             tags.pop(key, None)
+    keep_number_totals(current.tags, tags, edited)
 
     new_lyrics = current.lyrics if lyrics is None else lyrics
     cover_data = current.cover
