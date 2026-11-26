@@ -43,8 +43,9 @@ _CACHE_NAME = "artist-photos.json"
 _HIT_TTL = 30 * 86400
 #: "No such artist" is asked again after a week: the artist may appear.
 _MISS_TTL = 7 * 86400
-#: Searches running at once, across every caller.
-_MAX_LOOKUPS = 3
+#: Searches running at once, across every caller. Each is one ~0.5s
+#: request once a client is warm, so six keep a screenful of cards moving.
+_MAX_LOOKUPS = 6
 #: Names one call answers; the rest of a batch is the caller's next call.
 _MAX_BATCH = 24
 #: Below this similarity no result is the artist.
@@ -103,12 +104,28 @@ def best_match(name: str, artists: Iterable[Any]) -> str:
     return best_url if best_ratio >= _MIN_RATIO else ""
 
 
+#: Spotify clients kept between searches. Building one fetches a fresh
+#: access token (0.4-0.9s, more than the search itself), and every name
+#: used to pay for it. One client per running search: `_lookups` caps how
+#: many are out at once, so the pool never grows past `_MAX_LOOKUPS`.
+_clients: list = []
+_clients_lock = threading.Lock()
+
+
 def _spotify_search(name: str) -> list:
     """The artists the text search would list for `name`."""
     from .loop_runner import run_sync
     from .spotify_metadata import SpotifyMetadataClient
 
-    results = run_sync(SpotifyMetadataClient().search_async(name, limit=10), 20)
+    with _clients_lock:
+        client = _clients.pop() if _clients else None
+    if client is None:
+        client = SpotifyMetadataClient()
+    # A search that raises leaves its client out of the pool; the client
+    # renews its own token on a 401, so one that answered is fit to reuse.
+    results = run_sync(client.search_async(name, limit=10), 20)
+    with _clients_lock:
+        _clients.append(client)
     return list((results or {}).get("artists") or [])
 
 
