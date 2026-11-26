@@ -95,6 +95,7 @@ async def _transcode_result(result: DownloadResult, options: Any) -> DownloadRes
             keep_original=options.transcode_keep_original,
             max_sample_rate=max_rate,
             max_bit_depth=max_depth,
+            dither=getattr(options, "transcode_dither", "tpdf") or "tpdf",
         )
     except Exception as exc:
         logger.warning("[transcode] %s: %s", source.name, exc)

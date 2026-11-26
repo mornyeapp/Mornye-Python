@@ -10,6 +10,7 @@ import logging
 import math
 import re
 import socket
+from collections.abc import Iterable
 from pathlib import Path, PureWindowsPath
 from typing import TYPE_CHECKING, Any
 from urllib.parse import unquote, urljoin, urlsplit, urlunsplit
@@ -177,6 +178,15 @@ def _provider_track_dict(track: Any) -> dict[str, Any]:
     }
 
 
+def _source_url(url: Any) -> str:
+    """The provider playlist link an import follows, or "" when it is not
+    one a later sync could fetch again."""
+    url = str(url or "").strip() if isinstance(url, str) else ""
+    if not url.startswith(("http://", "https://")) or len(url) > 2048:
+        return ""
+    return url
+
+
 def _remote_track(item: dict[str, Any]) -> dict[str, Any] | None:
     """A not-downloaded playlist entry for a provider track."""
     title = str(item.get("title") or item.get("name") or "").strip()[:500]
@@ -271,6 +281,66 @@ class _LibraryIndex:
             "isrc": track.get("isrc") or remote["isrc"],
             "source_url": remote["source_url"],
         }
+
+
+def _track_link(url: str) -> str:
+    """A track link without the share junk (``?si=…``) two copies differ by."""
+    parts = urlsplit(str(url or "").strip())
+    if not parts.scheme or not parts.netloc:
+        return ""
+    return f"{parts.netloc.casefold()}{parts.path.rstrip('/')}"
+
+
+class _SongIndex:
+    """Tells whether a song is already in a playlist, however it is listed.
+
+    The same song can carry an ISRC in one entry (read from the file it was
+    linked to) and none in another (a provider that does not send it), so
+    no single key works: the same ISRC, the same track link, or the same
+    title with an artist in common and a duration within 10 s all count.
+    """
+
+    def __init__(self, tracks: Iterable[dict[str, Any]] = ()) -> None:
+        self.isrcs: set[str] = set()
+        self.links: set[str] = set()
+        self.titles: dict[str, list[tuple[set[str], float]]] = {}
+        for track in tracks:
+            self.add(track)
+
+    def add(self, track: dict[str, Any]) -> None:
+        isrc = str(track.get("isrc") or "").strip().upper()
+        if isrc:
+            self.isrcs.add(isrc)
+        link = _track_link(track.get("source_url") or "")
+        if link:
+            self.links.add(link)
+        title = _norm_title(track.get("title") or "")
+        if title:
+            self.titles.setdefault(title, []).append(
+                (
+                    _artist_names(track.get("artist") or ""),
+                    float(track.get("duration_s") or 0),
+                )
+            )
+
+    def __contains__(self, track: dict[str, Any]) -> bool:
+        isrc = str(track.get("isrc") or "").strip().upper()
+        if isrc and isrc in self.isrcs:
+            return True
+        link = _track_link(track.get("source_url") or "")
+        if link and link in self.links:
+            return True
+        artists = _artist_names(track.get("artist") or "")
+        duration = float(track.get("duration_s") or 0)
+        for names, seconds in self.titles.get(
+            _norm_title(track.get("title") or ""), []
+        ):
+            if artists and names and not artists & names:
+                continue
+            if duration and seconds and abs(duration - seconds) > 10:
+                continue
+            return True
+        return False
 
 
 class PlayerPlaylistsMixin:
@@ -653,6 +723,7 @@ class PlayerPlaylistsMixin:
         tracks: Any = None,
         library_tracks: Any = None,
         playlist_id: str = "",
+        source_url: str = "",
     ) -> dict:
         """Import a whole playlist found through a provider.
 
@@ -661,7 +732,9 @@ class PlayerPlaylistsMixin:
         are kept as not downloaded, and `link_player_playlist_tracks`
         points them at their file once they are. The cover is fetched and
         re-encoded like an uploaded one; a cover that cannot be fetched
-        does not stop the import.
+        does not stop the import. A new playlist given the provider link it
+        came from as `source_url` follows it: `sync_player_playlist` adds
+        the songs added there later.
         """
         try:
             if not isinstance(tracks, list) or not tracks:
@@ -674,12 +747,14 @@ class PlayerPlaylistsMixin:
                 self._playlist_tracks([] if library_tracks is None else library_tracks)
             )
             entries: list[dict[str, Any]] = []
+            source_keys: list[str] = []
             for item in tracks:
                 if not isinstance(item, dict):
                     raise ValueError("A playlist track has an invalid shape.")
                 remote = _remote_track(item)
                 if remote is None:
                     continue
+                source_keys.append(remote["path"])
                 entries.append(library.match(remote) or remote)
             if not entries:
                 raise ValueError("The playlist has no usable tracks.")
@@ -705,6 +780,8 @@ class PlayerPlaylistsMixin:
                     cover,
                     entries,
                     self.owner,
+                    source_url=_source_url(source_url),
+                    source_keys=source_keys,
                 )
         except (MornyeError, ValueError, TypeError, OSError) as exc:
             return {"status": "error", "error": str(exc)}
@@ -720,6 +797,102 @@ class PlayerPlaylistsMixin:
             "imported": len(imported),
             "downloaded": downloaded,
             "not_downloaded": len(imported) - downloaded,
+        }
+
+    def set_player_playlist_source(self, playlist_id: str, url: str = "") -> dict:
+        """Make a playlist follow a provider playlist link, then sync it.
+
+        For playlists imported before they could follow their source: the
+        songs listed now count as seen, so the first sync adds only what
+        the source has beyond them. An empty `url` stops following. A link
+        that cannot be fetched is not kept.
+        """
+        url = str(url or "").strip() if isinstance(url, str) else ""
+        followed = _source_url(url)
+        if url and not followed:
+            return {
+                "status": "error",
+                "error": "Paste the link of a playlist (https://…).",
+            }
+        playlist = player_playlists.get_playlist(playlist_id, self.owner)
+        if playlist is None:
+            return {"status": "error", "error": "Playlist not found."}
+        previous = player_playlists.playlist_source(playlist_id, self.owner)
+        seen = {player_playlists.remote_key(t) for t in playlist["tracks"]}
+        player_playlists.set_playlist_source(playlist_id, self.owner, followed, seen)
+        if not followed:
+            return {
+                "status": "ok",
+                "playlist": player_playlists.get_playlist(playlist_id, self.owner),
+                "added": 0,
+            }
+        result = self.sync_player_playlist(playlist_id)
+        if result.get("status") != "ok" and previous is not None:
+            old_url, old_keys = previous
+            player_playlists.set_playlist_source(
+                playlist_id, self.owner, old_url, old_keys
+            )
+        return result
+
+    def sync_player_playlist(self, playlist_id: str) -> dict:
+        """Add the songs added to the provider playlist this one follows.
+
+        Only additions travel: a song the source dropped stays here, and
+        one the user removed here is not brought back, since the source
+        listed it before. New songs are appended as not downloaded; the
+        Player points them at their file when the library has one.
+        """
+        source = player_playlists.playlist_source(playlist_id, self.owner)
+        if source is None:
+            return {"status": "error", "error": "Playlist not found."}
+        url, known = source
+        if not url:
+            return {
+                "status": "error",
+                "error": "This playlist does not follow a provider playlist.",
+            }
+        fetched = self.fetch_player_playlist_search_import(url)
+        if fetched.get("status") != "ok":
+            return fetched
+        playlist = player_playlists.get_playlist(playlist_id, self.owner)
+        if playlist is None:
+            return {"status": "error", "error": "Playlist not found."}
+        # Not-downloaded entries that repeat a song already listed (a file,
+        # or an earlier entry) go: they are what an earlier sync that
+        # missed the match left behind. Files are never removed.
+        present = _SongIndex([t for t in playlist["tracks"] if t["downloaded"]])
+        drop: list[str] = []
+        for track in playlist["tracks"]:
+            if track["downloaded"]:
+                continue
+            if track in present:
+                drop.append(track["path"])
+            else:
+                present.add(track)
+        keys: list[str] = []
+        added: list[dict[str, Any]] = []
+        for item in fetched["tracks"]:
+            remote = _remote_track(item)
+            if remote is None:
+                continue
+            keys.append(remote["path"])
+            if remote["path"] in known or remote in present:
+                continue
+            present.add(remote)
+            added.append(remote)
+        try:
+            playlist = player_playlists.record_source_sync(
+                playlist_id, self.owner, keys, added, drop
+            )
+        except (ValueError, TypeError, OSError) as exc:
+            return {"status": "error", "error": str(exc)}
+        if playlist is None:
+            return {"status": "error", "error": "Playlist not found."}
+        return {
+            "status": "ok",
+            "playlist": playlist,
+            "added": len(added),
+            "removed": len(drop),
         }
 
     def link_player_playlist_tracks(self, links: Any) -> dict:

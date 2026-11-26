@@ -1088,6 +1088,36 @@ def test_failed_provider_results_are_not_reported_as_success_and_fall_back():
     assert report.succeeded[0].provider == "second"
 
 
+def test_non_retryable_provider_error_falls_back_to_next_candidate():
+    attempts = []
+
+    async def execute(provider, source):
+        attempts.append(provider)
+        if provider == "first":
+            raise TrackNotFoundError(provider, source)
+        return DownloadResult.ok(provider, "/music/fallback.flac", source=source)
+
+    request = DownloadRequest(
+        sources=["spotify:track:non-retryable"],
+        config=MornyeConfig(),
+    )
+    report = asyncio.run(
+        DownloadService(
+            provider_resolver=ProviderResolver(
+                [
+                    ProviderProfile("first", priority=2),
+                    ProviderProfile("second", priority=1),
+                ]
+            ),
+            provider_executor=ProviderExecutor(execute),
+        ).download(request)
+    )
+
+    assert attempts == ["first", "second"]
+    assert report.failed == []
+    assert report.succeeded[0].provider == "second"
+
+
 def test_application_metadata_is_forwarded_without_legacy_reresolution():
     metadata_calls = 0
     forwarded = []

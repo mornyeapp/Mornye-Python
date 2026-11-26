@@ -1709,7 +1709,7 @@ body:has(#album-card:not(.hidden)) #fetchBtn {
    At 1200px and up the card had a 200px cover, a text column pinned to its
    top and the facts panel in the far corner, with most of the width empty
    between them. Here the cover grows with the window, the text column is as
-   tall as the cover with the actions along its foot, the title steps up,
+   tall as the cover with the actions right under the title, the title steps up,
    and the facts panel is centred beside them with readable values. */
 @media (min-width: 1200px) {
   #album-card { align-items: stretch; padding: var(--space-5); gap: var(--space-6); }
@@ -1718,7 +1718,7 @@ body:has(#album-card:not(.hidden)) #fetchBtn {
   #album-title { font-size: clamp(24px, 1.7vw, 34px); line-height: 1.15; }
   #album-subtitle, #album-artist { font-size: var(--text-lg); }
   #album-description { max-width: 72ch; }
-  #album-actions { margin-top: auto; padding-top: var(--space-3); }
+  #album-actions { margin-top: 0; padding-top: var(--space-5); }
   #album-tech {
     align-self: center;
     width: clamp(320px, 30%, 500px);
@@ -2094,3 +2094,141 @@ body:has(#album-card:not(.hidden)) #fetchBtn {
    Closing the result brings them back. */
 body:has(#album-card:not(.hidden)) #home-hero,
 body:has(#text-search-container:not(.hidden)) #home-hero { display: none; }
+
+/* An artist's releases, in groups: Albums, Singles & EPs, Appears On
+   (artistAlbumGroups in app.js); each title spans the grid. */
+.artist-albums-grid > .aac-group {
+  grid-column: 1 / -1; margin: var(--space-5) 0 0;
+  color: var(--text); font-size: var(--text-lg); font-weight: 700;
+}
+.artist-albums-grid > .aac-group:first-child { margin-top: 0; }
+
+/* An artist's page has no Albums / All Tracks / Gallery bar: it shows its
+   releases in groups (Albums, Singles & EPs, Appears On) straight away. */
+.artist-tabs-bar { display: none; }
+
+/* Apple Music's artist header (setArtistExpression in app.js): the motion
+   video sits over its own still, and the artist's wordmark — a white
+   transparent PNG — takes the place of the typed name. */
+.artist-hero-bg video {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; object-position: center 30%; filter: brightness(.9);
+}
+#album-card.artist-mode .hero-name.has-logo { display: block; line-height: 0; }
+#album-card.artist-mode .hero-logo {
+  display: block; width: auto; height: auto;
+  max-width: min(60%, 520px); max-height: clamp(72px, 14vw, 180px);
+  object-fit: contain; object-position: left bottom;
+  filter: drop-shadow(0 2px 14px rgba(var(--shade-rgb), .45));
+}
+
+/* ── Personal Home (music look; renderPersonalHome in app.js) ───────────
+   #recent-wrap lays its sections out in the order Edit Home saved: each
+   section's `order` is set from the layout, a hidden one carries
+   .m-home-off. "Recent fetches" stays last. */
+html[data-style="music"] #recent-wrap.m-personal { display: flex; flex-direction: column; }
+html[data-style="music"] #recent-wrap.m-personal > .recent-container { order: 1000; }
+html[data-style="music"] #recent-wrap.m-personal > .m-home-off { display: none !important; }
+/* Recent searches come first, above the feed and every shelf: they are what
+   search mode is for, and at the bottom they sat under a screen of
+   recommendations. Recent fetches keep their place at the end. */
+html[data-style="music"] #recent-wrap:has(> .recent-container #recent-grid.searches) {
+  display: flex; flex-direction: column;
+}
+html[data-style="music"] #recent-wrap > .recent-container:has(#recent-grid.searches) { order: -1; }
+html[data-style="music"] .m-home-sec { display: block; margin-top: var(--space-5, 24px); }
+html[data-style="music"] .m-home-sec.hidden { display: none; }
+html[data-style="music"] .m-home-sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+html[data-style="music"] .m-home-greet { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+html[data-style="music"] .m-home-status { margin: 0; font-size: 13px; color: var(--text-2); }
+html[data-style="music"] .m-home-head { flex-wrap: wrap; }
+html[data-style="music"] .m-home-actions {
+  display: flex; align-items: center; gap: 10px; margin-left: auto;
+}
+/* A pill the height of the source picker beside it, so the two read as one
+   row of page actions. */
+.m-home-link {
+  display: inline-flex; align-items: center; height: 30px; padding: 0 12px;
+  border: 1px solid var(--rule); border-radius: 8px; background: var(--m-fill, var(--raised));
+  color: var(--text); font: 500 13px var(--font); white-space: nowrap; cursor: pointer;
+}
+.m-home-link:hover { background: var(--m-fill-2, var(--raised)); }
+
+/* Quick play: nine covers, three by three, the title over each. */
+html[data-style="music"] .m-quick {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; max-width: 480px;
+}
+html[data-style="music"] .m-quick-tile {
+  position: relative; aspect-ratio: 1; padding: 0; border: 0; border-radius: 10px; overflow: hidden;
+  background: var(--m-fill-2, var(--raised)); cursor: pointer; text-align: left;
+}
+html[data-style="music"] .m-quick-tile img,
+html[data-style="music"] .m-quick-tile .explore-cover-blank {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 0;
+}
+html[data-style="music"] .m-quick-text {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 10px 8px;
+  background: linear-gradient(transparent, rgba(var(--shade-rgb), .65)); color: var(--m-glass-ink);
+  display: flex; flex-direction: column; min-width: 0;
+}
+html[data-style="music"] .m-quick-title,
+html[data-style="music"] .m-quick-artist { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html[data-style="music"] .m-quick-title { font-size: 13px; font-weight: 600; }
+html[data-style="music"] .m-quick-artist { font-size: 11px; opacity: .85; }
+html[data-style="music"] .m-quick-tile:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+
+/* Cards of pins and mixes: a "…" over the corner, a song count on mixes. */
+html[data-style="music"] .m-home-card { position: relative; }
+html[data-style="music"] .m-home-more {
+  position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; border: 0; border-radius: 50%;
+  background: rgba(var(--shade-rgb), .45); color: var(--m-glass-ink); font-weight: 700; cursor: pointer; opacity: 0;
+}
+html[data-style="music"] .m-home-card:hover .m-home-more,
+html[data-style="music"] .m-home-more:focus-visible { opacity: 1; }
+html[data-style="music"] .m-mix-badge {
+  position: absolute; left: 8px; top: 8px; padding: 2px 6px; border-radius: 6px;
+  background: rgba(var(--shade-rgb), .5); color: var(--m-glass-ink); font-size: 11px; font-weight: 600;
+}
+
+/* Finish your collection: one row per loose end. */
+html[data-style="music"] .m-unfinished { list-style: none; margin: 0 0 12px; padding: 0; max-width: 560px; }
+html[data-style="music"] .m-unfinished-row {
+  display: flex; justify-content: space-between; width: 100%; padding: 10px 2px;
+  border: 0; border-top: 1px solid var(--rule); background: transparent;
+  color: var(--text); font: 14px var(--font); cursor: pointer; text-align: left;
+}
+html[data-style="music"] .m-unfinished-row:hover { color: var(--signal); }
+
+/* Edit Home: the playback statistics' frame (views/settings.css). */
+#home-edit-modal {
+  position: fixed; inset: 0; z-index: var(--z-modal); display: flex;
+  align-items: center; justify-content: center; padding: var(--space-5);
+  background: var(--scrim);
+}
+#home-edit-modal.hidden { display: none; }
+.home-edit {
+  width: min(560px, 100%); max-height: 90vh; overflow: auto; padding: var(--space-5);
+  background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius-2, 12px); color: var(--text);
+}
+.home-edit .modal-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.home-edit .modal-header h2 { margin: 0; font-size: var(--text-lg); }
+.home-edit .modal-close {
+  width: 34px; height: 34px; border: 0; background: transparent;
+  color: var(--text-muted); font: inherit; font-size: 22px; cursor: pointer;
+}
+.home-edit .modal-footer { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-4); }
+.home-edit-list { list-style: none; margin: var(--space-3) 0 0; padding: 0; max-height: 60vh; overflow: auto; }
+.home-edit-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 0; border-top: 1px solid var(--rule);
+}
+.home-edit-check { display: flex; align-items: flex-start; gap: 10px; min-width: 0; cursor: pointer; }
+.home-edit-check input { margin-top: 3px; }
+.home-edit-name { display: block; font-weight: 600; color: var(--text); }
+.home-edit-about { display: block; font-size: 12px; color: var(--text-2); }
+.home-edit-moves { display: flex; gap: 4px; flex: none; }
+
+@media (max-width: 640px) {
+  html[data-style="music"] .m-quick { gap: 4px; }
+  html[data-style="music"] .m-home-head { padding-left: 16px; padding-right: 16px; }
+}

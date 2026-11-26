@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -268,7 +267,7 @@ def test_a_failing_extension_is_an_empty_answer(fresh_pool) -> None:
 
 @pytest.fixture
 def both_halves(monkeypatch):
-    """Built-in Deezer and Tidal lookups, plus tidal-web as Tidal's extension."""
+    """Built-in Deezer and Apple lookups, plus apple-music as Apple's extension."""
     monkeypatch.setenv(ext_enrich.ENABLE_ENV, "1")
     me._enrichment_cache.clear()
     monkeypatch.setattr(me, "_put_cached", lambda isrc, data: None)
@@ -279,17 +278,17 @@ def both_halves(monkeypatch):
             genre="R&B", label="Republic Records", upc="602508836060"
         )
 
-    async def tidal(track_name, artist_name, album_name="", duration_ms=0):
-        return EnrichedMetadata()  # the built-in Tidal lookup finding nothing
+    async def apple(track_name, artist_name, isrc="", album_name="", duration_ms=0):
+        return EnrichedMetadata()  # the built-in Apple lookup finding nothing
 
     monkeypatch.setattr(me, "_deezer_fetch_async", deezer)
-    monkeypatch.setattr(me, "_tidal_fetch_async", tidal)
+    monkeypatch.setattr(me, "_apple_fetch_async", apple)
     monkeypatch.setattr(
         ext_enrich,
         "extensions_for_service",
-        lambda service, manager=None: ["tidal-web"] if service == "tidal" else [],
+        lambda service, manager=None: ["apple-music"] if service == "apple" else [],
     )
-    state = {"delay": 0.0, "asked": [], "installed": ["tidal-web"]}
+    state = {"delay": 0.0, "asked": [], "installed": ["apple-music"]}
     monkeypatch.setattr(
         ext_enrich, "enrichment_extensions", lambda manager=None: state["installed"]
     )
@@ -301,7 +300,7 @@ def both_halves(monkeypatch):
     ):
         state["asked"].append(ext)
         await asyncio.sleep(state["delay"])
-        track = TIDAL_WEB_TRACK if ext == "tidal-web" else other_track
+        track = TIDAL_WEB_TRACK if ext == "apple-music" else other_track
         return enriched_from_track(track, title=track_name, album=album_name)
 
     monkeypatch.setattr(ext_enrich, "fetch_extension_enrichment", fake_ext)
@@ -314,7 +313,7 @@ def _enrich(**kwargs):
             "Blinding Lights",
             "The Weeknd",
             "USUG11904206",
-            ["deezer", "tidal"],
+            ["deezer", "apple"],
             album_name="After Hours",
             **kwargs,
         )
@@ -326,11 +325,11 @@ def test_extensions_fill_what_the_built_in_lookups_left(both_halves) -> None:
     merged = _enrich()
     # Deezer's built-in lookup came first and keeps its fields…
     assert (merged.label, merged.upc) == ("Republic Records", "602508836060")
-    # …and tidal-web supplies what nothing built in had.
+    # …and apple-music supplies what nothing built in had.
     assert merged.copyright == "℗ 2019 The Weeknd XO, Inc."
     assert merged.producer == "Max Martin; Oscar Holter"
     assert merged._sources["label"] == "deezer"
-    assert merged._sources["copyright"] == "ext:tidal-web"
+    assert merged._sources["copyright"] == "ext:apple-music"
 
 
 @pytest.mark.uses_extension_enrichment
@@ -345,21 +344,36 @@ def test_a_slow_extension_does_not_cost_the_built_in_answers(
 
 
 @pytest.mark.uses_extension_enrichment
-def test_extensions_outside_the_list_are_asked_too_and_merge_last(both_halves) -> None:
-    both_halves["installed"] = ["melon-music", "tidal-web"]
+def test_only_the_listed_services_extensions_are_asked(both_halves) -> None:
+    # An extension whose service is not in the enrichment list is left
+    # alone: asking it cost a signed session (a captcha) per service.
+    both_halves["installed"] = ["melon-music", "apple-music"]
     merged = _enrich()
-    assert sorted(both_halves["asked"]) == ["melon-music", "tidal-web"]
-    # A field nothing listed supplied comes from the extension outside it…
-    assert merged.bpm == 171
-    assert merged._sources["bpm"] == "ext:melon-music"
-    # …and one the listed sources answered stays theirs.
+    assert both_halves["asked"] == ["apple-music"]
+    assert merged._sources.get("bpm") != "ext:melon-music"
     assert merged.label == "Republic Records"
 
 
 @pytest.mark.uses_extension_enrichment
-def test_an_empty_list_still_asks_the_extensions(both_halves) -> None:
-    both_halves["installed"] = ["melon-music", "tidal-web"]
-    merged = asyncio.run(
+def test_the_extension_that_served_the_file_is_not_asked_again(both_halves) -> None:
+    both_halves["installed"] = ["apple-music"]
+    asyncio.run(
+        me.enrich_metadata_async(
+            "Blinding Lights",
+            "The Weeknd",
+            "USUG11904206",
+            ["apple"],
+            album_name="After Hours",
+            skip_extensions=("ext:apple-music",),
+        )
+    )
+    assert both_halves["asked"] == []
+
+
+@pytest.mark.uses_extension_enrichment
+def test_an_empty_list_asks_no_extension(both_halves) -> None:
+    both_halves["installed"] = ["melon-music", "apple-music"]
+    asyncio.run(
         me.enrich_metadata_async(
             "Blinding Lights",
             "The Weeknd",
@@ -368,8 +382,29 @@ def test_an_empty_list_still_asks_the_extensions(both_halves) -> None:
             album_name="After Hours",
         )
     )
-    assert sorted(both_halves["asked"]) == ["melon-music", "tidal-web"]
-    assert merged.copyright == "℗ 2019 The Weeknd XO, Inc."
+    assert both_halves["asked"] == []
+
+
+@pytest.mark.uses_extension_enrichment
+def test_qobuz_and_tidal_are_no_longer_enrichment_sources(
+    both_halves, monkeypatch
+) -> None:
+    # A saved setting that still names them is read without them: neither
+    # a built-in lookup nor their extensions (a captcha session per track).
+    monkeypatch.setattr(
+        ext_enrich, "extensions_for_service", lambda service, manager=None: [service]
+    )
+    both_halves["installed"] = ["qobuz", "tidal", "deezer"]
+    asyncio.run(
+        me.enrich_metadata_async(
+            "Blinding Lights",
+            "The Weeknd",
+            "USUG11904206",
+            ["qobuz", "tidal", "deezer"],
+            album_name="After Hours",
+        )
+    )
+    assert both_halves["asked"] == ["deezer"]
 
 
 @pytest.mark.uses_extension_enrichment
@@ -384,86 +419,8 @@ def test_the_switch_turns_the_extension_half_off(both_halves, monkeypatch) -> No
 # The built-in lookups that read less than they had
 # ---------------------------------------------------------------------------
 
-QOBUZ_TRACK = {
-    "isrc": "USUG11904206",
-    "parental_warning": False,
-    "composer": {"name": "Max Martin"},
-    "copyright": "℗ 2019 The Weeknd XO, Inc.",
-    "performers": (
-        "The Weeknd, MainArtist, Producer - Max Martin, Producer, ComposerLyricist"
-        " - Serban Ghenea, MixingEngineer - Dave Kutch, MasteringEngineer"
-    ),
-    "album": {
-        "title": "After Hours",
-        "genre": {"name": "R&B"},
-        "label": {"name": "Republic Records"},
-        "image": {"large": "https://static.qobuz.com/cover_600.jpg"},
-        "upc": "0602508883408",
-        "release_date_original": "2020-03-20",
-        "tracks_count": 14,
-        "media_count": 1,
-    },
-}
-
-
-def _qobuz(monkeypatch, track):
-    class _Provider:
-        async def _search_by_isrc_async(self, isrc):
-            return track
-
-    monkeypatch.setattr(me, "_get_dynamic_python_provider", lambda *a, **k: _Provider())
-    return me._QobuzMeta()
-
-
-def test_qobuz_reads_composer_copyright_totals_and_credits(monkeypatch) -> None:
-    out = asyncio.run(
-        _qobuz(monkeypatch, QOBUZ_TRACK).fetch_async("USUG11904206", "After Hours")
-    )
-    assert out.composer == "Max Martin"
-    assert out.copyright == "℗ 2019 The Weeknd XO, Inc."
-    assert (out.release_date, out.total_tracks, out.total_discs) == (
-        "2020-03-20",
-        14,
-        1,
-    )
-    assert out.producer == "The Weeknd; Max Martin"
-    assert (out.lyricist, out.mixer, out.engineer) == (
-        "Max Martin",
-        "Serban Ghenea",
-        "Dave Kutch",
-    )
-
-
-def test_qobuz_on_another_release_keeps_recording_fields_only(monkeypatch) -> None:
-    out = asyncio.run(
-        _qobuz(monkeypatch, QOBUZ_TRACK).fetch_async("USUG11904206", "The Highlights")
-    )
-    assert (out.genre, out.composer, out.producer) == (
-        "R&B",
-        "Max Martin",
-        "The Weeknd; Max Martin",
-    )
-    assert (out.label, out.upc, out.copyright, out.total_tracks) == ("", "", "", 0)
-
 
 def test_a_lookup_answering_with_another_isrc_is_ignored(monkeypatch) -> None:
-    """Qobuz's ISRC lookup is a search, and returns its nearest hit."""
-    nearest = {**QOBUZ_TRACK, "isrc": "USUG11904999"}
-    out = asyncio.run(
-        _qobuz(monkeypatch, nearest).fetch_async(
-            "USUG11904206", "After Hours", "Blinding Lights"
-        )
-    )
-    assert out.as_tags() == {}
-    # Written differently, the same code is still the same code.
-    same = {**QOBUZ_TRACK, "isrc": "usug11904206"}
-    out = asyncio.run(
-        _qobuz(monkeypatch, same).fetch_async(
-            "USUG11904206", "After Hours", "Blinding Lights"
-        )
-    )
-    assert out.composer == "Max Martin"
-
     class _Response:
         status_code = 200
         is_success = True
@@ -486,49 +443,6 @@ def test_a_lookup_answering_with_another_isrc_is_ignored(monkeypatch) -> None:
         me._DeezerMeta().fetch_async("USUG11904206", "After Hours", "Blinding Lights")
     )
     assert deezer.as_tags() == {}
-
-
-def test_a_wrong_isrc_does_not_bring_a_stranger_s_credits(monkeypatch) -> None:
-    """Seen live: an ISRC that belonged to an Olivia Rodrigo song, asked for
-    "Save Your Tears", came back from Qobuz with her credits."""
-    stranger = {**QOBUZ_TRACK, "title": "good 4 u"}
-    meta = _qobuz(monkeypatch, stranger)
-    out = asyncio.run(
-        meta.fetch_async("USUG12004749", "After Hours", "Save Your Tears")
-    )
-    assert out.as_tags() == {}
-
-
-def test_a_title_in_another_script_is_still_the_same_song(monkeypatch) -> None:
-    # Its own ISRC, the one asked for: only the script of the title differs.
-    korean = {**QOBUZ_TRACK, "title": "밤편지", "isrc": "KRA381700512"}
-    out = asyncio.run(
-        _qobuz(monkeypatch, korean).fetch_async(
-            "KRA381700512", "After Hours", "Through the Night"
-        )
-    )
-    assert out.composer == "Max Martin"
-
-
-def test_tidal_lookup_fills_its_api_list_from_the_async_refresh(monkeypatch) -> None:
-    async def refresh_tidal_api_list_async(force=False):
-        return ["https://tidal-mirror.example"]
-
-    def get_tidal_api_list():
-        raise RuntimeError("No cached Tidal API URLs")
-
-    module = SimpleNamespace(
-        get_tidal_api_list=get_tidal_api_list,
-        refresh_tidal_api_list_async=refresh_tidal_api_list_async,
-    )
-    monkeypatch.setattr(me, "_get_dynamic_python_module", lambda name: module)
-    # Built without __init__, which would start the refresh on a thread of
-    # its own; the refresh itself is what is under test.
-    meta = me._TidalMeta.__new__(me._TidalMeta)
-    meta._apis = []
-    meta._apis_lock = __import__("threading").Lock()
-    meta._refresh_bg()
-    assert meta._apis == ["https://tidal-mirror.example"]
 
 
 def test_deezer_is_asked_for_english_genre_names(monkeypatch) -> None:

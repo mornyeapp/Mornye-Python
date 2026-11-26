@@ -30,33 +30,19 @@ if (document.readyState === 'loading') {
   detectAndApplyOSStyles();
 }
 
-function showSkeletonTracks(count = 5) {
+// While a link is fetched or a search runs, the track table shows a small
+// equalizer of bouncing bars and what is happening, in place of the old
+// grey placeholder rows. The name stays for its callers; `count` is unused.
+function showSkeletonTracks(count = 5, label = 'Fetching metadata…') {
   const container = $('track-rows');
   if (!container) return;
-  
-  // Clear the table and insert skeletons using the SAME grid as real tracks
-  container.innerHTML = Array(count).fill(0).map(() => `
-    <div class="track-row u-border-bottom-1-solid-border" style="pointer-events:none;">
-      <div><div class="skeleton u-w-14 u-h-14 u-r-2"></div></div>
-      <div><div class="skeleton u-w-16 u-h-14"></div></div>
-      <div class="tr-title-cell">
-        <div class="skeleton u-w-44 u-h-44 u-r-6 u-shrink-0"></div>
-        <div class="u-dir-column u-gap-6 u-w-100pct" style="display:flex;">
-          <div class="skeleton skeleton-text u-m-0 u-w-70pct"></div>
-          <div class="skeleton skeleton-text short u-m-0 u-w-40pct"></div>
-        </div>
-      </div>
-      <div><div class="skeleton skeleton-text u-m-0-auto u-w-50pct"></div></div>
-      <div><div class="skeleton skeleton-text u-m-0-22-0-auto u-w-40"></div></div>
-      <div class="tr-actions">
-        <div class="skeleton u-w-30 u-h-30 u-r-6"></div>
-        <div class="skeleton u-w-30 u-h-30 u-r-6"></div>
-        <div class="skeleton u-w-30 u-h-30 u-r-6"></div>
-        <div class="skeleton u-w-30 u-h-30 u-r-6"></div>
-      </div>
-    </div>
-  `).join("");
-  
+  clearArtistPageParts();
+  container.innerHTML = `
+    <div class="fetch-loader" role="status" aria-live="polite">
+      <div class="fl-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="fl-label">${escHtml(label)}</div>
+    </div>`;
+
   $('track-table-wrap').classList.remove('hidden');
   
   // Hide the recents
@@ -202,8 +188,12 @@ function switchView(name) {
   if (name === 'local') loadNetworkShares();
   if (name === 'queue') { loadStaged(); window.dismissDownloadToast?.(); }
   if (name === 'history') loadHistory();
+  if (name === 'settings' && $('tc-general')?.classList.contains('active')) loadStorageUsage();
   if (name === 'following') loadWeeklyReleases(false);
   if (name === 'player') initPlayerView();
+  if (name === 'home') { ensureHomeFeed(); renderMusicRecentSongs(); }
+  if (name === 'home') renderPersonalHome();
+  placeQueueDock(name === 'home' && isMusicStyle());
   syncLibraryNav();
 }
 
@@ -301,7 +291,9 @@ function switchTab(name, btn) {
     // runs them. Re-read each time: an extension may have been installed.
     loadExtensionStatusList();
   }
-  if (name === 'player') loadPlayerSettings();
+  if (name === 'general') loadStorageUsage();
+  if (name === 'player') { loadPlayerSettings(); loadLinkSettings(); loadConnectSettings(); loadIntegrationSettings(); }
+  else stopLinkPolling();
   if (name === 'extensions') {
     loadRegistries();
     loadDirectories();
@@ -407,6 +399,19 @@ function applyAccent(accent) {
     if (val === 'amber') el.removeAttribute('data-accent');
     else el.setAttribute('data-accent', val);
   }
+  // The music look's swatches (.m-swatches) mirror the select.
+  document.querySelectorAll('.m-swatches [data-a]').forEach((b) => {
+    b.classList.toggle('on', b.dataset.a === val);
+    b.setAttribute('aria-checked', String(b.dataset.a === val));
+  });
+}
+
+// A swatch in the music look: the same choice as the Accent select.
+function pickAccent(accent) {
+  const select = $('config-accent');
+  if (!select || !ACCENTS.includes(accent)) return;
+  select.value = accent;
+  changeAccent();
 }
 
 function changeAccent() {
@@ -427,28 +432,31 @@ function changeAccent() {
 }
 
 // ── Density (N4) ───────────────────────────────────────────────────────────
-// 'compact' puts data-density on <html> and <body>; css/layout.css shrinks
-// the row height and the spacing tokens a step there. Stored like the
-// accent: localStorage for the next first paint (boot-head.js), the settings
-// blob, and gui-settings.json (save_density), the copy that survives.
-const DENSITIES = ['comfortable', 'compact', 'large'];
-// 'large' magnifies the whole interface. The desktop window zooms natively
-// (set_page_zoom, WKWebView pageZoom — like Cmd-+); where that isn't
-// available (browser tab, other platforms) css/layout.css applies CSS zoom
-// under data-zoom="css".
-const LARGE_ZOOM = 1.15;
+// Each density is a zoom of the whole interface, far enough apart to tell
+// at a glance; the compact ones also put data-density="compact" on <html>
+// and <body>, where css/layout.css takes a step off the row height and the
+// spacing tokens, so more rows fit. Stored like the accent: localStorage for
+// the next first paint (boot-head.js), the settings blob, and
+// gui-settings.json (save_density), the copy that survives.
+const DENSITIES = ['extra-compact', 'compact', 'comfortable', 'large', 'extra-large'];
+// The desktop window zooms natively (set_page_zoom, WKWebView pageZoom —
+// like Cmd-+); where that isn't available (browser tab, other platforms)
+// css/layout.css applies CSS zoom under data-zoom="css", by --page-zoom.
+const DENSITY_ZOOM = { 'extra-compact': 0.8, compact: 0.9, comfortable: 1, large: 1.15, 'extra-large': 1.3 };
 
 function applyDensity(density) {
   const val = DENSITIES.includes(density) ? density : 'comfortable';
+  const tokens = val.endsWith('compact') ? 'compact' : val.endsWith('large') ? 'large' : '';
   for (const el of [document.documentElement, document.body]) {
     if (!el) continue;
-    if (val !== 'comfortable') el.setAttribute('data-density', val);
+    if (tokens) el.setAttribute('data-density', tokens);
     else el.removeAttribute('data-density');
   }
-  applyPageZoom(val === 'large' ? LARGE_ZOOM : 1);
+  applyPageZoom(DENSITY_ZOOM[val]);
 }
 
 function applyPageZoom(factor) {
+  document.documentElement.style.setProperty('--page-zoom', String(factor));
   const setCss = (on) => {
     if (on) document.documentElement.setAttribute('data-zoom', 'css');
     else document.documentElement.removeAttribute('data-zoom');
@@ -473,6 +481,668 @@ function changeDensity() {
     window.pywebview?.api?.save_density?.(val);
   } catch (e) {}
 }
+
+// ── Interface style ────────────────────────────────────────────────────────
+// 'console' is the monospace console look; 'music' the music-app look
+// (css/music-tokens.css + css/music.css, keyed off data-style="music" on
+// <html> and <body>). Stored like the density: localStorage for the next
+// first paint (boot-head.js), the settings blob, and gui-settings.json
+// (save_style). Must match MornyeAPI.STYLES in app.py.
+const STYLES = ['console', 'music'];
+
+function isMusicStyle() {
+  return document.documentElement.getAttribute('data-style') === 'music';
+}
+
+function applyStyle(style) {
+  const val = STYLES.includes(style) ? style : 'console';
+  for (const el of [document.documentElement, document.body]) {
+    if (!el) continue;
+    if (val === 'music') el.setAttribute('data-style', 'music');
+    else el.removeAttribute('data-style');
+  }
+  mountHomeFeed(val === 'music');
+  // History's rows carry the covers only in the music look: redrawn on a
+  // switch either way.
+  if ($('view-history')?.classList.contains('active')) loadHistory();
+}
+
+function changeStyle() {
+  const val = $('config-style')?.value || 'console';
+  applyStyle(val);
+  try {
+    localStorage.setItem('mornye-style', val);
+    const stored = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) || '{}');
+    stored.style = val;
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(stored));
+  } catch (e) {}
+  try {
+    window.pywebview?.api?.save_style?.(val);
+  } catch (e) {}
+}
+
+// In the music look Home is also where the recommendations are, the way a
+// music app's Home is: Explore's feed (picker and sections, #explore-feed)
+// moves into #recent-wrap, which Home already hides while an album is open
+// and shows again when it closes, and the Explore entry leaves the sidebar.
+// Back in the console look the feed returns to its own page. Moving the
+// nodes keeps their ids and handlers, so loadExploreData() works in both.
+let exploreFeedHome = null;
+let exploreSourceHome = null;
+let homeFeedLoaded = false;
+
+function mountHomeFeed(music) {
+  const feed = $('explore-feed');
+  const slot = $('recent-wrap');
+  if (!feed || !slot) return;
+  if (!exploreFeedHome) exploreFeedHome = feed.parentElement;
+  if (music) {
+    if (feed.parentElement !== slot) slot.prepend(feed);
+  } else if (exploreFeedHome && feed.parentElement !== exploreFeedHome) {
+    exploreFeedHome.appendChild(feed);
+  }
+  // The source picker sits beside Home's title in the music look
+  // ("Recommendations from …"), in the feed's own header otherwise.
+  const picker = $('explore-source');
+  const pickSlot = $('m-feed-slot');
+  if (picker && pickSlot) {
+    if (!exploreSourceHome) exploreSourceHome = picker.parentElement;
+    if (music) pickSlot.appendChild(picker);
+    else if (exploreSourceHome && picker.parentElement !== exploreSourceHome) exploreSourceHome.appendChild(picker);
+  }
+  $('nav-explore')?.classList.toggle('hidden', music);
+  placeVersion(music);
+  if (music && $('view-explore')?.classList.contains('active')) switchView('home');
+  const onHome = $('view-home')?.classList.contains('active');
+  placeQueueDock(music && onHome);
+  if (music && onHome) { ensureHomeFeed(); renderMusicRecentSongs(); renderPersonalHome(); }
+}
+
+// The version sits under Settings, at the foot of the sidebar, in the music
+// look; beside the brand in the console look.
+let versionHome = null;
+
+function placeVersion(music) {
+  const ver = $('sb-version');
+  const settings = $('nav-settings');
+  if (!ver || !settings) return;
+  if (!versionHome) versionHome = ver.parentElement;
+  if (music) { if (settings.nextElementSibling !== ver) settings.after(ver); }
+  else if (versionHome && ver.parentElement !== versionHome) versionHome.appendChild(ver);
+}
+
+// The sidebar's Search in the music look: Home, in search mode, focused.
+function musicSearch() {
+  switchView('home');
+  setSearchModeTo('search');
+  $('urlInput')?.focus();
+}
+
+// The Link / Search / CSV control drives the same mode the console look's
+// toggle does; this only says which one to be in.
+function setSearchModeTo(mode) {
+  if ($('searchMode') && $('searchMode').value !== mode) toggleSearchMode();
+  syncModeSeg();
+}
+
+function syncModeSeg() {
+  const mode = $('searchMode')?.value || 'link';
+  document.querySelectorAll('.m-seg [data-mode]').forEach((b) => {
+    b.classList.toggle('on', b.dataset.mode === mode);
+    b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
+  });
+}
+
+// The download dock is a floating pill in the music look, except on Home,
+// where it sits under the fetch bar as the "Downloading …" line. Only the
+// node moves: renderQueueNow() keeps filling it by id wherever it is, and
+// it goes back to <body> on every other page, so it never disappears with
+// a view (the reason it lives at body level, see index.html).
+let queueDockHome = null;
+
+function placeQueueDock(onMusicHome) {
+  const dock = $('queue-dock');
+  const bar = $('search-bar');
+  if (!dock || !bar) return;
+  if (!queueDockHome) queueDockHome = dock.parentElement;
+  if (onMusicHome) {
+    if (dock.previousElementSibling !== bar) bar.after(dock);
+  } else if (queueDockHome && dock.parentElement !== queueDockHome) {
+    queueDockHome.appendChild(dock);
+  }
+}
+
+// "Recently Added" on the music look's Home: the newest downloaded songs,
+// three columns of three, with the cover read from each file.
+async function renderMusicRecentSongs() {
+  const shelf = $('m-recent-songs');
+  const grid = $('m-recent-songs-grid');
+  const api = window.pywebview?.api;
+  if (!shelf || !grid || !isMusicStyle() || typeof api?.get_download_history !== 'function') return;
+  let items = [];
+  try {
+    const res = await api.get_download_history('', 'newest', 30);
+    items = (res?.items || []).filter((r) => r.success).slice(0, 9);
+  } catch (e) { items = []; }
+  shelf.classList.toggle('hidden', !items.length);
+  if (!items.length) { grid.innerHTML = ''; return; }
+  let covers = {};
+  try {
+    const paths = items.map((r) => r.file_path).filter(Boolean);
+    if (paths.length && typeof api.get_track_thumbs === 'function') covers = (await api.get_track_thumbs(paths, 96)) || {};
+  } catch (e) { covers = {}; }
+  grid.innerHTML = items.map((r) => {
+    const cover = covers[r.file_path];
+    const art = cover
+      ? `<img class="m-song-art" src="${escHtml(cover)}" alt="" loading="lazy">`
+      : '<div class="m-song-art m-song-blank" aria-hidden="true">♪</div>';
+    const fmt = (r.format || '').toUpperCase();
+    return `<div class="m-song" title="${escHtml(r.file_path || '')}">
+      ${art}
+      <div class="m-song-text"><div class="m-song-title">${escHtml(r.title || 'Untitled')}</div>
+        <div class="m-song-artist">${escHtml(r.artist || '')}</div></div>
+      ${fmt ? `<span class="m-song-q">${escHtml(fmt)}</span>` : ''}
+    </div>`;
+  }).join('');
+  placeRecentSongs();
+}
+
+// The feed's container is emptied on every load (innerHTML), which would
+// take the shelf with it once placeRecentSongs() has put it in there: it
+// steps back out to #recent-wrap first.
+function rescueRecentSongs() {
+  const shelf = $('m-recent-songs');
+  const wrap = $('recent-wrap');
+  if (shelf && wrap && $('explore-sections')?.contains(shelf)) {
+    wrap.insertBefore(shelf, wrap.querySelector('.recent-container'));
+  }
+}
+
+// After the feed's first shelf (Top Picks), as on a music app's Home.
+function placeRecentSongs() {
+  // The personal Home orders its sections itself (Edit Home).
+  if (personalHome) return;
+  const shelf = $('m-recent-songs');
+  const first = $('explore-sections')?.firstElementChild;
+  if (shelf && first && isMusicStyle() && first.nextElementSibling !== shelf) first.after(shelf);
+}
+
+// Top Picks: the panel under each card takes the colour of its artwork, the
+// album page's own averaging (applyAlbumGlow) on a second, CORS-enabled
+// copy of the image. A host without CORS leaves the neutral panel.
+function tintPickCard(card, url) {
+  if (!url) return;
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    try {
+      const SIZE = 16;
+      const canvas = document.createElement('canvas');
+      canvas.width = SIZE; canvas.height = SIZE;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, SIZE, SIZE);
+      const { data } = ctx.getImageData(0, 0, SIZE, SIZE);
+      let r = 0, g = 0, b = 0, n = 0;
+      for (let i = 0; i < data.length; i += 4) { r += data[i]; g += data[i + 1]; b += data[i + 2]; n++; }
+      // Darkened so the white text on it stays readable.
+      const k = 0.55;
+      card.style.setProperty('--pick-bg', `rgb(${Math.round(r / n * k)}, ${Math.round(g / n * k)}, ${Math.round(b / n * k)})`);
+      card.classList.add('m-tinted');
+    } catch (e) { /* tainted canvas: keep the neutral panel */ }
+  };
+  img.src = url;
+}
+
+// Following, music look: "Follow several artists at once" is folded behind
+// a button under the follow field, as in the mockup.
+function toggleBulkFollow() {
+  const box = $('m-bulk-follow');
+  if (!box) return;
+  const open = !box.classList.contains('m-open');
+  box.classList.toggle('m-open', open);
+  document.querySelector('.m-bulk-toggle')?.setAttribute('aria-expanded', String(open));
+  if (open) $('subscription-bulk-input')?.focus();
+}
+
+// Queue, music look: "9 items · 3 downloading" under the title, from the
+// staged queue and the live downloads.
+function updateMusicQueueSub() {
+  const el = $('m-queue-sub');
+  if (!el) return;
+  const items = (stagedState.items || []).length;
+  const active = queue.filter((q) => q.status === 'active').length;
+  el.textContent = [`${items} item${items === 1 ? '' : 's'}`, active ? `${active} downloading` : '']
+    .filter(Boolean).join(' · ');
+}
+
+// The feed is fetched once per launch when Home first shows it; the picker
+// and the error state's retry reload it on demand, as on Explore.
+function ensureHomeFeed() {
+  if (homeFeedLoaded || !isMusicStyle()) return;
+  if (!window.pywebview?.api) return; // the boot handler asks again once the backend is up
+  homeFeedLoaded = true;
+  loadExploreData({ quiet: true });
+}
+
+// ── Personal Home (from Mornye mobile 5.4.5) ───────────────────────────────
+// The music look's Home made from the listener's own record
+// (core/personal_home.py): Quick play, Pinned, Mixes for you, Recently
+// played, Finish your collection, Recommended for you and On repeat, in the
+// order Edit Home saved, beside the feed (Top picks) and Recently added that
+// were already here. A status line under the greeting says what arrived
+// since the last visit and what is downloading.
+var HOME_SESSION = Math.random().toString(36).slice(2, 10);
+var HOME_SECTION_ELEMENT = { topPicks: 'explore-feed', recentlyAdded: 'm-recent-songs' };
+var personalHome = null;
+var personalHomeLoading = null;
+
+// What the status line says: arrivals since the last visit, then the queue.
+function homeStatusText(status, downloading) {
+  const parts = [];
+  const added = Number(status?.added) || 0;
+  if (added) {
+    const songs = added === 1 ? '1 song' : `${added} songs`;
+    parts.push(status.since_yesterday ? `${songs} added since yesterday` : `${songs} added since your last visit`);
+  }
+  if (downloading > 0) parts.push(`${downloading} downloading`);
+  return parts.join(' · ');
+}
+
+// Quick play: the tapped song first, the other eight queued after it.
+function quickPlayQueue(songs, index) {
+  if (!songs[index]) return [];
+  return [songs[index], ...songs.filter((_, i) => i !== index)];
+}
+
+// Edit Home's up/down: `list` with the item at `index` moved by `delta`.
+function moveInList(list, index, delta) {
+  const to = index + delta;
+  if (to < 0 || to >= list.length) return list.slice();
+  const out = list.slice();
+  const [item] = out.splice(index, 1);
+  out.splice(to, 0, item);
+  return out;
+}
+
+function homePinKey(pin) { return `${pin.kind}:${pin.id}`; }
+
+function homeSongItem(s) {
+  return { path: s.path, title: s.title || s.path.split(/[\\/]/).pop(), artist: s.artist || '', album: s.album || '' };
+}
+
+function playHomeSongs(songs, index = 0, shuffle) {
+  const items = (songs || []).filter(s => s && s.path).map(homeSongItem);
+  if (!items.length) { toastMgr.error('Nothing to play here.'); return; }
+  startPlayback(items, Math.min(index, items.length - 1), shuffle, false);
+}
+
+async function renderPersonalHome({ force = false } = {}) {
+  if (!isMusicStyle()) return;
+  const api = window.pywebview?.api;
+  if (typeof api?.get_personal_home !== 'function') return;
+  if (personalHomeLoading && !force) return personalHomeLoading;
+  personalHomeLoading = (async () => {
+    let res = null;
+    try { res = await api.get_personal_home(HOME_SESSION, false); } catch (e) { res = null; }
+    if (!res || res.status !== 'ok') return;
+    personalHome = res;
+    drawPersonalHome();
+    loadHomeRecommendations();
+  })();
+  try { await personalHomeLoading; } finally { personalHomeLoading = null; }
+}
+
+async function loadHomeRecommendations(refresh = false) {
+  const api = window.pywebview?.api;
+  if (!personalHome || !personalHome.order.includes('recommended') || typeof api?.get_home_recommendations !== 'function') return;
+  let res = null;
+  try { res = await api.get_home_recommendations(refresh); } catch (e) { res = null; }
+  personalHome.sections.recommended = res?.tracks || [];
+  drawHomeSection('recommended');
+}
+
+function homeDownloadingCount() {
+  try { return queue.filter(q => q.status === 'active' || q.status === 'queued' || q.status === 'waiting').length; } catch (e) { return 0; }
+}
+
+function drawHomeHead() {
+  if (!personalHome) return;
+  const title = $('m-home-title');
+  if (title) title.textContent = personalHome.greeting || 'Home';
+  const line = $('m-home-status');
+  if (line) {
+    const text = homeStatusText(personalHome.arrivals, homeDownloadingCount());
+    line.textContent = text;
+    line.classList.toggle('hidden', !text);
+  }
+}
+
+function drawPersonalHome() {
+  const wrap = $('recent-wrap');
+  if (!wrap || !personalHome) return;
+  wrap.classList.add('m-personal');
+  drawHomeHead();
+  rescueRecentSongs();
+  const order = personalHome.order || [];
+  const all = (personalHome.layout || []).map(s => s.id);
+  all.forEach((id) => {
+    const el = homeSectionEl(id);
+    if (!el) return;
+    const at = order.indexOf(id);
+    el.style.order = String(at < 0 ? 999 : at);
+    el.classList.toggle('m-home-off', at < 0);
+  });
+  for (const id of order) drawHomeSection(id);
+}
+
+// The element of a section: the feed and Recently added are already in
+// the page; the rest are made here, once.
+function homeSectionEl(id) {
+  if (HOME_SECTION_ELEMENT[id]) return $(HOME_SECTION_ELEMENT[id]);
+  let el = $(`m-home-${id}`);
+  if (!el) {
+    el = document.createElement('section');
+    el.id = `m-home-${id}`;
+    el.className = 'm-only m-shelf m-home-sec';
+    el.dataset.sec = id;
+    $('recent-wrap')?.appendChild(el);
+  }
+  return el;
+}
+
+function homeTitleOf(id) {
+  return (personalHome?.layout || []).find(s => s.id === id)?.title || id;
+}
+
+function homeShelf(id, inner, { action = '' } = {}) {
+  const el = homeSectionEl(id);
+  if (!el) return;
+  el.innerHTML = inner
+    ? `<div class="m-home-sec-head"><h3 class="explore-section-title">${escHtml(homeTitleOf(id))}</h3>${action}</div>${inner}`
+    : '';
+  el.classList.toggle('hidden', !inner);
+}
+
+function homeCard({ title, subtitle = '', cover = '', attrs = '', badge = '', menu = '' }) {
+  const art = cover
+    ? `<img src="${escHtml(cover)}" alt="" loading="lazy">`
+    : '<div class="explore-cover-blank" aria-hidden="true">♪</div>';
+  return `<div class="explore-card m-home-card" tabindex="0" role="button" data-activate ${attrs}>
+    ${art}${badge}
+    <div class="explore-card-title" title="${escHtml(title)}">${escHtml(title)}</div>
+    <div class="explore-card-subtitle" title="${escHtml(subtitle)}">${escHtml(subtitle)}</div>${menu}
+  </div>`;
+}
+
+// Covers are read from the files (get_track_thumbs), after the shelf is
+// drawn, so the shelf shows at once.
+async function fillHomeCovers(el) {
+  const api = window.pywebview?.api;
+  const slots = [...el.querySelectorAll('[data-cover-path]')];
+  if (!slots.length || typeof api?.get_track_thumbs !== 'function') return;
+  let covers = {};
+  try { covers = (await api.get_track_thumbs([...new Set(slots.map(s => s.dataset.coverPath))], 220)) || {}; } catch (e) { covers = {}; }
+  for (const slot of slots) {
+    const src = covers[slot.dataset.coverPath];
+    const blank = slot.querySelector('.explore-cover-blank, .m-song-blank');
+    if (src && blank) {
+      const img = document.createElement('img');
+      img.src = src; img.alt = ''; img.className = blank.className.includes('m-song') ? 'm-song-art' : '';
+      blank.replaceWith(img);
+    }
+  }
+}
+
+function drawHomeSection(id) {
+  if (!personalHome) return;
+  const data = personalHome.sections?.[id];
+  let html = '';
+  let action = '';
+  if (id === 'quickPlay') {
+    const songs = data || [];
+    html = songs.length ? `<div class="m-quick">${songs.map((s, i) => `
+      <button type="button" class="m-quick-tile" data-home-quick="${i}" data-cover-path="${escHtml(s.path)}" title="${escHtml(`${s.title} — ${s.artist}`)}">
+        <div class="explore-cover-blank" aria-hidden="true">♪</div>
+        <span class="m-quick-text"><span class="m-quick-title">${escHtml(s.title)}</span><span class="m-quick-artist">${escHtml(s.artist)}</span></span>
+      </button>`).join('')}</div>` : '';
+  } else if (id === 'pins') {
+    const pins = personalHome.pins || [];
+    const KIND = { album: 'Album', playlist: 'Playlist', artist: 'Artist', genre: 'Genre', folder: 'Folder' };
+    html = pins.length ? `<div class="explore-grid">${pins.map(p => homeCard({
+      title: p.title,
+      subtitle: p.subtitle || KIND[p.kind] || '',
+      attrs: `data-home-pin="${escHtml(homePinKey(p))}"${p.cover_path ? ` data-cover-path="${escHtml(p.cover_path)}"` : ''}`,
+      menu: `<button type="button" class="m-home-more" data-home-pin-menu="${escHtml(homePinKey(p))}" aria-label="More for ${escHtml(p.title)}" title="More">…</button>`,
+    })).join('')}</div>` : '';
+  } else if (id === 'mixes') {
+    const mixes = data || [];
+    html = mixes.length ? `<div class="explore-grid">${mixes.map((m, i) => homeCard({
+      title: m.title,
+      subtitle: m.subtitle || 'Made from your Library, updated daily',
+      attrs: `data-home-mix="${i}" data-cover-path="${escHtml(m.songs?.[0]?.path || '')}"`,
+      badge: `<span class="m-mix-badge">${m.songs.length} songs</span>`,
+      menu: `<button type="button" class="m-home-more" data-home-mix-menu="${i}" aria-label="More for ${escHtml(m.title)}" title="More">…</button>`,
+    })).join('')}</div>` : '';
+  } else if (id === 'recentlyPlayed') {
+    const albums = data || [];
+    html = albums.length ? `<div class="explore-grid">${albums.map(a => homeCard({
+      title: a.title, subtitle: a.artist,
+      attrs: `data-home-album="${escHtml(a.key)}" data-album-title="${escHtml(a.title)}" data-cover-path="${escHtml(a.cover_path)}"`,
+    })).join('')}</div>` : '';
+  } else if (id === 'onRepeat') {
+    if (data?.kind === 'songs') {
+      html = data.songs.length ? `<div class="m-songs">${data.songs.map((s, i) => `
+        <div class="m-song" role="button" tabindex="0" data-activate data-home-repeat="${i}" data-cover-path="${escHtml(s.path)}">
+          <div class="m-song-art m-song-blank" aria-hidden="true">♪</div>
+          <div class="m-song-text"><div class="m-song-title">${escHtml(s.title)}</div><div class="m-song-artist">${escHtml(s.artist)}</div></div>
+          <span class="m-song-q">${s.plays}×</span>
+        </div>`).join('')}</div>` : '';
+    } else {
+      const albums = data?.albums || [];
+      html = albums.length ? `<div class="explore-grid">${albums.map(a => homeCard({
+        title: a.title, subtitle: a.artist,
+        attrs: `data-home-album="${escHtml(a.key)}" data-album-title="${escHtml(a.title)}" data-cover-path="${escHtml(a.cover_path)}"`,
+      })).join('')}</div>` : '';
+    }
+  } else if (id === 'unfinished') {
+    const rows = data?.rows || [];
+    html = rows.length ? `<ul class="m-unfinished">${rows.map(r => `
+      <li><button type="button" class="m-unfinished-row" data-home-unfinished="${escHtml(r.id)}">${escHtml(r.text)}<span aria-hidden="true">›</span></button></li>`).join('')}</ul>
+      <div id="m-unfinished-albums" class="explore-grid hidden">${(data.albums || []).map(a => homeCard({
+        title: a.title, subtitle: `${a.present} of ${a.expected} songs`,
+        attrs: `data-home-album="${escHtml(a.key)}" data-album-title="${escHtml(a.title)}" data-cover-path="${escHtml(a.cover_path)}"`,
+      })).join('')}</div>` : '';
+  } else if (id === 'recommended') {
+    const tracks = data || [];
+    action = '<button type="button" class="m-home-link" data-home-refresh-reco title="Ask for new songs">Refresh</button>';
+    html = tracks.length ? `<div class="m-songs">${tracks.map((t, i) => {
+      const cover = httpUrlOrNull(t.cover);
+      return `<div class="m-song" role="button" tabindex="0" data-activate data-home-reco="${i}" title="Search for ${escHtml(`${t.title} — ${t.artist}`)}">
+          ${cover ? `<img class="m-song-art" src="${escHtml(cover)}" alt="" loading="lazy">` : '<div class="m-song-art m-song-blank" aria-hidden="true">♪</div>'}
+          <div class="m-song-text"><div class="m-song-title">${escHtml(t.title)}</div><div class="m-song-artist">${escHtml(t.artist)}</div></div>
+        </div>`;
+    }).join('')}</div>` : '';
+  } else {
+    return;
+  }
+  homeShelf(id, html, { action });
+  const el = homeSectionEl(id);
+  if (el && html) fillHomeCovers(el);
+}
+
+function openHomeAlbum(key, title) {
+  if (!enterLibrary()) return;
+  const open = () => {
+    if (libAll().albums.some(a => a.key === key)) { openPlayerAlbum(key); return true; }
+    return false;
+  };
+  if (open()) return;
+  // The Library may still be loading from its store.
+  setTimeout(() => { if (!open()) { $('player-search').value = title || ''; setPlayerTab('songs'); } }, 700);
+}
+
+async function openHomePin(key) {
+  const pin = (personalHome?.pins || []).find(p => homePinKey(p) === key);
+  if (!pin) return;
+  if (pin.kind === 'album') return openHomeAlbum(pin.id, pin.title);
+  if (pin.kind === 'playlist') return openLibraryPlaylist(pin.id);
+  if (pin.kind === 'artist') {
+    if (!enterLibrary()) return;
+    const go = () => { const a = libAll().artists.find(x => x.key === pin.id || x.name.toLowerCase() === pin.id); if (a) openPlayerArtist(a.key); return !!a; };
+    if (!go()) setTimeout(() => { if (!go()) { $('player-search').value = pin.title; setPlayerTab('songs'); } }, 700);
+    return;
+  }
+  // Genres and folders have no page in the Library: they play.
+  const res = await window.pywebview?.api?.get_home_pin_songs?.(key);
+  if (res?.status !== 'ok') { toastMgr.error(res?.error || 'Could not open this pin.'); return; }
+  playHomeSongs(res.songs, 0, true);
+}
+
+async function pinToHome(pin) {
+  const res = await window.pywebview?.api?.pin_to_home?.(pin);
+  if (res?.status !== 'ok') { toastMgr.error(res?.error || 'Could not pin to Home.'); return; }
+  if (personalHome) { personalHome.pins = res.pins; drawHomeSection('pins'); }
+  toastMgr.success(`Pinned ${pin.title} to Home`);
+}
+
+async function unpinFromHome(key) {
+  const res = await window.pywebview?.api?.unpin_from_home?.(key);
+  if (res?.status === 'ok' && personalHome) { personalHome.pins = res.pins; drawHomeSection('pins'); }
+}
+
+async function moveHomePinToFront(key) {
+  const res = await window.pywebview?.api?.move_home_pin?.(key, 0);
+  if (res?.status === 'ok' && personalHome) { personalHome.pins = res.pins; drawHomeSection('pins'); }
+}
+
+function homePinned(kind, id) {
+  return (personalHome?.pins || []).some(p => p.kind === kind && p.id === id);
+}
+
+// "Pin to Home" / "Unpin from Home" for a Library context menu.
+function homePinMenuItem(pin) {
+  if (!pin?.id) return null;
+  const pinned = homePinned(pin.kind, pin.id);
+  return pinned
+    ? { label: 'Unpin from Home', action: () => unpinFromHome(homePinKey(pin)) }
+    : { label: 'Pin to Home', action: () => pinToHome(pin) };
+}
+
+// The parent folder of a file, in its own spelling.
+function homeFolderOf(path) {
+  const cut = Math.max(String(path || '').lastIndexOf('/'), String(path || '').lastIndexOf('\\'));
+  return cut > 0 ? path.slice(0, cut) : '';
+}
+
+function homeGenreKey(genre) {
+  return String(genre || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .replace(/[^\p{L}\p{N}_]+/gu, ' ').trim().replace(/\s+/g, ' ');
+}
+
+// ── Edit Home ──
+let homeEditDraft = [];
+
+function openEditHome() {
+  homeEditDraft = (personalHome?.layout || []).map(s => ({ ...s }));
+  if (!homeEditDraft.length) { toastMgr.error('Home is still loading.'); return; }
+  renderEditHome();
+  $('home-edit-modal')?.classList.remove('hidden');
+}
+
+function closeEditHome() { $('home-edit-modal')?.classList.add('hidden'); }
+
+function renderEditHome() {
+  const list = $('home-edit-list');
+  if (!list) return;
+  list.innerHTML = homeEditDraft.map((s, i) => `
+    <li class="home-edit-row">
+      <label class="home-edit-check"><input type="checkbox" data-home-edit-toggle="${i}" ${s.shown ? 'checked' : ''}>
+        <span><span class="home-edit-name">${escHtml(s.title)}</span><span class="home-edit-about">${escHtml(s.about)}</span></span></label>
+      <span class="home-edit-moves">
+        <button type="button" class="btn ghost" data-home-edit-move="${i}" data-delta="-1" ${i === 0 ? 'disabled' : ''} aria-label="Move ${escHtml(s.title)} up">↑</button>
+        <button type="button" class="btn ghost" data-home-edit-move="${i}" data-delta="1" ${i === homeEditDraft.length - 1 ? 'disabled' : ''} aria-label="Move ${escHtml(s.title)} down">↓</button>
+      </span>
+    </li>`).join('');
+}
+
+async function saveEditHome() {
+  const api = window.pywebview?.api;
+  const visible = Object.fromEntries(homeEditDraft.map(s => [s.id, !!s.shown]));
+  const res = await api?.save_home_layout?.(homeEditDraft.map(s => s.id), visible);
+  if (res?.status !== 'ok') { toastMgr.error(res?.error || 'Could not save Home.'); return; }
+  closeEditHome();
+  renderPersonalHome({ force: true });
+}
+
+async function resetEditHome() {
+  const res = await window.pywebview?.api?.reset_home_layout?.();
+  if (res?.status === 'ok') { homeEditDraft = res.layout; renderEditHome(); }
+}
+
+(function initPersonalHome() {
+  document.addEventListener('click', (e) => {
+    const t = e.target instanceof Element ? e.target : null;
+    if (!t) return;
+    const edit = t.closest('[data-home-edit-toggle],[data-home-edit-move]');
+    if (edit) {
+      if (edit.dataset.homeEditToggle != null) homeEditDraft[Number(edit.dataset.homeEditToggle)].shown = edit.checked;
+      else { homeEditDraft = moveInList(homeEditDraft, Number(edit.dataset.homeEditMove), Number(edit.dataset.delta)); renderEditHome(); }
+      return;
+    }
+    if (!t.closest('#recent-wrap')) return;
+    const pinMenu = t.closest('[data-home-pin-menu]');
+    if (pinMenu) {
+      e.stopPropagation();
+      const key = pinMenu.dataset.homePinMenu;
+      openActionMenu(pinMenu, [
+        { label: 'Open', action: () => openHomePin(key) },
+        { label: 'Move to Front', action: () => moveHomePinToFront(key) },
+        '-',
+        { label: 'Unpin from Home', danger: true, action: () => unpinFromHome(key) },
+      ]);
+      return;
+    }
+    const mixMenu = t.closest('[data-home-mix-menu]');
+    if (mixMenu) {
+      e.stopPropagation();
+      const mix = personalHome?.sections?.mixes?.[Number(mixMenu.dataset.homeMixMenu)];
+      if (!mix) return;
+      openActionMenu(mixMenu, [
+        { label: 'Play', action: () => playHomeSongs(mix.songs, 0, false) },
+        { label: 'Shuffle', action: () => playHomeSongs(mix.songs, 0, true) },
+        { label: 'Save as Playlist', submenu: () => playlistPickerItems(mix.songs.map(homeSongItem)) },
+      ], mix.title);
+      return;
+    }
+    const quick = t.closest('[data-home-quick]');
+    if (quick) { playHomeSongs(quickPlayQueue(personalHome.sections.quickPlay, Number(quick.dataset.homeQuick)), 0, false); return; }
+    const pin = t.closest('[data-home-pin]');
+    if (pin) { openHomePin(pin.dataset.homePin); return; }
+    const mix = t.closest('[data-home-mix]');
+    if (mix) { playHomeSongs(personalHome.sections.mixes[Number(mix.dataset.homeMix)]?.songs, 0, false); return; }
+    const album = t.closest('[data-home-album]');
+    if (album) { openHomeAlbum(album.dataset.homeAlbum, album.dataset.albumTitle); return; }
+    const repeat = t.closest('[data-home-repeat]');
+    if (repeat) { playHomeSongs(personalHome.sections.onRepeat.songs, Number(repeat.dataset.homeRepeat), false); return; }
+    const reco = t.closest('[data-home-reco]');
+    if (reco) {
+      const track = personalHome.sections.recommended?.[Number(reco.dataset.homeReco)];
+      if (!track) return;
+      setSearchModeTo('search');
+      $('urlInput').value = `${track.artist} ${track.title}`.trim();
+      onFetch();
+      return;
+    }
+    if (t.closest('[data-home-refresh-reco]')) { loadHomeRecommendations(true); return; }
+    const row = t.closest('[data-home-unfinished]');
+    if (row) {
+      const which = row.dataset.homeUnfinished;
+      if (which === 'incompleteAlbums') $('m-unfinished-albums')?.classList.toggle('hidden');
+      else if (which === 'wishlist') openLibrary('playlists');
+      else if (which === 'failedDownloads') switchView('queue');
+    }
+  });
+})();
 
 function loadAccentFromStorage() {
   const stored = (() => {
@@ -593,6 +1263,12 @@ function applySettings(settings = {}) {
   try { localStorage.setItem('mornye-density', density); } catch (e) {}
   if ($('config-density')) $('config-density').value = density;
   applyDensity(density);
+  let style = cfg.style || 'console';
+  try { style = localStorage.getItem('mornye-style') || style; } catch (e) {}
+  if (!STYLES.includes(style)) style = 'console';
+  try { localStorage.setItem('mornye-style', style); } catch (e) {}
+  if ($('config-style')) $('config-style').value = style;
+  applyStyle(style);
   const soundEnabled = cfg.sound_enabled !== false && cfg.notification_sound !== false;
   if ($('config-sound-enabled')) $('config-sound-enabled').checked = soundEnabled;
   if (window.toastMgr) window.toastMgr.setSoundEnabled(soundEnabled);
@@ -904,11 +1580,10 @@ const EXTENSION_SERVICE_ICONS = {
 };
 const ALL_LYRICS = [
   { id:'apple',      label:'Apple Music',on:true, iconFile:'am.png', iconClass:'apple' },
-  { id:'binilyrics', label:'BiniLyrics', on:true, icon:'BL', iconClass:'binilyrics' },
+  { id:'binilyrics', label:'BiniLyrics', on:true, icon:'BL', iconClass:'binilyrics', iconFile:'binilyrics.svg' },
   { id:'lrclib',     label:'LRCLib',     on:true,  iconFile:'lrclib.png', iconClass:'lrclib' },
-  { id:'lyricsplus', label:'LyricsPlus', on:false, icon:'LP', iconClass:'lyricsplus' },
+  { id:'lyricsplus', label:'LyricsPlus', on:false, icon:'LP', iconClass:'lyricsplus', iconFile:'lyricsplus.svg' },
   { id:'lrcred',     label:'lrc.red',    on:false, icon:'LR', iconClass:'lrcred', iconFile:'lrcred.svg' },
-  { id:'amazon',     label:'Amazon',     on:false, iconFile:'amzn.png', iconClass:'amazon' },
   { id:'unison',     label:'Unison',     on:false, icon:'UN', iconClass:'unison', iconFile:'unison.png' },
   { id:'jiosaavn',   label:'JioSaavn',   on:false, icon:'JS', iconClass:'jiosaavn', iconFile:'jiosaavn.png' },
   { id:'kugou',      label:'KuGou',      on:false, icon:'KG', iconClass:'kugou', iconFile:'kugou.png' },
@@ -919,8 +1594,6 @@ const ALL_LYRICS = [
 const ALL_ENRICH = [
   { id:'deezer',     label:'Deezer',     on:true, iconFile:'dzr.png', iconClass:'deezer' },
   { id:'apple',      label:'Apple Music',on:true, iconFile:'am.png', iconClass:'apple' },
-  { id:'qobuz',      label:'Qobuz',      on:true, iconFile:'qbz.png', iconClass:'qobuz' },
-  { id:'tidal',      label:'Tidal',      on:true, iconFile:'tidal_l.png', iconClass:'tidal' },
 ];
 
 const SETTINGS_STORAGE_KEY = 'mornye-settings';
@@ -975,7 +1648,7 @@ const DEFAULT_SETTINGS = {
   services: ['tidal','qobuz','deezer','amazon','joox','netease','migu','kuwo','apple','soundcloud','youtube','pandora'],
   lyrics_providers: ['apple', 'binilyrics', 'lrclib'],
   apple_lyrics_word_by_word: true,
-  enrich_providers: ['deezer','apple','qobuz','tidal'],
+  enrich_providers: ['deezer','apple'],
 };
 
 // Ensure the version is populated even if pywebview API isn't ready yet
@@ -1400,7 +2073,6 @@ const API_SOURCES = [
   { id:'lrcred',     type:'lrcred',     name:'lrc.red',             url:'' },
   { id:'lrclib',     type:'lrclib',     name:'LRCLIB',             url:'' },
   { id:'spotify',    type:'spotify',    name:'Spotify Lyrics',     url:'' },
-  { id:'amazon',     type:'amazon',     name:'Amazon Lyrics',      url:'' },
   { id:'binilyrics', type:'binilyrics', name:'BiniLyrics',        url:'' },
   { id:'unison',     type:'unison',     name:'Unison',            url:'' },
   { id:'jiosaavn',   type:'jiosaavn',   name:'JioSaavn',          url:'' },
@@ -1473,12 +2145,14 @@ function renderPlatformIcon(type) {
     songstats: 'songstats.png',
     ...EXTENSION_SERVICE_ICONS,
   };
-  const iconFile = iconMap[type];
+  // The provider tables carry their own artwork (LRCLib, lrc.red, Unison,
+  // BiniLyrics, …): the Status tab used to show letters for those.
+  const known = [...ALL_SERVICES, ...ALL_LYRICS, ...ALL_ENRICH].find(x => x.id === type);
+  const iconFile = iconMap[type] || known?.iconFile;
   if (!iconFile) {
     // No artwork shipped for this one. The provider tables already carry a
     // letter glyph for exactly this case; guessing at `${type}.svg` and then
     // at `${type}.png` just put two 404s and a broken-image icon on screen.
-    const known = [...ALL_SERVICES, ...ALL_LYRICS, ...ALL_ENRICH].find(x => x.id === type);
     const glyph = known?.icon || (type || '?').slice(0, 2).toUpperCase();
     return `<span class="svc-icon icon-glyph ${type}">${escHtml(glyph)}</span>`;
   }
@@ -1504,7 +2178,10 @@ function renderStatusGrids() {
   renderExtensionStatusGrid();
   const servicesGrid = $('status-services-grid');
   if (servicesGrid) {
-    servicesGrid.innerHTML = API_SOURCES.map((source) => buildStatusCard(source)).join('');
+    servicesGrid.innerHTML = API_SOURCES
+      .filter((source) => apiStatusState.statuses[source.id] !== 'none')
+      .map((source) => buildStatusCard(source))
+      .join('');
   }
 }
 
@@ -1690,6 +2367,10 @@ function updateStatusesFromResults(data) {
   for (const source of API_SOURCES) {
     if (statusMap[source.id]) {
       apiStatusState.statuses[source.id] = statusMap[source.id];
+    } else if (apiStatusState.statuses[source.id] === 'checking') {
+      // Asked but not answered: the check has no server for it. Not
+      // offline — there is nothing to reach.
+      apiStatusState.statuses[source.id] = 'none';
     }
     apiStatusState.checkingSources[source.id] = false;
   }
@@ -1700,7 +2381,7 @@ window.updateHealthResults = (results) => {
   setFetchingState('hide');
   const data = typeof results === 'string' ? JSON.parse(results) : results;
   updateStatusesFromResults(data);
-  renderHealthResults(data);
+  updateOverallStatusFromCards();
 };
 
 renderStatusGrids();
@@ -1840,6 +2521,7 @@ window.app_set_metadata = (data) => {
       d.artists_data,
       d.artist_avatar
     );
+    setArtistExpression(d);
     g_artistConcerts = Array.isArray(d.artist_concerts) ? d.artist_concerts : [];
     renderConcertsButton(d.artist);
   } catch(e) {}
@@ -2170,6 +2852,14 @@ function artistNameHtml(name, url) {
 // The joined string is never split back apart to do this: "Tyler, The
 // Creator" is one artist whose name contains the separator, and splitting
 // is exactly what turns that into two wrong links.
+// A link to one song: Spotify's /track/, a YouTube video, and Apple Music's
+// /song/ page or an album link pointing at one of its tracks (?i=).
+function isSongUrl(url) {
+  const u = String(url || '').toLowerCase();
+  return u.includes('/track/') || u.includes('spotify:track:') || u.includes('watch?v=') || u.includes('youtu.be/')
+    || /music\.apple\.com\/.*\/song\//.test(u) || /music\.apple\.com\/.*\/album\/.*[?&]i=\d+/.test(u);
+}
+
 function artistsCreditHtml(artistsData, joinedNames, fallbackUrl) {
   const list = Array.isArray(artistsData) ? artistsData.filter(a => a && a.name) : [];
   if (!list.length) return artistNameHtml(joinedNames, fallbackUrl);
@@ -2309,7 +2999,11 @@ function setAlbumCard(title, artist, coverUrl, quality, description, followers, 
   const subtitle = $('album-subtitle');
   
   // For artists, show rank or listeners; for playlists, show quality
-  const isArtistCard = !!(artistRank || artistListeners || artistVerified || artistBiography);
+  // An artist link is an artist page even when its provider sends none of
+  // Spotify's extras (rank, listeners, verified, biography): Apple Music's
+  // artists came without them and lost the photo banner and the name.
+  const isArtistUrl = /\/artist\/|\/browse\/artist|spotify:artist:/i.test(currentUrl || '');
+  const isArtistCard = !!(artistRank || artistListeners || artistVerified || artistBiography || isArtistUrl);
   setArtistHero(isArtistCard, coverUrl);
   if (isArtistCard) {
     // On the banner, Spotify-style: "Verified Artist" over the name, the
@@ -2521,6 +3215,66 @@ function setArtistHero(on, coverUrl) {
   img.src = safe;
 }
 
+// Apple Music's artist header, as music.apple.com draws it: the motion
+// video over its preview frame (the still setArtistHero already shows),
+// the artist's wordmark in place of the typed name, and the page tinted
+// in the colour the video was graded in. Every piece is optional — a
+// Spotify artist, or an Apple one without editorial art, keeps the plain
+// banner and the app's own colours.
+const HEX_COLOR = /^[0-9a-f]{6}$/i;
+function setArtistExpression(d) {
+  const card = $('album-card');
+  const root = document.documentElement;
+  const on = !!card?.classList.contains('artist-mode');
+  const bg = card?.querySelector('.artist-hero-bg');
+
+  // Tint: the site sets --artist-joe-color from this same bgColor.
+  const tint = on && HEX_COLOR.test(d?.artist_bg_color || '') ? `#${d.artist_bg_color}` : '';
+  if (tint) {
+    root.style.setProperty('--artist-tint', tint);
+    root.dataset.artistTint = '';
+  } else {
+    root.style.removeProperty('--artist-tint');
+    delete root.dataset.artistTint;
+  }
+
+  // Video: HLS plays natively in WebKit (the desktop app) and Safari;
+  // elsewhere the still frame stays. It plays with Reduce Motion on too, as
+  // music.apple.com does: the still is only the video's poster frame, often
+  // a different shot, so without it the header did not look like the site's.
+  bg?.querySelector('video')?.remove();
+  const video = on ? httpUrlOrNull(d?.artist_video) : null;
+  if (bg && video) {
+    const v = document.createElement('video');
+    if (v.canPlayType('application/vnd.apple.mpegurl')) {
+      Object.assign(v, { muted: true, loop: true, autoplay: true, playsInline: true });
+      v.setAttribute('muted', '');
+      v.poster = bg.querySelector('img')?.src || '';
+      v.addEventListener('error', () => v.remove(), { once: true });
+      v.src = video;
+      bg.appendChild(v);
+      v.play?.().catch(() => {});
+    }
+  }
+
+  // Wordmark: a transparent PNG, drawn white by Apple, sized like the name.
+  const nameEl = card?.querySelector('.hero-name');
+  const logo = on ? httpUrlOrNull(d?.artist_logo) : null;
+  if (nameEl && logo) {
+    const name = nameEl.textContent;
+    const img = document.createElement('img');
+    img.className = 'hero-logo';
+    img.alt = name;
+    img.decoding = 'async';
+    // A logo that fails to load gives the typed name back.
+    img.addEventListener('error', () => { nameEl.textContent = name; nameEl.classList.remove('has-logo'); }, { once: true });
+    img.src = logo;
+    nameEl.textContent = '';
+    nameEl.classList.add('has-logo');
+    nameEl.appendChild(img);
+  }
+}
+
 function updateAlbumMeta(trackCount) {
   const searchMode = $('searchMode')?.value === 'search';
   const url = currentUrl.toLowerCase();
@@ -2528,7 +3282,7 @@ function updateAlbumMeta(trackCount) {
 
   if (searchMode) {
     badgeType = 'SEARCH';
-  } else if (url.includes('/track/') || url.includes('spotify:track:') || url.includes('watch?v=') || url.includes('youtu.be/')) {
+  } else if (isSongUrl(url)) {
     badgeType = 'TRACK';
   } else if (url.includes('/playlist/')) {
     badgeType = 'PLAYLIST';
@@ -2691,6 +3445,11 @@ function showSingleTrackCard(t) {
     ['Genre', t.genre],
     ['ISRC', t.isrc],
     ['Label', t.publisher || t.label],
+    // Apple Music's credits, as its song page lists them.
+    ...(Array.isArray(t.credits) ? t.credits : []).map(group => [
+      String(group.title || '').toLowerCase().replace(/(^|\s|&\s)\S/g, c => c.toUpperCase()),
+      (group.artists || []).map(a => a.name).filter(Boolean).join(', '),
+    ]),
     ['UPC', t.upc],
     ['Copyright', collapseCopyright(t.copyright)],
   ]);
@@ -2784,6 +3543,24 @@ function escHtml(s) {
 // Cover/avatar URLs arrive from whichever metadata provider answered, and
 // they end up in src attributes and in fetches — neither should ever be
 // handed a javascript:, data: or file: URL.
+// Apple's artwork comes as …/3000x3000bb.jpg, about 2.5 MB each: the size
+// a downloaded file's tag wants, not a 170px card. An artist page draws a
+// hundred and more of them, which made it slow to fill and left WebKit
+// giving up on some (the broken-image "?"). The same image server makes
+// any size, so what is only shown asks for `px` (times the screen's
+// density). Other hosts' URLs pass through unchanged.
+const MZ_ART_RE = /^(https:\/\/[^/]*mzstatic\.com\/image\/thumb\/.+\/)(\d+)x(\d+)([a-z]*)\.(jpg|jpeg|png|webp)$/i;
+function artSized(url, px) {
+  const u = String(url || '');
+  const m = MZ_ART_RE.exec(u);
+  if (!m) return u;
+  const want = Math.round(px * Math.min(window.devicePixelRatio || 1, 2));
+  const w = Number(m[2]), h = Number(m[3]);
+  if (!w || !h || Math.max(w, h) <= want) return u;
+  const scale = want / Math.max(w, h);
+  return `${m[1]}${Math.round(w * scale)}x${Math.round(h * scale)}${m[4]}.${m[5]}`;
+}
+
 function httpUrlOrNull(u) {
   if (!u) return null;
   try {
@@ -2940,8 +3717,12 @@ function artistHighlightsEl(tracks, albumMap) {
   const plays = t => Number(t.plays ?? t.playcount ?? t.playCount ?? t.plays_count ?? 0) || 0;
   // The same song on several releases (single, album, deluxe) shows once.
   const seenTitles = new Set();
-  const top = tracks.map((t, i) => ({ t, i })).filter(x => plays(x.t) > 0)
-    .sort((x, y) => plays(y.t) - plays(x.t))
+  // Apple Music sends its own Top Songs order (top_rank) and no play
+  // counts; Spotify sends play counts.
+  const ranked = tracks.some(t => Number(t.top_rank) > 0);
+  const top = tracks.map((t, i) => ({ t, i }))
+    .filter(x => (ranked ? Number(x.t.top_rank) > 0 : plays(x.t) > 0))
+    .sort((x, y) => (ranked ? Number(x.t.top_rank) - Number(y.t.top_rank) : plays(y.t) - plays(x.t)))
     .filter(({ t }) => {
       const k = String(t.title || t.name || '').toLowerCase().replace(/\s+/g, ' ').trim();
       if (seenTitles.has(k)) return false;
@@ -2956,7 +3737,7 @@ function artistHighlightsEl(tracks, albumMap) {
   if (latest) {
     const sec = document.createElement('section');
     sec.className = 'ah-sec';
-    const cover = httpUrlOrNull(latest.cover);
+    const cover = httpUrlOrNull(artSized(latest.cover, 220));
     const date = dateOf(latest);
     sec.innerHTML = `<h3 class="ah-title">Latest Release</h3>
       <div class="ah-latest" title="${escHtml(latest.name)}">
@@ -2988,14 +3769,14 @@ function artistHighlightsEl(tracks, albumMap) {
       const row = document.createElement('div');
       row.className = 'ah-top-row';
       row.setAttribute('role', 'listitem');
-      const cover = httpUrlOrNull(t.cover_url || t.cover || t.image);
+      const cover = httpUrlOrNull(artSized(t.cover_url || t.cover || t.image, 96));
       row.innerHTML = `
         <div class="ah-top-cover">${cover ? `<img src="${escHtml(cover)}" alt="" loading="lazy">` : ''}</div>
         <div class="ah-top-info">
           <span class="ah-top-name">${escHtml(t.title || t.name || '—')}</span>
-          <span class="ah-muted">${escHtml(t.artists || t.artist || '')}</span>
+          <span class="ah-muted">${escHtml(plays(t) > 0 ? (t.artists || t.artist || '') : [t.album, String(t.release_date || '').slice(0, 4)].filter(Boolean).join(' · '))}</span>
         </div>
-        <span class="ah-muted ah-num">${plays(t).toLocaleString('en-US')}</span>
+        <span class="ah-muted ah-num">${plays(t) > 0 ? plays(t).toLocaleString('en-US') : ''}</span>
         <button type="button" class="ah-dl" title="Download" aria-label="Download ${escHtml(t.title || t.name || '')}">${ARTIST_DL_SVG}</button>`;
       row.querySelector('.ah-dl').onclick = () => downloadTrackIndices([i]);
       list.appendChild(row);
@@ -3031,7 +3812,7 @@ function renderArtistAbout() {
   const sec = document.createElement('section');
   sec.id = 'artist-about';
   sec.className = 'artist-about';
-  const img = httpUrlOrNull(a.avatar);
+  const img = httpUrlOrNull(artSized(a.avatar, 1000));
   sec.innerHTML = `<h3 class="ah-title">About</h3>
     <div class="about-card${img ? '' : ' no-photo'}">
       ${img ? `<img class="about-photo" src="${escHtml(img)}" alt="" loading="lazy">` : ''}
@@ -3085,7 +3866,7 @@ function artistCardEl(item, { round = false, sub = '', albumMap = null } = {}) {
   const card = document.createElement('div');
   card.className = 'ao-card' + (round ? ' round' : '');
   card.setAttribute('role', 'listitem');
-  const img = httpUrlOrNull(round ? item.avatar : item.cover);
+  const img = httpUrlOrNull(artSized(round ? item.avatar : item.cover, 240));
   const album = albumMap && item.url ? albumMap.get(item.url) : null;
   card.innerHTML = `
     <div class="ao-card-img">${img ? `<img src="${escHtml(img)}" alt="" loading="lazy">` : '<span aria-hidden="true">🎵</span>'}
@@ -3323,6 +4104,28 @@ async function loadArtistOverview(host, tracks, albumMap) {
   renderArtistAbout();
 }
 
+// The artist's releases in a music app's order: their own albums, their
+// singles and EPs (Apple marks singles; three tracks or fewer, or "Single"
+// / "EP" in the title, count too), then other artists' releases they appear
+// on. Empty groups are left out.
+function artistAlbumGroups(albumMap) {
+  const artist = String(g_artistAbout?.name || '').trim().toLowerCase();
+  const newest = list => list.sort((x, y) => String(y.date || y.year).localeCompare(String(x.date || x.year)));
+  const groups = { albums: [], singles: [], appears: [] };
+  albumMap.forEach(album => {
+    const owner = album.albumArtist.toLowerCase();
+    if (artist && owner && !owner.includes(artist)) groups.appears.push(album);
+    else if (album.type === 'single' || /(?:^|[\s(\[-])(single|ep)(?:$|[\s)\]])/i.test(album.name)
+      || (album.type !== 'album' && album.indices.length <= 3)) groups.singles.push(album);
+    else groups.albums.push(album);
+  });
+  return [
+    { title: 'Albums', albums: newest(groups.albums) },
+    { title: 'Singles & EPs', albums: newest(groups.singles) },
+    { title: 'Appears On', albums: newest(groups.appears) },
+  ].filter(g => g.albums.length);
+}
+
 function injectArtistTabs(tracks) {
   document.getElementById('artist-tabs-section')?.remove();
 
@@ -3340,10 +4143,18 @@ function injectArtistTabs(tracks) {
         url: t.album_url || '',
         cover: t.cover_url || t.cover || t.image || '',
         year: t.release_date ? String(t.release_date).split('T')[0].substring(0, 4) : (t.year || ''),
+        date: String(t.release_date || '').split('T')[0],
+        type: String(t.album_type || '').toLowerCase(),
+        albumArtist: String(t.album_artist || ''),
+        explicit: false,
         indices: []
       });
     }
-    albumMap.get(key).indices.push(idx);
+    const entry = albumMap.get(key);
+    entry.indices.push(idx);
+    // Apple lists the clean and explicit editions as two albums with the
+    // same name and cover; as on its site, one explicit track marks the album.
+    if (t.explicit) entry.explicit = true;
   });
 
   const section = document.createElement('div');
@@ -3382,12 +4193,20 @@ function injectArtistTabs(tracks) {
   albumsPanel.id = 'artist-panel-albums';
   albumsPanel.className = 'artist-albums-grid';
   albumsPanel.style.display = 'none';
-  albumMap.forEach(album => {
+  // As a music app's artist page: Albums, then Singles & EPs, then the
+  // releases of others it appears on, each newest first under its title.
+  artistAlbumGroups(albumMap).forEach(group => {
+    const head = document.createElement('h3');
+    head.className = 'aac-group';
+    head.textContent = group.title;
+    albumsPanel.appendChild(head);
+    group.albums.forEach(album => {
     const card = document.createElement('div');
     card.className = 'artist-album-card';
     makeActivatable(card);
+    // A card-sized copy, not the 3000px original (artSized).
     const coverHtml = album.cover
-      ? `<img src="${escHtml(album.cover)}" alt="cover" loading="lazy" data-onerror="this.parentElement.innerHTML='🎵'">`
+      ? `<img src="${escHtml(artSized(album.cover, 240))}" alt="cover" loading="lazy" decoding="async" data-onerror="this.parentElement.innerHTML='🎵'">`
       : '🎵';
     card.innerHTML = `
       <div class="aac-cover">${coverHtml}
@@ -3396,7 +4215,7 @@ function injectArtistTabs(tracks) {
         </button>
       </div>
       <div class="aac-body">
-        <div class="aac-name" title="${escHtml(album.name)}">${escHtml(album.name)}</div>
+        <div class="aac-name" title="${escHtml(album.name)}${album.explicit ? ' (Explicit)' : ''}">${album.explicit ? '<span class="explicit-badge" aria-label="Explicit">E</span> ' : ''}${escHtml(album.name)}</div>
         <div class="aac-meta">${album.year ? album.year + ' · ' : ''}${album.indices.length} track${album.indices.length !== 1 ? 's' : ''}</div>
       </div>`;
 
@@ -3420,6 +4239,7 @@ function injectArtistTabs(tracks) {
       $('queue-drawer').classList.add('open');
     };
     albumsPanel.appendChild(card);
+    });
   });
   section.appendChild(albumsPanel);
 
@@ -3476,7 +4296,11 @@ async function loadArtistGallery(panel) {
   }
 }
 
+// The tab picked on this artist's page, kept while the same page re-renders
+// (a sort, another page of tracks); a new artist opens on Albums.
+let artistTabChoice = { url: '', tab: 'albums' };
 function switchArtistTab(tabName) {
+  artistTabChoice = { url: currentUrl, tab: tabName };
   document.querySelectorAll('.artist-tab').forEach(b => b.classList.remove('active'));
   $(`artist-tab-${tabName}-btn`)?.classList.add('active');
 
@@ -3559,8 +4383,9 @@ function renderTracks(tracks, page = 1) {
       let thumb;
       if (coverUrl) {
         // AGGIUNTO data-url QUI SOTTO
-        thumb = `<div class="tr-thumb" data-url="${escHtml(coverUrl)}" style="background-image:url('${encodeURI(coverUrl)}')">
-                   <img src="${escHtml(coverUrl)}" alt="cover" loading="lazy" decoding="async" data-onerror="this.parentElement.innerHTML='🎵';console.warn('cover load failed', this.src)">
+        const shown = artSized(coverUrl, 96);
+        thumb = `<div class="tr-thumb" data-url="${escHtml(coverUrl)}" style="background-image:url('${encodeURI(shown)}')">
+                   <img src="${escHtml(shown)}" alt="cover" loading="lazy" decoding="async" data-onerror="this.parentElement.innerHTML='🎵';console.warn('cover load failed', this.src)">
                  </div>`;
       } else {
         thumb = `<div class="tr-thumb">🎵</div>`;
@@ -3641,7 +4466,7 @@ function renderTracks(tracks, page = 1) {
       const isArtist = urlLower.includes('/artist/') || urlLower.includes('spotify:artist:') || urlLower.includes('/browse/artist');
       document.getElementById('artist-tabs-section')?.remove();
       if (isArtist) injectArtistTabs(tracks);
-      const isTrackUrl = urlLower.includes('/track/') || urlLower.includes('spotify:track:') || urlLower.includes('watch?v=') || urlLower.includes('youtu.be/');
+      const isTrackUrl = isSongUrl(urlLower);
       if (isTrackUrl && tracks.length === 1) {
         $('track-controls').classList.add('hidden');
         $('track-table-wrap').classList.add('hidden');
@@ -3649,6 +4474,12 @@ function renderTracks(tracks, page = 1) {
       } else {
         $('track-controls').classList.remove('hidden');
         $('track-table-wrap').classList.remove('hidden');
+        // An artist's page opens on its albums, like a music app's, not on a
+        // table of every track; the tab chosen since then is kept.
+        const overview = document.querySelector('.list-container')?.classList.contains('artist-overview-mode');
+        if (isArtist && !overview && $('artist-panel-albums')?.children.length) {
+          switchArtistTab(artistTabChoice.url === currentUrl ? artistTabChoice.tab : 'albums');
+        }
         // showSingleTrackCard()'s quality/duration chip row, if the previous
         // fetch on this same card was a single track — removing it here
         // (same render pass that decides "not a single track this time")
@@ -4233,6 +5064,16 @@ function renderRecentSearches() {
     }
 }
 
+// What an artist's page adds below its card (tabs, Latest Release / Top
+// Songs, About): it outlived the card, so a search showed the last artist's
+// sections under its own results.
+function clearArtistPageParts() {
+  document.getElementById('artist-tabs-section')?.remove();
+  document.querySelectorAll('.artist-highlights, #artist-about, #artist-overview').forEach(el => el.remove());
+  setArtistOverviewMode(false);
+  setArtistHero(false);
+}
+
 function toggleSearchMode() {
     clearSearchUI();
     clearTimeout(_searchDebounceTimer);
@@ -4252,6 +5093,7 @@ function toggleSearchMode() {
 
     if (mode.value === 'link') {
         mode.value = 'search';
+        syncModeSeg();
         toggle.classList.add('active');
         label.textContent = 'Search';
         toggle.title = 'Switch to Fetch Mode';
@@ -4261,11 +5103,17 @@ function toggleSearchMode() {
         renderRecentSearches();
         
         input.placeholder = searchPlaceholderLinks[0];
+        // A link left in the field is not a search: start from empty.
+        if (/^(https?:|spotify:)/i.test(input.value.trim())) input.value = '';
         $('track-table-wrap')?.classList.add('hidden');
         $('track-controls')?.classList.add('hidden');
         $('album-card')?.classList.add('hidden');
+        clearArtistPageParts();
     } else {
         mode.value = 'link';
+        // Search words left in the field are not a link: start from empty.
+        if (input.value.trim() && !/^(https?:|spotify:)/i.test(input.value.trim())) input.value = '';
+        syncModeSeg();
         toggle.classList.remove('active');
         label.textContent = 'Fetch';
         toggle.title = 'Switch to Search Mode';
@@ -4333,6 +5181,7 @@ function onSearchSourceChange() {
 }
 
 function updateSearchMode() {
+  syncModeSeg();
   const mode = $('searchMode').value;
   const input = $('urlInput');
   const toggle = $('searchModeToggle');
@@ -4452,7 +5301,7 @@ window.app_handle_provider_search_results = function(results) {
 
   function makeItemHTML(item) {
     const url  = item.external_url || item.external_urls || '';
-    const img  = resolveSearchImage(item.cover_url || item.cover || item.image || item.images);
+    const img  = artSized(resolveSearchImage(item.cover_url || item.cover || item.image || item.images), 160);
     const name = escHtml(item.name || item.title || '');
     const meta = escHtml(item.artists || item.artist || item.owner || '');
     const dur  = item._kind === 'track' ? fmtMs(item.duration_ms) : '';
@@ -4593,6 +5442,7 @@ async function importPlayerPlaylistSearchResult(button) {
       description: result.description || '',
       cover: result.cover || '',
       tracks: result.tracks || [],
+      sourceUrl: url,
     });
   } catch (e) {
     toastMgr.error(e?.message || 'Could not fetch the playlist.');
@@ -4690,6 +5540,7 @@ async function importFetchedPlaylist(button) {
         isrc: t.isrc || '',
         external_url: t.external_url || t.externalUrl || t.link || '',
       })),
+      sourceUrl: currentUrl,
     });
   } finally {
     button.disabled = false;
@@ -4717,7 +5568,9 @@ function playlistLibraryCandidates(tracks) {
     .map(t => ({ path: t.path, title: t.title, artist: t.artist, album: t.album, duration_s: t.duration_s, isrc: t.isrc || '' }));
 }
 
-async function importPlaylistCollection({ name, description, cover, tracks }) {
+// `sourceUrl` is the provider playlist: the imported copy follows it and
+// gets the songs added there later (syncFollowedPlaylists).
+async function importPlaylistCollection({ name, description, cover, tracks, sourceUrl }) {
   if (!tracks?.length) {
     toastMgr.error('The playlist has no tracks to import.');
     return;
@@ -4728,7 +5581,8 @@ async function importPlaylistCollection({ name, description, cover, tracks }) {
     cover || '',
     tracks,
     playlistLibraryCandidates(tracks),
-    ''
+    '',
+    /^https?:\/\//i.test(sourceUrl || '') ? sourceUrl : ''
   );
   if (!res || res.status !== 'ok') {
     toastMgr.error(res?.error || 'Could not import the playlist.');
@@ -4739,6 +5593,61 @@ async function importPlaylistCollection({ name, description, cover, tracks }) {
     ? ` · ${res.not_downloaded} not downloaded`
     : '';
   toastMgr.success(`Imported "${res.playlist.name}": ${res.imported} tracks${missing}.`);
+}
+
+// Playlists imported from a provider follow it: the songs added there since
+// the last check are appended (as "Not downloaded" until they are in the
+// library). Checked when the Player opens and every hour after, each
+// playlist at most every PLAYLIST_SYNC_EVERY_MS; `ids` forces those now.
+const PLAYLIST_SYNC_EVERY_MS = 6 * 60 * 60 * 1000;
+let playlistSyncBusy = false;
+let playlistSyncTimer = null;
+async function syncFollowedPlaylists(ids) {
+  const api = window.pywebview?.api;
+  if (playlistSyncBusy || !api?.sync_player_playlist) return;
+  const now = Date.now();
+  const due = lib.playlists.filter(p => p.source_url && (ids
+    ? ids.includes(p.id)
+    : now - (p.synced_at || 0) * 1000 >= PLAYLIST_SYNC_EVERY_MS));
+  if (!due.length) return;
+  playlistSyncBusy = true;
+  let added = 0;
+  let removed = 0;
+  const grown = [];
+  try {
+    for (const playlist of due) {
+      try {
+        const res = await api.sync_player_playlist(playlist.id);
+        if (res?.status !== 'ok') {
+          if (ids) toastMgr.error(res?.error || `Could not update "${playlist.name}".`);
+          continue;
+        }
+        if (res.added) { added += res.added; grown.push(res.playlist?.name || playlist.name); }
+        removed += res.removed || 0;
+      } catch (e) {
+        if (ids) toastMgr.error(e?.message || `Could not update "${playlist.name}".`);
+      }
+    }
+  } finally {
+    playlistSyncBusy = false;
+  }
+  if (removed) toastMgr.info(`${plural(removed, 'repeated song')} removed.`);
+  if (added) {
+    await refreshPlayerPlaylists(lib.playlist || undefined);
+    linkPlaylistTracksToLibrary();
+    toastMgr.success(grown.length === 1
+      ? `"${grown[0]}": ${plural(added, 'new song')} added.`
+      : `${plural(added, 'new song')} added to ${grown.length} playlists.`);
+  } else if (removed) {
+    await refreshPlayerPlaylists(lib.playlist || undefined);
+  } else if (ids) {
+    await refreshPlayerPlaylists(lib.playlist || undefined);
+    toastMgr.info('The playlist is up to date.');
+  }
+}
+function startPlaylistSync() {
+  syncFollowedPlaylists();
+  if (!playlistSyncTimer) playlistSyncTimer = setInterval(() => syncFollowedPlaylists(), 60 * 60 * 1000);
 }
 
 // Songs a playlist lists as "Not downloaded" that are now in the library
@@ -4942,7 +5851,7 @@ function _sortTracks() {
 function detectUrlType(url) {
   if (!url) return '';
   const u = url.toLowerCase();
-  if (u.includes('spotify:track:') || u.includes('/track/') || u.includes('watch?v=') || u.includes('youtu.be/')) return 'track';
+  if (isSongUrl(u)) return 'track';
   if (u.includes('spotify:album:') || u.includes('/album/') || (u.includes('playlist') && u.includes('olak5uy_'))) return 'album';
   if (u.includes('spotify:playlist:') || u.includes('/playlist/') || (u.includes('list=') && !u.includes('olak5uy_'))) return 'playlist';
   if (u.includes('spotify:artist:') || u.includes('/artist/') || u.includes('/browse/artist')) return 'artist';
@@ -5023,7 +5932,7 @@ function renderRecent(hist) {
     onFetch();
   };
  
-    const coverUrl = item.cover || item.cover_url || item.image || '';
+    const coverUrl = artSized(item.cover || item.cover_url || item.image || '', 240);
     const coverBg  = coverUrl ? `background-image:url('${encodeURI(coverUrl)}');` : '';
  
     const urlType = item.url_type || detectUrlType(item.url || '');
@@ -5333,7 +6242,8 @@ function paintQueueItem(el, item, qi) {
       // A segmented meter in whole steps (css/views/queue.css), then the words.
       const lit = Math.round((Math.max(0, Math.min(100, Number(item.progress) || 0)) / 100) * 20);
       const steps = Array.from({ length: 20 }, (_, i) => (i < lit ? '<i class="on"></i>' : '<i></i>')).join('');
-      p.bottom.innerHTML = `<span class="qi-meter" aria-hidden="true">${steps}</span><span></span>`;
+      // --qi-p: the same share as a smooth bar, for the music look.
+      p.bottom.innerHTML = `<span class="qi-meter" aria-hidden="true" style="--qi-p:${lit * 5}%">${steps}</span><span></span>`;
       p.bottom.lastChild.textContent = statusText;
     } else {
       p.bottom.textContent = statusText;
@@ -5365,6 +6275,7 @@ function renderQueueNow() {
   $('q-completed').textContent = completedCount;
   $('q-skipped').textContent = skippedCount;
   $('q-failed').textContent = failedCount;
+  updateMusicQueueSub();
 
   // Which counter is currently acting as the filter, and whether the "Clear
   // filter" escape hatch is needed at all.
@@ -5604,6 +6515,7 @@ function renderStaged() {
   if (badge) { badge.textContent = pending; badge.classList.toggle('hidden', !pending); }
   const startAll = $('sq-start-all');
   if (startAll) startAll.disabled = !pending;
+  updateMusicQueueSub();
 
   const list = $('sq-list');
   if (!list) return;
@@ -5852,22 +6764,68 @@ function renderDownloadHistory(items, totals, q) {
       : emptyState('disc', 'No download history yet', 'Tracks you download show up here.');
     return;
   }
+  // The music look groups the rows by day (Today, Yesterday…) when they are
+  // in date order, and reads them as columns: the .m-only cells below.
+  const byDate = ['newest', 'oldest'].includes($('hist-sort')?.value || 'newest');
+  let lastGroup = '';
   list.innerHTML = items.map(r => {
     const meta = [r.provider, r.format ? r.format.toUpperCase() : '', formatSize(r.bytes), timeAgo(r.downloaded_at)]
       .filter(Boolean).join(' · ');
-    return `<div class="page-row${r.success ? '' : ' status-failed'}">
-      <div class="pr-cover"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${KIND_META.track.icon}</svg></div>
+    const day = historyDay(r.downloaded_at);
+    const head = byDate && day.group !== lastGroup ? `<div class="m-only m-group-label">${escHtml(day.group)}</div>` : '';
+    lastGroup = day.group;
+    return `${head}<div class="page-row${r.success ? '' : ' status-failed'}">
+      <div class="pr-cover" data-thumb="${escHtml(r.success ? r.file_path || '' : '')}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${KIND_META.track.icon}</svg></div>
       <div class="pr-main">
         <div class="pr-title">${escHtml(r.title || 'Untitled')}</div>
         <div class="pr-sub">${escHtml([r.artist, r.album].filter(Boolean).join(' · '))}</div>
         <div class="pr-meta" title="${escHtml(r.file_path || '')}">${escHtml(meta)}</div>
+        <div class="m-only m-h-artist">${escHtml(r.artist || '')}</div>
       </div>
+      <span class="m-only m-h-album">${escHtml(r.album || '')}</span>
+      <span class="m-only m-h-q">${r.format ? `<span class="m-q">${escHtml(r.format.toUpperCase())}</span>` : ''}</span>
+      <span class="m-only m-h-size${r.success ? '' : ' failed'}">${r.success ? escHtml(formatSize(r.bytes)) : 'Failed'}</span>
+      <span class="m-only m-h-when" title="${escHtml(new Date((r.downloaded_at || 0) * 1000).toLocaleString())}">${escHtml(day.when)}</span>
       ${r.success ? '' : '<span class="status-pill failed">Failed</span>'}
       <div class="pr-actions">
         <button type="button" class="row-btn" title="Remove from history" data-onclick="removeDownloadHistory(${Number(r.id)})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
     </div>`;
   }).join('');
+  fillHistoryCovers(list);
+}
+
+// The day a download belongs to, for the music look's History: its group
+// (Today, Yesterday, This Week, then the month) and the time shown in the
+// row (the clock today and yesterday, the weekday this week, else the date).
+function historyDay(seconds) {
+  const d = new Date((Number(seconds) || 0) * 1000);
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  const days = Math.floor((start - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+  const clock = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (days <= 0) return { group: 'Today', when: clock };
+  if (days === 1) return { group: 'Yesterday', when: clock };
+  if (days < 7) return { group: 'Earlier This Week', when: d.toLocaleDateString([], { weekday: 'short' }) };
+  return {
+    group: d.toLocaleDateString([], { month: 'long', year: 'numeric' }),
+    when: d.toLocaleDateString([], { day: 'numeric', month: 'short' }),
+  };
+}
+
+// The music look's History shows each file's own cover, read from the file
+// (get_track_thumbs, as the Library does); the console look keeps its icon.
+// Only the first rows ask, the ones that are on screen.
+async function fillHistoryCovers(list) {
+  const api = window.pywebview?.api;
+  if (!isMusicStyle() || typeof api?.get_track_thumbs !== 'function') return;
+  const cells = [...list.querySelectorAll('.pr-cover[data-thumb]')].filter((c) => c.dataset.thumb).slice(0, 120);
+  if (!cells.length) return;
+  let thumbs = {};
+  try { thumbs = (await api.get_track_thumbs([...new Set(cells.map((c) => c.dataset.thumb))], 96)) || {}; } catch (e) { return; }
+  for (const cell of cells) {
+    const src = thumbs[cell.dataset.thumb];
+    if (src && cell.isConnected) cell.innerHTML = `<img src="${escHtml(src)}" alt="" loading="lazy">`;
+  }
 }
 
 function renderFetchHistory(items, q) {
@@ -6943,62 +7901,6 @@ async function loadProfile() {
   logMessage(`Profile '${name}' loaded.`, 'ok');
 }
 
-/**
- * Renders health-check results for providers and extensions.
- * @param {Array<Object>} data - Health-check result rows containing provider identifiers and endpoint status.
- */
-function renderHealthResults(data) {
-  // Extension service rows are shown separately; they are not
-  // a music provider and should not count toward the provider total.
-  const extRows  = data.filter(r => r.provider === 'extensions');
-  const provRows = data.filter(r => r.provider !== 'extensions');
-
-  // Group by provider first
-  const provMap = {};
-  provRows.forEach(r => { if (!provMap[r.provider]) provMap[r.provider] = []; provMap[r.provider].push(r); });
-
-  // Calcoliamo i provider totali e quelli con almeno un endpoint funzionante (ok)
-  const totalProviders = Object.keys(provMap).length;
-  const okProviders = Object.values(provMap).filter(rows => rows.some(r => r.ok)).length;
-
-  // Counts the extension cards too, whichever of the two checks ends last.
-  updateOverallStatusFromCards();
-
-  const container = $('hc-results'); container.innerHTML = '';
-  Object.entries(provMap).forEach(([prov, rows]) => {
-    const anyOk = rows.some(r => r.ok);
-    const okCount = rows.filter(r => r.ok).length;
-    const totalCount = rows.length;
-    const group  = document.createElement('div');
-    group.className = 'hc-prov-group s-section u-p-10-12';
-    group.innerHTML = `
-      <div class="hc-prov-name">
-        <span class="hc-dot ${anyOk ? 'ok' : 'err'}"></span>
-        ${prov}
-        <span class="u-fs-10 u-fw-400 u-c-muted">${okCount}/${totalCount} endpoints OK</span>
-      </div>
-    `;
-    container.appendChild(group);
-  });
-
-  // Sezione a parte per le estensioni
-  if (extRows.length) {
-    const anyOk = extRows.some(r => r.ok);
-    const okCount = extRows.filter(r => r.ok).length;
-    const totalCount = extRows.length;
-    const group = document.createElement('div');
-    group.className = 'hc-prov-group hc-ext-group s-section u-p-10-12 u-mt-10';
-    group.innerHTML = `
-      <div class="hc-prov-name">
-        <span class="hc-dot ${anyOk ? 'ok' : 'err'}"></span>
-        Extensions
-        <span class="u-fs-10 u-fw-400 u-c-muted">${okCount}/${totalCount} OK</span>
-      </div>
-    `;
-    container.appendChild(group);
-  }
-}
-
 // ── Window controls (no-drag safe wrappers) ───────────────────────────────────
 function pyWin(method, arg) {
   if (arg !== undefined) window.pywebview?.api?.[method]?.(arg);
@@ -7810,11 +8712,14 @@ async function doLogout() {
 // Explore's feed comes from Spotify or from any installed extension with a
 // home feed (core/extension_home_feed.py) — Jellyfin's "Recently added" and
 // "Most played" from the user's own server among them. The choice is a
-// per-browser convenience, so localStorage is enough.
+// per-browser convenience, so localStorage is enough. Until one is picked
+// the feed is Apple Music's (the apple-music extension's getHomeFeed), the
+// one a music app's Home would show; without that extension, Spotify's.
 const EXPLORE_SOURCE_KEY = 'mornye-explore-source';
+const DEFAULT_EXPLORE_SOURCE = 'ext:apple-music';
 
 function savedExploreSource() {
-  try { return localStorage.getItem(EXPLORE_SOURCE_KEY) || 'spotify'; } catch (e) { return 'spotify'; }
+  try { return localStorage.getItem(EXPLORE_SOURCE_KEY) || DEFAULT_EXPLORE_SOURCE; } catch (e) { return DEFAULT_EXPLORE_SOURCE; }
 }
 
 function setExploreSource(value) {
@@ -7828,7 +8733,9 @@ async function refreshExploreSources() {
   const select = $('explore-source');
   let wanted = savedExploreSource();
   const api = window.pywebview?.api;
-  if (!select || typeof api?.get_home_feed_sources !== 'function') return 'spotify';
+  if (!select || typeof api?.get_home_feed_sources !== 'function') {
+    return wanted.startsWith('ext:') ? 'spotify' : wanted;
+  }
   try {
     const sources = (await api.get_home_feed_sources())?.sources || [];
     if (sources.length) {
@@ -7841,12 +8748,16 @@ async function refreshExploreSources() {
   return wanted;
 }
 
-async function loadExploreData() {
+// quiet: the load Home starts on its own in the music look. A missing feed
+// (no extension that provides one) is then said once, in the feed's own
+// error state on Home, not also as an error toast at every launch.
+async function loadExploreData({ quiet = false } = {}) {
   const sectionsContainer = $('explore-sections');
   const greetingEl = $('explore-greeting');
   
   if (!sectionsContainer) return;
   
+  rescueRecentSongs();
   sectionsContainer.innerHTML = '<div class="u-ta-center u-p-40 u-c-muted">Loading feed...</div>';
   const source = await refreshExploreSources();
   if (window.pywebview?.api?.get_spotify_home_feed) {
@@ -7860,11 +8771,11 @@ async function loadExploreData() {
         renderHomeSections(homeData.sections);
       } else {
         const error = homeData?.error || '';
-        if (error) logMessage('Failed to load explore feed: ' + error, 'error');
+        if (error && !quiet) logMessage('Failed to load explore feed: ' + error, 'error');
         sectionsContainer.innerHTML = errorStateHTML(describeError(error, 'The Explore feed'), 'loadExploreData()');
       }
     } catch (e) {
-      logMessage('Failed to load explore feed: ' + e, 'error');
+      if (!quiet) logMessage('Failed to load explore feed: ' + e, 'error');
       sectionsContainer.innerHTML = errorStateHTML(describeError(String(e), 'The Explore feed'), 'loadExploreData()');
     }
   } else {
@@ -7876,15 +8787,31 @@ async function loadExploreData() {
 
 function renderHomeSections(sections) {
   const container = $('explore-sections');
+  rescueRecentSongs();
   container.innerHTML = '';
 
+  const KIND = { album: 'Album', playlist: 'Playlist', artist: 'Artist', track: 'Song', station: 'Station' };
+  let shelfIndex = 0;
   sections.forEach(section => {
     if (!section.items || section.items.length === 0) return;
+    const isFirstShelf = shelfIndex++ === 0;
 
     const sectionEl = document.createElement('div');
     const titleEl = document.createElement('h3');
-    titleEl.className = 'explore-section-title';
+    titleEl.className = 'explore-section-title m-shelf-link';
     titleEl.textContent = section.title;
+    // The title's chevron opens the shelf: the sideways row becomes a grid
+    // of every card (the feed gives no "see all" page to go to), and a
+    // second click folds it back.
+    titleEl.setAttribute('aria-expanded', 'false');
+    titleEl.title = 'Show all';
+    makeActivatable(titleEl);
+    titleEl.onclick = () => {
+      const open = sectionEl.classList.toggle('show-all');
+      titleEl.setAttribute('aria-expanded', String(open));
+      titleEl.title = open ? 'Show less' : 'Show all';
+      if (!open) sectionEl.scrollIntoView({ block: 'nearest' });
+    };
     sectionEl.appendChild(titleEl);
 
     const gridEl = document.createElement('div');
@@ -7899,11 +8826,16 @@ function renderHomeSections(sections) {
       // explore.css), not another service's logo — the feed may be Apple's
       // or a Jellyfin server's.
       const blank = '<div class="explore-cover-blank" aria-hidden="true">♪</div>';
+      const cover = artSized(item.cover_url, isFirstShelf ? 260 : 220);
       const subText = item.description || item.artists || item.type;
 
+      // The first shelf is the music look's Top Picks: a label above each
+      // card (.m-only, hidden in the console look) and a tinted panel.
+      const why = KIND[String(item.type || '').toLowerCase()] || section.title || '';
       card.innerHTML = `
-        ${item.cover_url
-          ? `<img src="${escHtml(item.cover_url)}" alt="" loading="lazy" data-onerror="this.outerHTML='${blank.replace(/"/g, '&quot;')}'">`
+        ${isFirstShelf ? `<div class="m-only m-pick-why">${escHtml(why)}</div>` : ''}
+        ${cover
+          ? `<img src="${escHtml(cover)}" alt="" loading="lazy" data-onerror="this.outerHTML='${blank.replace(/"/g, '&quot;')}'">`
           : blank}
         <div class="explore-card-title" title="${escHtml(item.name)}">${escHtml(item.name)}</div>
         <div class="explore-card-subtitle" title="${escHtml(subText)}">${escHtml(subText)}</div>
@@ -7930,12 +8862,14 @@ function renderHomeSections(sections) {
         }
       };
 
+      if (isFirstShelf) tintPickCard(card, cover);
       gridEl.appendChild(card);
     });
 
     sectionEl.appendChild(gridEl);
     container.appendChild(sectionEl);
   });
+  placeRecentSongs();
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
@@ -7967,6 +8901,9 @@ window.addEventListener('pywebviewready', async () => {
   updateSearchMode();
   initPasteButton();
   loadSearchSources();
+  // The music look's Home carries the recommendations; now the backend is
+  // there to ask (applySettings may have run before it was).
+  if ($('view-home')?.classList.contains('active')) ensureHomeFeed();
 });
 
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', syncSystemTheme);
@@ -8053,7 +8990,7 @@ $('urlInput').addEventListener('input', function() {
 
     // BEGIN CHANGE: Instead of old loading text, show skeletons!
     // Call the function you just created
-    showSkeletonTracks(6); // Show 6 pulsing placeholder rows
+    showSkeletonTracks(6, 'Searching…');
     
     // Ensure the table container is visible
     $('track-table-wrap')?.classList.remove('hidden');
@@ -9019,6 +9956,7 @@ async function startConvert() {
     bitrate: $('convert-bitrate').value,
     keep_original: $('convert-keep').checked,
     max_bit_depth: parseInt($('convert-depth').value) || 0,
+    dither: $('convert-dither')?.value || 'tpdf',
     max_sample_rate: parseInt($('convert-rate').value) || 0,
   };
   btn.disabled = true;
@@ -9464,7 +10402,7 @@ async function translateTagEditorLyrics() {
 async function saveTagEditorTranslation() {
   if (!tagEditState) return;
   const res = await window.pywebview.api.save_translated_lyrics(
-    tagEditState.path, $('tagedit-lang').value, $('tagedit-translation').value);
+    tagEditState.path, $('tagedit-lang').value, $('tagedit-translation').value, $('tagedit-lyrics').value);
   if (res?.status === 'ok') toastMgr.success('Saved ' + res.path.split(/[\\/]/).pop());
   else toastMgr.error(res?.error || 'Could not save the translation.');
 }
@@ -9562,11 +10500,16 @@ function updatePlayerModes() {
     b.setAttribute('aria-pressed', String(playerRepeat !== 'off'));
     b.title = { off: 'Repeat: off', all: 'Repeat all', one: 'Repeat this track' }[playerRepeat];
   });
-  try { localStorage.setItem('mornye-player-modes', JSON.stringify({ shuffle: playerShuffle, repeat: playerRepeat })); } catch (e) {}
+  // A remote shows the playing device's modes; they are not this browser's.
+  if (playerEngine.kind !== 'remote') {
+    try { localStorage.setItem('mornye-player-modes', JSON.stringify({ shuffle: playerShuffle, repeat: playerRepeat })); } catch (e) {}
+  }
   playerRefreshNext();
+  connectSchedule();
 }
 
 function playerToggleShuffle() {
+  if (playerEngine.kind === 'remote') { connectSendRemote('shuffle', { enabled: !playerShuffle }); return; }
   playerShuffle = !playerShuffle;
   if (playerQueue.length) playerBuildOrder(playerIndex >= 0 ? playerIndex : null);
   updatePlayerModes();
@@ -9574,6 +10517,10 @@ function playerToggleShuffle() {
 }
 
 function playerCycleRepeat() {
+  if (playerEngine.kind === 'remote') {
+    connectSendRemote('repeat', { mode: connectRepeatOut({ off: 'all', all: 'one', one: 'off' }[playerRepeat]) });
+    return;
+  }
   playerRepeat = { off: 'all', all: 'one', one: 'off' }[playerRepeat];
   updatePlayerModes();
 }
@@ -9582,6 +10529,12 @@ function playerCycleRepeat() {
 // it undefined to keep whatever the player is set to (clicking a row).
 function startPlayback(items, index, shuffle, openView) {
   if (!items.length) return;
+  if (playerEngine.kind === 'remote') {
+    // Spotify Connect: a song picked on a remote plays where the music is.
+    connectStartRemote(items, index, shuffle);
+    if (openView) openNowPlaying();
+    return;
+  }
   playerQueue = items;
   if (shuffle === true || shuffle === false) playerShuffle = shuffle;
   updatePlayerModes();
@@ -9789,7 +10742,7 @@ function playerNativeEngine(api, clock = () => performance.now()) {
         case 'warning':
           emit('warning', { message: evt.message }); return;
         case 'media': // a media key or Now Playing command that reached mpv
-          emit('media', { action: evt.action }); return;
+          emit('media', { action: evt.action, seekTime: evt.seekTime }); return;
       }
     },
   };
@@ -9831,7 +10784,7 @@ function createPlayerEngine(initial) {
       }
     },
     get hasSource() { return active.hasSource; },
-    load(url, next) { active.load(url, next); },
+    load(url, next, meta) { active.load(url, next, meta); },
     setNext(path) { active.setNext?.(path); },
     setAbLoop(a, b) { active.setAbLoop?.(a, b); },
     get output() { return active.output || null; },
@@ -9867,6 +10820,9 @@ window.app_native_player_event = (evt) => playerNative?.receive(evt);
 async function playerSetupEngine() {
   const api = window.pywebview?.api;
   if (window.__mornyeWeb || !api?.native_player_status) return;
+  // While casting the receiver plays; the local engine is chosen again
+  // when casting stops.
+  if (playerEngine.kind === 'cast') return;
   let status = null;
   try { status = await api.native_player_status(); } catch (e) { status = null; }
   playerNativeStatus = status;
@@ -9882,6 +10838,774 @@ async function playerSetupEngine() {
   playerMediaSessionActive(!native);
   if (playing) loadPlayerTrack(playerIndex);
 }
+
+// ── Cast: DLNA/UPnP and FCast receivers (from Mornye mobile 5.4.5) ─────────
+// Casting swaps the player's engine for one that drives the receiver
+// (api_mixins/cast.py, core/cast): the queue, lyrics and Now Playing stay
+// here and follow the receiver's clock; when the receiver says a song has
+// finished, the engine's "ended" moves the queue on as it does locally.
+// Desktop only: the web player has no cast methods, so no button.
+var playerCast = null;          // the cast engine, while casting
+var castLocalEngine = null;     // the engine to go back to
+var castDevices = [];
+var castStartAt = 0;            // where the next cast load starts, once
+var castPicker = null;          // the button the picker is open on
+
+// What a receiver status says for the song loaded as `token`.
+function castStateFromStatus(snap, token) {
+  if (!snap || !snap.connected) return { lost: true };
+  const ours = token == null || snap.token == null || snap.token === token;
+  return {
+    lost: false,
+    ours,
+    playing: snap.state === 2,
+    paused: snap.state === 3 || snap.state === 1,
+    buffering: snap.state === 4 || snap.state === 5,
+    finished: ours && !!snap.finished,
+    failed: ours && !!snap.failed,
+    time: Math.max(0, (Number(snap.position) || 0) / 1000),
+    duration: (Number(snap.duration) || 0) > 0 ? snap.duration / 1000 : NaN,
+    volume: typeof snap.volume === 'number' ? snap.volume : null,
+  };
+}
+
+function castDeviceLabel(device) {
+  const kind = device.kind === 'fcast' ? 'FCast' : 'DLNA';
+  return device.model && device.model !== 'FCast' ? `${device.name} · ${kind} · ${device.model}` : `${device.name} · ${kind}`;
+}
+
+function playerCastEngine(api, clock = () => performance.now()) {
+  let emit = () => {};
+  let src = '', paused = true, ended = false, time = 0, at = 0, duration = NaN;
+  let token = null, volume = 1, muted = false, guardUntil = 0, tick = 0, volumeTimer = 0;
+  const call = (name, ...args) => Promise.resolve(api[name](...args)).then((r) => {
+    if (r && r.status && r.status !== 'ok') throw new Error(r.error || r.status);
+    return r;
+  });
+  const fail = (e) => { emit('error', { message: e.message || String(e) }); };
+  const position = () => {
+    if (paused || !src) return time;
+    const t = time + (clock() - at) / 1000;
+    return Number.isFinite(duration) ? Math.min(duration, t) : t;
+  };
+  const settle = (t) => { time = Math.max(0, t); at = clock(); };
+  const ticking = (on) => {
+    clearInterval(tick);
+    tick = on ? setInterval(() => emit('timeupdate'), 500) : 0;
+  };
+  const engine = {
+    kind: 'cast',
+    attach(fn) { emit = fn; },
+    get hasSource() { return !!src; },
+    get output() { return null; },
+    load(path, _next, meta = {}) {
+      src = path; ended = false; duration = Number(meta.duration) > 0 ? Number(meta.duration) : NaN;
+      token = null; guardUntil = clock() + 4000;
+      settle(meta.start || 0);
+      const wasPaused = paused;
+      paused = false;
+      call('cast_load', path, meta, meta.start || 0, true)
+        .then((r) => { token = r.cast?.token ?? null; })
+        .catch((e) => { paused = true; ticking(false); emit('pause'); fail(e); });
+      ticking(true);
+      if (wasPaused) emit('play');
+    },
+    setNext() {},
+    clear() {
+      src = ''; paused = true; ended = false; ticking(false);
+      call('cast_command', 'stop').catch(() => {});
+    },
+    play() {
+      if (!src || !paused) return Promise.resolve();
+      if (ended) { engine.load(src, null, { start: 0 }); return Promise.resolve(); }
+      settle(time); paused = false; guardUntil = clock() + 4000;
+      ticking(true);
+      emit('play');
+      return call('cast_command', 'play').catch(fail);
+    },
+    pause() {
+      if (paused) return;
+      settle(position()); paused = true; ticking(false);
+      emit('pause');
+      call('cast_command', 'pause').catch(fail);
+    },
+    get paused() { return paused; },
+    get currentTime() { return position(); },
+    set currentTime(t) {
+      settle(Math.max(0, t));
+      if (src) call('cast_command', 'seek', time).catch(fail);
+      emit('timeupdate'); emit('seeked');
+    },
+    get duration() { return duration; },
+    get volume() { return volume; },
+    set volume(v) {
+      volume = Math.max(0, Math.min(1, v));
+      clearTimeout(volumeTimer);
+      volumeTimer = setTimeout(() => call('cast_command', 'volume', muted ? 0 : volume).catch(() => {}), 150);
+    },
+    get muted() { return muted; },
+    set muted(m) { muted = !!m; engine.volume = volume; },
+    get playbackRate() { return 1; },
+    set playbackRate(_r) {},
+    receive(snap) {
+      const s = castStateFromStatus(snap, token);
+      if (s.lost) { ticking(false); stopCasting({ lost: true }); return; }
+      if (!s.ours || !src) return;
+      if (Number.isFinite(s.duration) && s.duration !== duration) { duration = s.duration; emit('loadedmetadata'); }
+      if (s.failed) { paused = true; ticking(false); emit('pause'); fail(new Error(`${snap.deviceName || 'The device'} could not play this song`)); return; }
+      if (s.finished && !ended) { ended = true; paused = true; settle(duration || s.time); ticking(false); emit('pause'); emit('ended'); return; }
+      if (s.playing) {
+        settle(s.time);
+        if (paused) { paused = false; ticking(true); emit('play'); }
+      } else if (s.paused && !paused && clock() > guardUntil) {
+        // Paused on the receiver itself (its remote, its own buttons).
+        settle(s.time); paused = true; ticking(false); emit('pause');
+      } else if (!s.buffering && paused) {
+        settle(s.time);
+      }
+      emit('timeupdate');
+    },
+    dispose() { ticking(false); clearTimeout(volumeTimer); },
+  };
+  return engine;
+}
+
+window.app_cast_status = (snap) => playerCast?.receive(snap);
+window.app_cast_devices = (list) => {
+  castDevices = Array.isArray(list) ? list : [];
+  // Redrawn only while the picker is still the open menu.
+  if (castPicker && actionMenu?.anchor === castPicker) { closeActionMenu(); openCastPicker(castPicker, true); }
+};
+
+function castAvailable() {
+  return !window.__mornyeWeb && typeof window.pywebview?.api?.cast_devices === 'function';
+}
+
+// "Play on": this device, the account's other Connect devices, and (desktop)
+// the DLNA and FCast receivers this computer can cast to.
+async function openCastPicker(button, refresh = false) {
+  const api = window.pywebview?.api;
+  const cast = castAvailable();
+  // --web: asking for the list also has the server look for receivers.
+  if (window.__mornyeWeb && !refresh && connect.ready) {
+    try { const snap = await connectApi()?.connect_devices(); if (snap?.status === 'ok') connectDevices(snap); } catch (e) {}
+  }
+  const others = connectOthers();
+  if (!cast && !others.length) return;
+  if (cast && !refresh) {
+    try { castDevices = (await api.cast_devices())?.devices || castDevices; } catch (e) { /* keep the last list */ }
+  }
+  castPicker = button;
+  const remoteId = playerEngine.kind === 'remote' ? connect.remoteId : '';
+  const current = playerCast ? playerCastDeviceId : remoteId;
+  const here = connect.kind === 'window' || !window.__mornyeWeb ? 'This computer' : 'This browser';
+  const items = [
+    { label: `${current ? '' : '✓ '}${here}`, action: () => connectPlayHere() },
+    ...others.map(d => ({
+      label: `${current === d.id ? '✓ ' : ''}${connectDeviceLabel(d)}`,
+      action: () => connectTransferTo(d),
+    })),
+  ];
+  if (cast) {
+    items.push('-',
+      ...castDevices.map(d => ({
+        label: `${current === d.id ? '✓ ' : ''}${castDeviceLabel(d)}`,
+        action: () => startCasting(d),
+      })),
+      { label: castDevices.length ? 'Looking for more devices…' : 'Looking for DLNA and FCast devices…', disabled: true });
+  }
+  openActionMenu(button, items, 'Play on');
+}
+
+var playerCastDeviceId = '';
+
+async function startCasting(device) {
+  const api = window.pywebview?.api;
+  castPicker = null;
+  if (playerCast && playerCastDeviceId === device.id) return;
+  if (playerEngine.kind === 'remote') { toastMgr.info('Move playback to this computer first, then cast it.'); return; }
+  const at = playerEngine.hasSource ? playerEngine.currentTime : 0;
+  const wasPlaying = playerEngine.hasSource && !playerEngine.paused;
+  const res = await api.cast_connect(device.id);
+  if (res?.status !== 'ok') { toastMgr.error(res?.error || `Could not connect to ${device.name}`); return; }
+  if (!playerCast) castLocalEngine = playerEngine.active;
+  playerCast ||= playerCastEngine(api);
+  playerCastDeviceId = device.id;
+  playerEngine.use(playerCast);
+  playerMediaSessionActive(true);
+  document.body.classList.add('is-casting');
+  castButtonsShow(true, `Playing on ${device.name}`);
+  toastMgr.success(`Playing on ${device.name}`);
+  if (playerIndex >= 0) {
+    castStartAt = at;
+    await loadPlayerTrack(playerIndex);
+    if (!wasPlaying) playerEngine.pause();
+  }
+}
+
+async function stopCasting({ lost = false } = {}) {
+  castPicker = null;
+  if (!playerCast || playerEngine.active !== playerCast) {
+    if (!lost) window.pywebview?.api?.cast_disconnect?.();
+    return;
+  }
+  const at = playerCast.currentTime;
+  const wasPlaying = !playerCast.paused;
+  const name = castDevices.find(d => d.id === playerCastDeviceId)?.name || 'the device';
+  playerCastDeviceId = '';
+  playerEngine.use(castLocalEngine || playerBrowser);
+  playerCast.dispose();
+  playerCast = null;
+  playerMediaSessionActive(playerEngine.kind !== 'native');
+  if (!lost) window.pywebview?.api?.cast_disconnect?.();
+  document.body.classList.remove('is-casting');
+  castButtonsShow(false, 'Play on another device');
+  if (lost) toastMgr.warning(`Stopped playing on ${name}`);
+  if (playerIndex >= 0) {
+    await loadPlayerTrack(playerIndex);
+    if (at > 1) playerEngine.currentTime = at;
+    if (!wasPlaying) playerEngine.pause();
+  }
+}
+
+// ── Mornye Connect ─────────────────────────────────────────────────────────
+// Every page is a device of its account (api_mixins/connect.py, core/connect):
+// the desktop window, each browser tab on --web, and through the backend the
+// paired phones. One device plays; the others are remotes. This page reports
+// its own player as it changes (play order window, position, modes) and runs
+// the commands addressed to it. When another device plays, the player swaps
+// its engine for `playerRemoteEngine`, as casting does: the bar, Now Playing
+// and the Media Session then follow that device, and the buttons send it
+// commands. "Play on" moves playback between devices (and to cast receivers).
+var CONNECT_ID_KEY = 'mornye-connect-id';       // sessionStorage: one device per tab
+var CONNECT_NAME_KEY = 'mornye-connect-name';   // localStorage: the name chosen here
+var CONNECT_REPORT_MS = 250;
+var CONNECT_HEARTBEAT_MS = 15000;
+var CONNECT_HANDOFF_MAX = 1000;                 // queue entries sent on a transfer
+var connect = {
+  id: '', name: '', kind: 'browser', ready: false, starting: false,
+  devices: [], activeId: null, remoteId: '', localEngine: null, applying: false,
+  timer: 0, beat: 0, last: null, lastSig: '', lastAt: 0,
+};
+var playerRemote = null;        // the remote engine, while another device plays
+
+// The part of a list of `length` sent around `index` (core/connect/model.py
+// queue_window): at most `max` entries, the current one in the middle.
+function connectWindow(length, index, max = 200) {
+  if (length <= max) return [0, length];
+  const start = Math.min(Math.max(Math.max(index, 0) - Math.floor(max / 2), 0), length - max);
+  return [start, start + max];
+}
+
+function connectRepeatOut(mode) { return mode === 'off' ? 'none' : (mode === 'all' || mode === 'one' ? mode : 'none'); }
+function connectRepeatIn(mode) { return mode === 'all' || mode === 'one' ? mode : 'off'; }
+
+// Where a handed-over queue starts (link_desktop_ops.dart): the requested
+// entry if this library has it, else the next one it has, else the last.
+function connectStartIndex(slots, index) {
+  if (slots[index]) return index;
+  for (let i = index + 1; i < slots.length; i++) if (slots[i]) return i;
+  for (let i = Math.min(index, slots.length) - 1; i >= 0; i--) if (slots[i]) return i;
+  return -1;
+}
+
+// A remote state's position now: it was read when it arrived.
+function connectPositionAt(state, receivedAt, now) {
+  if (!state) return 0;
+  const p = (Number(state.positionMs) || 0) + (state.playing ? now - receivedAt : 0);
+  const d = Number(state.durationMs) || 0;
+  return Math.max(0, d ? Math.min(d, p) : p);
+}
+
+function connectDefaultName(ua) {
+  ua = String(ua || '');
+  const browser = /Edg\//.test(ua) ? 'Edge' : /Firefox\//.test(ua) ? 'Firefox'
+    : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
+  const os = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android'
+    : /Mac OS X|Macintosh/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : '';
+  return os ? `${browser} on ${os}` : browser;
+}
+
+function connectDeviceLabel(d) {
+  const kind = { window: 'Mornye app', browser: 'Browser', phone: 'Phone', server: 'Server', cast: 'Receiver', mornye: 'Mornye' }[d.kind] || '';
+  const playing = d.state?.playing ? ' · playing' : '';
+  return kind ? `${d.name} · ${kind}${playing}` : `${d.name}${playing}`;
+}
+
+// The engine of a page that remotes another device: it plays nothing, shows
+// the device's state (extrapolated between updates, like the cast engine)
+// and turns every transport call into a command. `send(action, args)`.
+function playerRemoteEngine(send, clock = () => performance.now()) {
+  let emit = () => {};
+  let state = null, at = 0, paused = true, tick = 0, volume = 1, muted = false, volumeTimer = 0;
+  const position = () => connectPositionAt(state, at, clock()) / 1000;
+  const ticking = (on) => {
+    clearInterval(tick);
+    tick = on ? setInterval(() => emit('timeupdate'), 500) : 0;
+  };
+  const engine = {
+    kind: 'remote',
+    silent: false,             // while set, setters change nothing remotely
+    attach(fn) { emit = fn; },
+    get hasSource() { return !!state?.track; },
+    get output() { return null; },
+    load(_path, _next, meta = {}) {
+      if (!engine.silent && Number.isInteger(meta.index)) send('jump', { index: meta.index });
+    },
+    setNext() {},
+    clear() { ticking(false); },
+    play() { if (paused && !engine.silent) send('play', {}); return Promise.resolve(); },
+    pause() { if (!paused && !engine.silent) send('pause', {}); },
+    get paused() { return paused; },
+    get currentTime() { return position(); },
+    set currentTime(t) {
+      const ms = Math.max(0, Math.round((Number(t) || 0) * 1000));
+      if (state) { state = { ...state, positionMs: ms }; at = clock(); }
+      if (!engine.silent) send('seek', { positionMs: ms });
+      emit('timeupdate'); emit('seeked');
+    },
+    get duration() { return state?.durationMs ? state.durationMs / 1000 : NaN; },
+    get volume() { return volume; },
+    set volume(v) {
+      volume = Math.max(0, Math.min(1, Number(v) || 0));
+      if (engine.silent) return;
+      clearTimeout(volumeTimer);
+      volumeTimer = setTimeout(() => { volumeTimer = 0; send('volume', { value: muted ? 0 : volume }); }, 150);
+    },
+    get muted() { return muted; },
+    set muted(m) { muted = !!m; engine.volume = volume; },
+    get playbackRate() { return 1; },
+    set playbackRate(_r) {},
+    receive(next, receivedAt = clock()) {
+      if (!next) return;
+      const wasPaused = paused, oldDuration = state?.durationMs;
+      state = next; at = receivedAt; paused = !next.playing;
+      if (typeof next.volume === 'number' && !volumeTimer) volume = next.volume;
+      if (next.durationMs !== oldDuration) emit('loadedmetadata');
+      if (wasPaused !== paused) emit(paused ? 'pause' : 'play');
+      ticking(!paused);
+      emit('timeupdate');
+    },
+    dispose() { ticking(false); clearTimeout(volumeTimer); },
+  };
+  return engine;
+}
+
+function connectApi() {
+  const api = window.pywebview?.api;
+  return typeof api?.connect_register === 'function' ? api : null;
+}
+
+async function connectInit() {
+  const api = connectApi();
+  if (!api || connect.ready || connect.starting) return;
+  connect.starting = true;
+  try {
+    let id = '';
+    try { id = sessionStorage.getItem(CONNECT_ID_KEY) || ''; } catch (e) {}
+    if (!id) {
+      id = (crypto.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
+      try { sessionStorage.setItem(CONNECT_ID_KEY, id); } catch (e) {}
+    }
+    let name = '';
+    try { name = localStorage.getItem(CONNECT_NAME_KEY) || ''; } catch (e) {}
+    const desktop = !window.__mornyeWeb;
+    const res = await api.connect_register(id, name || (desktop ? '' : connectDefaultName(navigator.userAgent)), desktop ? 'window' : 'browser');
+    if (res?.status !== 'ok') return;
+    Object.assign(connect, { id, name: res.device.name, kind: res.device.kind, ready: true });
+    clearInterval(connect.beat);
+    connect.beat = setInterval(connectBeat, CONNECT_HEARTBEAT_MS);
+    connectDevices(res);
+    if (playerIndex >= 0) connectSchedule(true);
+  } catch (e) {
+    console.warn('Connect unavailable', e);
+  } finally {
+    connect.starting = false;
+  }
+}
+
+async function connectBeat() {
+  const api = connectApi();
+  if (!api || !connect.ready) return;
+  if (playerEngine.kind !== 'remote' && playerIndex >= 0 && !playerEngine.paused) { connectReport(true); return; }
+  try {
+    const res = await api.connect_heartbeat(connect.id);
+    if (res?.status === 'ok' && res.known === false) { connect.ready = false; connectInit(); }
+  } catch (e) { /* the next beat tries again */ }
+}
+
+// This page's player as connect_report_state takes it: the play order's
+// window around the current entry, in the page's own queue entries.
+function connectLocalState() {
+  const audio = playerEngine;
+  const order = playerOrder.map(i => playerQueue[i]);
+  const [start, end] = connectWindow(order.length, playerPos);
+  const has = playerIndex >= 0 && audio.hasSource;
+  return {
+    playing: has && !audio.paused,
+    positionMs: has ? Math.round((audio.currentTime || 0) * 1000) : 0,
+    durationMs: has && Number.isFinite(audio.duration) ? Math.round(audio.duration * 1000) : 0,
+    items: order.slice(start, end).map(q => (q ? {
+      path: q.path, title: q.title || '', artist: q.artist || '', album: q.album || '', duration_s: q.duration_s || 0,
+    } : null)),
+    index: playerIndex >= 0 ? playerPos - start : -1,
+    shuffle: playerShuffle,
+    repeat: connectRepeatOut(playerRepeat),
+    volume: audio.muted ? 0 : audio.volume,
+  };
+}
+
+function connectSchedule(force = false) {
+  if (!connect.ready || playerEngine.kind === 'remote') return;
+  clearTimeout(connect.timer);
+  connect.timer = setTimeout(() => connectReport(force), CONNECT_REPORT_MS);
+}
+
+// Sends the state unless only the position moved, and moved as playback
+// alone explains (the backend applies the same rule for the phones).
+async function connectReport(force = false) {
+  connect.timer = 0;
+  const api = connectApi();
+  if (!api || !connect.ready || playerEngine.kind === 'remote') return;
+  if (playerIndex < 0 && !connect.last) return;
+  const s = connectLocalState();
+  const now = performance.now();
+  const sig = JSON.stringify([s.playing, s.index, s.shuffle, s.repeat, Math.round(s.volume * 200), s.durationMs,
+    s.items.map(i => i?.path || '')]);
+  const expected = connect.last ? connectPositionAt(connect.last, connect.lastAt, now) : -1;
+  if (!force && sig === connect.lastSig && Math.abs(expected - s.positionMs) <= 2000) return;
+  connect.last = s; connect.lastSig = sig; connect.lastAt = now;
+  try { await api.connect_report_state(connect.id, s); } catch (e) { /* the heartbeat sends it again */ }
+}
+
+function connectOthers() {
+  return connect.devices.filter(d => d.id !== connect.id && d.canPlay);
+}
+
+function connectButtonsShow() {
+  const visible = castAvailable() || connectOthers().length > 0;
+  document.querySelectorAll('.cast-btn').forEach(b => b.classList.toggle('hidden', !visible));
+  if (playerCast) return;
+  const remote = playerEngine.kind === 'remote' ? connect.devices.find(d => d.id === connect.remoteId) : null;
+  castButtonsShow(!!remote, remote ? `Playing on ${remote.name}` : 'Play on another device');
+}
+
+// app_connect_devices: the account's devices and which one plays.
+function connectDevices(snap) {
+  if (!snap || !Array.isArray(snap.devices)) return;
+  connect.devices = snap.devices;
+  connect.activeId = snap.activeId || null;
+  const active = connect.devices.find(d => d.id === connect.activeId);
+  if (active && active.id !== connect.id && active.state) connectFollow(active.id, active.state, active.extra);
+  else if (playerEngine.kind === 'remote') connectLeaveRemote({ lost: !active });
+  connectButtonsShow();
+}
+
+// app_connect_state: the active device's player changed.
+function connectRemoteState(msg) {
+  if (!msg || msg.deviceId === connect.id || !msg.state) return;
+  connect.activeId = msg.deviceId;
+  const device = connect.devices.find(d => d.id === msg.deviceId);
+  if (device) { device.state = msg.state; device.extra = msg.extra; }
+  connectFollow(msg.deviceId, msg.state, msg.extra);
+}
+
+function connectEnterRemote() {
+  // A receiver this window casts to is the user's own choice: leave it be.
+  if (playerCast && playerEngine.active === playerCast) return false;
+  listenFinish();
+  connect.localEngine = playerEngine.active;
+  playerRemote ||= playerRemoteEngine((action, args) => connectSendRemote(action, args));
+  playerRemote.silent = true;
+  playerEngine.use(playerRemote);
+  playerRemote.silent = false;
+  playerMediaSessionActive(true);
+  document.body.classList.add('is-remote');
+  return true;
+}
+
+async function connectLeaveRemote({ lost = false, keep = true } = {}) {
+  if (playerEngine.kind !== 'remote') return;
+  const at = playerRemote?.currentTime || 0;
+  const back = connect.localEngine || playerBrowser;
+  connect.remoteId = '';
+  playerEngine.use(back);
+  playerRemote?.dispose();
+  playerRemote = null;
+  playerMediaSessionActive(back.kind !== 'native');
+  document.body.classList.remove('is-remote');
+  connectButtonsShow();
+  if (lost) toastMgr.warning('The device that was playing is gone.');
+  if (keep && playerIndex >= 0 && playerQueue[playerIndex]?.path) {
+    await loadPlayerTrack(playerIndex);
+    if (at > 1) playerEngine.currentTime = at;
+    playerEngine.pause();
+  }
+}
+
+// Shows the remote device's queue and song here, without playing anything.
+async function connectFollow(id, state, extra) {
+  const receivedAt = performance.now();
+  if (playerEngine.kind !== 'remote' && !connectEnterRemote()) return;
+  const changedDevice = connect.remoteId !== id;
+  connect.remoteId = id;
+  const paths = Array.isArray(extra?.paths) ? extra.paths : [];
+  const items = (state.queue || []).map((r, i) => ({
+    path: paths[i] || '', title: r.title || '', artist: r.artist || '', album: r.album || '',
+    duration_s: r.durationMs ? r.durationMs / 1000 : 0,
+  }));
+  const same = !changedDevice && items.length === playerQueue.length
+    && items.every((q, i) => q.path === playerQueue[i]?.path && q.title === playerQueue[i]?.title);
+  if (!same) { playerQueue = items; playerOrder = items.map((_, i) => i); }
+  playerShuffle = !!state.shuffle;
+  playerRepeat = connectRepeatIn(state.repeat);
+  updatePlayerModes();
+  playerRemote.receive(state, receivedAt);
+  const v = Math.round((typeof state.volume === 'number' ? state.volume : 1) * 100);
+  ['pl-vol', 'np-vol'].forEach(n => { const el = $(n); if (el) { el.value = v; amPaint(el); } });
+  const index = Number.isInteger(state.index) ? state.index : -1;
+  if (index >= 0 && (index !== playerIndex || !same)) {
+    connect.applying = true;
+    try { await loadPlayerTrack(index); } finally { connect.applying = false; }
+  } else if (index < 0 && state.track) {
+    connectShowRemoteTrack({ title: state.track.title || '', artist: state.track.artist || '', path: '' });
+  }
+  connectButtonsShow();
+  if (!$('np-queue').classList.contains('hidden')) npRenderQueue();
+}
+
+// A remote song this library has no file for: its name only.
+function connectShowRemoteTrack(item) {
+  $('player-bar').classList.remove('hidden');
+  document.body.classList.add('has-player');
+  const artist = displayArtists(item.artist);
+  $('pl-title').textContent = artist ? `${item.title} — ${artist}` : item.title;
+  marqueeFit($('pl-title'));
+  $('pl-quality').textContent = '';
+  setPlayerArtwork('');
+  fillNowPlaying(item, {});
+}
+
+async function connectSendRemote(action, args) {
+  const api = connectApi();
+  if (!api || !connect.remoteId) return;
+  try {
+    const res = await api.connect_command(action, args, connect.remoteId);
+    if (res?.status !== 'ok') toastMgr.error(res?.error || 'The device did not answer.');
+  } catch (e) {
+    toastMgr.error('The device did not answer.');
+  }
+}
+
+// app_connect_command: a remote's command for this page's player.
+async function connectRun(action, args = {}) {
+  const audio = playerEngine;
+  if (audio.kind === 'remote' && action !== 'play_queue') return;
+  switch (action) {
+    case 'play':
+      if (audio.hasSource) { try { await audio.play(); } catch (e) { connectAutoplayBlocked(); } }
+      else if (playerIndex >= 0) await loadPlayerTrack(playerIndex);
+      break;
+    case 'pause': audio.pause(); break;
+    case 'toggle': playerToggle(); break;
+    case 'next': await playerNext(); break;
+    case 'previous': await playerPrev(); break;
+    case 'seek': if (audio.hasSource) audio.currentTime = (Number(args.positionMs) || 0) / 1000; break;
+    case 'volume': playerSetVolumePercent((typeof args.value === 'number' ? args.value : 1) * 100); break;
+    case 'shuffle': if (playerShuffle !== !!args.enabled) playerToggleShuffle(); break;
+    case 'repeat': playerRepeat = connectRepeatIn(args.mode); updatePlayerModes(); break;
+    case 'jump': { const p = connectOrderPos(args.index); if (p >= 0) await loadPlayerTrack(playerOrder[p]); break; }
+    case 'move': connectMove(connectOrderPos(args.from), connectOrderPos(args.to)); break;
+    case 'remove': connectRemove(connectOrderPos(args.index)); break;
+    case 'play_queue': await connectPlayQueue(args); break;
+    case 'queue_add': await connectQueueAdd(args); break;
+    default: return;
+  }
+  connectSchedule();
+}
+
+// An index into the window this page last reported, as a play-order position.
+function connectOrderPos(index) {
+  const [start, end] = connectWindow(playerOrder.length, playerPos);
+  const p = start + Number(index);
+  return Number.isInteger(p) && p >= start && p < end ? p : -1;
+}
+
+function connectMove(from, to) {
+  if (from < 0 || to < 0 || from === to) return;
+  const [moved] = playerOrder.splice(from, 1);
+  playerOrder.splice(to, 0, moved);
+  playerPos = playerOrder.indexOf(playerIndex);
+  playerRefreshNext();
+  if (!$('np-queue').classList.contains('hidden')) npRenderQueue();
+}
+
+function connectRemove(pos) {
+  if (pos < 0 || pos === playerPos) return;
+  playerOrder.splice(pos, 1);
+  playerPos = playerOrder.indexOf(playerIndex);
+  playerRefreshNext();
+  if (!$('np-queue').classList.contains('hidden')) npRenderQueue();
+}
+
+// queue_add: songs a remote (or the phone's queue/add) puts in this queue.
+async function connectQueueAdd(args) {
+  const res = await connectApi()?.connect_resolve(Array.isArray(args.queue) ? args.queue : []);
+  const items = (res?.items || []).filter(Boolean);
+  if (!items.length) return;
+  if (!playerQueue.length || playerIndex < 0) { startPlayback(items, 0, false, false); return; }
+  const start = playerQueue.length;
+  playerQueue.push(...items);
+  const added = items.map((_, i) => start + i);
+  if (args.next) playerOrder.splice(playerPos + 1, 0, ...added);
+  else playerOrder.push(...added);
+  playerRefreshNext();
+  if (!$('np-queue').classList.contains('hidden')) npRenderQueue();
+}
+
+function connectAutoplayBlocked() {
+  toastMgr.info('Press play to start playback on this device.');
+}
+
+// play_queue: a queue handed to this page (another device's, a phone's).
+// The songs this library lacks are skipped, as the desktop app does.
+async function connectPlayQueue(args) {
+  const api = connectApi();
+  if (!api) return;
+  const res = await api.connect_resolve(Array.isArray(args.queue) ? args.queue : []);
+  if (res?.status !== 'ok') { toastMgr.error(res?.error || 'Could not play that queue here.'); return; }
+  const slots = res.items || [];
+  const wanted = Math.max(0, Number(args.index) || 0);
+  const startAt = connectStartIndex(slots, wanted);
+  if (startAt < 0) { toastMgr.error('None of those songs is in this library.'); return; }
+  if (playerEngine.kind === 'remote') await connectLeaveRemote({ keep: false });
+  if (res.missing?.length) toastMgr.info(`${plural(res.missing.length, 'song')} not in this library ${res.missing.length === 1 ? 'was' : 'were'} skipped.`);
+  const items = slots.filter(Boolean);
+  playerQueue = items;
+  playerOrder = items.map((_, i) => i);
+  const first = slots.slice(0, startAt).filter(Boolean).length;
+  playerPos = first;
+  if (typeof args.shuffle === 'boolean') playerShuffle = args.shuffle;
+  if (args.repeat) playerRepeat = connectRepeatIn(args.repeat);
+  updatePlayerModes();
+  playerIndex = -1;
+  await loadPlayerTrack(first);
+  const position = startAt === wanted ? (Number(args.positionMs) || 0) / 1000 : 0;
+  if (position > 0) playerEngine.currentTime = position;
+  if (args.playing === false) playerEngine.pause();
+  else if (playerEngine.paused) connectAutoplayBlocked();
+  connectSchedule(true);
+}
+
+// The whole play order (up to CONNECT_HANDOFF_MAX around the current song)
+// for another device to continue from here.
+function connectHandoff() {
+  const order = playerOrder.map(i => playerQueue[i]);
+  const [start, end] = connectWindow(order.length, playerPos, CONNECT_HANDOFF_MAX);
+  return {
+    items: order.slice(start, end).map(q => (q ? { path: q.path, title: q.title || '', artist: q.artist || '', album: q.album || '', duration_s: q.duration_s || 0 } : null)),
+    index: playerPos - start,
+    positionMs: Math.round((playerEngine.currentTime || 0) * 1000),
+    playing: !playerEngine.paused,
+    shuffle: playerShuffle,
+    repeat: connectRepeatOut(playerRepeat),
+  };
+}
+
+async function connectTransferTo(device) {
+  const api = connectApi();
+  castPicker = null;
+  if (!api) return;
+  if (playerCast && playerEngine.active === playerCast) await stopCasting();
+  let res;
+  if (playerEngine.kind === 'remote') {
+    res = await api.connect_transfer(device.id);
+  } else if (playerIndex >= 0 && playerEngine.hasSource) {
+    res = await api.connect_transfer(device.id, connectHandoff());
+  } else {
+    toastMgr.info('Nothing is playing yet.');
+    return;
+  }
+  if (res?.status !== 'ok') toastMgr.error(res?.error || `Could not play on ${device.name}`);
+  else connectDevices(res);
+}
+
+async function connectPlayHere() {
+  castPicker = null;
+  if (playerCast && playerEngine.active === playerCast) { await stopCasting(); return; }
+  if (playerEngine.kind !== 'remote') return;
+  const api = connectApi();
+  const res = await api?.connect_transfer(connect.id);
+  if (res?.status !== 'ok') toastMgr.error(res?.error || 'Could not move playback here.');
+}
+
+// Plays `items` on the device this page remotes, as Spotify Connect does when
+// a song is picked on a remote. `shuffle` true sends them already shuffled.
+function connectStartRemote(items, index, shuffle) {
+  let list = items.map(q => ({ path: q.path, title: q.title || '', artist: q.artist || '', album: q.album || '', duration_s: q.duration_s || 0 }));
+  let first = index;
+  if (shuffle === true) {
+    for (let i = list.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [list[i], list[j]] = [list[j], list[i]];
+    }
+    first = 0;
+  }
+  const [start, end] = connectWindow(list.length, first, CONNECT_HANDOFF_MAX);
+  list = list.slice(start, end);
+  connectSendRemote('play_queue', {
+    items: list, index: first - start, positionMs: 0, playing: true,
+    ...(typeof shuffle === 'boolean' ? { shuffle } : {}),
+  });
+}
+
+// The "Playing on …" strip opens the same menu as the player bar's button.
+function connectOpenPicker() {
+  const button = $('pl-cast-btn');
+  if (button) openCastPicker(button);
+}
+
+window.app_connect_devices = (snap) => connectDevices(snap);
+window.app_connect_state = (msg) => connectRemoteState(msg);
+window.app_connect_command = (msg) => { if (msg && msg.target === connect.id) connectRun(msg.action, msg.args || {}); };
+
+(function initConnect() {
+  for (const type of ['play', 'pause', 'seeked', 'loadedmetadata', 'ended']) {
+    playerEngine.addEventListener(type, () => connectSchedule());
+  }
+  window.addEventListener('pywebviewready', connectInit);
+  window.addEventListener('pagehide', () => {
+    const api = connectApi();
+    if (api && connect.ready) { try { api.connect_unregister(connect.id); } catch (e) {} }
+    connect.ready = false;
+  });
+  window.addEventListener('pageshow', (e) => { if (e.persisted) connectInit(); });
+  if (connectApi()) setTimeout(connectInit, 0);
+})();
+
+// Every cast button (the player bar's, Now Playing's) lights while the
+// music plays elsewhere (a receiver, another Connect device), and the strip
+// above the player says where.
+function castButtonsShow(on, title) {
+  const banner = $('connect-banner');
+  if (banner) {
+    banner.classList.toggle('hidden', !on);
+    $('connect-banner-text').textContent = on ? title : '';
+    document.body.classList.toggle('plays-elsewhere', !!on);
+  }
+  document.querySelectorAll('.cast-btn').forEach((b) => {
+    b.classList.toggle('on', on);
+    b.setAttribute('title', title);
+  });
+}
+
+(function initCastButtons() {
+  const buttons = [...document.querySelectorAll('.cast-btn')];
+  const show = () => buttons.forEach(b => b.classList.toggle('hidden', !(castAvailable() || connectOthers().length)));
+  show();
+  window.addEventListener('pywebviewready', show);
+  buttons.forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); openCastPicker(btn); }));
+})();
 
 // The track that plays after the current one, or -1: what the native
 // engine opens in advance for a gapless change. Repeat-one queues the same
@@ -9930,15 +11654,119 @@ function playerShowQuality() {
     : 'Played exactly as stored. Formats the window cannot decode are played as a lossless FLAC copy. The operating system may still resample to your output device\'s rate.';
 }
 
+// ── Listening record ────────────────────────────────────────────────────────
+// As Mornye mobile records it (core/listening.py): elapsed playing time,
+// never a jump of the seek bar; a play counts once per song after 30
+// seconds of it; when a song stops being the current one it was played
+// through (to the end or past half) or skipped. Sent in pieces: every 30
+// seconds heard, and when the song changes or the player closes.
+var listenState = null;
+
+function listenNew(item, quality) {
+  return { item, quality: quality || '', duration: 0, ms: 0, sent: 0, counted: false, last: null, playing: false, ended: false, started: Date.now() / 1000 };
+}
+
+// Adds the time since the last tick while playing; a gap longer than
+// `maxGap` (a sleeping machine, a stalled stream) counts only `maxGap`.
+function listenAdvance(state, now, playing, maxGap = 3000) {
+  if (!state) return state;
+  if (state.playing && state.last != null) {
+    const gap = now - state.last;
+    if (gap > 0) state.ms += Math.min(gap, maxGap);
+  }
+  state.last = now;
+  state.playing = !!playing;
+  return state;
+}
+
+// What is still to be sent of `state`, or null; marks it sent. `final`
+// when the song stops being the current one.
+function listenPiece(state, final = false, playMs = 30000) {
+  if (!state) return null;
+  const ms = Math.max(0, Math.round(state.ms - state.sent));
+  const play = !state.counted && state.ms >= playMs;
+  let outcome = '';
+  if (final && state.ms >= 1000) {
+    const half = state.duration > 0 ? state.ms >= state.duration * 500 : state.ms >= playMs;
+    outcome = state.ended || half ? 'listened' : 'skipped';
+  }
+  if (!ms && !play && !outcome) return null;
+  state.sent += ms;
+  if (play) state.counted = true;
+  const it = state.item || {};
+  const piece = { path: it.path || '', title: it.title || '', artist: it.artist || '', album: it.album || '', quality: state.quality, ms, play, outcome };
+  // The final piece also carries what a Last.fm scrobble needs: the whole
+  // time heard, the song's length and when it started (core/scrobbler.py).
+  if (outcome) Object.assign(piece, { heard: state.ms / 1000, duration: state.duration || 0, started: state.started || 0 });
+  return piece;
+}
+
+function listenSend(final = false) {
+  const piece = listenPiece(listenState, final);
+  if (!piece) return;
+  try { window.pywebview?.api?.record_listening?.(piece); } catch (e) { /* the record is best effort */ }
+}
+
+function listenTick() {
+  if (!listenState) return;
+  listenAdvance(listenState, performance.now(), !playerEngine.paused);
+  if (listenState.ms - listenState.sent >= 30000 || (!listenState.counted && listenState.ms >= 30000)) listenSend(false);
+}
+
+function listenFinish({ ended = false } = {}) {
+  if (!listenState) return;
+  listenAdvance(listenState, performance.now(), false);
+  if (ended) listenState.ended = true;
+  listenSend(true);
+  listenState = null;
+  presenceSync();
+}
+
+// ── Now playing, for Discord and Last.fm (api_mixins/integrations.py) ───────
+// Told on every change of song, play/pause and seek, gathered over a moment
+// and only when something changed. Desktop only: over --web the services
+// would be the server's.
+var presenceTimer = null, presenceSent = '';
+
+function presenceInfo() {
+  const it = listenState?.item;
+  if (!it?.title) return null;
+  const duration = Number.isFinite(playerEngine.duration) ? playerEngine.duration : (listenState.duration || 0);
+  return {
+    title: it.title || '', artist: it.artist || '', album: it.album || '',
+    duration: duration || 0, position: playerEngine.currentTime || 0, playing: !playerEngine.paused,
+  };
+}
+
+function presenceSync() {
+  if (window.__MORNYE_WEB_MODE__) return;
+  clearTimeout(presenceTimer);
+  presenceTimer = setTimeout(() => {
+    const info = presenceInfo();
+    // The start time, rounded, so a playing song is not re-sent every
+    // tick; Mornye itself skips what moved by less than a few seconds.
+    const key = info
+      ? [info.title, info.artist, info.album, info.playing, Math.round(Date.now() / 1000 - info.position)].join('|')
+      : '';
+    if (key === presenceSent) return;
+    presenceSent = key;
+    try { window.pywebview?.api?.set_now_playing?.(info); } catch (e) { /* best effort */ }
+  }, 400);
+}
+
 async function loadPlayerTrack(index, { advanced = false } = {}) {
   const item = playerQueue[index];
   if (!item) return;
+  listenFinish();
   playerIndex = index;
   if (playerOrder.length !== playerQueue.length) playerBuildOrder(index);
   else playerPos = playerOrder.indexOf(index);
   const token = ++playerToken;
   const audio = playerEngine;
   const native = audio.kind === 'native';
+  const remote = audio.kind === 'remote';
+  const cast = audio.kind === 'cast' || remote;
+  if (remote && !item.path) { connectShowRemoteTrack(item); markPlayingRow(); return; }
   $('player-bar').classList.remove('hidden');
   document.body.classList.add('has-player');
   setPlayerArtwork('');
@@ -9948,15 +11776,28 @@ async function loadPlayerTrack(index, { advanced = false } = {}) {
   if (!advanced) $('pl-quality').textContent = 'Preparing…';
   markPlayingRow();
   playerAbReset();
-  if (!advanced) audio.pause();
-  const res = await window.pywebview?.api?.prepare_playback?.(item.path, !window.__mornyeWeb, native);
+  if (!advanced && !remote) audio.pause();
+  // A receiver is sent the file as stored (native: no local copy is made).
+  const res = await window.pywebview?.api?.prepare_playback?.(item.path, !window.__mornyeWeb, native || cast);
   if (token !== playerToken) return; // another track was chosen meanwhile
   if (!res || res.status !== 'ok') {
     $('pl-quality').textContent = 'Cannot play this file';
     toastMgr.error(res?.error || 'Could not play the file.');
     return;
   }
-  if (!advanced) {
+  if (!advanced && remote) {
+    // Another device plays: a song picked here is a jump there, unless this
+    // load only shows what that device moved on to.
+    playerRemote.silent = connect.applying;
+    audio.load(res.path, undefined, { index });
+    playerRemote.silent = false;
+  } else if (!advanced && cast) {
+    const start = castStartAt; castStartAt = 0;
+    audio.load(res.path, undefined, {
+      title: res.title || item.title, artist: res.artist || item.artist || '', album: res.album || item.album || '',
+      duration: item.duration_s || res.info?.duration || 0, start,
+    });
+  } else if (!advanced) {
     audio.load(native ? res.path : (res.url || ('/api/media?path=' + encodeURIComponent(res.path))),
       native ? playerUpcomingPath() : undefined);
   } else {
@@ -9964,8 +11805,13 @@ async function loadPlayerTrack(index, { advanced = false } = {}) {
   }
   playerSourceQuality = res.quality;
   playerShowQuality();
+  // A listen is counted where the music plays, not on a remote.
+  if (!remote) {
+    listenState = listenNew({ ...item, title: res.title || item.title, artist: res.artist || item.artist, album: res.album || item.album }, res.quality);
+    listenAdvance(listenState, performance.now(), !audio.paused);
+  }
   fillNowPlaying(item, res);
-  if (!advanced) {
+  if (!advanced && !remote) {
     try { await audio.play(); } catch (e) { /* autoplay blocked: the play button works */ }
   }
   playerMediaMetadata(item, res, artist);
@@ -10092,7 +11938,7 @@ function playerMediaSessionActive(on) {
   }
 }
 
-playerEngine.addEventListener('media', (d) => playerMediaAction(d?.action, 'native'));
+playerEngine.addEventListener('media', (d) => playerMediaAction(d?.action, 'native', d));
 
 // Media keys that arrive as keys (with the window focused). Never typed
 // text, so a focused field does not keep them from the player.
@@ -10130,8 +11976,14 @@ function playerNext(auto) {
   }
 }
 function playerEnded() {
+  const heard = listenState;
+  listenFinish({ ended: true });
   const audio = playerEngine;
-  if (playerRepeat === 'one') { audio.currentTime = 0; audio.play(); return; }
+  if (playerRepeat === 'one') {
+    // The same song again is a new listen.
+    if (heard) listenState = listenNew(heard.item, heard.quality);
+    audio.currentTime = 0; audio.play(); return;
+  }
   playerNext(true);
 }
 function playerPrev() {
@@ -10142,6 +11994,7 @@ function playerPrev() {
   audio.currentTime = 0;
 }
 function closePlayer() {
+  listenFinish();
   playerToken++;
   const audio = playerEngine;
   audio.clear();
@@ -10150,6 +12003,7 @@ function closePlayer() {
   document.body.classList.remove('has-player');
   playerIndex = -1;
   markPlayingRow();
+  connectSchedule(true);
   if ('mediaSession' in navigator && playerMediaSessionOn) {
     navigator.mediaSession.metadata = null;
     navigator.mediaSession.playbackState = 'none';
@@ -10225,8 +12079,17 @@ playerEngine.addEventListener('warning', (d) => { if (d?.message) toastMgr.warni
       amPaint(seek);
     }
   });
-  audio.addEventListener('loadedmetadata', () => { $('pl-dur').textContent = fmtTime(audio.duration); });
+  audio.addEventListener('loadedmetadata', () => {
+    $('pl-dur').textContent = fmtTime(audio.duration);
+    if (listenState) listenState.duration = audio.duration || 0;
+  });
   audio.addEventListener('ended', playerEnded);
+  // The listening record follows the clock while the song plays.
+  audio.addEventListener('timeupdate', listenTick);
+  audio.addEventListener('play', listenTick);
+  audio.addEventListener('pause', listenTick);
+  window.addEventListener('pagehide', () => { listenTick(); listenSend(false); });
+  for (const type of ['play', 'pause', 'seeked', 'loadedmetadata', 'ended']) audio.addEventListener(type, presenceSync);
   const icon = $('pl-play-icon');
   const PLAY = '<path d="M8 5v14l11-7z"/>', PAUSE = '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>';
   audio.addEventListener('play', () => { icon.innerHTML = PAUSE; });
@@ -10328,7 +12191,118 @@ function npOptFill(options) {
     el.value = String(options.eq_gains?.[Number(el.dataset.band)] ?? 0);
     amPaint(el);
   });
+  npPeqShowMode(options.eq_mode);
+  npPeqRender(options.eq_filters || []);
   npOptState(options);
+}
+
+// ── Parametric equalizer ────────────────────────────────────────────────────
+// Up to 20 peak/shelf filters with exact values, and the AutoEQ / Equalizer
+// APO text list in and out (core/native_player.py parse_filter_list).
+const NP_PEQ_MAX = 20;
+const NP_PEQ_TYPES = [['peak', 'Peak'], ['lowshelf', 'Low shelf'], ['highshelf', 'High shelf']];
+
+function npPeqShowMode(mode) {
+  const parametric = mode === 'parametric';
+  document.querySelectorAll('#tc-player .np-eq-graphic').forEach(el => el.classList.toggle('hidden', parametric));
+  document.querySelectorAll('#tc-player .np-eq-parametric').forEach(el => el.classList.toggle('hidden', !parametric));
+  const hint = $('np-eq-mode-hint');
+  if (hint) hint.textContent = parametric
+    ? 'Parametric: up to 20 filters, 20 Hz to 20 kHz, ±24 dB, Q 0.1 to 20.'
+    : 'Graphic: ten bands, lowered by the largest boost so they cannot clip.';
+}
+
+function npPeqRow(f, i) {
+  const types = NP_PEQ_TYPES.map(([v, label]) => `<option value="${v}"${f.type === v ? ' selected' : ''}>${label}</option>`).join('');
+  return `<div class="np-peq-row" data-index="${i}">
+    <input type="checkbox" class="np-peq-on" ${f.enabled === false ? '' : 'checked'} aria-label="Filter ${i + 1} on">
+    <select class="np-peq-type" aria-label="Filter ${i + 1} type">${types}</select>
+    <input type="number" class="np-peq-freq" min="20" max="20000" step="1" value="${Number(f.freq) || 1000}" aria-label="Filter ${i + 1} frequency, Hz">
+    <input type="number" class="np-peq-gain" min="-24" max="24" step="0.1" value="${Number(f.gain) || 0}" aria-label="Filter ${i + 1} gain, dB">
+    <input type="number" class="np-peq-q" min="0.1" max="20" step="0.01" value="${Number(f.q) || 0.707}" aria-label="Filter ${i + 1} Q">
+    <button type="button" class="np-peq-remove" data-onclick="npPeqRemove(this)" aria-label="Remove filter ${i + 1}" title="Remove">×</button>
+  </div>`;
+}
+
+function npPeqRender(filters) {
+  const list = $('np-peq-list');
+  if (!list) return;
+  list.innerHTML = filters.length
+    ? filters.map(npPeqRow).join('')
+    : '<div class="np-peq-empty">No filters yet. Add one, or load an AutoEQ list.</div>';
+  const add = $('np-peq-add');
+  if (add) add.disabled = filters.length >= NP_PEQ_MAX;
+  if (playerNativeStatus && !playerNativeStatus.available) npOptState(playerNativeStatus.options);
+}
+
+function npPeqCollect() {
+  return [...document.querySelectorAll('#np-peq-list .np-peq-row')].map(row => ({
+    type: row.querySelector('.np-peq-type').value,
+    freq: Number(row.querySelector('.np-peq-freq').value),
+    gain: Number(row.querySelector('.np-peq-gain').value),
+    q: Number(row.querySelector('.np-peq-q').value),
+    enabled: row.querySelector('.np-peq-on').checked,
+  }));
+}
+
+function npPeqAdd() {
+  const filters = npPeqCollect();
+  if (filters.length >= NP_PEQ_MAX) return;
+  filters.push({ type: 'peak', freq: 1000, gain: 0, q: 0.707, enabled: true });
+  npPeqRender(filters);
+  npOptQueue({ eq_filters: filters }, 0);
+}
+
+function npPeqRemove(btn) {
+  const filters = npPeqCollect();
+  filters.splice(Number(btn.closest('.np-peq-row')?.dataset.index), 1);
+  npPeqRender(filters);
+  npOptQueue({ eq_filters: filters }, 0);
+}
+
+async function npPeqImport(text) {
+  const api = window.pywebview?.api;
+  if (!api?.native_player_eq_import) return;
+  let res;
+  try { res = await api.native_player_eq_import(String(text || '')); } catch (e) { res = { status: 'error', error: String(e) }; }
+  if (res?.status !== 'ok') { toastMgr.error(res?.error || 'Could not read the filter list.'); return; }
+  if (playerNativeStatus) playerNativeStatus.options = res.options;
+  npOptFill(res.options);
+  showToast(`${res.imported} filter${res.imported === 1 ? '' : 's'} loaded.`, 'success');
+}
+
+function npPeqApplyText() { npPeqImport($('np-peq-text').value); }
+
+function npPeqPickFile() { $('np-peq-file').click(); }
+
+function npPeqLoadFile(input) {
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  if (file.size > 64000) { toastMgr.error('That file is too large to be a filter list.'); return; }
+  const reader = new FileReader();
+  reader.onload = () => npPeqImport(reader.result);
+  reader.onerror = () => toastMgr.error('Could not read the file.');
+  reader.readAsText(file);
+}
+
+async function npPeqExport() {
+  const wrap = $('np-peq-text-wrap');
+  if (!wrap.classList.contains('hidden')) { wrap.classList.add('hidden'); return; }
+  // Unsaved edits first, so the list shows what the rows show.
+  clearTimeout(npOptSaveTimer);
+  await npOptFlush();
+  const api = window.pywebview?.api;
+  let res = null;
+  try { res = await api?.native_player_eq_export?.(); } catch (e) { res = null; }
+  $('np-peq-text').value = res?.text || '';
+  wrap.classList.remove('hidden');
+}
+
+async function npPeqCopy() {
+  const text = $('np-peq-text').value;
+  if (await copyText(text)) showToast('Filter list copied.', 'success');
+  else { $('np-peq-text').select(); toastMgr.error('Could not copy: select the text and copy it by hand.'); }
 }
 
 // What can be set right now: without libmpv (or with the window's engine
@@ -10344,7 +12318,7 @@ function npOptState(options) {
   const off = !!window.__mornyeWeb || !st?.available;
   document.querySelectorAll('#tc-player .np-native-only').forEach(sec => {
     sec.classList.toggle('np-disabled', off);
-    sec.querySelectorAll('input, select').forEach(el => { el.disabled = off; });
+    sec.querySelectorAll('input, select, button, textarea').forEach(el => { el.disabled = off; });
   });
   $('np-opt-engine').disabled = !!window.__mornyeWeb;
 }
@@ -10375,6 +12349,271 @@ async function loadPlayerSettings() {
   } catch (e) { /* the list stays at "System default" */ }
 }
 
+// ── Mornye Link (api_mixins/link.py) ─────────────────────────────────────
+// Every call answers with the same status, so one renderer draws the
+// section. While the Player tab is open it is re-read every 2 s: a phone
+// pairing, connecting or the PIN running out shows up without a click.
+let g_linkPoll = null;
+let g_linkPinShown = '';
+
+function stopLinkPolling() { clearInterval(g_linkPoll); g_linkPoll = null; stopIntegrationPolling(); }
+
+// ── Services: Discord and Last.fm (api_mixins/integrations.py) ────────────
+// Desktop only. A connection is made in the background, so the status is
+// asked again every few seconds while Settings › Player is open.
+var g_integrationPoll = null;
+
+function stopIntegrationPolling() { clearInterval(g_integrationPoll); g_integrationPoll = null; }
+
+function openServiceUrl(url) {
+  if (window.pywebview?.api?.open_url) window.pywebview.api.open_url(url);
+  else window.open(url, '_blank', 'noopener');
+}
+
+function renderServiceStatus(id, connected, enabled, text) {
+  const el = $(id);
+  if (!el) return;
+  el.classList.toggle('on', !!connected);
+  el.classList.toggle('waiting', !connected && !!enabled);
+  const label = el.querySelector('.svc-text');
+  if (label) label.textContent = text || 'Off';
+}
+
+function renderDiscordPresence(s) {
+  if (!s || s.status !== 'ok') return;
+  const box = $('discord-enabled'), id = $('discord-app-id'), art = $('discord-artwork');
+  if (box) box.checked = !!s.enabled;
+  if (id && document.activeElement !== id) id.value = s.application_id || '';
+  if (art) art.checked = !!s.show_artwork;
+  if (id) id.disabled = !s.enabled;
+  if (art) art.disabled = !s.enabled;
+  renderServiceStatus('discord-status', s.connected, s.enabled, s.status_text);
+}
+
+async function loadIntegrationSettings() {
+  const api = window.pywebview?.api;
+  const available = !window.__MORNYE_WEB_MODE__ && !!api?.get_discord_presence;
+  $('discord-section')?.classList.toggle('hidden', !available);
+  $('lastfm-section')?.classList.toggle('hidden', !available || !api?.get_lastfm);
+  if (!available) return;
+  renderDiscordPresence(await linkCall('get_discord_presence'));
+  renderLastFm(await linkCall('get_lastfm'));
+  if (!g_integrationPoll) g_integrationPoll = setInterval(loadIntegrationSettings, 4000);
+}
+
+// ── Services: Last.fm (core/scrobbler.py) ──────────────────────────────────
+function renderLastFm(s) {
+  if (!s || s.status !== 'ok') return;
+  const box = $('lastfm-enabled'), key = $('lastfm-key'), secret = $('lastfm-secret');
+  if (box) box.checked = !!s.enabled;
+  if (key && document.activeElement !== key) key.value = s.api_key || '';
+  if (secret && document.activeElement !== secret) {
+    secret.value = '';
+    secret.placeholder = s.has_secret ? 'Saved — type to replace' : 'Not set';
+  }
+  for (const el of [key, secret]) if (el) el.disabled = !s.enabled;
+  const connect = $('lastfm-connect');
+  if (connect) {
+    connect.classList.toggle('hidden', !!s.connected);
+    connect.disabled = !s.enabled || !s.api_key || !s.has_secret || !!s.authorising;
+    connect.textContent = s.authorising ? 'Waiting…' : 'Connect…';
+  }
+  $('lastfm-disconnect')?.classList.toggle('hidden', !s.connected);
+  $('lastfm-retry')?.classList.toggle('hidden', !s.connected || !s.pending);
+  const pending = $('lastfm-pending');
+  if (pending) {
+    pending.classList.toggle('hidden', !s.pending);
+    pending.textContent = s.pending ? `${s.pending} scrobble${s.pending === 1 ? '' : 's'} waiting to be sent` : '';
+  }
+  renderServiceStatus('lastfm-status', s.connected, s.enabled, s.status_text);
+}
+
+async function lastFmCall(name, ...args) {
+  let res = null;
+  try { res = await window.pywebview?.api?.[name]?.(...args); } catch (e) { res = { error: String(e) }; }
+  if (res?.status !== 'ok') { toastMgr.error(res?.error || 'Last.fm did not answer.'); return null; }
+  renderLastFm(res);
+  return res;
+}
+
+function saveLastFm(setting, value) {
+  const changes = { enabled: null, api_key: null, secret: null, [setting]: value };
+  // An emptied secret field means "keep it": the stored one is never shown.
+  if (setting === 'secret' && !String(value || '').trim()) return;
+  return lastFmCall('save_lastfm', changes.enabled, changes.api_key, changes.secret);
+}
+
+async function connectLastFm() {
+  const res = await lastFmCall('connect_lastfm');
+  if (res) toastMgr.info?.('Approve Mornye on the Last.fm page that just opened.');
+}
+
+function disconnectLastFm() { return lastFmCall('disconnect_lastfm'); }
+function retryLastFm() { return lastFmCall('retry_lastfm'); }
+
+async function saveDiscordPresence(setting, value) {
+  const changes = { enabled: null, application_id: null, show_artwork: null, [setting]: value };
+  let res = null;
+  try { res = await window.pywebview?.api?.save_discord_presence?.(changes.enabled, changes.application_id, changes.show_artwork); } catch (e) { res = { error: String(e) }; }
+  if (res?.status !== 'ok') { toastMgr.error(res?.error || 'Could not save the Discord settings.'); return; }
+  renderDiscordPresence(res);
+}
+
+async function linkCall(name, ...args) {
+  const api = window.pywebview?.api;
+  if (!api?.[name]) return null;
+  try {
+    const res = await api[name](...args);
+    // --web multi-user answers non-admins "Not found": no section for them.
+    return res && !res.error ? res : null;
+  } catch (e) { return null; }
+}
+
+// Settings → Mornye Connect: this device's name, and (--web) the server
+// speaker switch, which only admins get an answer for.
+async function loadConnectSettings() {
+  const section = $('connect-section');
+  if (!section) return;
+  section.classList.toggle('hidden', !connect.ready);
+  if (!connect.ready) return;
+  const input = $('connect-name');
+  if (document.activeElement !== input) input.value = connect.name || '';
+  const status = await linkCall('connect_speaker_status');
+  const row = $('connect-speaker-row');
+  row.classList.toggle('hidden', !status?.supported);
+  if (!status?.supported) return;
+  const box = $('connect-speaker');
+  box.checked = !!status.enabled;
+  box.disabled = !!status.forced || (!status.available && !status.enabled);
+  $('connect-speaker-hint').textContent = status.forced
+    ? 'On through MORNYE_CONNECT_SERVER_SPEAKER.'
+    : status.available
+      ? 'The server plays out loud through its own audio output when picked in "Play on". Admins only.'
+      : `Unavailable: ${status.reason || 'libmpv was not found on the server'}.`;
+}
+
+async function connectSaveName(value) {
+  const name = String(value || '').trim();
+  if (!name || !connect.ready) return;
+  try { localStorage.setItem(CONNECT_NAME_KEY, name); } catch (e) {}
+  const res = await connectApi()?.connect_rename(connect.id, name);
+  if (res?.status === 'ok') { connect.name = name; connectDevices(res); toastMgr.success('Name saved.'); }
+}
+
+async function connectToggleSpeaker(on) {
+  const res = await linkCall('connect_speaker_set', !!on);
+  if (!res || res.status !== 'ok') toastMgr.error(res?.error || 'Only an admin can change this.');
+  loadConnectSettings();
+}
+
+async function loadLinkSettings() {
+  const status = await linkCall('link_status');
+  $('link-section')?.classList.toggle('hidden', !status);
+  if (!status) return;
+  renderLink(status);
+  if (!g_linkPoll) {
+    g_linkPoll = setInterval(async () => {
+      if (!$('tc-player')?.classList.contains('active') || !$('view-settings')?.classList.contains('active')) {
+        stopLinkPolling();
+        return;
+      }
+      const next = await linkCall('link_status');
+      if (next) renderLink(next);
+    }, 2000);
+  }
+}
+
+function linkAgo(ms) {
+  if (!ms) return 'never';
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
+  return new Date(ms).toLocaleDateString();
+}
+
+const LINK_ENDED = {
+  paired: 'Paired.',
+  expired: 'The PIN expired.',
+  attempts: 'Too many wrong PINs: show a new one.',
+};
+
+function renderLink(s) {
+  const on = !!s.enabled;
+  $('link-enabled').checked = on;
+  const running = on && s.running;
+  $('link-address-row').classList.toggle('hidden', !running);
+  $('link-pair-row').classList.toggle('hidden', !running);
+  $('link-devices').classList.toggle('hidden', !(s.devices || []).length);
+
+  const err = $('link-error');
+  const message = on && !s.running ? (s.error || 'Starting…') : '';
+  err.textContent = message;
+  err.classList.toggle('hidden', !message);
+
+  if (running) {
+    $('link-address').innerHTML = (s.addresses || []).map(a => `<code>${escHtml(a)}</code>`).join('')
+      || `<code>port ${escHtml(String(s.port))}</code>`;
+    $('link-address-hint').textContent = s.discovery
+      ? 'The phone finds it on the same Wi-Fi; or add it by address'
+      : s.discoveryError
+        ? 'The phone cannot find it by itself here: add it by address'
+        : 'Announcing it on the Wi-Fi…';
+  }
+
+  // The PIN, its countdown and the certificate code the phone shows too.
+  const pin = $('link-pin');
+  const btn = $('link-pair-btn');
+  if (s.pairing) {
+    const left = Math.max(0, Math.round((s.pairing.expiresMs - Date.now()) / 1000));
+    const mmss = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+    pin.innerHTML = `<span class="link-pin-code">${escHtml(s.pairing.pin.replace(/(\d{3})(\d{3})/, '$1 $2'))}</span>`
+      + `<span class="link-pin-meta">Code ${escHtml(s.shortFingerprint)} · ${mmss}</span>`;
+    pin.classList.remove('hidden');
+    btn.textContent = 'Cancel';
+    g_linkPinShown = s.pairing.pin;
+  } else {
+    pin.classList.add('hidden');
+    btn.textContent = 'Show PIN';
+    if (g_linkPinShown) {
+      g_linkPinShown = '';
+      const said = LINK_ENDED[s.pairingEnded];
+      if (said) showToast(said, s.pairingEnded === 'paired' ? 'success' : 'info');
+    }
+  }
+
+  $('link-devices').innerHTML = (s.devices || []).map(d => `
+    <div class="link-device">
+      <span class="link-device-dot${d.connected ? ' on' : ''}" aria-hidden="true"></span>
+      <span class="link-device-name">${escHtml(d.name)}<small>${escHtml(d.platform)} · ${d.connected ? 'connected' : `seen ${escHtml(linkAgo(d.lastSeenMs))}`}</small></span>
+      <button class="act-btn secondary" type="button" data-device="${escHtml(d.deviceId)}" data-name="${escHtml(d.name)}" data-onclick="revokeLinkDevice(this)">Unpair</button>
+    </div>`).join('');
+}
+
+async function toggleLink(on) {
+  $('link-error').textContent = on ? 'Starting…' : '';
+  const status = await linkCall('link_set_enabled', !!on);
+  if (status) renderLink(status);
+}
+
+async function toggleLinkPairing() {
+  const status = await linkCall(g_linkPinShown ? 'link_end_pairing' : 'link_begin_pairing');
+  if (status) {
+    // A cancel is the person's own doing: no toast for it.
+    if (g_linkPinShown && !status.pairing) g_linkPinShown = '';
+    renderLink(status);
+  }
+}
+
+async function revokeLinkDevice(btn) {
+  const name = btn?.dataset.name || 'this device';
+  const ok = await askConfirm(`${name} will no longer reach this library until it pairs again.`,
+    { title: `Unpair ${name}?`, ok: 'Unpair', danger: true });
+  if (!ok) return;
+  const status = await linkCall('link_revoke_device', btn.dataset.device);
+  if (status) renderLink(status);
+}
+
 function npOptQueue(patch, delay) {
   Object.assign(npOptPending, patch);
   clearTimeout(npOptSaveTimer);
@@ -10392,6 +12631,9 @@ async function npOptFlush() {
   if (playerNativeStatus) playerNativeStatus.options = res.options;
   // A preset fills the sliders; a slider makes the preset "Custom".
   if ('eq_preset' in patch || 'eq_gains' in patch) npOptFill(res.options);
+  if ('eq_mode' in patch) npPeqShowMode(res.options.eq_mode);
+  // Values out of range come back clamped; redraw unless a row is being typed in.
+  if ('eq_filters' in patch && !$('np-peq-list')?.contains(document.activeElement)) npPeqRender(res.options.eq_filters || []);
   if ('engine' in patch) { npOptState(res.options); playerSetupEngine(); }
 }
 
@@ -10410,6 +12652,9 @@ async function npOptFlush() {
       if (live) return;
       const spdif = [...pane.querySelectorAll('[data-np-spdif]')].filter(c => c.checked).map(c => c.dataset.npSpdif);
       npOptQueue({ spdif }, 0);
+    } else if (el.closest('.np-peq-row')) {
+      // Typing waits for a pause; a type, a switch or leaving a field saves now.
+      npOptQueue({ eq_filters: npPeqCollect() }, live ? 400 : 0);
     } else if (el.classList.contains('np-eq-slider')) {
       amPaint(el);
       const eq_gains = [...pane.querySelectorAll('.np-eq-slider')].map(s => Number(s.value));
@@ -10505,6 +12750,7 @@ function playerSetVolumePercent(value) {
   const v = Math.max(0, Math.min(100, Math.round(value)));
   playerEngine.volume = v / 100;
   ['pl-vol', 'np-vol'].forEach(id => { const el = $(id); if (el) { el.value = v; amPaint(el); } });
+  connectSchedule();
 }
 
 document.addEventListener('keydown', (e) => {
@@ -10601,7 +12847,13 @@ function openNowPlaying() {
   npCanvasSync();
   if (npLines.length) { npLayoutLyrics(); NP.focus = -2; NP.first = true; npUpdate(npLyricsTime(playerEngine.currentTime), true); }
 }
-function closeNowPlaying() { $('np-view').classList.add('hidden'); npCanvasSync(); }
+function closeNowPlaying() { closeActionMenu(); $('np-view').classList.add('hidden'); npCanvasSync(); }
+
+// Now Playing's "…": the song playing.
+function npOpenMenu(button) {
+  const cur = playerQueue[playerIndex];
+  if (cur) openActionMenu(button, trackMenuItems(cur, { nowPlaying: true }));
+}
 
 function npShow(which) {
   $('np-lyrics').classList.toggle('hidden', which !== 'lyrics');
@@ -10616,7 +12868,11 @@ function npShow(which) {
 //   [mm:ss.xx]v1:<t>Word <t_end><t>Next  enhanced (word-by-word), "v1:/v2:" is
 //                                         the singer, as written by Apple/lrc.red
 //   [bg:(backing vocals)]               attached to the line before it
-//   [x-translation:N:...] [x-romaji:N:...]  optional extra line under line N
+//   [x-translated:K:...] [x-romanized:K:...]  translation / pronunciation of
+//                                         the line at K ms (index K without
+//                                         timing), as the Mornye app writes
+//                                         them in .mlrc; the older
+//                                         [x-translation:K:base64] still read
 // A tag between two words is both the end of the first and the start of the
 // second; when there are two (end, then start) the pair can differ by a gap.
 function parseLyrics(text) {
@@ -10625,22 +12881,52 @@ function parseLyrics(text) {
   const LEAD_TS = /^((?:\[\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?\]\s*)+)/;
   const ONE_TS = /\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]/g;
   const VOICE = /^((?:\s*<[^>]*>)*)\s*(v[1-9]\d*):[ \t]*/i;
-  const ID_TAG = /^\[(ti|ar|al|by|offset|length|re|ve|tool|au|la|encoder|instrumental):.*\]$/i;
-  const SUPP = /^\[x-(romaji-words|romaji|translation):(\d+):([^\]]*)\]$/i;
+  const ID_TAG = /^\[(ti|ar|al|by|offset|length|re|ve|tool|au|la|encoder|instrumental|x-[a-z0-9_-]+):.*\]$/i;
+  const SUPP = /^\[x-(romanized-words|romanized|translated-words|translated|romaji-words|romaji|translation-words|translation):(\d+):(.*)\]$/i;
   const BG = /^\[bg:(.*)\]$/i;
   const sec = m => Number(m[1]) * 60 + Number(m[2]) + (m[3] ? Number('0.' + m[3]) : 0);
   const stripWordTags = t => t.replace(/<\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?>/g, '').replace(/\s+/g, ' ').trim();
+
+  // The words of a piece of text with their own times (<mm:ss.xx> tags), or
+  // null: a line's body, or the backing vocals of a [bg:…] tag.
+  const timedWords = (body, fallback) => {
+    if (!WORD_TS.test(body)) return null;
+    const words = [];
+    let run = [];
+    let prev = null;
+    for (const part of body.split(WORD_SPLIT)) {
+      const tag = WORD_TS.exec(part);
+      if (tag && part.startsWith('<')) { run.push(sec(tag)); continue; }
+      if (!part) continue;
+      if (!part.trim()) { if (prev) prev.text += part; continue; }
+      const start = run.length ? run[run.length - 1] : (prev ? (prev.e ?? prev.s) : fallback);
+      if (prev && prev.e == null) prev.e = run.length ? run[0] : start;
+      prev = { s: start, e: null, text: words.length ? part : part.replace(/^\s+/, '') };
+      words.push(prev);
+      run = [];
+    }
+    if (prev && prev.e == null) {
+      if (run.length) prev.e = run[0];
+      // No closing stamp: a guess, which fillNowPlaying() refines once
+      // it knows when the next line starts.
+      else { prev.e = prev.s + 0.6; prev.open = true; }
+    }
+    return words.length ? words : null;
+  };
 
   const synced = [], plain = [];
   let last = null;
   const supplements = [];
   for (const raw of String(text || '').replace(/\r/g, '').split('\n')) {
     const line = raw.trim();
-    if (!line || ID_TAG.test(line)) continue;
+    if (!line) continue;
     let m = SUPP.exec(line);
-    if (m) { supplements.push({ idx: Number(m[2]), kind: m[1].toLowerCase(), text: m[3].trim() }); continue; }
+    if (m) { const sup = lyricSupplement(m); if (sup) supplements.push(sup); continue; }
+    if (ID_TAG.test(line)) continue;
     m = BG.exec(line);
-    if (m) { if (last) last.bg = stripWordTags(m[1]); continue; }
+    // Backing vocals keep their word times when they have them, so they
+    // light up word by word under their line like the line itself.
+    if (m) { if (last) { last.bg = stripWordTags(m[1]); last.bgWords = timedWords(m[1], last.t); } continue; }
 
     const lead = LEAD_TS.exec(line);
     if (!lead) { plain.push({ t: null, text: stripWordTags(line), words: null, voice: 1 }); continue; }
@@ -10654,30 +12940,7 @@ function parseLyrics(text) {
     }
 
     // Words with their own times, if the line carries any.
-    let words = null;
-    if (WORD_TS.test(body)) {
-      words = [];
-      let run = [];
-      let prev = null;
-      for (const part of body.split(WORD_SPLIT)) {
-        const tag = WORD_TS.exec(part);
-        if (tag && part.startsWith('<')) { run.push(sec(tag)); continue; }
-        if (!part) continue;
-        if (!part.trim()) { if (prev) prev.text += part; continue; }
-        const start = run.length ? run[run.length - 1] : (prev ? (prev.e ?? prev.s) : stamps[0]);
-        if (prev && prev.e == null) prev.e = run.length ? run[0] : start;
-        prev = { s: start, e: null, text: words.length ? part : part.replace(/^\s+/, '') };
-        words.push(prev);
-        run = [];
-      }
-      if (prev && prev.e == null) {
-        if (run.length) prev.e = run[0];
-        // No closing stamp: a guess, which fillNowPlaying() refines once
-        // it knows when the next line starts.
-        else { prev.e = prev.s + 0.6; prev.open = true; }
-      }
-      if (!words.length) words = null;
-    }
+    const words = timedWords(body, stamps[0]);
     const lineText = words ? words.map(w => w.text).join('').trim() : stripWordTags(body);
     for (const t of stamps) {
       const entry = { t, text: lineText, words, voice, bg: '', tr: '', rom: '' };
@@ -10691,17 +12954,40 @@ function parseLyrics(text) {
   if (synced.length && !synced.some(l => l.words && l.words.length > 1)) {
     synced.forEach(l => { l.words = null; });
   }
+  const attach = (target, sup) => {
+    if (!target) return;
+    if (sup.kind === 'translation') target.tr = sup.text;
+    else if (sup.kind === 'romaji') target.rom = sup.text;
+  };
   if (synced.length) {
-    supplements.forEach(sup => {
-      const target = synced[sup.idx];
-      if (!target) return;
-      if (sup.kind === 'translation') target.tr = sup.text;
-      else if (sup.kind === 'romaji') target.rom = sup.text;
-    });
+    // The key is the line's time in ms; a key no line starts at is an index.
+    const byMs = new Map(synced.map(l => [Math.round(l.t * 1000), l]));
+    supplements.forEach(sup => attach(byMs.get(sup.key) ?? synced[sup.key], sup));
     return { lines: synced.sort((a, b) => a.t - b.t), synced: true, wordSynced: synced.some(l => l.words) };
   }
+  supplements.forEach(sup => attach(plain[sup.key], sup));
   while (plain.length && !plain[0].text) plain.shift();
   return { lines: plain, synced: false, wordSynced: false };
+}
+
+// One [x-…:key:value] row as { kind, key, text }, or null for word timing
+// and damaged values (lib: core/lyric_tags.py). The readable form escapes
+// "\n" and "\\"; the older x-translation / x-romaji rows are base64.
+function lyricSupplement(m) {
+  const written = m[1].toLowerCase();
+  const KINDS = { romanized: 'romaji', translated: 'translation' };
+  const legacy = written === 'romaji' || written === 'translation';
+  const kind = KINDS[written] || (legacy ? written : null);
+  if (!kind) return null; // -words: word timing is not drawn for these
+  let text;
+  if (legacy) {
+    try { text = new TextDecoder().decode(Uint8Array.from(atob(m[3]), c => c.charCodeAt(0))); }
+    catch (e) { return null; }
+  } else {
+    text = m[3].replace(/\\(.)/g, (_, c) => (c === 'n' ? '\n' : c === '\\' || c === '<' ? c : '\\' + c));
+  }
+  text = text.trim();
+  return text ? { key: Number(m[2]), kind, text } : null;
 }
 
 // A timed piece can hold several words: a provider that times phrases, or a
@@ -10743,6 +13029,9 @@ function npTechLabel(res) {
 
 function npApplyColors(src) {
   const bg = $('np-bg');
+  // The music look paints the cover itself, blurred, behind the view.
+  if (src) bg.style.setProperty('--np-art', `url("${String(src).replace(/["\\\n]/g, c => encodeURIComponent(c))}")`);
+  else bg.style.removeProperty('--np-art');
   if (!src) { bg.style.setProperty('--np-bg', 'linear-gradient(135deg, #5a3a3a, #2c1f1f)'); return; }
   const img = new Image();
   img.onload = () => {
@@ -10820,7 +13109,8 @@ function npFillCredits(item, res) {
   const artists = npArtistLinks(names, item.artist);
   if (artists) parts.push(artists);
   if (album) parts.push(`<button type="button" class="np-link" data-onclick="npGoAlbum()">${escHtml(album)}</button>`);
-  $('np-artist').innerHTML = parts.join(' · ');
+  // The separator is drawn by CSS: " · " in the console look, " — " in music.
+  $('np-artist').innerHTML = parts.join('<span class="np-sep" aria-hidden="true"></span>');
   marqueeFit($('np-artist'));
 }
 
@@ -10976,26 +13266,32 @@ function fillNowPlaying(item, res) {
       }
       l.end = l.words ? l.words[l.words.length - 1].e : (next && next.t != null ? next.t : (l.t ?? 0) + 4);
       if (l.words && next && next.t != null && l.end > next.t + 8) l.end = next.t;
+      if (l.bgWords) {
+        const last = l.bgWords[l.bgWords.length - 1];
+        if (last.open) last.e = Math.max(last.s + 0.6, Math.min(l.end, last.s + 2));
+        l.bgWords = npSplitTimedPhrases(l.bgWords);
+        // The line stays lit while its backing vocals are still sung.
+        l.end = Math.max(l.end, l.bgWords[l.bgWords.length - 1].e);
+      }
     });
     if (npSynced) npLines = npAddRests(npLines);
     box.innerHTML = npLines.map((l, i) => {
       if (npSynced && !l.text) {
         return `<div class="np-line gap" data-i="${i}"><span class="gd"></span><span class="gd"></span><span class="gd"></span></div>`;
       }
-      const body = l.words
-        ? l.words.map(w => {
-            // Spaces stay outside the word: inside, they would be part of
-            // what the lit copy draws and of the box the line wraps around.
-            const lead = w.text.match(/^\s*/)[0];
-            const core = w.text.trim();
-            const tail = w.text.slice(lead.length + core.length);
-            return `${escHtml(lead)}<span class="w" data-s="${w.s}" data-e="${w.e}" data-t="${escHtml(core)}">${escHtml(core)}</span>${escHtml(tail)}`;
-          }).join('')
-        : escHtml(l.text);
+      // Spaces stay outside a word: inside, they would be part of what the
+      // lit copy draws and of the box the line wraps around.
+      const wordSpans = words => words.map(w => {
+        const lead = w.text.match(/^\s*/)[0];
+        const core = w.text.trim();
+        const tail = w.text.slice(lead.length + core.length);
+        return `${escHtml(lead)}<span class="w" data-s="${w.s}" data-e="${w.e}" data-t="${escHtml(core)}">${escHtml(core)}</span>${escHtml(tail)}`;
+      }).join('');
+      const body = l.words ? wordSpans(l.words) : escHtml(l.text);
       const extra = (l.rom ? `<div class="np-sub">${escHtml(l.rom)}</div>` : '')
         + (l.tr ? `<div class="np-sub">${escHtml(l.tr)}</div>` : '')
-        + (l.bg ? `<div class="np-sub bg">${escHtml(l.bg)}</div>` : '');
-      return `<div class="np-line${l.words ? ' wsync' : ''}${l.voice === 2 ? ' v2' : ''}" data-i="${i}">${body}${extra}</div>`;
+        + (l.bgWords ? `<div class="np-sub bg">${wordSpans(l.bgWords)}</div>` : l.bg ? `<div class="np-sub bg">${escHtml(l.bg)}</div>` : '');
+      return `<div class="np-line${l.words || l.bgWords ? ' wsync' : ''}${l.voice === 2 ? ' v2' : ''}" data-i="${i}">${body}${extra}</div>`;
     }).join('');
     box.querySelectorAll('.np-line').forEach(el => el.addEventListener('click', () => {
       const l = npLines[parseInt(el.dataset.i)];
@@ -11240,7 +13536,7 @@ function npUpdate(time, force) {
       });
       return;
     }
-    if (!l.words) return;
+    if (!l.words && !l.bgWords) return;
     el.querySelectorAll('.w').forEach(w => {
       const s = Number(w.dataset.s), e = Number(w.dataset.e);
       const dur = Math.max((e - s) * 1000, 1), elapsed = (time - s) * 1000;
@@ -11283,7 +13579,8 @@ function npStartTick() { if (!npRaf) npRaf = requestAnimationFrame(npTick); }
 function npSyncLyrics(time) { npUpdate(npLyricsTime(time)); }
 
 function npRenderQueue() {
-  const rows = [];
+  const rows = playerQueue.length ? [`<div class="np-queue-head"><span>Up Next</span>
+    <button type="button" class="np-queue-save" id="np-queue-save" data-onclick="npSaveQueueAsPlaylist(this)" aria-haspopup="menu" title="Save the whole queue, in its order, to a playlist">Save as Playlist</button></div>`] : [];
   for (let n = Math.max(0, playerPos); n < Math.min(playerOrder.length, Math.max(0, playerPos) + 200); n++) {
     const i = playerOrder[n], q = playerQueue[i];
     if (!q) continue;
@@ -11398,6 +13695,7 @@ async function initPlayerView() {
   if (lib.started) { markPlayingRow(); return; }
   lib.started = true;
   await refreshPlayerPlaylists();
+  startPlaylistSync();
   // A library saved before several folders were possible is its last folder.
   if (!libFolders().length) {
     let folder = libRecent()[0];
@@ -11634,6 +13932,7 @@ async function cancelPlayerScan() {
 window.app_library_scan_cancelled = function(p) {
   if (lib.scan === null || p?.scan !== lib.scan) return;
   lib.loading = false;
+  lib.partial = true;  // files not read yet are not missing ones
   setPlayerScanBusy(false);
   setPlayerStatus(lib.items.length ? '' : 'Scan stopped.');
   if (lib.items.length) {
@@ -11656,6 +13955,7 @@ window.app_library_scan_progress = function(p) {
 window.app_library_scan_finished = function(p) {
   if (!libAccept(p)) return;
   lib.loading = false;
+  lib.partial = false;
   // A stored library is usable at once; the check for changes on disk
   // goes on behind it until app_library_scan_synced.
   setPlayerScanBusy(!!p.stored);
@@ -11690,6 +13990,7 @@ window.app_library_scan_synced = function(p) {
   if (!libAccept(p)) return;
   setPlayerScanBusy(false);
   setPlayerStatus('');
+  filterPlayerLibrary(true);  // counts that wait for the scan to end
   linkPlaylistTracksToLibrary();
 };
 
@@ -11836,6 +14137,7 @@ function libDuration(seconds) {
 const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? '' : 's'}`;
 
 function setPlayerTab(tab) {
+  if (lib.playlist) $('player-search').value = '';
   lib.tab = tab;
   lib.album = null;
   lib.artist = null;
@@ -11947,7 +14249,7 @@ function openPlayerArtist(key) {
 
 // Back from an album page goes to the artist it was opened from, if any.
 function playerBack() {
-  if (lib.playlist) { lib.playlist = null; }
+  if (lib.playlist) { lib.playlist = null; $('player-search').value = ''; }
   else if (lib.album && lib.artist) { lib.album = null; lib.tab = 'artists'; }
   else if (lib.album) lib.album = null;
   else lib.artist = null;
@@ -11985,12 +14287,15 @@ async function refreshPlayerPlaylists(selectedId) {
   return true;
 }
 
-function openPlayerPlaylistEditor(id) {
+// `tracks`: songs a new playlist starts with (Add to Playlist → New, or the
+// queue saved from Up Next).
+function openPlayerPlaylistEditor(id, tracks) {
   const current = id ? lib.playlists.find(p => p.id === id) : null;
   playerPlaylistEdit = {
     id: current?.id || '',
     cover: current?.cover || '',
     mode: 'edit',
+    tracks: !current && Array.isArray(tracks) ? tracks : [],
   };
   $('player-playlist-import-options').classList.add('hidden');
   $('player-playlist-new-fields').classList.remove('hidden');
@@ -11998,6 +14303,10 @@ function openPlayerPlaylistEditor(id) {
   $('player-playlist-save').textContent = current ? 'Save changes' : 'Create playlist';
   $('player-playlist-name').value = current?.name || '';
   $('player-playlist-description').value = current?.description || '';
+  // An existing playlist can follow a provider playlist: the ones imported
+  // before imports remembered their link get it here.
+  $('player-playlist-source-field').classList.toggle('hidden', !current);
+  $('player-playlist-source').value = current?.source_url || '';
   renderPlayerPlaylistCover();
   $('player-playlist-modal').classList.remove('hidden');
   $('player-playlist-name').focus();
@@ -12066,6 +14375,7 @@ async function savePlayerPlaylist() {
   const button = $('player-playlist-save');
   const mode = playerPlaylistEdit.mode;
   const editing = !!playerPlaylistEdit.id;
+  let sourceAdded = 0;
   if (mode === 'import' && !playerPlaylistEdit.preview.matched) {
     toastMgr.error('No tracks from this file matched your local library.');
     return;
@@ -12088,9 +14398,20 @@ async function savePlayerPlaylist() {
       res = await api?.update_player_playlist?.(
         playerPlaylistEdit.id, name, description, playerPlaylistEdit.cover
       );
+      const source = $('player-playlist-source').value.trim();
+      const before = lib.playlists.find(p => p.id === playerPlaylistEdit.id)?.source_url || '';
+      if (res?.status === 'ok' && source !== before) {
+        const linked = await api?.set_player_playlist_source?.(playerPlaylistEdit.id, source);
+        if (!linked || linked.status !== 'ok') {
+          toastMgr.error(linked?.error || 'Could not follow that playlist link.');
+          $('player-playlist-source').focus();
+          return;
+        }
+        sourceAdded = linked.added || 0;
+      }
     } else {
       res = await api?.create_player_playlist?.(
-        name, description, playerPlaylistEdit.cover, []
+        name, description, playerPlaylistEdit.cover, playerPlaylistEdit.tracks || []
       );
     }
     if (!res || res.status !== 'ok') {
@@ -12106,7 +14427,12 @@ async function savePlayerPlaylist() {
         ? `Imported ${res.imported} tracks.`
         : 'No new tracks were added; they were already in the playlist.');
     } else {
-      toastMgr.success(editing ? 'Playlist updated.' : 'Playlist created.');
+      const songs = res.playlist.tracks?.length || 0;
+      toastMgr.success(editing ? 'Playlist updated.' : songs ? `Playlist created with ${plural(songs, 'song')}.` : 'Playlist created.');
+      if (sourceAdded) {
+        linkPlaylistTracksToLibrary();
+        toastMgr.success(`${plural(sourceAdded, 'new song')} added from the original playlist.`);
+      }
     }
   } catch (e) {
     toastMgr.error(e?.message || 'Could not save the playlist.');
@@ -12241,6 +14567,7 @@ function openPlayerPlaylist(id) {
   lib.tab = 'playlists';
   lib.album = null;
   lib.artist = null;
+  if (lib.playlist !== playlist.id) $('player-search').value = '';
   lib.playlist = playlist.id;
   document.querySelectorAll('.player-tabs .seg-tab').forEach(b => {
     const on = b.dataset.tab === 'playlists';
@@ -12249,27 +14576,6 @@ function openPlayerPlaylist(id) {
   });
   filterPlayerLibrary();
   playerScrollTop();
-}
-
-async function addPlayerTrackToPlaylist(index) {
-  const id = $('player-add-playlist').value;
-  const track = lib.view[Number(index)];
-  if (!id) {
-    toastMgr.error('Choose a playlist in “Add to” first.');
-    return;
-  }
-  if (!track) return;
-  try {
-    const res = await window.pywebview?.api?.add_player_playlist_tracks?.(id, [track]);
-    if (!res || res.status !== 'ok') {
-      toastMgr.error(res?.error || 'Could not add the track.');
-      return;
-    }
-    await refreshPlayerPlaylists(id);
-    toastMgr.success('Track added to playlist.');
-  } catch (e) {
-    toastMgr.error(e?.message || 'Could not add the track.');
-  }
 }
 
 async function removePlayerPlaylistTrack(index) {
@@ -12308,7 +14614,7 @@ async function deletePlayerPlaylist(id) {
 
 async function reorderPlayerPlaylistTrack(index, delta) {
   const playlist = lib.playlists.find(p => p.id === lib.playlist);
-  if (!playlist) return;
+  if (!playlist || lib.playlistFiltered) return;
   const ordered = playlist.tracks.map(track => track.path);
   const from = Number(index);
   const to = from + Number(delta);
@@ -12369,9 +14675,14 @@ function filterPlayerLibrary(keepScroll) {
   $('ptab-count-playlists').textContent = lib.playlists.length.toLocaleString();
   $('player-toolbar').classList.toggle('hidden', lib.items.length === 0 && tab !== 'playlists');
   const addSelect = $('player-add-select-wrap');
-  addSelect.classList.toggle('hidden', tab === 'playlists');
+  // A song's "+" opens the list of playlists itself (openActionMenu).
+  addSelect.classList.add('hidden');
   $('player-play-controls').classList.toggle('hidden', tab === 'playlists' && !lib.playlist);
-  $('player-search-wrap').classList.toggle('hidden', tab === 'playlists');
+  // Inside a playlist the search looks through its songs only.
+  const inPlaylistDetail = tab === 'playlists' && !!lib.playlist;
+  $('player-search-wrap').classList.toggle('hidden', tab === 'playlists' && !inPlaylistDetail);
+  $('player-search').placeholder = inPlaylistDetail ? 'Search in this playlist' : 'Search title, artist or album';
+  lib.playlistFiltered = false;
   // New playlist / Import belong to the list of playlists, not every page.
   $('player-playlist-tools')?.classList.toggle('hidden', !(tab === 'playlists' && !lib.playlist));
 
@@ -12381,9 +14692,18 @@ function filterPlayerLibrary(keepScroll) {
   if (tab === 'playlists' && lib.playlist) {
     const playlist = lib.playlists.find(p => p.id === lib.playlist);
     if (!playlist) { lib.playlist = null; return filterPlayerLibrary(keepScroll); }
-    rows = playlist.tracks;
     header = libPlaylistHeaderHtml(playlist);
-    count = plural(rows.length, 'track');
+    if (q) {
+      // The songs keep their number in the playlist; moving one is off
+      // while the list is filtered, since its neighbours are hidden.
+      lib.playlistPos = new Map(playlist.tracks.map((t, n) => [t.path, n]));
+      lib.playlistFiltered = true;
+      rows = playlist.tracks.filter(t => `${t.title} ${t.artist} ${t.album}`.toLowerCase().includes(q));
+      count = `${rows.length.toLocaleString()} of ${plural(playlist.tracks.length, 'track')}`;
+    } else {
+      rows = playlist.tracks;
+      count = plural(rows.length, 'track');
+    }
   } else if (tab === 'playlists') {
     cards = lib.playlists.length
       ? lib.playlists.map(libPlaylistCardHtml)
@@ -12399,11 +14719,17 @@ function filterPlayerLibrary(keepScroll) {
     const artist = allArtists.find(a => a.key === lib.artist);
     if (!artist) { lib.artist = null; return filterPlayerLibrary(keepScroll); }
     const { own, guest } = libAlbumsOf(allAlbums, artist.key);
-    cards = own.length ? [`<h3 class="pl-sec-title pl-grid-sec">Albums</h3>`, ...own.map(libAlbumCardHtml)] : [];
-    if (guest.length) {
-      cards.push(`<h3 class="pl-grid-head">Appears on</h3>`, ...guest.map(libAlbumCardHtml));
-    }
-    header = libArtistHeaderHtml(artist, [...own, ...guest]);
+    // As a music app's artist page: shelves under the hero, newest first —
+    // Albums, Singles & EPs, Appears On, Similar Artists.
+    const newest = list => list.slice().sort((x, y) => String(y.year || '').localeCompare(String(x.year || '')));
+    const singles = own.filter(libIsSingle);
+    const full = own.filter(al => !libIsSingle(al));
+    cards = [];
+    header = libArtistHeaderHtml(artist, [...own, ...guest])
+      + libShelfHtml('Albums', newest(full).map(libAlbumCardHtml))
+      + libShelfHtml('Singles & EPs', newest(singles).map(libAlbumCardHtml))
+      + libShelfHtml('Appears On', newest(guest).map(libAlbumCardHtml))
+      + libShelfHtml('Similar Artists', libSimilarArtists(artist.key, allArtists).map(libArtistCardHtml), 'artists');
   } else if (tab === 'recent') {
     // The albums whose newest file arrived last, newest first.
     recent = libAlbumsFor(matches)
@@ -12433,9 +14759,15 @@ function filterPlayerLibrary(keepScroll) {
   const inDetail = !!header;
   $('player-sort-wrap').classList.toggle('hidden', tab !== 'songs');
   $('player-colhead').classList.toggle('hidden', tab !== 'songs');
+  // The music look lays the Songs page out as a table with its own head
+  // (docs/mocks/music-style/): the count and length under the title.
+  $('view-player').classList.toggle('is-songs', tab === 'songs' && !inDetail);
+  $('player-msub').textContent = [plural(lib.items.length, 'song'), libDuration(total)].filter(Boolean).join(', ');
   $('player-count').textContent = count;
   detail.innerHTML = header;
   detail.classList.toggle('hidden', !inDetail);
+  // The music look lets an artist's photo run to the top of the page.
+  $('view-player').classList.toggle('is-artist-page', tab === 'artists' && !!lib.artist);
   if (header) libObserve(detail);
 
   if (cards) {
@@ -12490,6 +14822,7 @@ function filterPlayerLibrary(keepScroll) {
 const LIB_PLAY_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
 const LIB_SHUFFLE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>';
 const LIB_BACK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>';
+const LIB_MORE_SVG = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>';
 const LIB_NOTE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
 let playerPlaylistEdit = null;
 
@@ -12538,12 +14871,36 @@ function libPlaylistCardHtml(playlist) {
   </div>`;
 }
 
+// A playlist song is "not downloaded" when it was never linked to a file
+// (its key is remote:…) or, once a scan is over, when its file sits in a
+// library folder but the scan did not find it there (deleted or moved).
+// So Rescan moves the count both ways: new files are linked by
+// linkPlaylistTracksToLibrary, missing ones are counted here.
+let libPathCache = { items: null, len: -1, set: new Set() };
+function libPathSet() {
+  if (libPathCache.items !== lib.items || libPathCache.len !== lib.items.length) {
+    libPathCache = { items: lib.items, len: lib.items.length, set: new Set(lib.items.map(t => t.path)) };
+  }
+  return libPathCache.set;
+}
+function libPathUnder(path, folder) {
+  const root = String(folder || '').replace(/[\\/]+$/, '');
+  return !!root && (path.startsWith(root + '/') || path.startsWith(root + '\\'));
+}
+function libTrackMissing(t) {
+  if (t.downloaded === false) return true;
+  if (lib.scanning || lib.loading || lib.partial || !lib.items.length) return false;
+  const path = String(t.path || '');
+  if (!libFolders().some(f => libPathUnder(path, f))) return false;
+  return !libPathSet().has(path);
+}
+
 function libPlaylistHeaderHtml(playlist) {
   const cover = playlist.cover
     ? `<img src="${escHtml(playlist.cover)}" alt="" draggable="false">`
     : `<span class="pl-cover-ph">${LIB_NOTE_SVG}</span>`;
   const duration = playlist.tracks.reduce((sum, track) => sum + (track.duration_s || 0), 0);
-  const missing = playlist.tracks.filter(t => t.downloaded === false).length;
+  const missing = playlist.tracks.filter(libTrackMissing).length;
   const meta = [plural(playlist.tracks.length, 'track'), missing ? `${missing} not downloaded` : '', libDuration(duration)].filter(Boolean);
   return `<button type="button" class="pl-back" data-onclick="playerBack()">${LIB_BACK_SVG}Playlists</button>
     <div class="pl-detail-head">
@@ -12558,6 +14915,8 @@ function libPlaylistHeaderHtml(playlist) {
           <button class="pt-btn" type="button" data-shuffle-player-playlist="${escHtml(playlist.id)}">${LIB_SHUFFLE_SVG}Shuffle</button>
           <button class="pt-btn" type="button" data-edit-player-playlist="${escHtml(playlist.id)}">Edit</button>
           <button class="pt-btn" type="button" data-export-player-playlist="${escHtml(playlist.id)}">Export M3U8</button>
+          ${playlist.source_url ? `<button class="pt-btn" type="button" data-sync-player-playlist="${escHtml(playlist.id)}" title="Add the songs added to the original playlist">Check for new songs</button>` : ''}
+          <button class="pt-btn pl-more-btn" type="button" data-group-menu="playlist" data-group-key="${escHtml(playlist.id)}" aria-haspopup="menu" aria-label="More" title="More">${LIB_MORE_SVG}</button>
         </div>
       </div>
     </div>`;
@@ -12567,6 +14926,7 @@ function libDetailActions(kind, key) {
   return `<div class="pl-detail-actions">
     <button class="pt-btn primary" type="button" data-play-${kind}="${escHtml(key)}">${LIB_PLAY_SVG}Play</button>
     <button class="pt-btn" type="button" data-shuffle-${kind}="${escHtml(key)}">${LIB_SHUFFLE_SVG}Shuffle</button>
+    <button class="pt-btn pl-more-btn" type="button" data-group-menu="${kind}" data-group-key="${escHtml(key)}" aria-haspopup="menu" aria-label="More" title="More">${LIB_MORE_SVG}</button>
   </div>`;
 }
 
@@ -12601,17 +14961,43 @@ function libLatestAlbum(albums) {
   return newest(albums.filter(al => libAlbumIsBy(al, lib.artist))) || newest(albums);
 }
 
+// A single or an EP: three songs or fewer, or named so.
+function libIsSingle(album) {
+  return album.tracks.length <= 3 || /(?:^|[\s(\[-])(single|ep)(?:$|[\s)\]])/i.test(album.title || '');
+}
+
+// The artists most often credited next to this one in the library.
+function libSimilarArtists(key, allArtists) {
+  const score = new Map();
+  for (const t of libArtistTracks(key)) {
+    for (const name of libCredited(t)) {
+      const k = name.toLowerCase();
+      if (k !== key) score.set(k, (score.get(k) || 0) + 1);
+    }
+  }
+  return allArtists.filter(a => score.has(a.key)).sort((x, y) => score.get(y.key) - score.get(x.key)).slice(0, 12);
+}
+
+// A titled row of cards that scrolls sideways.
+function libShelfHtml(title, cards, extra = '') {
+  if (!cards.length) return '';
+  return `<section class="pl-shelf ${extra}">
+      <h3 class="pl-sec-title">${escHtml(title)}</h3>
+      <div class="pl-shelf-row" role="list">${cards.join('')}</div>
+    </section>`;
+}
+
 // Top songs by play count when the files carry one; otherwise the newest
 // release's tracks lead, in album order.
 function libArtistTopSongs(key, albums) {
   const tracks = libArtistTracks(key).filter(t => t.downloaded !== false);
   if (tracks.some(t => LIB_PLAYS(t) > 0)) {
-    return { ranked: true, tracks: tracks.slice().sort((x, y) => LIB_PLAYS(y) - LIB_PLAYS(x)).slice(0, 5) };
+    return { ranked: true, tracks: tracks.slice().sort((x, y) => LIB_PLAYS(y) - LIB_PLAYS(x)).slice(0, 9) };
   }
   const order = albums.slice().sort((x, y) => String(y.year || '').localeCompare(String(x.year || '')));
   const rank = new Map(order.map((al, i) => [al.key, i]));
   const sorted = tracks.slice().sort((x, y) => (rank.get(libAlbumKey(x)) ?? 99) - (rank.get(libAlbumKey(y)) ?? 99));
-  return { ranked: false, tracks: sorted.slice(0, 5) };
+  return { ranked: false, tracks: sorted.slice(0, 9) };
 }
 
 function libArtistHeaderHtml(a, albums) {
@@ -12632,12 +15018,13 @@ function libArtistHeaderHtml(a, albums) {
       </div>
     </section>` : '';
   const topHtml = top.tracks.length ? `<section class="pl-artist-sec">
-      <h3 class="pl-sec-title">${top.ranked ? 'Top Songs' : 'Songs'}</h3>
+      <h3 class="pl-sec-title"><button type="button" class="pl-sec-link" data-artist-songs="${escHtml(a.name)}" title="All songs">${top.ranked ? 'Top Songs' : 'Songs'}<span aria-hidden="true"> ›</span></button></h3>
       <div class="pl-top-list" role="list">${top.tracks.map((t, i) => `
         <div class="pl-top-row" role="listitem" tabindex="0" data-activate data-artist-top="${i}" title="Play ${escHtml(t.title)}">
           ${libCoverHtml(t.path, 120, 'pl-top-cover')}
-          <div class="pl-top-info"><span class="pl-top-t">${escHtml(t.title)}</span><span class="pl-top-a">${escHtml(t.album || '')}</span></div>
+          <div class="pl-top-info"><span class="pl-top-t">${escHtml(t.title)}</span><span class="pl-top-a">${escHtml([t.album, t.year].filter(Boolean).join(' · '))}</span></div>
           <span class="pl-top-dur">${t.duration_s ? fmtTime(t.duration_s) : ''}</span>
+          <button type="button" class="pl-top-more" data-top-menu="${i}" aria-haspopup="menu" aria-label="More for ${escHtml(t.title)}" title="More">${LIB_MORE_SVG}</button>
         </div>`).join('')}
       </div>
     </section>` : '';
@@ -12650,6 +15037,7 @@ function libArtistHeaderHtml(a, albums) {
         <div class="pl-artist-actions">
           <button type="button" class="pl-round" data-shuffle-artist="${escHtml(a.key)}" aria-label="Shuffle ${escHtml(a.name)}" title="Shuffle">${LIB_SHUFFLE_SVG}</button>
           <button type="button" class="pl-round primary" data-play-artist="${escHtml(a.key)}" aria-label="Play ${escHtml(a.name)}" title="Play">${LIB_PLAY_SVG}</button>
+          <button type="button" class="pl-round" data-group-menu="artist" data-group-key="${escHtml(a.key)}" aria-haspopup="menu" aria-label="More for ${escHtml(a.name)}" title="More">${LIB_MORE_SVG}</button>
         </div>
       </div>
     </div>
@@ -12659,22 +15047,26 @@ function libArtistHeaderHtml(a, albums) {
 function libRowHtml(t, i) {
   const inAlbum = !!lib.album;
   const art = inAlbum ? (t.artist && t.artist !== libArtistOf(t) ? t.artist : '') : [t.artist, t.album].filter(Boolean).join(' — ');
-  const num = inAlbum && t.track ? t.track : i + 1;
+  const num = inAlbum && t.track ? t.track
+    : lib.playlistFiltered ? (lib.playlistPos?.get(t.path) ?? i) + 1 : i + 1;
   const rowAction = lib.tab === 'playlists' && lib.playlist
-    ? `<span class="pl-row-actions">
-        <button type="button" class="pl-row-action" data-move-player-track="${i},-1" ${i === 0 ? 'disabled' : ''} aria-label="Move ${escHtml(t.title)} up" title="Move up">↑</button>
-        <button type="button" class="pl-row-action" data-move-player-track="${i},1" ${i === lib.view.length - 1 ? 'disabled' : ''} aria-label="Move ${escHtml(t.title)} down" title="Move down">↓</button>
+    ? `<span class="pl-row-actions${lib.playlistFiltered ? ' is-filtered' : ''}">
+        <button type="button" class="pl-row-action" data-move-player-track="${i},-1" ${i === 0 || lib.playlistFiltered ? 'disabled' : ''} aria-label="Move ${escHtml(t.title)} up" title="Move up">↑</button>
+        <button type="button" class="pl-row-action" data-move-player-track="${i},1" ${i === lib.view.length - 1 || lib.playlistFiltered ? 'disabled' : ''} aria-label="Move ${escHtml(t.title)} down" title="Move down">↓</button>
         <button type="button" class="pl-row-action" data-remove-player-track="${i}" aria-label="Remove ${escHtml(t.title)} from playlist" title="Remove from playlist">−</button>
       </span>`
-    : `<button type="button" class="pl-row-action" data-add-player-track="${i}" aria-label="Add ${escHtml(t.title)} to playlist" title="Add to selected playlist">+</button>`;
-  const remote = t.downloaded === false;
+    : `<button type="button" class="pl-row-action" data-add-player-track="${i}" aria-haspopup="menu" aria-label="Add ${escHtml(t.title)} to a playlist" title="Add to a playlist">+</button>`;
+  const more = `<button type="button" class="pl-row-action pl-row-more" data-track-menu="${i}" aria-haspopup="menu" aria-label="More for ${escHtml(t.title)}" title="More">${LIB_MORE_SVG}</button>`;
+  const remote = libTrackMissing(t);
   const badge = remote ? '<span class="pl-not-downloaded" title="Not in your library yet: download it and it plays from here">Not downloaded</span>' : '';
   return `<div class="pl-row ${remote ? 'is-remote' : ''}" role="listitem" tabindex="0" data-activate data-i="${i}" data-p="${remote ? '' : escHtml(t.path)}" data-size="0">
     <div class="pl-num"><span class="n">${num}</span><span class="pi" aria-hidden="true">${LIB_PLAY_SVG}</span><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span></div>
     <div class="pl-thumb"><img alt="" draggable="false"></div>
-    <div class="pl-main"><div class="pl-main-info"><div class="pl-t">${escHtml(t.title)}${badge}</div>${art ? `<div class="pl-a">${escHtml(art)}</div>` : ''}</div>${rowAction}</div>
+    <div class="pl-main"><div class="pl-main-info"><div class="pl-t">${escHtml(t.title)}${badge}</div>${art ? `<div class="pl-a">${escHtml(art)}</div>` : ''}</div>${rowAction}${more}</div>
     <div class="pl-dur">${t.duration_s ? fmtTime(t.duration_s) : ''}</div>
     <div class="pl-fmt">${escHtml(t.format)}</div>
+    <div class="pl-c-artist m-only">${escHtml(t.artist || '')}</div>
+    <div class="pl-c-album m-only">${escHtml(t.album || '')}</div>
   </div>`;
 }
 
@@ -12894,13 +15286,13 @@ function libQueueItems(tracks) {
 function playFromLibrary(index, shuffle) {
   const tracks = lib.view.length ? lib.view : libPlayAll();
   const chosen = tracks[index];
-  if (chosen && chosen.downloaded === false) {
+  if (chosen && libTrackMissing(chosen)) {
     toastMgr.info('This song is not downloaded yet.');
     return;
   }
   // A playlist can list songs that are not downloaded: the queue skips
   // them, so the clicked song's place is counted among the playable ones.
-  const playable = tracks.filter(t => t.downloaded !== false);
+  const playable = tracks.filter(t => !libTrackMissing(t));
   const at = Math.max(0, playable.indexOf(chosen));
   if (playable.length) startPlayback(libQueueItems(playable), at, shuffle, false);
 }
@@ -12909,7 +15301,7 @@ function playFromLibrary(index, shuffle) {
 // skipping the ones not downloaded wherever they sit in the list.
 function playAllFromLibrary(shuffle) {
   const tracks = lib.view.length ? lib.view : libPlayAll();
-  const playable = tracks.filter(t => t.downloaded !== false);
+  const playable = tracks.filter(t => !libTrackMissing(t));
   if (playable.length) startPlayback(libQueueItems(playable), 0, !!shuffle, false);
   else if (tracks.length) toastMgr.info('None of these songs is downloaded yet.');
 }
@@ -12928,6 +15320,312 @@ function playLibraryGroup(kind, key, shuffle) {
     tracks = libArtistTracks(key);
   }
   if (tracks.length) startPlayback(libQueueItems(tracks), 0, !!shuffle, false);
+}
+
+// ── Action menus ("…" and "+") ──────────────────────────────────────────────
+// One small popover for every "…" button (a song, an album, a playlist, an
+// artist, Now Playing) and for a song's "+" (straight to the playlist list).
+// Items: { label, action, disabled, danger, keep } or '-' for a rule; an
+// item with `submenu` (a function returning items) swaps the menu's content
+// for that list, with a Back row on top.
+let actionMenu = null;
+
+function closeActionMenu() {
+  if (!actionMenu) return;
+  actionMenu.el.remove();
+  document.removeEventListener('pointerdown', actionMenu.onDown, true);
+  document.removeEventListener('keydown', actionMenu.onKey, true);
+  window.removeEventListener('resize', closeActionMenu);
+  actionMenu.anchor?.setAttribute('aria-expanded', 'false');
+  const anchor = actionMenu.anchor;
+  actionMenu = null;
+  if (anchor && document.contains(anchor)) anchor.focus({ preventScroll: true });
+}
+
+function openActionMenu(anchor, items, title = '') {
+  if (actionMenu?.anchor === anchor) { closeActionMenu(); return; }
+  closeActionMenu();
+  const el = document.createElement('div');
+  el.className = 'action-menu';
+  el.setAttribute('role', 'menu');
+  // Inside Now Playing the menu takes the view's light ink.
+  if (anchor.closest('#np-view')) el.classList.add('on-media');
+  document.body.appendChild(el);
+  const stack = [];
+  const render = (list, heading) => {
+    el.innerHTML = '';
+    if (stack.length) {
+      const back = document.createElement('button');
+      back.type = 'button';
+      back.className = 'am-item am-back';
+      back.setAttribute('role', 'menuitem');
+      back.textContent = heading || 'Back';
+      back.addEventListener('click', () => { const prev = stack.pop(); render(prev.list, prev.heading); });
+      el.appendChild(back);
+      el.appendChild(Object.assign(document.createElement('div'), { className: 'am-sep' }));
+    } else if (heading) {
+      el.appendChild(Object.assign(document.createElement('div'), { className: 'am-title', textContent: heading }));
+    }
+    for (const item of list) {
+      if (item === '-') { el.appendChild(Object.assign(document.createElement('div'), { className: 'am-sep' })); continue; }
+      if (item.note) { el.appendChild(Object.assign(document.createElement('div'), { className: 'am-note', textContent: item.note })); continue; }
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'am-item' + (item.danger ? ' danger' : '') + (item.submenu ? ' has-sub' : '');
+      b.setAttribute('role', 'menuitem');
+      b.textContent = item.label;
+      b.disabled = !!item.disabled;
+      b.addEventListener('click', async () => {
+        if (item.submenu) {
+          // A submenu that asks the network (Share → Copy Link) says so.
+          b.disabled = true;
+          b.setAttribute('aria-busy', 'true');
+          const waiting = setTimeout(() => { b.textContent = `${item.label} — looking up…`; }, 250);
+          let sub;
+          try { sub = await item.submenu(); }
+          finally { clearTimeout(waiting); b.disabled = false; b.removeAttribute('aria-busy'); b.textContent = item.label; }
+          if (!actionMenu || actionMenu.el !== el) return; // closed meanwhile
+          stack.push({ list, heading });
+          render(sub, item.label);
+          return;
+        }
+        if (!item.keep) closeActionMenu();
+        try { await item.action?.(); } catch (e) { toastMgr.error(e?.message || 'That did not work.'); }
+      });
+      el.appendChild(b);
+    }
+    place();
+    el.querySelector('.am-item:not(:disabled)')?.focus({ preventScroll: true });
+  };
+  const place = () => {
+    const r = anchor.getBoundingClientRect();
+    const w = el.offsetWidth, h = el.offsetHeight;
+    let left = Math.min(window.innerWidth - w - 8, Math.max(8, r.right - w));
+    let top = r.bottom + 6;
+    if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);
+    el.style.left = `${left}px`;
+    el.style.top = `${top}px`;
+  };
+  const onDown = e => { if (!el.contains(e.target) && !anchor.contains(e.target)) closeActionMenu(); };
+  const onKey = e => {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeActionMenu(); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const all = [...el.querySelectorAll('.am-item:not(:disabled)')];
+      const at = all.indexOf(document.activeElement);
+      const next = all[(at + (e.key === 'ArrowDown' ? 1 : -1) + all.length) % all.length];
+      next?.focus();
+    }
+  };
+  actionMenu = { el, anchor, onDown, onKey };
+  anchor.setAttribute('aria-expanded', 'true');
+  document.addEventListener('pointerdown', onDown, true);
+  document.addEventListener('keydown', onKey, true);
+  window.addEventListener('resize', closeActionMenu);
+  render(items, title);
+}
+
+// Play Next / Add to Queue: the songs go into the running queue, right after
+// the song playing or at its end; with nothing playing they start it.
+function queueLibraryTracks(tracks, next) {
+  const items = libQueueItems(tracks.filter(t => !libTrackMissing(t)));
+  if (!items.length) { toastMgr.info('None of these songs is downloaded yet.'); return; }
+  if (playerEngine.kind === 'remote') {
+    // The queue is the playing device's: the songs go there.
+    connectSendRemote('queue_add', { items: items.map(q => ({ path: q.path, title: q.title || '', artist: q.artist || '', album: q.album || '', duration_s: q.duration_s || 0 })), next: !!next });
+    const what = items.length === 1 ? `"${items[0].title}"` : plural(items.length, 'song');
+    toastMgr.success(next ? `${what} plays next.` : `${what} added to the queue.`);
+    return;
+  }
+  if (!playerQueue.length || playerIndex < 0) { startPlayback(items, 0, false, false); return; }
+  const start = playerQueue.length;
+  playerQueue.push(...items);
+  const added = items.map((_, i) => start + i);
+  if (next) playerOrder.splice(playerPos + 1, 0, ...added);
+  else playerOrder.push(...added);
+  playerRefreshNext();
+  connectSchedule();
+  if (!$('np-queue')?.classList.contains('hidden')) npRenderQueue();
+  const what = items.length === 1 ? `"${items[0].title}"` : plural(items.length, 'song');
+  toastMgr.success(next ? `${what} plays next.` : `${what} added to the queue.`);
+}
+
+// Up Next → a new or existing playlist: every song of the queue, in the
+// order it plays (the backend drops repeats and files that are gone).
+function playerQueueTracks() {
+  return playerOrder.map(i => playerQueue[i]).filter(Boolean).map(q => {
+    const t = libTrackFor(q) || {};
+    return { path: q.path, title: q.title || t.title || '', artist: q.artist || t.artist || '',
+      album: t.album || q.album || '', duration_s: t.duration_s || q.duration_s || 0, isrc: t.isrc || '' };
+  }).filter(t => t.path);
+}
+
+async function npSaveQueueAsPlaylist(btn) {
+  const tracks = playerQueueTracks();
+  if (!tracks.length) { toastMgr.info('The queue is empty.'); return; }
+  openActionMenu(btn, await playlistPickerItems(tracks), 'Save Queue to Playlist');
+}
+
+// The playlists a song can go into, for "+" and "Add to Playlist".
+async function playlistPickerItems(tracks) {
+  if (!lib.playlists.length) await refreshPlayerPlaylists();
+  const others = lib.playlists.filter(p => !(lib.tab === 'playlists' && p.id === lib.playlist));
+  const items = others.map(p => ({
+    label: p.name,
+    action: () => addTracksToPlayerPlaylist(p.id, tracks),
+  }));
+  if (!items.length) items.push({ note: 'No playlists yet.' });
+  items.push('-', { label: 'New Playlist…', action: () => openPlayerPlaylistEditor('', tracks) });
+  return items;
+}
+
+async function addTracksToPlayerPlaylist(id, tracks) {
+  const playlist = lib.playlists.find(p => p.id === id);
+  const res = await window.pywebview?.api?.add_player_playlist_tracks?.(id, tracks);
+  if (!res || res.status !== 'ok') { toastMgr.error(res?.error || 'Could not add to the playlist.'); return; }
+  await refreshPlayerPlaylists(lib.playlist || id);
+  const what = tracks.length === 1 ? `"${tracks[0].title}"` : plural(tracks.length, 'song');
+  toastMgr.success(`${what} added to ${playlist ? `"${playlist.name}"` : 'the playlist'}.`);
+}
+
+// A song as the library knows it (album, credits), from a queue entry.
+function libTrackFor(item) {
+  return lib.items.find(t => t.path === item?.path) || item || null;
+}
+
+function goToLibraryAlbum(track) {
+  const t = libTrackFor(track);
+  if (!t) return;
+  const key = libAlbumKey(t);
+  closeNowPlaying();
+  switchView('player');
+  if (libAll().albums.some(a => a.key === key)) openPlayerAlbum(key);
+  else { $('player-search').value = t.album || t.title || ''; setPlayerTab('songs'); }
+}
+
+function revealLabel() {
+  const os = navigator.userAgent || '';
+  return /Mac/.test(os) ? 'Show in Finder' : /Win/.test(os) ? 'Show in Explorer' : 'Show in Folder';
+}
+
+async function revealLibraryFile(path) {
+  const res = await window.pywebview?.api?.reveal_in_folder?.(path);
+  if (!res?.ok) toastMgr.error(res?.error || 'Could not show the file.');
+}
+
+async function copyTrackText(t) {
+  const text = [t.title, t.artist].filter(Boolean).join(' — ');
+  try { await navigator.clipboard.writeText(text); toastMgr.success('Copied.'); }
+  catch (e) { toastMgr.error('Could not copy.'); }
+}
+
+// Share: the song's name, or its link on a service it is on (looked up by
+// ISRC, else by title and artist: api track_share_links).
+const SHARE_PLATFORMS = { spotify: 'Spotify', appleMusic: 'Apple Music', tidal: 'TIDAL', qobuz: 'Qobuz',
+  deezer: 'Deezer', amazonMusic: 'Amazon Music', youtubeMusic: 'YouTube Music', youtube: 'YouTube', soundcloud: 'SoundCloud' };
+
+function shareMenuItems(t) {
+  return [
+    { label: 'Copy Name', action: () => copyTrackText(t) },
+    { label: 'Copy Link', submenu: () => shareLinkItems(t) },
+  ];
+}
+
+async function shareLinkItems(t) {
+  const api = window.pywebview?.api;
+  let res = null;
+  try { res = await api?.track_share_links?.(t.title || '', t.artist || '', t.isrc || ''); } catch (e) { res = null; }
+  const links = res?.status === 'ok' ? res.links : {};
+  const items = Object.keys(SHARE_PLATFORMS).filter(k => links[k]).map(k => ({
+    label: SHARE_PLATFORMS[k],
+    action: async () => { if (await copyText(links[k])) toastMgr.success(`${SHARE_PLATFORMS[k]} link copied.`); else toastMgr.error('Could not copy.'); },
+  }));
+  return items.length ? items : [{ note: res?.error || 'This song was not found on any service.' }];
+}
+
+// What a song's "…" offers. ctx: { playlistIndex } for a row of the open
+// playlist, { nowPlaying: true } in Now Playing.
+function trackMenuItems(track, ctx = {}) {
+  const t = libTrackFor(track);
+  const playable = !libTrackMissing(t);
+  const items = [
+    { label: 'Play Next', disabled: !playable, action: () => queueLibraryTracks([t], true) },
+    { label: 'Add to Queue', disabled: !playable, action: () => queueLibraryTracks([t], false) },
+    { label: 'Add to Playlist', submenu: () => playlistPickerItems([t]) },
+    '-',
+  ];
+  if (t.album) items.push({ label: 'Go to Album', action: () => goToLibraryAlbum(t) });
+  const names = (t.artist_names && t.artist_names.length ? t.artist_names : artistNames(t.artist || '')).slice(0, 3);
+  for (const name of names) items.push({ label: names.length > 1 ? `Go to ${name}` : 'Go to Artist', action: () => npGoArtist(name) });
+  if (ctx.playlistIndex != null) {
+    const i = Number(ctx.playlistIndex);
+    items.push('-',
+      { label: 'Move Up', disabled: i === 0 || lib.playlistFiltered, action: () => reorderPlayerPlaylistTrack(i, -1) },
+      { label: 'Move Down', disabled: i >= lib.view.length - 1 || lib.playlistFiltered, action: () => reorderPlayerPlaylistTrack(i, 1) },
+      { label: 'Remove from Playlist', danger: true, action: () => removePlayerPlaylistTrack(i) });
+  }
+  items.push('-');
+  if (playable && window.pywebview?.api?.reveal_in_folder) items.push({ label: revealLabel(), action: () => revealLibraryFile(t.path) });
+  items.push({ label: 'Share', submenu: () => shareMenuItems(t) });
+  // Pin to Home: the song's genre and folder (they have no page of their
+  // own to pin from).
+  const pinItems = [];
+  const genre = String(t.genre || '').split(/[;,/]/)[0].trim();
+  const folder = playable ? homeFolderOf(t.path) : '';
+  const pinChoice = (pin, what) => {
+    const item = homePinMenuItem(pin);
+    return { ...item, label: `${item.label.startsWith('Unpin') ? 'Unpin ' : ''}${what}: ${pin.title}` };
+  };
+  if (genre) pinItems.push(pinChoice({ kind: 'genre', id: homeGenreKey(genre), title: genre, subtitle: 'Genre', cover_path: t.path }, 'Genre'));
+  if (folder) pinItems.push(pinChoice({ kind: 'folder', id: folder, title: folder.split(/[\\/]/).pop() || folder, subtitle: folder, cover_path: t.path }, 'Folder'));
+  if (pinItems.length) items.push({ label: 'Pin to Home', submenu: () => pinItems });
+  if (ctx.nowPlaying) items.push({ label: 'Playback Statistics', action: () => openPlayerStats() });
+  return items;
+}
+
+// A group's "…": the album page, a playlist page, an artist page.
+function groupMenuItems(kind, key) {
+  if (kind === 'album') {
+    const album = libAll().albums.find(a => a.key === key);
+    const tracks = album?.tracks || [];
+    const owners = album ? libAlbumArtistNames(album) : [];
+    const items = [
+      { label: 'Play Next', action: () => queueLibraryTracks(tracks, true) },
+      { label: 'Add to Queue', action: () => queueLibraryTracks(tracks, false) },
+      { label: 'Add to Playlist', submenu: () => playlistPickerItems(tracks) },
+      '-',
+    ];
+    owners.slice(0, 3).forEach(name => items.push({ label: owners.length > 1 ? `Go to ${name}` : 'Go to Artist', action: () => npGoArtist(name) }));
+    if (tracks[0] && window.pywebview?.api?.reveal_in_folder) items.push({ label: revealLabel(), action: () => revealLibraryFile(tracks[0].path) });
+    if (album) items.push('-', homePinMenuItem({ kind: 'album', id: album.key, title: album.title, subtitle: album.artist, cover_path: tracks[0]?.path || '' }));
+    return items;
+  }
+  if (kind === 'playlist') {
+    const playlist = lib.playlists.find(p => p.id === key);
+    const tracks = playlist?.tracks || [];
+    return [
+      { label: 'Play Next', action: () => queueLibraryTracks(tracks, true) },
+      { label: 'Add to Queue', action: () => queueLibraryTracks(tracks, false) },
+      { label: 'Add to Another Playlist', submenu: () => playlistPickerItems(tracks.filter(t => !libTrackMissing(t))) },
+      '-',
+      { label: 'Edit Playlist…', action: () => openPlayerPlaylistEditor(key) },
+      ...(playlist ? [homePinMenuItem({ kind: 'playlist', id: key, title: playlist.name, subtitle: 'Playlist', cover_path: tracks.find(t => !libTrackMissing(t))?.path || '' })] : []),
+      { label: 'Export M3U8…', action: () => exportPlayerPlaylist(key) },
+      ...(playlist?.source_url ? [{ label: 'Check for New Songs', action: () => syncFollowedPlaylists([key]) }] : []),
+      '-',
+      { label: 'Delete Playlist…', danger: true, action: () => deletePlayerPlaylist(key) },
+    ];
+  }
+  const tracks = libArtistTracks(key);
+  const artist = libAll().artists.find(a => a.key === key);
+  return [
+    { label: 'Play Next', action: () => queueLibraryTracks(tracks, true) },
+    { label: 'Add to Queue', action: () => queueLibraryTracks(tracks, false) },
+    { label: 'Add to Playlist', submenu: () => playlistPickerItems(tracks) },
+    '-',
+    { label: 'All Songs', action: () => { $('player-search').value = artist?.name || ''; setPlayerTab('songs'); } },
+    ...(artist ? [homePinMenuItem({ kind: 'artist', id: artist.name.toLowerCase(), title: artist.name, subtitle: 'Artist', cover_path: tracks[0]?.path || '' })] : []),
+  ];
 }
 
 function markPlayingRow() {
@@ -12955,7 +15653,18 @@ function markPlayingRow() {
     if (add) {
       e.preventDefault();
       e.stopPropagation();
-      addPlayerTrackToPlaylist(add.dataset.addPlayerTrack);
+      const track = lib.view[Number(add.dataset.addPlayerTrack)];
+      if (track) playlistPickerItems([track]).then(items => openActionMenu(add, items, 'Add to Playlist'));
+      return;
+    }
+    const menu = e.target.closest('[data-track-menu]');
+    if (menu) {
+      e.preventDefault();
+      e.stopPropagation();
+      const i = Number(menu.dataset.trackMenu);
+      const track = lib.view[i];
+      const inPlaylist = lib.tab === 'playlists' && !!lib.playlist;
+      if (track) openActionMenu(menu, trackMenuItems(track, inPlaylist ? { playlistIndex: i } : {}));
       return;
     }
     const remove = e.target.closest('[data-remove-player-track]');
@@ -12969,16 +15678,31 @@ function markPlayingRow() {
     if (row) playFromLibrary(Number(row.dataset.i));
   });
   const onGroupClick = e => {
-    const t = e.target.closest('[data-artist-top],[data-play-album],[data-play-artist],[data-shuffle-album],[data-shuffle-artist],[data-artist-link],[data-player-playlist],[data-play-player-playlist],[data-shuffle-player-playlist],[data-edit-player-playlist],[data-delete-player-playlist],[data-export-player-playlist],.pl-card,.pl-latest');
+    const songs = e.target.closest('[data-artist-songs]');
+    if (songs) { $('player-search').value = songs.dataset.artistSongs; setPlayerTab('songs'); return; }
+    const menu = e.target.closest('[data-group-menu],[data-top-menu]');
+    if (menu) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (menu.dataset.topMenu != null) {
+        const t = (lib.artistTop || [])[Number(menu.dataset.topMenu)];
+        if (t) openActionMenu(menu, trackMenuItems(t));
+      } else {
+        openActionMenu(menu, groupMenuItems(menu.dataset.groupMenu, menu.dataset.groupKey));
+      }
+      return;
+    }
+    const t = e.target.closest('[data-artist-top],[data-play-album],[data-play-artist],[data-shuffle-album],[data-shuffle-artist],[data-artist-link],[data-player-playlist],[data-play-player-playlist],[data-shuffle-player-playlist],[data-edit-player-playlist],[data-delete-player-playlist],[data-export-player-playlist],[data-sync-player-playlist],.pl-card,.pl-latest');
     if (!t) return;
     const d = t.dataset;
     if (d.editPlayerPlaylist != null) { e.stopPropagation(); openPlayerPlaylistEditor(d.editPlayerPlaylist); return; }
     if (d.deletePlayerPlaylist != null) { e.stopPropagation(); deletePlayerPlaylist(d.deletePlayerPlaylist); return; }
     if (d.exportPlayerPlaylist != null) { e.stopPropagation(); exportPlayerPlaylist(d.exportPlayerPlaylist); return; }
+    if (d.syncPlayerPlaylist != null) { e.stopPropagation(); syncFollowedPlaylists([d.syncPlayerPlaylist]); return; }
     if (d.playPlayerPlaylist != null) {
       e.stopPropagation();
       const playlist = lib.playlists.find(p => p.id === d.playPlayerPlaylist);
-      const playable = (playlist?.tracks || []).filter(t => t.downloaded !== false);
+      const playable = (playlist?.tracks || []).filter(t => !libTrackMissing(t));
       if (playable.length) startPlayback(libQueueItems(playable), 0, false, false);
       else if (playlist) toastMgr.info('None of these songs is downloaded yet.');
       return;
@@ -12986,7 +15710,7 @@ function markPlayingRow() {
     if (d.shufflePlayerPlaylist != null) {
       e.stopPropagation();
       const playlist = lib.playlists.find(p => p.id === d.shufflePlayerPlaylist);
-      const playable = (playlist?.tracks || []).filter(t => t.downloaded !== false);
+      const playable = (playlist?.tracks || []).filter(t => !libTrackMissing(t));
       if (playable.length) startPlayback(libQueueItems(playable), 0, true, false);
       else if (playlist) toastMgr.info('None of these songs is downloaded yet.');
       return;
@@ -13561,6 +16285,59 @@ function healthTone(row) {
   return 'error';
 }
 
+// ── Storage & memory (api_mixins/storage.py) ─────────────────────────────
+async function loadStorageUsage() {
+  const list = $('storage-list');
+  const api = window.pywebview?.api;
+  if (!list || !api?.storage_usage) return;
+  let data;
+  try { data = await api.storage_usage(); } catch (e) { data = { status: 'error', error: String(e) }; }
+  if (!data || data.status !== 'ok') {
+    list.innerHTML = '<div class="s-row"><span class="s-label u-c-red">' + regEscapeHtml(data?.error || 'Could not read storage usage.') + '</span></div>';
+    return;
+  }
+  const mem = data.memory || {};
+  $('storage-mem-total').textContent = formatSize(mem.total_bytes) || '—';
+  const parts = (mem.processes || []).map((p) => `${p.name}${p.count > 1 ? ' ×' + p.count : ''} ${formatSize(p.bytes)}`);
+  $('storage-mem-detail').textContent = parts.length ? parts.join(' · ') : 'Mornye and the helpers it started';
+  list.innerHTML = (data.disk || []).map((it) => {
+    const size = formatSize(it.bytes) || '0 B';
+    const btn = it.compactable
+      ? `<button type="button" class="act-btn secondary" data-onclick="compactStorage()">Compact</button>`
+      : it.clearable && it.bytes
+        ? `<button type="button" class="act-btn secondary" data-onclick="clearStorage('${regEscapeHtml(it.id)}')">Clear</button>`
+        : '';
+    return `<div class="s-row storage-row">
+        <span class="s-label">${regEscapeHtml(it.label)}<small>${regEscapeHtml(it.description)}</small></span>
+        <div class="storage-actions"><span class="storage-size">${size}</span>${btn}</div>
+      </div>`;
+  }).join('');
+  $('storage-summary').textContent =
+    `${formatSize(data.disk_total_bytes) || '0 B'} on disk in ${data.data_dir}; ${formatSize(data.clearable_bytes) || 'nothing'} can be cleared.`;
+  const all = $('storage-clear-all');
+  if (all) all.disabled = !data.clearable_bytes;
+}
+
+async function clearStorage(id) {
+  const api = window.pywebview?.api;
+  if (!api?.storage_clear) return;
+  const what = id === 'all' ? 'every cache' : 'this cache';
+  if (!(await askConfirm(`Clear ${what}? Mornye fetches or rebuilds it again when needed.`, { title: 'Clear cache', ok: 'Clear', danger: true }))) return;
+  const r = await api.storage_clear(id);
+  if (r?.status === 'ok') showToast(`Freed ${formatSize(r.freed_bytes + (r.compact?.freed_bytes || 0)) || '0 B'}.`);
+  else showToast(r?.error || 'Could not clear the cache.', 'error');
+  loadStorageUsage();
+}
+
+async function compactStorage() {
+  const api = window.pywebview?.api;
+  if (!api?.storage_compact) return;
+  const r = await api.storage_compact();
+  if (r?.status === 'ok') showToast(`Database compacted: ${formatSize(r.freed_bytes) || '0 B'} freed.`);
+  else showToast(r?.error || 'Could not compact the database.', 'error');
+  loadStorageUsage();
+}
+
 async function loadExtensionHealth() {
   const list = $('ext-health-list');
   if (!list) return;
@@ -13628,13 +16405,16 @@ async function resetExtensionHealth() {
 
 // ── Self-hosted endpoints ─────────────────────────────────────────────────
 //
-// A shortcut to tidal-web's and qobuz-web's own "customEndpoint" settings
-// (plus qobuz-web's API key): the same values the extension cards below edit.
+// A shortcut to tidal-web's, qobuz-web's and amazon's own "customEndpoint"
+// settings (plus qobuz-web's API key and amazon's session token): the same
+// values the extension cards below edit.
 
 const CUSTOM_ENDPOINTS = [
-  { ext: 'tidal-web', input: 'ce-tidal', note: 'ce-tidal-note', key: 'customEndpoint' },
-  { ext: 'qobuz-web', input: 'ce-qobuz', note: 'ce-qobuz-note', key: 'customEndpoint',
+  { service: 'tidal', ext: 'tidal-web', input: 'ce-tidal', note: 'ce-tidal-note', key: 'customEndpoint' },
+  { service: 'qobuz', ext: 'qobuz-web', input: 'ce-qobuz', note: 'ce-qobuz-note', key: 'customEndpoint',
     secret: { input: 'ce-qobuz-key', key: 'customEndpointApiKey' } },
+  { service: 'amazon', ext: 'amazon', input: 'ce-amazon', note: 'ce-amazon-note', key: 'customEndpoint',
+    secret: { input: 'ce-amazon-key', key: 'customEndpointApiKey' } },
 ];
 
 function customEndpointSupport(info, key) {
@@ -13669,7 +16449,7 @@ async function loadCustomEndpoints() {
 // upstream account. An empty field tests the saved value.
 async function testCustomEndpoint(service) {
   const api = window.pywebview?.api;
-  const item = CUSTOM_ENDPOINTS.find((e) => e.ext === `${service}-web`);
+  const item = CUSTOM_ENDPOINTS.find((e) => e.service === service);
   const out = $(`ce-${service}-result`);
   const btn = $(`ce-${service}-test`);
   if (!item || !out) return;
@@ -14212,7 +16992,183 @@ window.app_smb_library_error = function(message) {
   setStatsSmbStatus(message || 'Network library scan failed.', true);
 };
 
+// ── Listener profile (from Mornye mobile 5.4.5) ─────────────────────────────
+// Stats' Listening tab: what the Player's listening record says about its
+// listener (core/listener_profile.py), drawn with the Library tab's tiles
+// and bars.
+var statsTab = 'library';
+
+function setStatsTab(tab) {
+  statsTab = tab === 'listening' ? 'listening' : 'library';
+  document.querySelectorAll('[data-stats-tab]').forEach((b) => {
+    const on = b.dataset.statsTab === statsTab;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', String(on));
+  });
+  $('profile-body')?.classList.toggle('hidden', statsTab !== 'listening');
+  $('stats-library-panel')?.classList.toggle('hidden', statsTab !== 'library');
+  document.querySelector('.stats-actions')?.classList.toggle('hidden', statsTab !== 'library');
+  if (statsTab === 'listening') loadListenerProfile();
+}
+
+// "42%" of `whole`; "0%" without one.
+function profileShare(part, whole) {
+  return whole > 0 ? `${Math.round((part / whole) * 100)}%` : '0%';
+}
+
+// The last 30 days against the 30 before.
+function profileChangeText(percent) {
+  if (percent == null) return 'nothing to compare with yet';
+  if (percent === 0) return 'as much as the 30 days before';
+  return `${percent > 0 ? '+' : '−'}${Math.abs(percent)}% on the 30 days before`;
+}
+
+function profileDayLabel(day) {
+  if (!day) return '';
+  const d = new Date(`${day}T12:00:00`);
+  return Number.isNaN(d.getTime()) ? day : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+// A row of small columns, one per value (the 30 days, the 24 hours).
+function profileColumns(values, labels, title) {
+  const peak = Math.max(1, ...values);
+  return `<div class="profile-cols" role="img" aria-label="${regEscapeHtml(title)}">${values.map((v, i) =>
+    `<span class="profile-col" style="--v:${(v / peak).toFixed(3)}" title="${regEscapeHtml(`${labels[i]}: ${statsDuration(v)}`)}"></span>`).join('')}</div>`;
+}
+
+async function loadListenerProfile() {
+  const body = $('profile-body');
+  if (!body) return;
+  if (!window.pywebview?.api?.get_listener_profile) {
+    body.innerHTML = '<div class="s-label u-fs-11_5">The listener profile is unavailable in this build.</div>';
+    return;
+  }
+  body.innerHTML = '<div class="s-label u-fs-11_5">Loading…</div>';
+  let doc = null;
+  try { doc = await window.pywebview.api.get_listener_profile(); } catch (e) { doc = null; }
+  renderListenerProfile(doc);
+}
+
+function renderListenerProfile(doc) {
+  const body = $('profile-body');
+  if (!body) return;
+  if (!doc || doc.status !== 'ok') {
+    body.innerHTML = `<div class="s-label u-fs-11_5 u-c-red">${regEscapeHtml(doc?.error || 'Could not read the listening record.')}</div>`;
+    return;
+  }
+  if (doc.empty) {
+    body.innerHTML = `<div class="s-section">${emptyState('chart', 'Nothing played yet',
+      'The profile is built from what the Player plays: time heard, songs played for 30 seconds or more, '
+      + 'and the songs played through or skipped. Play a few songs and come back.')}</div>`;
+    return;
+  }
+  const at = doc.all_time || {};
+  const month = doc.last_30_days || {};
+  const hab = doc.habits || {};
+  const snd = doc.sound || {};
+  const rh = doc.rhythm || {};
+  const coll = doc.collection || {};
+  const WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const parts = [];
+
+  const traits = doc.traits || [];
+  if (traits.length) {
+    parts.push(statsSection('Listener type', `<ul class="profile-traits">${traits.map(t =>
+      `<li><strong>${regEscapeHtml(t.name)}</strong><span>${regEscapeHtml(t.text)}</span></li>`).join('')}</ul>`));
+  }
+
+  parts.push(statsSection('All time', `<div class="stat-tiles">
+    ${statsTile('listened', statsDuration(at.milliseconds), doc.since ? `since ${profileDayLabel(doc.since)}` : '')}
+    ${statsTile('plays', (at.plays || 0).toLocaleString())}
+    ${statsTile('songs', (at.songs || 0).toLocaleString())}
+    ${statsTile('artists', (at.artists || 0).toLocaleString())}
+    ${statsTile('days with music', (at.active_days || 0).toLocaleString())}
+    ${statsTile('day streak', at.current_streak || 0, `longest ${at.longest_streak || 0}`)}
+    ${at.peak_day ? statsTile('biggest day', statsDuration(at.peak_day_ms), profileDayLabel(at.peak_day)) : ''}
+    ${at.replay ? statsTile('on repeat', `${at.replay.plays}×`, `${at.replay.title} on ${profileDayLabel(at.replay.day)}`) : ''}
+  </div>`));
+
+  const recent = hab.recent || [];
+  const dayLabels = recent.map((_, i) => {
+    const d = new Date(); d.setDate(d.getDate() - (recent.length - 1 - i));
+    return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  });
+  parts.push(statsSection('Last 30 days', `<div class="stat-tiles">
+      ${statsTile('listened', statsDuration(month.milliseconds), profileChangeText(month.change_percent))}
+      ${statsTile('songs', (month.songs || 0).toLocaleString())}
+      ${statsTile('days with music', month.active_days || 0)}
+      ${statsTile('new artists', month.new_artist_count || 0, (month.new_artists || []).slice(0, 3).join(', '))}
+    </div>${profileColumns(recent, dayLabels, 'Listening on each of the last 30 days')}`));
+
+  const months = hab.months || [];
+  if (months.some(v => v > 0)) {
+    parts.push(statsSection('Last 12 months', statsBars(
+      months.map((v, i) => ({ label: (hab.month_labels || [])[i] || '', value: v })), statsDuration)));
+  }
+
+  const genres = doc.genres || [];
+  if (genres.length) {
+    parts.push(statsSection('Taste by genre', statsBars(
+      genres.slice(0, 10).map(g => ({ label: g.name, value: g.milliseconds })),
+      v => profileShare(v, doc.genre_ms)),
+      `${doc.genre_count} genres; shares of the songs with a genre tag.`));
+  }
+  const decades = snd.decades || [];
+  if (decades.length) {
+    parts.push(statsSection('Decades', statsBars(
+      decades.map(d => ({ label: `${d.decade}s`, value: d.milliseconds })), v => profileShare(v, snd.decade_ms))));
+  }
+  if (snd.quality_ms > 0) {
+    const q = snd.quality || {};
+    parts.push(statsSection('Sound', statsBars([
+      { label: 'Hi-Res', value: q.hiRes || 0 },
+      { label: 'Lossless', value: q.lossless || 0 },
+      { label: 'Lossy', value: q.lossy || 0 },
+      ...(snd.formats || []).map(f => ({ label: f.name, value: f.milliseconds })),
+    ].filter(r => r.value > 0), v => profileShare(v, snd.quality_ms))));
+  }
+
+  if (rh.played_through + rh.skipped > 0) {
+    const hours = rh.hours || [];
+    const DAYPART = { morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening', night: 'Night' };
+    const note = rh.enough
+      ? `Mostly in the ${(rh.daypart || '').toLowerCase()}, busiest around ${rh.peak_hour}:00 · ${profileShare(rh.played_through, rh.played_through + rh.skipped)} played through`
+      : `Needs ${20} songs played through or skipped to say much; ${rh.played_through + rh.skipped} so far.`;
+    parts.push(statsSection('Time of day',
+      `<div class="profile-cols profile-hours" role="img" aria-label="Songs played through at each hour">${hours.map((n, h) =>
+        `<span class="profile-col" style="--v:${(n / Math.max(1, ...hours)).toFixed(3)}" title="${h}:00 — ${n} songs"></span>`).join('')}</div>
+       <div class="profile-axis"><span>0:00</span><span>6:00</span><span>12:00</span><span>18:00</span><span>23:00</span></div>`
+      + statsBars(Object.entries(rh.dayparts || {}).map(([k, v]) => ({ label: DAYPART[k] || k, value: v })), v => `${v} songs`),
+      note));
+  }
+
+  if ((hab.weekdays || []).some(v => v > 0)) {
+    const best = hab.weekdays.indexOf(Math.max(...hab.weekdays));
+    parts.push(statsSection('Listening habits', statsBars(
+      hab.weekdays.map((v, i) => ({ label: WEEK[i], value: v })), statsDuration),
+      `An active day averages ${statsDuration(hab.average_ms)}; ${WEEK[best]} is the busiest.`));
+  }
+
+  parts.push(statsSection('Top artists', statsBars((doc.top_artists || []).map(a => ({ label: a.name, value: a.milliseconds })), statsDuration)));
+  parts.push(statsSection('Top albums', statsBars((doc.top_albums || []).map(a => ({ label: a.artist ? `${a.album} — ${a.artist}` : a.album, value: a.milliseconds })), statsDuration)));
+  parts.push(statsSection('Top songs', statsBars((doc.top_tracks || []).map(t => ({ label: `${t.title} — ${t.artist}`, value: t.plays })), v => `${v} plays`)));
+
+  if (coll.songs || coll.downloads) {
+    parts.push(statsSection('Collection', `<div class="stat-tiles">
+      ${statsTile('songs', (coll.songs || 0).toLocaleString())}
+      ${statsTile('albums', (coll.albums || 0).toLocaleString())}
+      ${statsTile('artists', (coll.artists || 0).toLocaleString())}
+      ${statsTile('genres', (coll.genres || 0).toLocaleString())}
+      ${statsTile('playlists', (coll.playlists || 0).toLocaleString())}
+      ${statsTile('of music', statsDuration(coll.duration_ms))}
+      ${statsTile('downloaded', (coll.downloads || 0).toLocaleString())}
+    </div>`));
+  }
+  body.innerHTML = parts.join('');
+}
+
 async function loadStats() {
+  if (statsTab === 'listening') loadListenerProfile();
   const body = $('stats-body');
   if (!body) return;
   void loadStatsSmbDestinations();

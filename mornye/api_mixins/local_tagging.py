@@ -406,6 +406,7 @@ class LocalTaggingMixin:
                 ensure_ffmpeg_available,
                 is_lossless,
                 normalize_bitrate,
+                normalize_dither,
                 source_is_lossless,
                 transcode_file_async,
             )
@@ -415,6 +416,7 @@ class LocalTaggingMixin:
             keep_original = bool(options.get("keep_original", False))
             max_rate = int(options.get("max_sample_rate") or 0)
             max_depth = int(options.get("max_bit_depth") or 0)
+            dither = normalize_dither(options.get("dither"))
             lossless_target = is_lossless(fmt)
 
             approved_roots = [
@@ -456,6 +458,7 @@ class LocalTaggingMixin:
                                 keep_original=keep_original,
                                 max_sample_rate=max_rate if lossless_target else 0,
                                 max_bit_depth=max_depth if lossless_target else 0,
+                                dither=dither,
                             ),
                         )
                         result.update(success=True, output_path=str(dest))

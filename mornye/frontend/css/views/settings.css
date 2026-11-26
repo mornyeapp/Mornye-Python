@@ -127,7 +127,7 @@
 #view-settings > .s-header,
 #view-settings > .s-body {
   width: 100%;
-  max-width: 1180px;
+  max-width: none;  /* every tab fills the page, whatever the density */
 }
 /* Volume slider + its readout as one control. The native range input is
    themed rather than replaced: accent-color is enough to make it follow
@@ -234,6 +234,9 @@
   color: var(--text-2); font-size: 12px; font-weight: 500;
 }
 .network-destination-encryption > span { min-width: 0; }
+/* A whole row of its own: in the narrow second column beside the timeout
+   the label wrapped a word per line. */
+.network-destination-encryption { grid-column: 1 / -1; }
 .network-destination-encryption .toggle { flex: 0 0 42px; }
 .network-destination-actions {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 16px;
@@ -488,12 +491,6 @@ input[type="password"].full { width: 100%; }
 .status-card-name { font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .status-icon-dot { flex-shrink: 0; font-weight: 600; }
 
-/* HC */
-.hc-prov-group { margin-bottom: 8px; }
-.hc-prov-name { font-size: var(--text-md); font-weight: 700; color: var(--text-2); display: flex; align-items: center; gap: 5px; margin-bottom: 4px; }
-.hc-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--text-muted); }
-.hc-dot.ok { background: var(--ok); }
-.hc-dot.err { background: var(--error); }
 
 /* Forced colours: see the note in layout.css. */
 @media (forced-colors: active) {
@@ -616,7 +613,7 @@ input[type="password"].full { width: 100%; }
     font-weight: var(--weight-medium);
   }
   #view-settings > .tab-bar .stab.active svg { color: var(--signal-text); }
-  #view-settings > .s-body { max-width: 880px; padding: var(--space-4) var(--space-5) var(--space-8); }
+  #view-settings > .s-body { max-width: none; padding: var(--space-4) var(--space-5) var(--space-8); }
 }
 
 /* ── Sections: flat panels, heading as a silk-screen label ──────────── */
@@ -914,6 +911,41 @@ input[type="password"].full { width: 100%; }
 @media (max-width: 640px) {
   .np-eq { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 }
+/* Parametric equalizer: one row per filter, exact numbers. */
+.np-peq { padding: var(--space-2) 0; }
+.np-peq-num { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--text-muted); }
+.np-peq-num input { width: 6em; }
+.np-peq-head,
+.np-peq-row {
+  display: grid;
+  grid-template-columns: 24px minmax(7em, 1.2fr) repeat(3, minmax(4.5em, 1fr)) 32px;
+  gap: var(--space-2);
+  align-items: center;
+}
+.np-peq-head { padding: var(--space-2) 0 var(--space-1); font-size: var(--text-xs); color: var(--text-muted); }
+.np-peq-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.np-peq-row input[type="number"],
+.np-peq-row select { width: 100%; min-width: 0; }
+.np-peq-row input[type="checkbox"] { accent-color: var(--signal); }
+.np-peq-remove {
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-1);
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+  min-height: 28px;
+}
+.np-peq-remove:hover { color: var(--text); border-color: var(--text-muted); }
+.np-peq-empty { padding: var(--space-3) 0; font-size: var(--text-sm); color: var(--text-muted); }
+.np-peq-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); padding-top: var(--space-3); }
+.np-peq-text { display: flex; flex-direction: column; gap: var(--space-2); padding-top: var(--space-3); }
+.np-peq-text small { font-size: var(--text-xs); color: var(--text-muted); }
+.np-peq-text textarea { width: 100%; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: var(--text-xs); resize: vertical; }
+@media (max-width: 640px) {
+  .np-peq-head { display: none; }
+  .np-peq-row { grid-template-columns: 24px 1fr 1fr 32px; }
+}
 
 /* ── Playback statistics ─────────────────────────────────────────────────── */
 /* Same frame as the playlist editor's (views/player.css). */
@@ -952,3 +984,63 @@ input[type="password"].full { width: 100%; }
   color: var(--text-muted);
   font-size: var(--text-xs);
 }
+
+/* ── Mornye Link (renderLink in app.js) ─────────────────────────────────
+   The addresses to type on the phone, the pairing PIN in large digits
+   with the certificate code the phone shows beside it, and the paired
+   devices with a dot that is green while one is connected. */
+.link-address { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
+.link-address code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--text-sm); color: var(--text);
+  padding: 3px 8px; border-radius: var(--radius-1); background: var(--raised);
+  user-select: all;
+}
+.link-pair { flex: none; display: flex; align-items: center; gap: var(--space-4); }
+.link-pin { display: grid; justify-items: end; gap: 2px; white-space: nowrap; }
+.link-pin-code {
+  font-size: 28px; font-weight: 700; letter-spacing: .12em; line-height: 1;
+  font-variant-numeric: tabular-nums; color: var(--text); user-select: all;
+}
+.link-pin-meta { font-size: var(--text-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.link-devices { display: grid; gap: 0; margin-top: var(--space-2); }
+.link-device {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3) 0; border-top: 1px solid var(--rule);
+}
+.link-device-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); opacity: .5; }
+.link-device-dot.on { background: var(--ok); opacity: 1; }
+.link-device-name { flex: 1; min-width: 0; display: grid; gap: 2px; font-size: var(--text-md); color: var(--text); }
+.link-device-name small { font-size: var(--text-xs); color: var(--text-muted); }
+.link-error { margin-top: var(--space-2); font-size: var(--text-sm); color: var(--text-2); }
+
+/* Self-hosted endpoints: a fixed grid so every field and Test button lines
+   up on the same columns, whatever the label's width. The API key row has
+   no button and leaves the last column empty. */
+#custom-endpoints > .s-row:not(:last-child) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 320px) 72px;
+  align-items: center;
+}
+#custom-endpoints > .s-row > input { width: 100%; max-width: none; min-width: 0; }
+#custom-endpoints > .s-row > .act-btn { justify-self: end; }
+#custom-endpoints > .s-row:last-child { justify-content: flex-start; }
+@media (max-width: 700px) {
+  #custom-endpoints > .s-row:not(:last-child) { grid-template-columns: minmax(0, 1fr) auto; }
+  #custom-endpoints > .s-row > .s-label { grid-column: 1 / -1; }
+  #custom-endpoints > .s-row > input { grid-column: 1; }
+  #custom-endpoints > .s-row > input:last-child { grid-column: 1 / -1; }
+}
+
+/* Settings › Storage & Memory: the size and the Clear button on the right. */
+.storage-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.storage-size { min-width: 64px; text-align: right; color: var(--text-2); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+#storage-list:empty { display: none; }
+
+/* Services (Discord, Last.fm): a dot and a line saying where the connection
+   stands. Green when connected, amber while switched on but not yet. */
+.svc-status { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--text-2); }
+.svc-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); flex: none; }
+.svc-status.waiting .svc-dot { background: var(--signal); }
+.svc-status.on .svc-dot { background: var(--ok); }
+.svc-actions { display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; justify-content: flex-end; }

@@ -693,3 +693,32 @@
   .scan-bar-fill { transition: none; }
   .scan-bar.indeterminate .scan-bar-fill { animation: none; left: 0; width: 100%; opacity: .5; }
 }
+
+/* ── Fetch / search loader (showSkeletonTracks in app.js) ───────────────
+   An equalizer of five bars bouncing out of step in the accent colour,
+   with what is happening under it, centred where the tracks will appear.
+   It fades in after a beat, so a quick answer never flashes it. */
+.fetch-loader {
+  display: grid; justify-items: center; gap: var(--space-3);
+  padding: 72px var(--space-4);
+  opacity: 0; animation: fl-in .3s var(--ease) .15s forwards;
+}
+.fl-bars { display: flex; align-items: flex-end; gap: 5px; height: 34px; }
+.fl-bars i {
+  width: 6px; height: 100%; border-radius: 2px; background: var(--signal);
+  transform-origin: bottom; transform: scaleY(.25);
+  animation: fl-bar 1s cubic-bezier(.45, 0, .55, 1) infinite;
+}
+.fl-bars i:nth-child(2) { animation-delay: -.65s; }
+.fl-bars i:nth-child(3) { animation-delay: -.3s; }
+.fl-bars i:nth-child(4) { animation-delay: -.85s; }
+.fl-bars i:nth-child(5) { animation-delay: -.45s; }
+.fl-label { color: var(--text-2); font-size: var(--text-sm); }
+@keyframes fl-bar { 0%, 100% { transform: scaleY(.25); } 50% { transform: scaleY(1); } }
+@keyframes fl-in { to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .fetch-loader { opacity: 1; animation: none; }
+  .fl-bars i { animation: none; }
+  .fl-bars i:nth-child(odd) { transform: scaleY(.55); }
+  .fl-bars i:nth-child(even) { transform: scaleY(.9); }
+}

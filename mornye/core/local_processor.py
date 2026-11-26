@@ -494,6 +494,6 @@ def default_embed_options(
             "lrclib",
         ],
         enrich=enrich,
-        enrich_providers=["deezer", "apple", "qobuz", "tidal"],
+        enrich_providers=["deezer", "apple"],
         artist_separator=artist_separator,
     )

@@ -699,10 +699,10 @@ body.web-mode #np-view > .np-drag { display: none; }
   --space-6: 20px;
   --space-8: 24px;
 }
-/* Large: everything a step bigger. app.js zooms the desktop window natively
+/* Every density is a zoom (DENSITY_ZOOM in app.js, 80% to 130%). app.js zooms the desktop window natively
    (WKWebView pageZoom); data-zoom="css" is the fallback where it can't. On
    <body>, not <html>: <html> is what holds the viewport-height box. */
-:root[data-zoom="css"] body { zoom: 1.15; }
+:root[data-zoom="css"] body { zoom: var(--page-zoom, 1); }
 
 /* ── Titlebar (desktop window only; web mode hides it) ─────────────── */
 #titlebar {
@@ -1139,3 +1139,9 @@ body.sidebar-collapsed .sb-playlists-inner { visibility: hidden; }
   body.web-mode .sb-playlists { display: none; }
   body.web-mode #view-player .player-tabs { display: flex; }
 }
+
+/* Parts only the music look shows (Settings → Interface Style → Music):
+   its sidebar search, Home's title row, the Link/Search/CSV control, the
+   Fetch label, the Recently Added shelf. css/music.css shows them; doubled
+   class so no component rule of equal weight brings one back. */
+.m-only.m-only { display: none; }

@@ -208,7 +208,7 @@ class _View:
             "track": s.track or None,
             "discNumber": s.disc or None,
             "year": s.year or None,
-            "genre": s.genre or None,
+            "genre": s.genre_tag or s.genre or None,
             "coverArt": s.album_id,
             "size": s.size,
             "contentType": sub.content_type(s.suffix),
@@ -231,6 +231,9 @@ class _View:
                 {"id": sub.artist_id(n), "name": n} for n in s.album_artists
             ],
             "genres": [{"name": s.genre}] if s.genre else [],
+            # OpenSubsonic's song ISRCs; a Link phone compares its saved
+            # copies with them (Update metadata).
+            "isrc": [s.isrc] if s.isrc else [],
         }
 
     def album(self, a: sub.Album, *, folder: bool = False) -> dict[str, Any]:
@@ -788,8 +791,16 @@ def _media(name: str, params: dict[str, list[str]]) -> Response:
     )
 
 
-def build_subsonic_router(roots: Callable[[], list[str]]) -> APIRouter:
-    """The /rest routes. `roots` names the folders a scan syncs."""
+def build_subsonic_router(
+    roots: Callable[[], list[str]],
+    authenticate: Callable[[dict[str, str]], str] | None = None,
+) -> APIRouter:
+    """The /rest routes. `roots` names the folders a scan syncs.
+
+    `authenticate` replaces the MORNYE_SUBSONIC_* login: Mornye Link passes
+    one that accepts its paired devices' keys (core/link.py), and the API
+    then answers without those variables. It returns the user whose stars
+    and plays a request sees, or raises `sub.AuthError`."""
     router = APIRouter(prefix="/rest", include_in_schema=False)
     first_scan = {"done": False}
 
@@ -817,7 +828,7 @@ def build_subsonic_router(roots: Callable[[], list[str]]) -> APIRouter:
     async def rest(method: str, request: Request) -> Response:
         params = await _params(request)
         name = method[:-5] if method.endswith(".view") else method
-        if not sub.enabled():
+        if authenticate is None and not sub.enabled():
             return _error(
                 params,
                 0,
@@ -825,8 +836,14 @@ def build_subsonic_router(roots: Callable[[], list[str]]) -> APIRouter:
                 "(or MORNYE_SUBSONIC_API_KEY) to turn it on.",
             )
         try:
-            user = sub.authenticate({k: v[0] for k, v in params.items() if v})
+            user = (authenticate or sub.authenticate)(
+                {k: v[0] for k, v in params.items() if v}
+            )
         except sub.AuthError as exc:
+            # OpenSubsonic: the extension list answers without credentials,
+            # so a client can learn the supported auth methods first.
+            if name == "getOpenSubsonicExtensions":
+                return _respond(params, handle(name, params, sub.username()))
             return _error(params, exc.code, str(exc))
         try:
             ensure_library()

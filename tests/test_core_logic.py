@@ -95,10 +95,10 @@ def test_soundcloud_is_not_a_default_metadata_enrichment_provider():
     default, not a CLI choice, not in the TUI or the GUI checklist."""
     default_providers = DownloadOptions(output_dir=".").enrich_providers
     assert "soundcloud" not in default_providers
-    assert default_providers == ["deezer", "apple", "qobuz", "tidal"]
+    assert default_providers == ["deezer", "apple"]
 
     assert "soundcloud" not in ProfileConfig().enrich_providers
-    assert ProfileConfig().enrich_providers == ["deezer", "apple", "qobuz", "tidal"]
+    assert ProfileConfig().enrich_providers == ["deezer", "apple"]
 
 
 def test_track_metadata_strips_artists_and_builds_tags():

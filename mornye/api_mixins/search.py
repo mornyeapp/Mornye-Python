@@ -141,14 +141,66 @@ def _is_spotify(source: str | None) -> bool:
     return not source or source == "spotify"
 
 
+class AppleMusicSearch:
+    """Apple Music search through the built-in catalogue client.
+
+    The apple-music extension only answers `searchTracks`, so searching
+    through it returned no artists and no playlists. The built-in client
+    asks Apple for all four kinds at once. If it fails, or finds nothing,
+    the extension's track search is the fallback.
+    """
+
+    def __init__(self, source: str = "apple-music") -> None:
+        self._source = source
+
+    async def search_async(self, query: str, limit: int = 50) -> dict[str, list]:
+        from ..core.apple_music_metadata import AppleMusicMetadataClient
+
+        import asyncio
+
+        try:
+            # One request per kind: Apple's mixed search returns all 25
+            # songs and albums asked for but often a single artist and a
+            # single playlist, while a search for one kind fills the page.
+            client = AppleMusicMetadataClient()
+            kinds = ("tracks", "albums", "artists", "playlists")
+            answers = await asyncio.gather(
+                *(client.search_async(query, limit=limit, kind=kind) for kind in kinds),
+                return_exceptions=True,
+            )
+            results = empty_results()
+            for kind, answer in zip(kinds, answers, strict=True):
+                if isinstance(answer, BaseException):
+                    logger.debug("Apple Music %s search failed: %s", kind, answer)
+                    continue
+                results[kind] = answer.get(kind) or []
+            if any(results.values()):
+                return results
+        except Exception as exc:
+            logger.debug("built-in Apple Music search failed: %s", exc)
+        from ..core.extension_metadata import ExtensionMetadataClient
+
+        return await ExtensionMetadataClient.for_source(self._source).search_async(
+            query, limit=limit
+        )
+
+    def search(self, query: str, limit: int = 50) -> dict[str, list]:
+        import asyncio
+
+        return asyncio.run(self.search_async(query, limit))
+
+
 def _search_client(source: str | None):
     """Spotify — the built-in client merged with the spotify-web extension
-    (core/metadata_fallback.MergedSpotifySearch) — or the catalogue
-    extension named `source` (see core/extension_metadata.py)."""
+    (core/metadata_fallback.MergedSpotifySearch) — Apple Music through its
+    built-in client (AppleMusicSearch), or the catalogue extension named
+    `source` (see core/extension_metadata.py)."""
     if _is_spotify(source):
         from ..core.metadata_fallback import MergedSpotifySearch
 
         return MergedSpotifySearch()
+    if source == "apple-music":
+        return AppleMusicSearch(source)
     from ..core.extension_metadata import ExtensionMetadataClient
 
     return ExtensionMetadataClient.for_source(source or "")

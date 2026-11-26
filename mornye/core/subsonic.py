@@ -40,6 +40,9 @@ logger = logging.getLogger(__name__)
 
 API_VERSION = "1.16.1"
 SERVER_TYPE = "mornye"
+
+UNKNOWN_ARTIST = "Unknown Artist"
+UNKNOWN_ALBUM = "Unknown Album"
 USER_ENV = "MORNYE_SUBSONIC_USER"
 PASSWORD_ENV = "MORNYE_SUBSONIC_PASSWORD"
 API_KEY_ENV = "MORNYE_SUBSONIC_API_KEY"
@@ -175,6 +178,11 @@ class Song:
     genre: str
     duration: int
     suffix: str
+    #: The whole GENRE tag ("Rock; Alternative"), as Mornye's own Link host
+    #: sends it: a phone comparing its saved copy (Link "Update metadata")
+    #: reads this, and `genre` (the first name) groups getGenres.
+    genre_tag: str = ""
+    isrc: str = ""
 
     @property
     def artist(self) -> str:
@@ -238,9 +246,12 @@ def build_index(rows: list[tuple[str, int, dict[str, Any]]]) -> Index:
     artists: dict[str, Artist] = {}
 
     for path, size, row in rows:
-        track_artists = artist_names(str(row.get("artist", ""))) or ["Unknown artist"]
+        # The placeholders Mornye's own Link host puts in empty tags: a phone
+        # updating its saved copies (Link "Update metadata") knows them and
+        # never writes them into a file.
+        track_artists = artist_names(str(row.get("artist", ""))) or [UNKNOWN_ARTIST]
         album_artists = artist_names(str(row.get("album_artist", ""))) or track_artists
-        album_name = str(row.get("album", "")).strip() or "Unknown album"
+        album_name = str(row.get("album", "")).strip() or UNKNOWN_ALBUM
         album_id = _id("al-", album_artists[0], album_name)
         song = Song(
             id=_id("so-", path),
@@ -257,6 +268,8 @@ def build_index(rows: list[tuple[str, int, dict[str, Any]]]) -> Index:
             genre=str(row.get("genre", "")).split(";")[0].strip(),
             duration=_int(row.get("duration_s")),
             suffix=Path(path).suffix.lstrip(".").lower(),
+            genre_tag=str(row.get("genre", "")).strip(),
+            isrc=str(row.get("isrc", "")).strip().upper(),
         )
         songs[song.id] = song
         album = albums.get(album_id)
@@ -335,15 +348,12 @@ _LRC_WORD = re.compile(r"<\d+:\d+(?:[.:]\d+)?>")
 
 
 def lyrics_for(song: Song) -> tuple[bool, list[tuple[int, str]]] | None:
-    """(synced, [(start ms, text)]) from a .lrc beside the file or the
-    embedded lyrics; None when there are none."""
-    text = ""
-    sidecar = Path(song.path).with_suffix(".lrc")
-    try:
-        if sidecar.is_file():
-            text = sidecar.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        text = ""
+    """(synced, [(start ms, text)]) from a .mlrc or .lrc beside the file or
+    the embedded lyrics; None when there are none. Translation tags are
+    left out: OpenSubsonic lyrics have one text per line."""
+    from .lyric_tags import sidecar_lyrics
+
+    text = sidecar_lyrics(song.path)
     if not text:
         try:
             from .tagger import read_embedded_tags
@@ -362,7 +372,7 @@ def lyrics_for(song: Song) -> tuple[bool, list[tuple[int, str]]] | None:
             for m in stamps:
                 seconds = float(m.group(2).replace(":", "."))
                 timed.append((int((int(m.group(1)) * 60 + seconds) * 1000), words))
-        elif raw.strip() and not re.match(r"^\[[a-z]+:", raw.strip(), re.I):
+        elif raw.strip() and not re.match(r"^\[[a-z][a-z0-9_-]*:", raw.strip(), re.I):
             plain.append(raw.strip())
     if timed:
         return True, sorted(timed)

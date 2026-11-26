@@ -62,7 +62,7 @@ class DownloadConfig:
 class MetadataConfig:
     enrich: bool = True
     providers: list[str] = field(
-        default_factory=lambda: ["deezer", "apple", "qobuz", "tidal"],
+        default_factory=lambda: ["deezer", "apple"],
     )
     save_animated_artwork: bool = field(
         default_factory=animated_artworks_enabled_by_default,

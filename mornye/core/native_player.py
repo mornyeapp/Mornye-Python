@@ -22,6 +22,7 @@ import json
 import logging
 import os
 import queue
+import re
 import sys
 import threading
 import time
@@ -58,6 +59,15 @@ EQ_PRESETS: dict[str, tuple[float, ...]] = {
     "electronic": (5, 4, 1, 0, -2, 1, 0, 1, 4, 5),
 }
 EQ_RANGE_DB = 12.0
+EQ_MODES = ("graphic", "parametric")
+#: Parametric filters: the kinds, how many, and the ranges each value keeps
+#: to (the mobile app's, so a filter list moves between them unchanged).
+PEQ_TYPES = ("peak", "lowshelf", "highshelf")
+PEQ_MAX_FILTERS = 20
+PEQ_FREQ_HZ = (20.0, 20000.0)
+PEQ_GAIN_DB = 24.0
+PEQ_Q = (0.1, 20.0)
+PEQ_DEFAULT_Q = 0.707
 
 #: ffmpeg codec names (``audio-codec-name``) and the bitstream settings
 #: that send them out compressed.
@@ -74,6 +84,41 @@ class NativePlayerUnavailable(RuntimeError):
 
 
 # ── Options ──────────────────────────────────────────────────────────────────
+
+
+def _clamped(value: Any, low: float, high: float, default: float) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    if number != number:  # NaN
+        return default
+    return max(low, min(high, number))
+
+
+def clean_filter(raw: Any) -> dict | None:
+    """One parametric filter with every value in range; None if unusable."""
+    if not isinstance(raw, dict):
+        return None
+    kind = str(raw.get("type", "peak"))
+    if kind not in PEQ_TYPES:
+        return None
+    enabled = raw.get("enabled", True)
+    return {
+        "type": kind,
+        "freq": round(_clamped(raw.get("freq"), *PEQ_FREQ_HZ, 1000.0), 2),
+        "gain": round(_clamped(raw.get("gain"), -PEQ_GAIN_DB, PEQ_GAIN_DB, 0.0), 2),
+        "q": round(_clamped(raw.get("q"), *PEQ_Q, PEQ_DEFAULT_Q), 3),
+        "enabled": enabled if isinstance(enabled, bool) else True,
+    }
+
+
+def clean_filters(raw: Any) -> list[dict]:
+    """The usable filters of `raw`, at most PEQ_MAX_FILTERS of them."""
+    if not isinstance(raw, list):
+        return []
+    filters = [f for f in (clean_filter(item) for item in raw) if f is not None]
+    return filters[:PEQ_MAX_FILTERS]
 
 
 @dataclass
@@ -93,9 +138,13 @@ class PlayerOptions:
     eq_enabled: bool = False
     eq_preset: str = "flat"
     eq_gains: list[float] = field(default_factory=lambda: [0.0] * len(EQ_BANDS_HZ))
+    eq_mode: str = "graphic"
+    eq_preamp: float = 0.0
+    eq_filters: list[dict] = field(default_factory=list)
     channels: str = "auto"
     upmix: bool = False
     normalize: str = "off"
+    quiet_boost: bool = False
 
     @classmethod
     def from_dict(cls, raw: Any) -> PlayerOptions:
@@ -156,6 +205,10 @@ class PlayerOptions:
             channels=pick("channels", CHANNEL_LAYOUTS),
             upmix=flag("upmix"),
             normalize=pick("normalize", NORMALIZERS),
+            quiet_boost=flag("quiet_boost"),
+            eq_mode=pick("eq_mode", EQ_MODES),
+            eq_preamp=number("eq_preamp", -PEQ_GAIN_DB, PEQ_GAIN_DB),
+            eq_filters=clean_filters(raw.get("eq_filters", base.eq_filters)),
         )
 
     def to_dict(self) -> dict:
@@ -192,7 +245,11 @@ def filter_chain(options: PlayerOptions) -> list[str]:
     on, so a plain file goes through no filter at all.
     """
     chain: list[str] = []
-    if options.eq_enabled and any(abs(g) > 0.01 for g in options.eq_gains):
+    if options.eq_enabled and options.eq_mode == "parametric":
+        graph = _parametric_graph(options)
+        if graph:
+            chain.append(f"lavfi=[{graph}]")
+    elif options.eq_enabled and any(abs(g) > 0.01 for g in options.eq_gains):
         # Headroom first: a band raised by +6 dB would clip a file mastered
         # to 0 dBFS, so the whole signal is lowered by the largest boost.
         headroom = max(0.0, max(options.eq_gains))
@@ -210,7 +267,129 @@ def filter_chain(options: PlayerOptions) -> list[str]:
         chain.append("lavfi=[dynaudnorm=f=250:g=15]")
     elif options.normalize == "loudnorm":
         chain.append("lavfi=[loudnorm=I=-16:TP=-1.5:LRA=11]")
+    if quiet_boost_active(options):
+        # ReplayGain may now raise a song past its peak: the limiter holds
+        # the loudest moments under full scale instead of letting them clip.
+        # level=disabled, or alimiter would turn the whole song up itself.
+        chain.append("lavfi=[alimiter=limit=0.977:attack=5:release=50:level=disabled]")
     return chain
+
+
+def quiet_boost_active(options: PlayerOptions) -> bool:
+    """ "Turn quiet songs up" works through ReplayGain: without it on, there
+    is no gain telling how much a song should be raised."""
+    return options.quiet_boost and options.replaygain != "no"
+
+
+_PEQ_FILTER = {"peak": "equalizer", "lowshelf": "lowshelf", "highshelf": "highshelf"}
+
+
+def _parametric_graph(options: PlayerOptions) -> str:
+    """The lavfi graph of the parametric equalizer: the preamp as given (an
+    AutoEQ list brings its own, negative, to make room for its boosts),
+    then one biquad per filter that is on and changes something."""
+    parts = [
+        f"{_PEQ_FILTER[f['type']]}=f={_db(f['freq'])}:t=q:w={_db(f['q'])}:g={_db(f['gain'])}"
+        for f in options.eq_filters
+        if f.get("enabled", True) and abs(f["gain"]) > 0.01
+    ]
+    if abs(options.eq_preamp) > 0.01:
+        parts.insert(0, f"volume={_db(options.eq_preamp)}dB")
+    return ",".join(parts)
+
+
+# ── AutoEQ / Equalizer APO filter lists ──────────────────────────────────────
+
+_AUTOEQ_TYPES = {
+    "PK": "peak",
+    "PEQ": "peak",
+    "LS": "lowshelf",
+    "LSC": "lowshelf",
+    "LSQ": "lowshelf",
+    "HS": "highshelf",
+    "HSC": "highshelf",
+    "HSQ": "highshelf",
+}
+_AUTOEQ_NAMES = {"peak": "PK", "lowshelf": "LSC", "highshelf": "HSC"}
+_NUM = r"([-+]?\d+(?:[.,]\d+)?)"
+_PREAMP_RE = re.compile(rf"^\s*preamp\s*:\s*{_NUM}\s*db", re.I)
+_FILTER_RE = re.compile(
+    rf"^\s*filter(?:\s*\d+)?\s*:\s*(on|off)\s+([a-z]+)"
+    rf"(?:\s+fc\s+{_NUM}\s*hz)?(?:\s+gain\s+{_NUM}\s*db)?(?:\s+q\s+{_NUM})?",
+    re.I,
+)
+
+
+def _num(text: str | None) -> float | None:
+    return None if text is None else float(text.replace(",", "."))
+
+
+def parse_filter_list(text: str) -> tuple[float, list[dict]]:
+    """(preamp dB, filters) from a plain text filter list.
+
+    Reads the lines AutoEQ and Equalizer APO write::
+
+        Preamp: -6.4 dB
+        Filter 1: ON PK Fc 105 Hz Gain -3.5 dB Q 0.70
+        Filter 2: ON LSC Fc 105 Hz Gain 6.0 dB Q 0.70
+
+    Shelves without a Q take 0.707. Lines of other kinds (comments,
+    unsupported filter types such as LP/HP) are skipped; ValueError when
+    nothing usable is left.
+    """
+    preamp = 0.0
+    filters: list[dict] = []
+    seen_preamp = False
+    for line in str(text or "").splitlines():
+        m = _PREAMP_RE.match(line)
+        if m:
+            preamp = _clamped(_num(m.group(1)), -PEQ_GAIN_DB, PEQ_GAIN_DB, 0.0)
+            seen_preamp = True
+            continue
+        m = _FILTER_RE.match(line)
+        if not m:
+            continue
+        state, code, fc, gain, q = m.groups()
+        kind = _AUTOEQ_TYPES.get(code.upper())
+        if kind is None or fc is None or gain is None:
+            continue
+        cleaned = clean_filter(
+            {
+                "type": kind,
+                "freq": _num(fc),
+                "gain": _num(gain),
+                "q": _num(q) if q is not None else PEQ_DEFAULT_Q,
+                "enabled": state.upper() == "ON",
+            }
+        )
+        if cleaned is not None:
+            filters.append(cleaned)
+    if not filters and not seen_preamp:
+        raise ValueError("No Preamp or Filter lines found in the filter list.")
+    return preamp, filters[:PEQ_MAX_FILTERS]
+
+
+def _q_text(q: float) -> str:
+    """Two decimals as AutoEQ writes them, three when that would lose some."""
+    two = f"{q:.2f}"
+    return two if float(two) == q else f"{q:.3f}"
+
+
+def _gain_text(gain: float) -> str:
+    one = f"{gain:.1f}"
+    return one if float(one) == gain else f"{gain:.2f}"
+
+
+def format_filter_list(preamp: float, filters: list[dict]) -> str:
+    """The filters as an AutoEQ text list, which parse_filter_list reads back."""
+    lines = [f"Preamp: {_gain_text(preamp)} dB"]
+    for index, f in enumerate(clean_filters(filters), start=1):
+        lines.append(
+            f"Filter {index}: {'ON' if f['enabled'] else 'OFF'} "
+            f"{_AUTOEQ_NAMES[f['type']]} Fc {f['freq']:g} Hz "
+            f"Gain {_gain_text(f['gain'])} dB Q {_q_text(f['q'])}"
+        )
+    return "\n".join(lines) + "\n"
 
 
 def mpv_properties(options: PlayerOptions) -> dict[str, Any]:
@@ -227,7 +406,9 @@ def mpv_properties(options: PlayerOptions) -> dict[str, Any]:
         "gapless-audio": "weak" if options.gapless else "no",
         "replaygain": options.replaygain,
         "replaygain-preamp": options.replaygain_preamp,
-        "replaygain-clip": options.replaygain_clip,
+        # With "Turn quiet songs up" mpv may raise a song past its peak;
+        # the limiter in filter_chain keeps it from clipping instead.
+        "replaygain-clip": options.replaygain_clip and not quiet_boost_active(options),
         "audio-delay": options.audio_delay_ms / 1000.0,
         "audio-pitch-correction": options.pitch_correction,
         "audio-channels": (
@@ -415,6 +596,21 @@ _MEDIA_MESSAGE = "mornye-media"
 _OUTPUT_PROPERTIES = ("audio-spdif", "audio-exclusive", "audio-device")
 
 
+def _now_playing_tags(state: dict) -> dict:
+    """Title, artist and album for Now Playing, from mpv's metadata (its
+    keys keep the file's case: TITLE in a FLAC, title in an M4A)."""
+    meta = state.get("metadata") or {}
+    folded = (
+        {str(k).lower(): v for k, v in meta.items()} if isinstance(meta, dict) else {}
+    )
+    title = folded.get("title") or state.get("media-title") or ""
+    return {
+        "title": str(title),
+        "artist": str(folded.get("artist") or folded.get("album_artist") or ""),
+        "album": str(folded.get("album") or ""),
+    }
+
+
 class NativePlayer:
     """One mpv instance, created on first use, and its events to the page.
 
@@ -449,8 +645,17 @@ class NativePlayer:
         self._closed = False
         # (position, paused) to restore once a reopened file has loaded.
         self._resume: tuple[float, bool] | None = None
+        # Whether the current file has finished opening. A seek before that
+        # fails ("Error running mpv command", -12) — on a network share the
+        # open takes long enough for the page's first seek to land in it —
+        # so it is held in `_pending_seek` and made on file-loaded.
+        self._loaded = False
+        self._pending_seek: float | None = None
         # The output refused bitstream: play PCM until the setting changes.
         self._spdif_failed = False
+        # macOS media keys and Now Playing (core/macos_now_playing.py),
+        # registered with the first mpv instance.
+        self._now_playing: Any = None
 
     # ── lifecycle ──
 
@@ -477,7 +682,13 @@ class NativePlayer:
                 keep_open="no",
                 audio_display="no",
             )
-            if self._media_controls:
+            if self._media_controls and self._mpv_factory is None:
+                # On macOS libmpv's media-controls never registers with the
+                # system when mpv is embedded, so Mornye registers itself.
+                from . import macos_now_playing
+
+                self._now_playing = macos_now_playing.create(self._on_now_playing)
+            if self._media_controls and self._now_playing is None:
                 # libmpv leaves the system's media keys and Now Playing off;
                 # the CLI player turns them on itself.
                 kwargs["media_controls"] = "yes"
@@ -499,6 +710,9 @@ class NativePlayer:
             self._apply(player, self._options, codec=None)
             for name in _OBSERVED:
                 player.observe_property(name, self._on_property)
+            if self._now_playing is not None:
+                player.observe_property("metadata", self._on_property)
+                player.observe_property("media-title", self._on_property)
             player.register_event_callback(self._on_event)
             self._bind_media_keys(player)
             self._start_sender()
@@ -523,7 +737,19 @@ class NativePlayer:
         )
         self._sender.start()
 
+    def _on_now_playing(self, action: str, detail: dict) -> None:
+        """A media key or a Now Playing command: the page owns the queue."""
+        self._post({"type": "media", "action": action, **detail})
+
+    def _now_playing_update(self, **fields: Any) -> None:
+        if self._now_playing is not None:
+            self._now_playing.update(**fields)
+
     def close(self) -> None:
+        if self._now_playing is not None:
+            with contextlib.suppress(Exception):
+                self._now_playing.close()
+            self._now_playing = None
         with self._lock:
             self._closed = True
             player, self._mpv = self._mpv, None
@@ -611,6 +837,8 @@ class NativePlayer:
             self._next = None
             self._advancing = False
             self._resume = None
+            self._loaded = False
+            self._pending_seek = None
             for key in ("time-pos", "duration"):
                 self._state.pop(key, None)
             player.command("loadfile", path, "replace")
@@ -640,6 +868,10 @@ class NativePlayer:
         elif name == "pause":
             player.pause = True
         elif name == "seek":
+            with self._lock:
+                if not self._loaded:
+                    self._pending_seek = float(value)
+                    return
             player.command("seek", float(value), "absolute", "exact")
         elif name == "volume":
             player.volume = max(0.0, min(100.0, float(value) * 100.0))
@@ -710,6 +942,7 @@ class NativePlayer:
             self._next = None
             self._advancing = False
             self._resume = (self._time(), self._paused)
+            self._loaded = False
             # Held silently while it reloads: the page keeps its state, and
             # the play that follows is one it already shows.
             self._paused = True
@@ -784,6 +1017,7 @@ class NativePlayer:
                 self._pending_time = float(value)
         elif name == "pause":
             paused = bool(value)
+            self._now_playing_update(paused=paused, position=self._time())
             if paused != self._paused:
                 self._paused = paused
                 self._post(
@@ -791,7 +1025,10 @@ class NativePlayer:
                 )
         elif name == "duration":
             if value:
+                self._now_playing_update(duration=float(value), position=self._time())
                 self._post({"type": "loadedmetadata", "duration": float(value)})
+        elif name in ("metadata", "media-title"):
+            self._now_playing_update(**_now_playing_tags(self._state))
         elif name == "audio-codec-name":
             with self._lock:
                 player = self._mpv
@@ -835,6 +1072,10 @@ class NativePlayer:
                     self._current, self._next = self._next, None
                 current = self._current
                 resume, self._resume = self._resume, None
+                self._loaded = True
+                pending, self._pending_seek = self._pending_seek, None
+                if pending is not None and resume is None and not advanced:
+                    resume = (pending, self._paused)
             if advanced:
                 # The duration goes with the change. mpv reports a property
                 # only when it changes, so a file that follows itself (repeat
@@ -899,6 +1140,7 @@ class NativePlayer:
             ):
                 self._post({"type": "media", "action": args[1]})
         elif kind == "playback-restart":
+            self._now_playing_update(position=self._time())
             self._post({"type": "seeked", "time": self._time()})
 
     # ── to the page (sender thread) ──

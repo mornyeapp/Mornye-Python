@@ -11,7 +11,6 @@ import urllib.parse
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from . import get_amazon_endpoint
 from .cross_loop_lock import CrossLoopLock
 from .env import env_value
 from .http import NetworkManager
@@ -53,7 +52,7 @@ DEFAULT_LYRICS_PROVIDERS = [
     "binilyrics",
     "lrclib",
 ]
-DEFAULT_ENRICH_PROVIDERS = ["deezer", "apple", "qobuz", "tidal"]
+DEFAULT_ENRICH_PROVIDERS = ["deezer", "apple"]
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +113,6 @@ LYRICS_PROVIDER_LABELS = {
     "lrclib": "LRCLIB",
     "lyricsplus": "LyricsPlus",
     "lrcred": "lrc.red",
-    "amazon": "Amazon Music",
     "unison": "Unison",
     "jiosaavn": "JioSaavn",
     "kugou": "KuGou",
@@ -868,38 +866,6 @@ async def _fetch_lrcred_async(isrc: str, timeout: int = 7) -> str:
         return ""
 
 
-async def _fetch_amazon_async(isrc: str, timeout: int = 7) -> str:
-    if not isrc:
-        return ""
-    try:
-        client = await NetworkManager.get_async_client_safe()
-        r = await client.get(
-            f"{get_amazon_endpoint('spotbye1')}/lyrics/{isrc}",
-            headers={"User-Agent": _UA},
-            timeout=timeout,
-        )
-        if not r.is_success:
-            return ""
-        data = r.json()
-        lines = data.get("lines") or data.get("lyrics", [])
-        if not lines:
-            return ""
-        if isinstance(lines[0], dict):
-            lrc = []
-            for line in lines:
-                ts = int(line.get("startTime", 0))
-                m = ts // 60000
-                s = (ts % 60000) // 1000
-                cs = (ts % 1000) // 10
-                text = line.get("text", "")
-                lrc.append(f"[{m:02d}:{s:02d}.{cs:02d}]{text}")
-            return "\n".join(lrc)
-        return "\n".join(str(ln) for ln in lines)
-    except Exception as exc:
-        logger.debug("[lyrics/amazon] async: %s", exc)
-        return ""
-
-
 async def _fetch_lrclib_async(
     track_name: str,
     artist_name: str,
@@ -1274,9 +1240,6 @@ _PROVIDER_MAP = {
         ctx.duration_s,
         ctx.isrc,
         word_by_word=ctx.apple_word_by_word,
-    ),
-    "amazon": lambda ctx: _fetch_amazon_async(
-        ctx.isrc,
     ),
     "lrclib": lambda ctx: _fetch_lrclib_async(
         ctx.clean_track,

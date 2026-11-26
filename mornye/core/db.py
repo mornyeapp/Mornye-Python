@@ -448,6 +448,58 @@ _MIGRATIONS: tuple[tuple[str, ...], ...] = (
         )
         """,
     ),
+    # v16 — imported playlists that follow their source.
+    #
+    # A playlist imported from a provider remembers where it came from, so
+    # songs added there later are added here too. `source_keys` is the JSON
+    # list of every song the source has listed so far: a song is new only
+    # when it is not in it, so one the user removed here stays removed.
+    (
+        "ALTER TABLE player_playlists "
+        "ADD COLUMN source_url TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE player_playlists "
+        "ADD COLUMN source_keys TEXT NOT NULL DEFAULT '[]'",
+        "ALTER TABLE player_playlists " "ADD COLUMN synced_at REAL NOT NULL DEFAULT 0",
+    ),
+    # v17 — what the Player has played (core/listening.py).
+    #
+    # One row per song per day, as Mornye mobile keeps its listening record:
+    # the time heard and the plays counted (a play counts once a song has
+    # been heard for 30 seconds). Home's mixes and recommendations and the
+    # listener profile read it. `listening_sessions` keeps the last songs
+    # played through or skipped, with the hour, for the profile's time of
+    # day and play-through rate.
+    (
+        """
+        CREATE TABLE IF NOT EXISTS listening (
+            owner        TEXT NOT NULL DEFAULT '',
+            day          TEXT NOT NULL,
+            track_key    TEXT NOT NULL,
+            path         TEXT NOT NULL DEFAULT '',
+            title        TEXT NOT NULL DEFAULT '',
+            artist       TEXT NOT NULL DEFAULT '',
+            album        TEXT NOT NULL DEFAULT '',
+            genre        TEXT NOT NULL DEFAULT '',
+            year         INTEGER NOT NULL DEFAULT 0,
+            format       TEXT NOT NULL DEFAULT '',
+            bit_depth    INTEGER NOT NULL DEFAULT 0,
+            sample_rate  INTEGER NOT NULL DEFAULT 0,
+            milliseconds INTEGER NOT NULL DEFAULT 0,
+            plays        INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (owner, day, track_key)
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_listening_key ON listening(owner, track_key)",
+        """
+        CREATE TABLE IF NOT EXISTS listening_sessions (
+            owner     TEXT NOT NULL DEFAULT '',
+            at        REAL NOT NULL,
+            track_key TEXT NOT NULL,
+            outcome   TEXT NOT NULL
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_listening_sessions ON listening_sessions(owner, at)",
+    ),
 )
 
 

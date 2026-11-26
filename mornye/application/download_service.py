@@ -355,8 +355,6 @@ class DownloadService:
 
             policy = RetryPolicy(request.config.download.retries + 1)
             candidates = context.provider_candidates or []
-            if not self._provider_executor:
-                candidates = candidates[:1]
             provider = context.provider or self._provider_resolver.resolve(request)[0]
             last_error: Exception | None = None
             if self._provider_executor is not None:
@@ -472,7 +470,7 @@ class DownloadService:
                 if last_error is None:
                     break
                 if not ProviderExecutor.is_retryable(last_error, policy):
-                    break
+                    continue
             if attempts and attempts[0][1] is not None:
                 if quality_adapter is None:
                     raise RuntimeError(

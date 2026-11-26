@@ -12,7 +12,13 @@ import logging
 import threading
 from typing import Any
 
-from ..core.native_player import NativePlayer, NativePlayerUnavailable
+from ..core.native_player import (
+    NativePlayer,
+    NativePlayerUnavailable,
+    format_filter_list,
+    load_options,
+    parse_filter_list,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +111,37 @@ class NativePlayerMixin:
         return self._native_call(
             lambda: {"options": self._native().set_options(options).to_dict()}
         )
+
+    def native_player_eq_import(self, text: str) -> dict:
+        """Reads an AutoEQ-style filter list (``Preamp:`` and ``Filter N:``
+        lines) into the parametric equalizer and switches it on."""
+
+        def run():
+            if not isinstance(text, str) or len(text) > 64_000:
+                raise ValueError("The filter list must be plain text.")
+            preamp, filters = parse_filter_list(text)
+            options = self._native().set_options(
+                {
+                    "eq_enabled": True,
+                    "eq_mode": "parametric",
+                    "eq_preamp": preamp,
+                    "eq_filters": filters,
+                }
+            )
+            return {"options": options.to_dict(), "imported": len(filters)}
+
+        return self._native_call(run)
+
+    def native_player_eq_export(self) -> dict:
+        """The parametric equalizer as an AutoEQ-style text filter list."""
+
+        def run():
+            if not self._desktop():
+                raise NativePlayerUnavailable(_DESKTOP_ONLY)
+            options = load_options()
+            return {"text": format_filter_list(options.eq_preamp, options.eq_filters)}
+
+        return self._native_call(run)
 
     def native_player_stats(self) -> dict:
         return self._native_call(lambda: {"stats": self._native().stats()})

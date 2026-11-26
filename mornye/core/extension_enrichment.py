@@ -10,10 +10,12 @@ what the public iTunes search carries.
 
 So enrichment now asks both. Each service in the enrichment list gets its
 built-in lookup (which uses the Python extensions where it needs a
-service's API) and then its own JavaScript extensions; after those, every
-other installed JavaScript extension that implements enrichTrack is asked
-too — always, whether or not its service is in the list. Each fills only
-the fields still blank.
+service's API) and then its own JavaScript extensions. Services outside the
+list are not asked: they used to be, always, and for the zarz-backed
+extensions every one of them meant a signed session of its own (a captcha
+in a hidden browser) plus a search per track. The extension the file was
+downloaded from is skipped too — its answer is already in hand. Each source
+fills only the fields still blank.
 
 Two things keep that from costing more than it gives:
 

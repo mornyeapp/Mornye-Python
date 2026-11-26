@@ -21,9 +21,11 @@ from mornye.core.native_player import (
     NativePlayerUnavailable,
     PlayerOptions,
     filter_chain,
+    format_filter_list,
     is_bitstreamed,
     mpv_properties,
     output_label,
+    parse_filter_list,
 )
 
 
@@ -183,6 +185,129 @@ def test_filter_chain_equalizer_with_headroom_upmix_and_normalizer():
     assert chain[2].startswith("lavfi=[dynaudnorm")
     # Upmix only toward a surround layout.
     assert filter_chain(PlayerOptions(upmix=True, channels="stereo")) == []
+
+
+AUTOEQ = """\
+# a comment line
+Preamp: -6.4 dB
+Filter 1: ON LSC Fc 105 Hz Gain 6.0 dB Q 0.70
+Filter 2: ON PK Fc 2350,5 Hz Gain -3.5 dB Q 1.41
+Filter 3: OFF PK Fc 4000 Hz Gain 2.0 dB Q 2.00
+Filter 4: ON HS Fc 10000 Hz Gain -2 dB
+Filter 5: ON LP Fc 18000 Hz
+"""
+
+
+def test_parse_filter_list_reads_autoeq_and_apo_lines():
+    preamp, filters = parse_filter_list(AUTOEQ)
+    assert preamp == -6.4
+    assert [f["type"] for f in filters] == ["lowshelf", "peak", "peak", "highshelf"]
+    assert filters[0] == {
+        "type": "lowshelf",
+        "freq": 105.0,
+        "gain": 6.0,
+        "q": 0.7,
+        "enabled": True,
+    }
+    assert filters[1]["freq"] == 2350.5  # a decimal comma, as some locales write
+    assert filters[2]["enabled"] is False
+    assert filters[3]["q"] == 0.707  # a shelf without Q
+    with pytest.raises(ValueError):
+        parse_filter_list("nothing here")
+
+
+def test_parse_filter_list_clamps_and_caps():
+    lines = ["Preamp: -40 dB"] + [
+        f"Filter {i}: ON PK Fc 5 Hz Gain 30 dB Q 50" for i in range(1, 26)
+    ]
+    preamp, filters = parse_filter_list("\n".join(lines))
+    assert preamp == -24.0
+    assert len(filters) == 20
+    assert filters[0] == {
+        "type": "peak",
+        "freq": 20.0,
+        "gain": 24.0,
+        "q": 20.0,
+        "enabled": True,
+    }
+
+
+def test_filter_list_round_trips():
+    preamp, filters = parse_filter_list(AUTOEQ)
+    text = format_filter_list(preamp, filters)
+    assert text.startswith(
+        "Preamp: -6.4 dB\nFilter 1: ON LSC Fc 105 Hz Gain 6.0 dB Q 0.70"
+    )
+    assert "Filter 3: OFF PK" in text
+    assert parse_filter_list(text) == (preamp, filters)
+
+
+def test_options_keep_parametric_filters_in_range():
+    options = PlayerOptions.from_dict(
+        {
+            "eq_mode": "parametric",
+            "eq_preamp": "-3",
+            "eq_filters": [
+                {"type": "peak", "freq": 1e6, "gain": -99, "q": 0},
+                {"type": "notch", "freq": 100},
+                "junk",
+            ]
+            * 1,
+        }
+    )
+    assert options.eq_mode == "parametric"
+    assert options.eq_preamp == -3.0
+    assert options.eq_filters == [
+        {"type": "peak", "freq": 20000.0, "gain": -24.0, "q": 0.1, "enabled": True}
+    ]
+    assert PlayerOptions.from_dict({"eq_mode": "x"}).eq_mode == "graphic"
+
+
+def test_filter_chain_parametric():
+    _, filters = parse_filter_list(AUTOEQ)
+    options = PlayerOptions(
+        eq_enabled=True,
+        eq_mode="parametric",
+        eq_preamp=-6.4,
+        eq_filters=filters,
+        eq_gains=list(EQ_PRESETS["rock"]),
+    )
+    assert filter_chain(options) == [
+        "lavfi=[volume=-6.4dB,lowshelf=f=105:t=q:w=0.7:g=6,"
+        "equalizer=f=2350.5:t=q:w=1.41:g=-3.5,highshelf=f=10000:t=q:w=0.707:g=-2]"
+    ]
+    # The graphic bands are not used in parametric mode, nor off filters.
+    assert filter_chain(PlayerOptions(eq_mode="parametric", eq_filters=filters)) == []
+    assert filter_chain(PlayerOptions(eq_enabled=True, eq_mode="parametric")) == []
+
+
+def test_quiet_boost_lets_replaygain_raise_and_adds_a_limiter():
+    off = PlayerOptions(replaygain="track", quiet_boost=False)
+    assert mpv_properties(off)["replaygain-clip"] is True
+    assert filter_chain(off) == []
+    on = PlayerOptions(replaygain="track", quiet_boost=True)
+    assert mpv_properties(on)["replaygain-clip"] is False
+    assert filter_chain(on)[-1].startswith("lavfi=[alimiter=")
+    assert "level=disabled" in filter_chain(on)[-1]
+    # Without ReplayGain there is nothing to raise by.
+    without = PlayerOptions(replaygain="no", quiet_boost=True)
+    assert filter_chain(without) == []
+    assert mpv_properties(without)["replaygain-clip"] is True
+
+
+def test_api_imports_and_exports_a_filter_list():
+    api = _api()
+    fakes: list[FakeMPV] = []
+    _fake_backed(api, fakes)
+    res = api.native_player_eq_import(AUTOEQ)
+    assert res["status"] == "ok" and res["imported"] == 4
+    assert res["options"]["eq_enabled"] is True
+    assert res["options"]["eq_mode"] == "parametric"
+    assert api.native_player_eq_export()["text"].startswith("Preamp: -6.4 dB\n")
+    assert api.native_player_eq_import("hello")["status"] == "error"
+    assert api.native_player_eq_import(None)["status"] == "error"
+    api._close_native_player()
+    assert _api(window=False).native_player_eq_export()["status"] == "unavailable"
 
 
 def test_bitstream_codecs():
@@ -408,6 +533,7 @@ def test_commands():
     assert fake.pause is True
     player.command("play")
     assert fake.pause is False
+    fake.event(event="file-loaded")
     player.command("seek", 12.5)
     assert fake.commands[-1] == ("seek", 12.5, "absolute", "exact")
     player.command("volume", 0.4)
@@ -744,6 +870,19 @@ def test_real_mpv_accepts_every_filter(tmp_path):
                 }
             )
             assert player.stats()["filters"] == ["lavfi", "lavfi", "lavfi"]
+        _, filters = parse_filter_list(AUTOEQ)
+        player.set_options(
+            {
+                "eq_mode": "parametric",
+                "eq_preamp": -6.4,
+                "eq_filters": filters,
+                "upmix": False,
+                "normalize": "off",
+                "replaygain": "track",
+                "quiet_boost": True,
+            }
+        )
+        assert player.stats()["filters"] == ["lavfi", "lavfi"]
         assert not [e for e in events if e["type"] == "warning"]
     finally:
         player.close()
@@ -760,3 +899,22 @@ def test_real_mpv_reports_a_broken_file(tmp_path):
         assert wait_for(events, "error", 5)
     finally:
         player.close()
+
+
+def test_a_seek_while_the_file_opens_waits_for_it():
+    # mpv refuses a seek until the file is open ("Error running mpv
+    # command", -12); on a network share the page's first seek lands there.
+    player, _events, fakes = make_player()
+    player.load("/m/a.flac")
+    fake = fakes[0]
+    player.command("seek", 42.0)
+    assert ("seek", 42.0, "absolute", "exact") not in fake.commands
+    fake.event(event="file-loaded")
+    import time as _t
+
+    for _ in range(50):
+        if ("seek", 42.0, "absolute", "exact") in fake.commands:
+            break
+        _t.sleep(0.02)
+    assert ("seek", 42.0, "absolute", "exact") in fake.commands
+    player.close()

@@ -15,6 +15,8 @@ var _accent = document.documentElement.getAttribute('data-accent');
 if (_accent) document.body.setAttribute('data-accent', _accent);
 var _density = document.documentElement.getAttribute('data-density');
 if (_density) document.body.setAttribute('data-density', _density);
+var _style = document.documentElement.getAttribute('data-style');
+if (_style) document.body.setAttribute('data-style', _style);
 // Sidebar collapsed or labelled (toggleSidebar in app.js), before paint so
 // the content does not jump sideways once the app has loaded.
 try {

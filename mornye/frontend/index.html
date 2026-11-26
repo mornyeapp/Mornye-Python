@@ -73,6 +73,12 @@
       <span class="sb-name">Mornye</span>
       <span id="sb-version" class="sb-version clickable-version" role="link" tabindex="0" data-activate data-onclick="openReleasePage()" title="Latest release on PyPI">v...</span>
     </div>
+    <!-- The music look's search field (.m-only: hidden in the console look):
+         a button that opens Home in search mode, see musicSearch(). -->
+    <button class="nav-btn m-only m-search" type="button" data-onclick="musicSearch()" title="Search" data-label="Search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <span class="nav-label">Search</span>
+    </button>
     <div class="sb-group">Discover</div>
     <button class="nav-btn active" id="nav-home"     data-onclick="switchView('home')"     title="Home" data-label="Home">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V21H15v-5h-6v5H3z"/></svg>
@@ -178,9 +184,32 @@
         </div>
       </div>
       
+      <!-- The music look's page title, with the feed's source picker beside
+           it (mountHomeFeed moves #explore-source into #m-feed-slot). -->
+      <div class="m-only m-home-head">
+        <!-- The personal Home's greeting (renderPersonalHome) and, under it,
+             what arrived since the last visit and what is downloading. -->
+        <div class="m-home-greet">
+          <h1 id="m-home-title">Home</h1>
+          <p id="m-home-status" class="m-home-status hidden" role="status"></p>
+        </div>
+        <!-- On the right, beside the feed's source: Edit Home is a page
+             action, not part of the title. -->
+        <div class="m-home-actions">
+          <label class="m-feed-pick"><span>Recommendations from</span><span id="m-feed-slot"></span></label>
+          <button type="button" id="m-home-edit" class="m-home-link" data-onclick="openEditHome()" title="Reorder or hide Home's sections">Edit Home</button>
+        </div>
+      </div>
       <div id="search-bar">
         <div class="search-container">
           <div class="mode-wrap">
+            <!-- The music look's Link / Search / CSV segmented control; the
+                 console look keeps the toggle and the CSV button below. -->
+            <div class="m-only m-seg" role="group" aria-label="What to fetch">
+              <button type="button" data-mode="link" data-onclick="setSearchModeTo('link')">Link</button>
+              <button type="button" data-mode="search" data-onclick="setSearchModeTo('search')">Search</button>
+              <button type="button" data-onclick="openCsvPicker()">CSV</button>
+            </div>
             <!-- Both icons ship in the markup and CSS shows the one matching
                  the current mode, keyed off the .active class the toggle
                  already carries (see .mode-btn.active in css/views/home.css). That
@@ -237,6 +266,7 @@
             </span>
           </button>
           <button id="fetchBtn" data-onclick="onFetch()" title="Fetch" aria-label="Fetch">
+            <span class="m-only m-fetch-label">Fetch</span>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
         </div>
@@ -365,6 +395,13 @@
 
           </div> 
           <div id="recent-wrap">
+            <!-- The music look's "Recently Added": the latest downloaded
+                 songs (renderMusicRecentSongs), placed after the feed's
+                 first shelf once the feed is drawn. -->
+            <section id="m-recent-songs" class="m-only m-shelf hidden" aria-label="Recently added songs">
+              <h3 class="explore-section-title m-shelf-link" role="link" tabindex="0" data-activate data-onclick="switchView('history')">Recently Added</h3>
+              <div id="m-recent-songs-grid" class="m-songs"></div>
+            </section>
             <div class="recent-container">
               <div class="recent-label">Recent fetches</div>
               <div id="recent-grid"></div>
@@ -374,15 +411,19 @@
     </div>
     <div class="view" id="view-explore">
       <div class="explore-container u-p-20 u-oy-auto u-h-100pct">
-        <div class="u-items-center u-justify-space-between u-gap-12 u-mb-24 u-wrap-wrap" style="display:flex;">
-          <h2 class="u-m-0 u-fs-28" id="explore-greeting">Explore</h2>
-          <label class="s-label u-items-center u-gap-8" style="display:flex;">Feed
-            <select id="explore-source" data-onchange="setExploreSource(this.value)" title="Where the feed comes from">
-              <option value="spotify">Spotify</option>
-            </select>
-          </label>
+        <!-- #explore-feed moves into Home's #recent-wrap in the music look
+             (mountHomeFeed in app.js) and back here in the console look. -->
+        <div id="explore-feed">
+          <div class="explore-head u-items-center u-justify-space-between u-gap-12 u-mb-24 u-wrap-wrap" style="display:flex;">
+            <h2 class="u-m-0 u-fs-28" id="explore-greeting">Explore</h2>
+            <label class="s-label u-items-center u-gap-8" style="display:flex;"><span class="explore-feed-label">Feed</span>
+              <select id="explore-source" data-onchange="setExploreSource(this.value)" title="Where the feed comes from">
+                <option value="spotify">Spotify</option>
+              </select>
+            </label>
+          </div>
+          <div id="explore-sections"></div>
         </div>
-        <div id="explore-sections"></div>
       </div>
     </div>
     <div class="view" id="view-logs">
@@ -411,6 +452,7 @@
         <div class="player-heading">
           <h1 id="player-title">Player</h1>
           <p>Browse and play music from your local library.</p>
+          <p class="m-only" id="player-msub"></p>
         </div>
       </div>
       <div class="s-body" id="player-body">
@@ -437,12 +479,16 @@
         </div>
         <div class="player-playlist-tools hidden" id="player-playlist-tools">
           <button class="act-btn primary" type="button" data-onclick="openPlayerPlaylistEditor()">New playlist</button>
-          <button class="act-btn secondary" type="button" data-onclick="openPlayerPlaylistImport()">Import M3U/M3U8</button>
-          <label for="player-playlist-url">Playlist link</label>
-          <input type="url" id="player-playlist-url" placeholder="Paste an M3U/M3U8 link"
-                 data-onkeydown="if(event.key==='Enter') importPlayerPlaylistFromUrl()">
-          <button class="act-btn secondary" type="button" id="player-playlist-url-import"
-                  data-onclick="importPlayerPlaylistFromUrl()">Import link</button>
+          <button class="act-btn secondary" type="button" data-onclick="openPlayerPlaylistImport()">Import File…</button>
+          <!-- One field: a link icon, the URL, and its Import button inside it. -->
+          <div class="ppt-link" role="group" aria-label="Import a playlist from a link">
+            <svg class="ppt-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
+            <label for="player-playlist-url" class="ppt-link-label">Playlist link</label>
+            <input type="url" id="player-playlist-url" placeholder="Paste an M3U or M3U8 link to import it" autocomplete="off" spellcheck="false"
+                   data-onkeydown="if(event.key==='Enter') importPlayerPlaylistFromUrl()">
+            <button class="ppt-link-go" type="button" id="player-playlist-url-import"
+                    data-onclick="importPlayerPlaylistFromUrl()">Import</button>
+          </div>
           <input type="file" id="player-playlist-file" accept=".m3u,.m3u8,audio/x-mpegurl,audio/mpegurl" class="hidden"
                  data-onchange="onPlayerPlaylistFileChosen(this)">
         </div>
@@ -483,7 +529,7 @@
           <div class="pt-row">
             <div class="pt-group" id="player-play-controls" role="group" aria-label="Playback">
               <button class="pt-btn primary" type="button" data-onclick="playAllFromLibrary(false)">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Play all</button>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Play<span class="m-hide">&nbsp;all</span></button>
               <button class="pt-btn" type="button" data-onclick="playAllFromLibrary(true)">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>Shuffle</button>
             </div>
@@ -508,7 +554,7 @@
             <span id="player-count" class="player-count"></span>
           </div>
           <div class="pt-colhead" id="player-colhead" aria-hidden="true">
-            <span class="c-num">#</span><span></span><span>Title</span><span class="c-dur">Time</span><span class="c-fmt">Format</span>
+            <span class="c-num">#</span><span class="c-art"></span><span class="c-title">Title</span><span class="m-only c-artist">Artist</span><span class="m-only c-album">Album</span><span class="c-dur">Time</span><span class="c-fmt">Format</span>
           </div>
         </div>
         <div class="player-scroll" id="player-scroll">
@@ -534,6 +580,12 @@
             <input type="text" id="player-playlist-name" maxlength="120" placeholder="Playlist name">
             <label for="player-playlist-description">Description</label>
             <textarea id="player-playlist-description" maxlength="2000" rows="4" placeholder="Add a description (optional)"></textarea>
+            <div id="player-playlist-source-field" class="hidden">
+              <label for="player-playlist-source">Original playlist link</label>
+              <input type="text" id="player-playlist-source" inputmode="url" maxlength="2048" autocomplete="off" spellcheck="false"
+                     placeholder="https://… (optional)">
+              <p class="player-playlist-source-hint">Songs added to that playlist are added here too.</p>
+            </div>
             <div class="player-playlist-cover-edit">
               <img id="player-playlist-cover-preview" alt="Playlist cover preview" class="hidden">
               <span id="player-playlist-cover-placeholder">No cover image</span>
@@ -555,7 +607,8 @@
 
     <div class="view" id="view-local">
       <div class="s-header">
-        <h1>Local Auto-Tagger</h1>
+        <h1><span class="m-hide">Local Auto-Tagger</span><span class="m-only m-alt">Fix Local Files</span></h1>
+        <p class="m-only m-sub">Match your files against the catalogue and rewrite their tags.</p>
         <div class="s-actions">
           <button class="act-btn secondary" data-onclick="startDedupScan()" id="btn-scan-dedup" title="Find files that are the same recording by acoustic fingerprint, independent of tags/ISRC">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3z"/><path d="M20 20l-2.5-2.5"/></svg>
@@ -716,6 +769,7 @@
     <div class="view" id="view-following">
       <div class="s-header">
         <h1>Following</h1>
+        <p class="m-only m-sub">Mornye checks the artists and playlists you follow and downloads what is new.</p>
         <div class="s-actions">
           <button class="act-btn secondary" type="button" data-onclick="checkSubscriptions(false)">Check for new</button>
           <button class="act-btn primary" type="button" data-onclick="checkSubscriptions(true)">Check &amp; download</button>
@@ -737,7 +791,7 @@
           <div class="u-fs-12 u-c-muted" id="weekly-status"></div>
           <div class="u-dir-column u-gap-6 u-mt-8" id="weekly-list" style="display:flex;"></div>
         </div>
-        <div class="s-section">
+        <div class="s-section m-follow-card">
           <div class="s-title">Follow an artist or a playlist</div>
           <p class="u-fs-12 u-c-muted u-m-n4-0-12 u-lh-1_6">
             Paste a Spotify artist or playlist link. What already exists is recorded
@@ -761,7 +815,8 @@
             <select class="u-maxw-170" id="subscription-interval" title="Check automatically and download what is new"></select>
             <button class="act-btn secondary u-p-8-16 u-fs-12 u-ws-nowrap" type="button" data-onclick="addSubscription()">Follow</button>
           </div>
-          <div class="bulk-follow">
+          <button type="button" class="m-only m-bulk-toggle" data-onclick="toggleBulkFollow()" aria-expanded="false" aria-controls="m-bulk-follow">Follow several artists at once…</button>
+          <div class="bulk-follow" id="m-bulk-follow">
             <label for="subscription-bulk-input" class="field-label">Follow several artists at once</label>
             <p class="field-hint">One artist link per line, or separate them with commas.</p>
             <textarea id="subscription-bulk-input" class="field-textarea" rows="4"
@@ -780,7 +835,7 @@
           </div>
         </div>
 
-        <div class="s-section">
+        <div class="s-section m-followed">
           <div class="s-title">Followed artists &amp; playlists</div>
           <div id="subscription-list" class="sort-list u-mt-4">
             <div class="s-label u-fs-11_5">Loading…</div>
@@ -796,7 +851,8 @@
 
     <div class="view" id="view-stats">
       <div class="s-header">
-        <h1>Your library</h1>
+        <h1><span class="m-hide">Your library</span><span class="m-only m-alt">Stats</span></h1>
+        <p class="m-only m-sub">Your library</p>
         <div class="s-actions stats-actions">
           <div class="stats-smb-controls">
             <select id="stats-smb-destination" aria-label="Network library destination" title="Saved network library">
@@ -817,6 +873,15 @@
         </div>
       </div>
       <div class="s-body">
+        <!-- Library: the download log and the Player library (get_stats).
+             Listening: the listener profile read from what the Player has
+             played (get_listener_profile, core/listener_profile.py). -->
+        <div class="seg-tabs stats-tabs" role="tablist" aria-label="Stats">
+          <button type="button" class="seg-tab active" data-stats-tab="library" data-onclick="setStatsTab('library')" role="tab" aria-selected="true"><span>Library</span></button>
+          <button type="button" class="seg-tab" data-stats-tab="listening" data-onclick="setStatsTab('listening')" role="tab" aria-selected="false"><span>Listening</span></button>
+        </div>
+        <div id="profile-body" class="hidden" role="tabpanel" aria-label="Listener profile"></div>
+        <div id="stats-library-panel" role="tabpanel" aria-label="Library">
         <p class="stats-intro">
           Counts include downloaded audio files still present at their saved locations. Refresh
           checks the files again; removed files leave these totals without erasing download history.
@@ -825,6 +890,7 @@
         <div id="stats-smb-status" class="stats-smb-status hidden" role="status" aria-live="polite"></div>
         <div id="stats-body">
           <div class="s-label u-fs-11_5">Loading…</div>
+        </div>
         </div>
       </div>
     </div>
@@ -892,12 +958,25 @@
               </select>
             </div>
             <div class="s-row">
-              <span class="s-label">Accent Color<small>The signal colour: focus, selection, the primary action. Default: Amber</small></span>
+              <span class="s-label">Accent Color<small>The signal colour: focus, selection, the primary action. <span class="m-hide">Default: Amber</span><span class="m-only m-alt">Default: the first swatch</span></small></span>
               <div class="accent-picker">
                 <!-- A swatch of the current accent next to the select: the
                      names alone ("Cyan" vs "Blue") don't tell you what you
                      are choosing until you have chosen it. Painted from
                      --accent itself, so it is always the real colour. -->
+                <!-- The music look's colour swatches; each sets #config-accent
+                     (pickAccent in app.js). "Default" is the look's own red. -->
+                <div class="m-only m-swatches" role="radiogroup" aria-label="Accent colour">
+                  <button type="button" role="radio" data-a="amber" title="Default" data-onclick="pickAccent('amber')"></button>
+                  <button type="button" role="radio" data-a="orange" title="Orange" data-onclick="pickAccent('orange')"></button>
+                  <button type="button" role="radio" data-a="green" title="Green" data-onclick="pickAccent('green')"></button>
+                  <button type="button" role="radio" data-a="teal" title="Teal" data-onclick="pickAccent('teal')"></button>
+                  <button type="button" role="radio" data-a="cyan" title="Cyan" data-onclick="pickAccent('cyan')"></button>
+                  <button type="button" role="radio" data-a="blue" title="Blue" data-onclick="pickAccent('blue')"></button>
+                  <button type="button" role="radio" data-a="purple" title="Purple" data-onclick="pickAccent('purple')"></button>
+                  <button type="button" role="radio" data-a="pink" title="Pink" data-onclick="pickAccent('pink')"></button>
+                  <button type="button" role="radio" data-a="red" title="Red" data-onclick="pickAccent('red')"></button>
+                </div>
                 <span class="accent-dot" aria-hidden="true"></span>
                 <select id="config-accent" data-onchange="changeAccent()">
                   <option value="amber" selected>Amber</option>
@@ -912,13 +991,24 @@
                 </select>
               </div>
             </div>
+            <!-- The console look, or the music-app look (css/music-tokens.css,
+                 css/music.css). See applyStyle() in app.js. -->
+            <div class="s-row">
+              <span class="s-label">Interface Style<small>Console is the monospace look; Music is a music-app look with the recommendations on Home</small></span>
+              <select id="config-style" data-onchange="changeStyle()">
+                <option value="console" selected>Console</option>
+                <option value="music">Music</option>
+              </select>
+            </div>
             <!-- N4: rows and gaps; compact shrinks the spacing tokens a step. -->
             <div class="s-row">
               <span class="s-label">Density<small>Compact fits more rows on screen; Large makes everything bigger</small></span>
               <select id="config-density" data-onchange="changeDensity()">
-                <option value="compact">Compact</option>
-                <option value="comfortable" selected>Comfortable</option>
-                <option value="large">Large</option>
+                <option value="extra-compact">Extra Compact (80%)</option>
+                <option value="compact">Compact (90%)</option>
+                <option value="comfortable" selected>Comfortable (100%)</option>
+                <option value="large">Large (115%)</option>
+                <option value="extra-large">Extra Large (130%)</option>
               </select>
             </div>
             <div class="s-row">
@@ -965,6 +1055,29 @@
                 <option value="INFO">Standard (INFO)</option>
                 <option value="DEBUG">Verbose (DEBUG)</option>
               </select>
+            </div>
+            <!-- The music look has no Logs entry in the sidebar; it opens
+                 from here. -->
+            <div class="s-row m-only m-logs-row">
+              <span class="s-label">Terminal Logs<small>Everything Mornye has printed this session</small></span>
+              <button type="button" class="act-btn secondary" data-onclick="switchView('logs')">Open Logs…</button>
+            </div>
+          </div>
+          <!-- Storage & memory (api_mixins/storage.py): what Mornye keeps on
+               disk and holds in RAM; only regenerable caches can be cleared. -->
+          <div class="s-section" id="storage-section">
+            <div class="s-title">Storage &amp; Memory</div>
+            <div class="s-row">
+              <span class="s-label">Memory in use<small id="storage-mem-detail">Mornye and the helpers it started</small></span>
+              <span id="storage-mem-total" class="u-fw-600 u-fs-13">—</span>
+            </div>
+            <div id="storage-list"></div>
+            <div class="s-row">
+              <span class="s-label">Caches<small id="storage-summary">Clearing only removes what Mornye can fetch or rebuild again.</small></span>
+              <div class="storage-actions">
+                <button type="button" class="act-btn secondary" data-onclick="loadStorageUsage()">Refresh</button>
+                <button type="button" class="act-btn secondary" id="storage-clear-all" data-onclick="clearStorage('all')">Clear All Caches</button>
+              </div>
             </div>
           </div>
         </div>
@@ -1054,24 +1167,36 @@
               <a class="u-c-accent" href="https://github.com/binimum/hifi-api" target="_blank" rel="noopener">hifi-api</a>
               compatible server, Qobuz a
               <a class="u-c-accent" href="https://github.com/BartolomeoRusso9/qobuz-rest-api" target="_blank" rel="noopener">qobuz-rest-api</a>
+              compatible one, Amazon an
+              <a class="u-c-accent" href="https://github.com/AmineSoukara/amazon-music" target="_blank" rel="noopener">amazon-music</a>
               compatible one. A server on this machine or your LAN
               (<code>http://192.168.1.10:8000</code>) is allowed for that address only.
             </p>
             <div class="s-row">
               <span class="s-label">Tidal endpoint<small id="ce-tidal-note">tidal-web</small></span>
-              <input style="flex:1 1 220px;min-width:180px;max-width:320px;" type="text" class="full" id="ce-tidal" placeholder="http://192.168.1.10:8000">
+              <input type="text" class="full" id="ce-tidal" placeholder="http://192.168.1.10:8000">
               <button class="act-btn secondary u-p-6-14 u-fs-12" type="button" id="ce-tidal-test" data-onclick="testCustomEndpoint('tidal')">Test</button>
             </div>
             <div class="ce-result" id="ce-tidal-result" role="status" aria-live="polite" hidden></div>
             <div class="s-row">
               <span class="s-label">Qobuz endpoint<small id="ce-qobuz-note">qobuz-web</small></span>
-              <input style="flex:1 1 220px;min-width:180px;max-width:320px;" type="text" class="full" id="ce-qobuz" placeholder="http://127.0.0.1:8000">
+              <input type="text" class="full" id="ce-qobuz" placeholder="http://127.0.0.1:8000">
               <button class="act-btn secondary u-p-6-14 u-fs-12" type="button" id="ce-qobuz-test" data-onclick="testCustomEndpoint('qobuz')">Test</button>
             </div>
             <div class="ce-result" id="ce-qobuz-result" role="status" aria-live="polite" hidden></div>
             <div class="s-row">
               <span class="s-label">Qobuz API key<small>Sent as X-API-Key; leave empty to keep the saved one</small></span>
-              <input style="flex:1 1 220px;min-width:180px;max-width:320px;" type="password" class="full" id="ce-qobuz-key" autocomplete="off" placeholder="Not set">
+              <input type="password" class="full" id="ce-qobuz-key" autocomplete="off" placeholder="Not set">
+            </div>
+            <div class="s-row">
+              <span class="s-label">Amazon endpoint<small id="ce-amazon-note">amazon</small></span>
+              <input type="text" class="full" id="ce-amazon" placeholder="http://127.0.0.1:8000">
+              <button class="act-btn secondary u-p-6-14 u-fs-12" type="button" id="ce-amazon-test" data-onclick="testCustomEndpoint('amazon')">Test</button>
+            </div>
+            <div class="ce-result" id="ce-amazon-result" role="status" aria-live="polite" hidden></div>
+            <div class="s-row">
+              <span class="s-label">Amazon session token<small>The server's session JWT, sent as Bearer; leave empty to keep the saved one</small></span>
+              <input type="password" class="full" id="ce-amazon-key" autocomplete="off" placeholder="Not set">
             </div>
             <div class="s-row u-items-stretch u-gap-8">
               <button class="act-btn u-p-8-16 u-fs-12" type="button" id="ce-save" data-onclick="saveCustomEndpoints()">Save endpoints</button>
@@ -1467,7 +1592,6 @@
             </div>
             <div id="status-services-grid" class="status-grid"></div>
           </div>
-          <div id="hc-results"></div>
         </div>
 
         <div class="tc" id="tc-player" data-title="Player">
@@ -1568,14 +1692,25 @@
                 <option value="loudnorm">Loudness, EBU R128 (loudnorm)</option>
               </select>
             </div>
+            <div class="s-row">
+              <span class="s-label">Turn quiet songs up<small>ReplayGain then raises songs mastered quietly too, not only lowers loud ones; a limiter holds back their loudest moments. Needs ReplayGain on.</small></span>
+              <label class="toggle"><input type="checkbox" id="np-opt-quiet_boost" data-np-opt="quiet_boost"><span class="toggle-sl"></span></label>
+            </div>
           </div>
           <div class="s-section np-native-only">
             <div class="s-title">Equalizer</div>
             <div class="s-row">
-              <span class="s-label">Equalizer<small>Ten bands; the signal is lowered by the largest boost so it cannot clip. Not applied to a bitstreamed format.</small></span>
+              <span class="s-label">Equalizer<small>Not applied to a bitstreamed format.</small></span>
               <label class="toggle"><input type="checkbox" id="np-opt-eq_enabled" data-np-opt="eq_enabled"><span class="toggle-sl"></span></label>
             </div>
             <div class="s-row">
+              <span class="s-label">Mode<small id="np-eq-mode-hint">Graphic: ten bands, lowered by the largest boost so they cannot clip.</small></span>
+              <select id="np-opt-eq_mode" data-np-opt="eq_mode">
+                <option value="graphic">Graphic</option>
+                <option value="parametric">Parametric</option>
+              </select>
+            </div>
+            <div class="s-row np-eq-graphic">
               <span class="s-label">Preset</span>
               <select id="np-opt-eq_preset" data-np-opt="eq_preset">
                 <option value="flat">Flat</option>
@@ -1589,7 +1724,7 @@
                 <option value="custom">Custom</option>
               </select>
             </div>
-            <div class="np-eq" id="np-eq" role="group" aria-label="Equalizer bands, dB">
+            <div class="np-eq np-eq-graphic" id="np-eq" role="group" aria-label="Equalizer bands, dB">
                 <label class="np-eq-band"><span class="np-eq-track"><input type="range" class="np-eq-slider" min="-12" max="12" step="0.5" value="0" data-band="0" aria-label="31 band"></span><span>31</span></label>
                 <label class="np-eq-band"><span class="np-eq-track"><input type="range" class="np-eq-slider" min="-12" max="12" step="0.5" value="0" data-band="1" aria-label="62 band"></span><span>62</span></label>
                 <label class="np-eq-band"><span class="np-eq-track"><input type="range" class="np-eq-slider" min="-12" max="12" step="0.5" value="0" data-band="2" aria-label="125 band"></span><span>125</span></label>
@@ -1600,6 +1735,117 @@
                 <label class="np-eq-band"><span class="np-eq-track"><input type="range" class="np-eq-slider" min="-12" max="12" step="0.5" value="0" data-band="7" aria-label="4k band"></span><span>4k</span></label>
                 <label class="np-eq-band"><span class="np-eq-track"><input type="range" class="np-eq-slider" min="-12" max="12" step="0.5" value="0" data-band="8" aria-label="8k band"></span><span>8k</span></label>
                 <label class="np-eq-band"><span class="np-eq-track"><input type="range" class="np-eq-slider" min="-12" max="12" step="0.5" value="0" data-band="9" aria-label="16k band"></span><span>16k</span></label>
+            </div>
+            <div class="np-peq np-eq-parametric hidden" id="np-peq">
+              <div class="s-row">
+                <span class="s-label">Preamp<small>Lower it by your largest boost so the filters cannot clip.</small></span>
+                <span class="np-peq-num"><input type="number" id="np-opt-eq_preamp" data-np-opt="eq_preamp" min="-24" max="24" step="0.1" value="0" aria-label="Preamp, dB"> dB</span>
+              </div>
+              <div class="np-peq-head" aria-hidden="true"><span></span><span>Type</span><span>Frequency (Hz)</span><span>Gain (dB)</span><span>Q</span><span></span></div>
+              <div class="np-peq-list" id="np-peq-list" role="group" aria-label="Parametric filters"></div>
+              <div class="np-peq-actions">
+                <button class="act-btn secondary" type="button" id="np-peq-add" data-onclick="npPeqAdd()">Add filter</button>
+                <button class="act-btn secondary" type="button" data-onclick="npPeqExport()">Show filter list</button>
+                <button class="act-btn secondary" type="button" data-onclick="npPeqPickFile()">Load file…</button>
+                <input type="file" id="np-peq-file" accept=".txt,text/plain" class="hidden" data-onchange="npPeqLoadFile(this)">
+              </div>
+              <div class="np-peq-text hidden" id="np-peq-text-wrap">
+                <small>AutoEQ / Equalizer APO format: a <code>Preamp:</code> line and <code>Filter N: ON PK Fc 105 Hz Gain -3.5 dB Q 0.70</code> lines (PK, LSC, HSC).</small>
+                <textarea id="np-peq-text" rows="8" spellcheck="false" aria-label="Filter list"></textarea>
+                <div class="np-peq-actions">
+                  <button class="act-btn" type="button" data-onclick="npPeqApplyText()">Apply list</button>
+                  <button class="act-btn secondary" type="button" data-onclick="npPeqCopy()">Copy</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Mornye Link (api_mixins/link.py, link_server.py): the phone app
+               pairs with a PIN, then browses and plays this library over
+               OpenSubsonic. Drawn by renderLink() in app.js. -->
+          <div class="s-section" id="link-section">
+            <div class="s-title">Mornye Link</div>
+            <div class="s-row">
+              <span class="s-label">Share with the phone app<small>The Mornye app on your phone browses and plays this library over your Wi-Fi, after pairing once with a PIN</small></span>
+              <label class="toggle">
+                <input type="checkbox" id="link-enabled" data-onchange="toggleLink(this.checked)">
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
+            <div class="s-row hidden" id="link-address-row">
+              <span class="s-label">This computer<small id="link-address-hint">If the phone does not find it, add it by address</small></span>
+              <div id="link-address" class="link-address"></div>
+            </div>
+            <div class="s-row hidden" id="link-pair-row">
+              <span class="s-label">Pair a phone<small>In the Mornye app on the phone, pick this computer and type the PIN. Check that the code under it matches.</small></span>
+              <div class="link-pair">
+                <div id="link-pin" class="link-pin hidden" aria-live="polite"></div>
+                <button class="act-btn secondary" type="button" id="link-pair-btn" data-onclick="toggleLinkPairing()">Show PIN</button>
+              </div>
+            </div>
+            <div id="link-devices" class="link-devices hidden"></div>
+            <div id="link-error" class="link-error hidden" role="status"></div>
+          </div>
+          <!-- Mornye Connect (api_mixins/connect.py, core/connect): play on one
+               device, control it from the others. Drawn by loadConnectSettings(). -->
+          <div class="s-section hidden" id="connect-section">
+            <div class="s-title">Mornye Connect</div>
+            <div class="s-row">
+              <span class="s-label">This device's name<small>How it shows in "Play on" on your other devices</small></span>
+              <input type="text" class="full" id="connect-name" maxlength="80" data-onchange="connectSaveName(this.value)">
+            </div>
+            <div class="s-row hidden" id="connect-speaker-row">
+              <span class="s-label">Use the server as a speaker<small id="connect-speaker-hint">The server plays out loud through its own audio output when picked in "Play on". Admins only.</small></span>
+              <label class="toggle">
+                <input type="checkbox" id="connect-speaker" data-onchange="connectToggleSpeaker(this.checked)">
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
+          </div>
+          <!-- Discord Rich Presence (api_mixins/integrations.py). Desktop only;
+               drawn by loadIntegrationSettings(). -->
+          <div class="s-section hidden" id="discord-section">
+            <div class="s-title">Discord</div>
+            <div class="s-row">
+              <span class="s-label">Show what you're listening to<small>"Listening to Mornye" on your Discord profile, with the song, artist and time. The Discord desktop app has to be running on this computer.</small></span>
+              <label class="toggle"><input type="checkbox" id="discord-enabled" data-onchange="saveDiscordPresence('enabled', this.checked)"><span class="toggle-sl"></span></label>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Application ID<small>Create an application in the <a href="#" data-onclick="openServiceUrl('https://discord.com/developers/applications'); return false">Discord Developer Portal</a>: its name is what Discord shows, so call it Mornye. Paste its Application ID here.</small></span>
+              <input type="text" class="full" id="discord-app-id" inputmode="numeric" autocomplete="off" placeholder="e.g. 1234567890123456789" data-onchange="saveDiscordPresence('application_id', this.value)">
+            </div>
+            <div class="s-row">
+              <span class="s-label">Show album art<small>Looked up on Apple Music by artist and album: Discord can only show a picture from a public address, and a cover inside your files is not one.</small></span>
+              <label class="toggle"><input type="checkbox" id="discord-artwork" data-onchange="saveDiscordPresence('show_artwork', this.checked)"><span class="toggle-sl"></span></label>
+            </div>
+            <div class="s-row">
+              <span class="s-label">Status</span>
+              <span class="svc-status" id="discord-status" role="status"><span class="svc-dot"></span><span class="svc-text">Off</span></span>
+            </div>
+          </div>
+          <!-- Last.fm scrobbling (core/scrobbler.py). Desktop only; drawn by
+               loadIntegrationSettings(). The secret is never sent back. -->
+          <div class="s-section hidden" id="lastfm-section">
+            <div class="s-title">Last.fm</div>
+            <div class="s-row">
+              <span class="s-label">Scrobble to Last.fm<small>A song is scrobbled once you have heard half of it or four minutes, and never one under thirty seconds. Scrobbles that cannot be sent are kept and tried again.</small></span>
+              <label class="toggle"><input type="checkbox" id="lastfm-enabled" data-onchange="saveLastFm('enabled', this.checked)"><span class="toggle-sl"></span></label>
+            </div>
+            <div class="s-row">
+              <span class="s-label">API key<small><a href="#" data-onclick="openServiceUrl('https://www.last.fm/api/account/create'); return false">Create an API account</a> on Last.fm (any name will do) and paste its API key and shared secret.</small></span>
+              <input type="text" class="full" id="lastfm-key" autocomplete="off" spellcheck="false" data-onchange="saveLastFm('api_key', this.value)">
+            </div>
+            <div class="s-row">
+              <span class="s-label">Shared secret</span>
+              <input type="password" class="full" id="lastfm-secret" autocomplete="off" placeholder="Not set" data-onchange="saveLastFm('secret', this.value)">
+            </div>
+            <div class="s-row">
+              <span class="s-label">Account<small id="lastfm-pending" class="hidden"></small></span>
+              <div class="svc-actions">
+                <span class="svc-status" id="lastfm-status" role="status"><span class="svc-dot"></span><span class="svc-text">Off</span></span>
+                <button class="act-btn secondary u-p-5-12 u-fs-11_5" type="button" id="lastfm-connect" data-onclick="connectLastFm()">Connect…</button>
+                <button class="act-btn secondary u-p-5-12 u-fs-11_5 hidden" type="button" id="lastfm-disconnect" data-onclick="disconnectLastFm()">Disconnect</button>
+                <button class="act-btn secondary u-p-5-12 u-fs-11_5 hidden" type="button" id="lastfm-retry" data-onclick="retryLastFm()">Retry now</button>
+              </div>
             </div>
           </div>
         </div>
@@ -1723,6 +1969,7 @@
     <div class="view" id="view-queue">
       <div class="s-header">
         <h1>Queue</h1>
+        <p class="m-only m-sub" id="m-queue-sub"></p>
         <div class="s-actions">
           <button class="act-btn secondary" type="button" data-onclick="finishCurrentDownloads()" title="Let the tracks downloading now finish, then stop — nothing else starts">Finish current</button>
           <button class="act-btn secondary" type="button" data-onclick="stopAllDownloads()">Stop all downloads</button>
@@ -2053,6 +2300,14 @@
               <option value="48000">48 kHz</option><option value="44100">44.1 kHz</option>
             </select>
           </div>
+          <!-- The dither a lower bit depth adds (core/transcode.py DITHER_METHODS). -->
+          <div class="u-flex-1">
+            <label class="u-fs-12 u-c-muted" for="convert-dither">Dither type</label>
+            <select class="u-w-100pct u-mt-4" id="convert-dither"
+                    title="Used when the bit depth is lowered. TPDF spreads the added noise evenly across all frequencies; TPDF HP (high-pass) moves it to high frequencies where it is harder to hear.">
+              <option value="tpdf">TPDF</option><option value="tpdf_hp">TPDF HP</option>
+            </select>
+          </div>
         </div>
         <label class="u-gap-8 u-items-center u-fs-12_5" style="display:flex;">
           <input type="checkbox" id="convert-keep"> Keep the original files
@@ -2183,6 +2438,9 @@
 
 <div id="player-bar" class="hidden" role="region" aria-label="Player">
   <audio id="player-audio" preload="metadata"></audio>
+  <!-- Mornye Connect / cast: where the music is playing, when that is not
+       here (castButtonsShow in app.js). A click opens "Play on". -->
+  <button type="button" id="connect-banner" class="connect-banner hidden" data-onclick="connectOpenPicker()" aria-haspopup="menu" title="Choose where to play"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="12" height="10" rx="1.5"/><path d="M5.5 18h5"/><path d="M8 14v4"/><rect x="16" y="7" width="6" height="13" rx="1.5"/><circle cx="19" cy="15.5" r="1.6"/></svg><span id="connect-banner-text"></span></button>
   <div class="pl-info u-cursor-pointer" role="button" tabindex="0" data-activate data-onclick="openNowPlaying()" title="Open the full player">
     <span id="pl-artwork" class="pl-artwork" aria-hidden="true">
       <img id="pl-cover" alt="">
@@ -2209,10 +2467,32 @@
     <input type="range" id="pl-seek" class="am-range" min="0" max="1000" value="0" aria-label="Seek">
     <span id="pl-dur" class="pl-time">0:00</span>
   </div>
+  <!-- Music look only (.m-only): Lyrics and Queue open Now Playing on that pane; the speaker marks the volume. -->
+  <button type="button" class="pl-btn m-only" id="pl-lyrics-btn" data-onclick="openNowPlaying(); npShow('lyrics')" aria-label="Lyrics" title="Lyrics"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/></svg></button>
+  <button type="button" class="pl-btn m-only" id="pl-queue-btn" data-onclick="openNowPlaying(); npShow('queue')" aria-label="Up next" title="Up next"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg></button>
+  <svg class="pl-vol-icon m-only" width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
   <input type="range" id="pl-vol" class="pl-vol am-range" min="0" max="100" value="100" aria-label="Volume">
+  <!-- Play on a DLNA/UPnP or FCast receiver (openCastPicker; desktop only). -->
+  <button type="button" class="pl-btn cast-btn hidden" id="pl-cast-btn" aria-haspopup="menu" aria-label="Play on another device" title="Play on another device"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="12" height="10" rx="1.5"/><path d="M5.5 18h5"/><path d="M8 14v4"/><rect x="16" y="7" width="6" height="13" rx="1.5"/><circle cx="19" cy="15.5" r="1.6"/><line x1="19" y1="10.4" x2="19.01" y2="10.4"/></svg></button>
   <button type="button" class="pl-btn" id="pl-stats-btn" data-onclick="openPlayerStats()" aria-label="Playback statistics" title="Playback statistics (I)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></button>
   <button type="button" class="pl-btn" data-onclick="openNowPlaying()" aria-label="Open the full player" title="Open the full player"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>
   <button type="button" class="pl-btn" data-onclick="closePlayer()" aria-label="Close player">✕</button>
+</div>
+
+<!-- Edit Home: the personal Home's sections, in order, each shown or not
+     (core/personal_home.py; Finish your collection and On repeat ship off). -->
+<div id="home-edit-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="home-edit-title">
+  <div class="modal-content home-edit">
+    <div class="modal-header">
+      <h2 id="home-edit-title">Edit Home</h2>
+      <button type="button" class="modal-close" data-onclick="closeEditHome()" aria-label="Close">×</button>
+    </div>
+    <ul id="home-edit-list" class="home-edit-list"></ul>
+    <div class="modal-footer">
+      <button type="button" class="act-btn secondary" data-onclick="resetEditHome()">Reset</button>
+      <button type="button" class="act-btn primary" data-onclick="saveEditHome()">Done</button>
+    </div>
+  </div>
 </div>
 
 <div id="player-stats-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="player-stats-title">
@@ -2233,6 +2513,8 @@
   <div class="np-drag pywebview-drag-region" aria-hidden="true"></div>
   <button type="button" class="np-close" data-onclick="closeNowPlaying()" aria-label="Back to the library">✕</button>
   <div class="np-volume">
+    <!-- Play on another device (Mornye Connect) or a DLNA/FCast receiver, as in the player bar. -->
+    <button type="button" class="np-cast cast-btn hidden" id="np-cast-btn" aria-haspopup="menu" aria-label="Play on another device" title="Play on another device"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="12" height="10" rx="1.5"/><path d="M5.5 18h5"/><path d="M8 14v4"/><rect x="16" y="7" width="6" height="13" rx="1.5"/><circle cx="19" cy="15.5" r="1.6"/><line x1="19" y1="10.4" x2="19.01" y2="10.4"/></svg></button>
     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9z"/></svg>
     <input type="range" id="np-vol" class="am-range" min="0" max="100" value="100" aria-label="Volume">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg>
@@ -2242,6 +2524,7 @@
     <div class="np-meta">
       <div class="np-title-row"><span id="np-title" class="np-title"></span><span id="np-explicit" class="np-e hidden">E</span></div>
       <div id="np-artist" class="np-artist"></div>
+      <button type="button" class="np-more" id="np-more" data-onclick="npOpenMenu(this)" aria-haspopup="menu" aria-label="More" title="More"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
     </div>
     <div class="np-seek-wrap"><input type="range" id="np-seek" class="np-seek" min="0" max="1000" value="0" aria-label="Seek"></div>
     <div class="np-times"><span id="np-cur">0:00</span><span id="np-tech" class="np-tech" title="Played exactly as stored. Formats the window cannot decode are played as a lossless FLAC copy."></span><span id="np-rem">-0:00</span></div>

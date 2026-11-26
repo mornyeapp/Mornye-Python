@@ -50,11 +50,39 @@ def _decrypt_base64_payload(b64_string: str) -> dict:
     return json.loads(decrypted_bytes.decode("utf-8"))
 
 
+#: Set to 1 to fetch the endpoint list from the cloud again. Off by default:
+#: the published list no longer decrypts (InvalidTag), so every start paid a
+#: request and a warning only to fall back to the local copy anyway.
+CLOUD_ENDPOINTS_ENV = "MORNYE_CLOUD_ENDPOINTS"
+
+
+def _cloud_endpoints_enabled() -> bool:
+    return os.environ.get(CLOUD_ENDPOINTS_ENV, "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _read_local_registry(cache_file_path: str) -> dict:
+    try:
+        if os.path.exists(cache_file_path):
+            with open(cache_file_path) as cache_file:
+                return _decrypt_base64_payload(cache_file.read())
+    except Exception as cache_exc:
+        logger.debug("Unable to read the local endpoint list: %s", cache_exc)
+    return {}
+
+
 def _load_registry() -> dict:
     import tempfile
 
     cache_dir = _cache_dir()
     cache_file_path = _cache_file()
+
+    if not _cloud_endpoints_enabled():
+        return _read_local_registry(cache_file_path)
 
     try:
         fresh_url = f"{_CLOUD_URL}?t={int(time.time())}"
@@ -89,13 +117,7 @@ def _load_registry() -> dict:
             "Unable to contact Cloud servers (%s). Falling back to local cache...",
             str(exc) or type(exc).__name__,
         )
-        try:
-            if os.path.exists(cache_file_path):
-                with open(cache_file_path) as cache_file:
-                    return _decrypt_base64_payload(cache_file.read())
-        except Exception as cache_exc:
-            logger.exception("Unable to read local cache: %s", cache_exc)
-        return {}
+        return _read_local_registry(cache_file_path)
 
 
 _TTL_SECONDS = 3600

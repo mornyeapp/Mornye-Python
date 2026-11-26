@@ -30,11 +30,17 @@ from .api_mixins.discovery import DiscoveryMixin
 from .api_mixins.extension_health import ExtensionHealthMixin
 from .api_mixins.extension_settings import ExtensionSettingsMixin
 from .api_mixins.failed_tracks import FailedTracksMixin
+from .api_mixins.integrations import IntegrationsMixin
 from .api_mixins.library_tools import LibraryToolsMixin
+from .api_mixins.link import LinkMixin
 from .api_mixins.local_tagging import LocalTaggingMixin
 from .api_mixins.player_playlists import PlayerPlaylistsMixin
 from .api_mixins.music_extras import MusicExtrasMixin
 from .api_mixins.native_player import NativePlayerMixin
+from .api_mixins.personal import PersonalMixin
+from .api_mixins.cast import CastMixin
+from .api_mixins.connect import ConnectMixin
+from .api_mixins.storage import StorageMixin
 from .api_mixins.search import SearchMixin
 from .api_mixins.signed_sessions import SignedSessionsMixin
 from .api_mixins.stats import StatsMixin
@@ -275,6 +281,12 @@ class MornyeAPI(
     SignedSessionsMixin,
     QueueHistoryMixin,
     NativePlayerMixin,
+    LinkMixin,
+    PersonalMixin,
+    CastMixin,
+    ConnectMixin,
+    StorageMixin,
+    IntegrationsMixin,
 ):
     """pywebview/`--web` bridge — every method here (plus the two mixins
     above) becomes a callable the frontend invokes as `pywebview.api.<name>`
@@ -434,6 +446,8 @@ class MornyeAPI(
             self._start_subscription_scheduler()
         except Exception as e:
             self.log(f"Could not start the subscription scheduler: {e}", "warn")
+        # Mornye Link (api_mixins/link.py): back on if it was left on.
+        self._link_autostart()
         app_version = self.app_version
         self._push("loadHistoryAndProfiles")
         self._push("__set_version_label", app_version)
@@ -621,6 +635,10 @@ class MornyeAPI(
         artists_data=None,
         artist_concerts=None,
         artist_avatar="",
+        artist_logo="",
+        artist_video="",
+        artist_bg_color="",
+        artist_text_color="",
     ) -> None:
         payload = {
             "title": title,
@@ -654,6 +672,16 @@ class MornyeAPI(
             payload["artist_concerts"] = artist_concerts
         if artist_avatar:
             payload["artist_avatar"] = artist_avatar
+        # Apple Music's artist header: wordmark PNG, motion video and the
+        # colours its preview frame was graded in (hex, no "#").
+        if artist_logo:
+            payload["artist_logo"] = artist_logo
+        if artist_video:
+            payload["artist_video"] = artist_video
+        if artist_bg_color:
+            payload["artist_bg_color"] = artist_bg_color
+        if artist_text_color:
+            payload["artist_text_color"] = artist_text_color
         if release_date:
             payload["release_date"] = release_date
         if track_count is not None:
@@ -717,6 +745,82 @@ class MornyeAPI(
                 except Exception:
                     continue
         return stats_map
+
+    #: At most this many tracks of one non-Spotify list get a playcount
+    #: looked up: two requests each (the ISRC search, then the count), spaced
+    #: by PLAYCOUNT_MIN_INTERVAL_S, so a long artist list stays a few seconds.
+    ISRC_PLAYCOUNT_MAX = 150
+
+    def _start_isrc_playcounts(self, track_data: list, list_id: int) -> None:
+        """Fills the Playcount column of a non-Spotify list (Apple Music and
+        the like) after the table is up.
+
+        Those services publish no play counts. Their tracks carry an ISRC,
+        though, so each one is found on Spotify by `isrc:` search — an
+        identity lookup, never a guess from title and artist — and that
+        recording's count is patched into the row (app_update_playcounts,
+        keyed by the row's own track id). Rows with no ISRC, or not on
+        Spotify, keep "—". Never fatal; a newer list stops the work.
+        """
+        wanted = [
+            (t.get("id"), t.get("isrc"))
+            for t in track_data
+            if t.get("id") and t.get("isrc") and not t.get("playcount")
+        ][: self.ISRC_PLAYCOUNT_MAX]
+        if not wanted:
+            return
+
+        def _work() -> None:
+            try:
+                from .core.spotfetch import SpotifyWebClient
+                from .core.spotify_metadata import SpotifyMetadataClient
+
+                search = SpotifyMetadataClient()
+
+                async def _find_all() -> dict:
+                    found: dict[str, str] = {}
+                    gate = asyncio.Semaphore(4)
+
+                    async def _one(row_id: str, isrc: str) -> None:
+                        async with gate:
+                            if self._tracklist_seq != list_id:
+                                return
+                            try:
+                                hits = await search.search_tracks_async(
+                                    f"isrc:{isrc}", limit=1
+                                )
+                            except Exception:
+                                return
+                            spotify_id = getattr(hits[0], "id", "") if hits else ""
+                            if spotify_id:
+                                found[row_id] = spotify_id
+
+                    await asyncio.gather(*(_one(r, i) for r, i in wanted))
+                    return found
+
+                by_row = run_sync(_find_all())
+                if not by_row or self._tracklist_seq != list_id:
+                    return
+                client = SpotifyWebClient()
+                client.initialize()
+                stats = self._fetch_track_playcounts(client, list(by_row.values()))
+                if self._tracklist_seq != list_id:
+                    return
+                counts = {
+                    row_id: stats[sid].get("playcount", "")
+                    for row_id, sid in by_row.items()
+                    if sid in stats
+                }
+                if counts:
+                    self._push_safe("app_update_playcounts", counts)
+                    self.log(
+                        f"Playcount filled in for {len(counts)} of {len(wanted)} track(s) by ISRC.",
+                        "debug",
+                    )
+            except Exception as e:
+                self.log(f"Playcount unavailable: {e}", "debug")
+
+        threading.Thread(target=_work, daemon=True).start()
 
     # ── Profile & History API ─────────────────────────────────────────────────
 
@@ -812,7 +916,7 @@ class MornyeAPI(
             return {"ok": False, "error": str(e)}
 
     #: Row and gap density of the GUI (N4): frontend/css/layout.css.
-    DENSITIES = ("comfortable", "compact", "large")
+    DENSITIES = ("extra-compact", "compact", "comfortable", "large", "extra-large")
 
     def set_page_zoom(self, factor: float) -> dict:
         """Zoom the whole page natively (the 'large' density).
@@ -852,6 +956,23 @@ class MornyeAPI(
             return {"ok": True, "density": density}
         except Exception as e:
             self.log(f"Failed to save density: {e}", "error")
+            return {"ok": False, "error": str(e)}
+
+    #: The look of the GUI: "console" is the monospace console look,
+    #: "music" the music-app look (frontend/css/music-tokens.css and
+    #: music.css, keyed off data-style="music" on <html> and <body>).
+    STYLES = ("console", "music")
+
+    def save_style(self, style: str) -> dict:
+        """Persists the interface style, same reasoning as save_theme()."""
+        style = str(style or "console")
+        if style not in self.STYLES:
+            return {"ok": False, "error": f"unknown style: {style}"}
+        try:
+            self._update_settings({"style": style})
+            return {"ok": True, "style": style}
+        except Exception as e:
+            self.log(f"Failed to save style: {e}", "error")
             return {"ok": False, "error": str(e)}
 
     def load_settings(self) -> dict:
@@ -1381,6 +1502,37 @@ class MornyeAPI(
         except Exception as e:
             self.log(f"Failed opening config folder: {e}", "error")
 
+    def reveal_in_folder(self, path) -> dict:
+        """Shows a music file selected in the system file manager (Finder,
+        Explorer; on Linux its folder opens).
+
+        Desktop window only: it is left out of the web interface's allowed
+        methods (webapp.py), where it would open a window on the server.
+        Only an existing audio file is accepted, and it is shown, never
+        opened, so nothing the path names can run.
+        """
+        from .core.playlist_sync import AUDIO_EXTENSIONS
+
+        try:
+            p = Path(str(path or "")).expanduser()
+            if not p.is_absolute() or not p.is_file():
+                return {
+                    "ok": False,
+                    "error": "That file is not on this computer any more.",
+                }
+            if p.suffix.lower() not in AUDIO_EXTENSIONS:
+                return {"ok": False, "error": "Only music files can be shown."}
+            if sys.platform == "darwin":
+                subprocess.Popen(["open", "-R", str(p)])
+            elif sys.platform == "win32":
+                subprocess.Popen(["explorer", f"/select,{p}"])
+            else:
+                subprocess.Popen(["xdg-open", str(p.parent)])
+            return {"ok": True}
+        except Exception as e:
+            self.log(f"Failed showing {path}: {e}", "error")
+            return {"ok": False, "error": str(e)}
+
     def open_url(self, url) -> None:
         """Opens an http(s) URL in the user's browser.
 
@@ -1564,6 +1716,20 @@ class MornyeAPI(
             ):
                 playcount_map = {}
 
+            # Apple Music ranks an artist's Top Songs itself (no play counts):
+            # their order, keyed by ISRC and by song id, ranks the rows.
+            top_rank: dict[str, int] = {}
+            for rank, song in enumerate(
+                collection_meta.get("top_songs") or [], start=1
+            ):
+                for key in (
+                    song.get("isrc"),
+                    song.get("id"),
+                    f"apple_{song.get('id')}",
+                ):
+                    if key and key not in top_rank:
+                        top_rank[str(key)] = rank
+
             # ── Enhanced metadata-extraction loop ──
             for i, t in enumerate(tracks):
                 track_id = getattr(t, "id", "")
@@ -1615,6 +1781,21 @@ class MornyeAPI(
                         "external_url": getattr(t, "external_url", ""),
                         "preview_url": getattr(t, "preview_url", ""),
                         "playcount": playcount,
+                        # Apple Music: the album's popularity of the track
+                        # (0-1) and its place among the artist's Top Songs.
+                        "popularity": (getattr(t, "extra_info", None) or {}).get(
+                            "apple_popularity"
+                        ),
+                        "top_rank": top_rank.get(str(getattr(t, "isrc", "") or ""))
+                        or top_rank.get(str(track_id)),
+                        "credits": (getattr(t, "extra_info", None) or {}).get(
+                            "apple_credits"
+                        )
+                        or [],
+                        # Lets an artist page sort its releases into albums,
+                        # singles & EPs, and other artists' releases.
+                        "album_type": getattr(t, "album_type", "") or "",
+                        "album_artist": getattr(t, "album_artist", "") or "",
                         "release_date": getattr(t, "release_date", ""),
                         "copyright": getattr(t, "copyright", ""),
                         # For the album card's technical sheet. Every provider
@@ -1636,11 +1817,42 @@ class MornyeAPI(
                 display_artist = ""
                 display_artist_url = ""
                 display_artists_data: list = []
+            elif is_playlist:
+                # A playlist is by its curator, not by whoever sings its first
+                # track: that put "Justice, Tame Impala, SZA, …" under "Top
+                # 100: Global", as one link that led nowhere.
+                display_title = collection_name
+                display_artist = collection_meta.get("owner", "") or ""
+                display_artist_url = ""
+                display_artists_data = []
             else:
                 display_title = collection_name
                 display_artist = tracks[0].artists if tracks else ""
                 display_artist_url = tracks[0].artist_url if tracks else ""
                 display_artists_data = (tracks[0].artists_data if tracks else []) or []
+                # An album is by its album artist, not by everyone on its
+                # first track: "Babyface Ray, Babyface" headed Babyface Ray's
+                # album because track 1 has a guest. A track link keeps the
+                # track's own credits.
+                is_track_link = len(tracks) == 1 and bool(
+                    re.search(r"(track|song)[:/]|/album/[^?]*[?&]i=\d+", lower_url)
+                )
+                album_artist = (
+                    str(getattr(tracks[0], "album_artist", "") or "") if tracks else ""
+                )
+                owner_names = (
+                    list(getattr(tracks[0], "album_artist_names", None) or [])
+                    if tracks
+                    else []
+                )
+                if album_artist and owner_names and not is_track_link:
+                    owners = {n.lower() for n in owner_names}
+                    display_artist = album_artist
+                    display_artists_data = [
+                        a
+                        for a in display_artists_data
+                        if str(a.get("name", "")).lower() in owners
+                    ]
 
             if is_artist:
                 # The hero is a wide banner, so it takes the artist's header
@@ -1657,6 +1869,10 @@ class MornyeAPI(
                     artist_biography=collection_meta.get("biography", ""),
                     artist_concerts=collection_meta.get("concerts"),
                     artist_avatar=collection_meta.get("avatar") or cover,
+                    artist_logo=collection_meta.get("logo", ""),
+                    artist_video=collection_meta.get("header_video", ""),
+                    artist_bg_color=collection_meta.get("bg_color", ""),
+                    artist_text_color=collection_meta.get("text_color", ""),
                 )
             else:
                 self.set_metadata(
@@ -1682,14 +1898,24 @@ class MornyeAPI(
             self.set_progress("Ready for download.")
 
             try:
+                from urllib.parse import urlparse
+
                 from .core.session_memory import add_url_to_history_async
 
                 _lower = url.lower()
+                # By host, not substring: "music.apple.com" may sit anywhere
+                # in a URL that is not Apple's.
+                _host = (urlparse(_lower).hostname or "") if "://" in _lower else ""
+                _apple = _host == "music.apple.com" or _host.endswith(
+                    ".music.apple.com"
+                )
                 if (
                     "/track/" in _lower
                     or _lower.startswith("spotify:track:")
                     or "watch?v=" in _lower
                     or "youtu.be" in _lower
+                    or (_apple and "/song/" in _lower)
+                    or ("/album/" in _lower and re.search(r"[?&]i=\d+", _lower))
                 ):
                     _url_type = "track"
                 elif "/album/" in _lower or _lower.startswith("spotify:album:"):
@@ -1724,6 +1950,10 @@ class MornyeAPI(
                 )
 
             self._push("showTracklist", track_data)
+            # Apple Music and the other services publish no play counts:
+            # look them up on Spotify by ISRC, behind the table.
+            if not url_host_matches(url, "spotify.com"):
+                self._start_isrc_playcounts(track_data, list_id)
 
         except Exception as e:
             self.log(f"Error fetching metadata: {e!s}", "error")
@@ -2398,13 +2628,7 @@ class MornyeAPI(
                 "spotify",
                 "paxsenix",
             ]
-            enrich_providers = config.get("enrich_providers") or [
-                "deezer",
-                "apple",
-                "qobuz",
-                "tidal",
-                "soundcloud",
-            ]
+            enrich_providers = config.get("enrich_providers") or ["deezer", "apple"]
             from .core.transcode import is_lossless, normalize_transcode_format
 
             # The GUI sends "none" when conversion is disabled

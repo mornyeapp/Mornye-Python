@@ -363,6 +363,8 @@ def test_playlist_methods_are_available_over_both_api_surfaces() -> None:
         "preview_player_playlist_import",
         "import_player_playlist",
         "import_player_playlist_collection",
+        "sync_player_playlist",
+        "set_player_playlist_source",
         "link_player_playlist_tracks",
     )
     assert all(name in ALLOWED_METHODS for name in methods)
@@ -602,3 +604,212 @@ def test_remote_keys_prefer_isrc_then_link_then_tags() -> None:
     assert tagged == player_playlists.remote_key(
         {"title": " a ", "artist": "b", "album": "c"}
     )
+
+
+def _follow_source(monkeypatch, api: _PlaylistApi, listing: list[list[dict]]) -> None:
+    """Serves `listing[0]`, then `listing[1]`… as the provider playlist."""
+    pages = iter(listing)
+
+    def fetch(_url):
+        return {"status": "ok", "name": "Mix", "tracks": next(pages)}
+
+    monkeypatch.setattr(api, "fetch_player_playlist_search_import", fetch)
+
+
+def test_imported_playlist_gets_the_songs_added_to_its_source(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api = _PlaylistApi(tmp_path)
+    first = [
+        _provider("One", "Artist", isrc="AA0000000001"),
+        _provider("Two", "Artist"),
+    ]
+    created = api.import_player_playlist_collection(
+        "Mix", "", "", first, [], "", "https://open.spotify.com/playlist/mix"
+    )["playlist"]
+    assert created["source_url"] == "https://open.spotify.com/playlist/mix"
+    assert created["synced_at"] > 0
+
+    # "Two" is removed here; the source adds "Three" and keeps the others.
+    two = created["tracks"][1]["path"]
+    api.remove_player_playlist_track(created["id"], two)
+    _follow_source(
+        monkeypatch,
+        api,
+        [
+            [*first, _provider("Three", "Artist")],
+            [*first, _provider("Three", "Artist")],
+        ],
+    )
+
+    result = api.sync_player_playlist(created["id"])
+
+    assert result["status"] == "ok", result
+    assert result["added"] == 1
+    assert [t["title"] for t in result["playlist"]["tracks"]] == ["One", "Three"]
+    assert result["playlist"]["tracks"][1]["downloaded"] is False
+
+    again = api.sync_player_playlist(created["id"])
+    assert again["added"] == 0
+    assert [t["title"] for t in again["playlist"]["tracks"]] == ["One", "Three"]
+
+
+def test_sync_does_not_duplicate_a_song_already_linked_to_its_file(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api = _PlaylistApi(tmp_path)
+    local = {**_track(tmp_path / "one.flac", "One", "Artist"), "isrc": "AA0000000001"}
+    song = _provider("One", "Artist", isrc="AA0000000001")
+    created = api.import_player_playlist_collection(
+        "Mix", "", "", [song], [local], "", "https://open.spotify.com/playlist/mix"
+    )["playlist"]
+    # A playlist made before following existed knows none of its songs.
+    from mornye.core import db
+
+    with db.transaction() as conn:
+        conn.execute(
+            "UPDATE player_playlists SET source_keys = '[]' WHERE id = ?",
+            (created["id"],),
+        )
+    _follow_source(monkeypatch, api, [[song]])
+
+    result = api.sync_player_playlist(created["id"])
+
+    assert result["added"] == 0
+    assert [t["downloaded"] for t in result["playlist"]["tracks"]] == [True]
+
+
+def test_only_provider_imports_follow_a_source(tmp_path: Path) -> None:
+    api = _PlaylistApi(tmp_path)
+    plain = api.create_player_playlist("Mine")["playlist"]
+    assert plain["source_url"] == ""
+    assert api.sync_player_playlist(plain["id"])["status"] == "error"
+    assert api.sync_player_playlist("missing")["error"] == "Playlist not found."
+    not_a_link = api.import_player_playlist_collection(
+        "Mix", "", "", [_provider("One", "Artist")], [], "", "file:///etc/passwd"
+    )["playlist"]
+    assert not_a_link["source_url"] == ""
+
+
+def test_a_playlist_imported_earlier_can_follow_its_source(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api = _PlaylistApi(tmp_path)
+    first = [
+        _provider("One", "Artist", isrc="AA0000000001"),
+        _provider("Two", "Artist"),
+    ]
+    # Imported before playlists remembered their link.
+    old = api.import_player_playlist_collection("Mix", "", "", first, [])["playlist"]
+    assert old["source_url"] == ""
+    _follow_source(monkeypatch, api, [[*first, _provider("Three", "Artist")]])
+
+    result = api.set_player_playlist_source(
+        old["id"], "https://open.spotify.com/playlist/mix"
+    )
+
+    assert result["status"] == "ok", result
+    assert result["added"] == 1
+    playlist = result["playlist"]
+    assert playlist["source_url"] == "https://open.spotify.com/playlist/mix"
+    assert [t["title"] for t in playlist["tracks"]] == ["One", "Two", "Three"]
+
+    stopped = api.set_player_playlist_source(old["id"], "")
+    assert stopped["playlist"]["source_url"] == ""
+
+
+def test_a_source_link_that_cannot_be_fetched_is_not_kept(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api = _PlaylistApi(tmp_path)
+    old = api.import_player_playlist_collection(
+        "Mix", "", "", [_provider("One", "Artist")], []
+    )["playlist"]
+    monkeypatch.setattr(
+        api,
+        "fetch_player_playlist_search_import",
+        lambda _url: {"status": "error", "error": "Not a playlist."},
+    )
+
+    assert api.set_player_playlist_source(old["id"], "ftp://x")["status"] == "error"
+    failed = api.set_player_playlist_source(old["id"], "https://example.com/x")
+
+    assert failed == {"status": "error", "error": "Not a playlist."}
+    assert player_playlists.get_playlist(old["id"], "alice")["source_url"] == ""
+
+
+def test_following_a_source_matches_songs_linked_to_files_without_isrc(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The file gave the entry its ISRC; Spotify sends none: still the same song."""
+    api = _PlaylistApi(tmp_path)
+    local = {
+        **_track(tmp_path / "plan.m4a", "God's Plan", "Drake"),
+        "isrc": "USCM51800004",
+    }
+    song = {
+        **_provider("God's Plan", "Drake"),
+        "external_url": "https://open.spotify.com/track/6DC",
+    }
+    old = api.import_player_playlist_collection(
+        "Mix", "", "", [{**song, "isrc": "USCM51800004"}], [local]
+    )["playlist"]
+    assert old["tracks"][0]["downloaded"] is True
+    _follow_source(
+        monkeypatch,
+        api,
+        [
+            [
+                {**song, "external_url": "https://open.spotify.com/track/6DC?si=abc"},
+                _provider("New One", "Drake"),
+            ]
+        ],
+    )
+
+    result = api.set_player_playlist_source(
+        old["id"], "https://open.spotify.com/playlist/mix?si=x"
+    )
+
+    assert result["added"] == 1
+    assert [t["title"] for t in result["playlist"]["tracks"]] == [
+        "God's Plan",
+        "New One",
+    ]
+
+
+def test_a_sync_removes_the_repeats_an_earlier_sync_added(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api = _PlaylistApi(tmp_path)
+    local = {
+        **_track(tmp_path / "plan.m4a", "God's Plan", "Drake"),
+        "isrc": "USCM51800004",
+    }
+    song = {
+        **_provider("God's Plan", "Drake"),
+        "external_url": "https://open.spotify.com/track/6DC",
+    }
+    created = api.import_player_playlist_collection(
+        "Mix",
+        "",
+        "",
+        [{**song, "isrc": "USCM51800004"}],
+        [local],
+        "",
+        "https://open.spotify.com/playlist/mix",
+    )["playlist"]
+    # What the earlier sync left: the same song again, not downloaded.
+    repeat = _remote_track_for_test(song)
+    player_playlists.add_tracks(created["id"], "alice", [repeat])
+    _follow_source(monkeypatch, api, [[song]])
+
+    result = api.sync_player_playlist(created["id"])
+
+    assert (result["added"], result["removed"]) == (0, 1)
+    assert [t["downloaded"] for t in result["playlist"]["tracks"]] == [True]
+
+
+def _remote_track_for_test(item: dict) -> dict:
+    from mornye.api_mixins.player_playlists import _remote_track
+
+    return _remote_track(item)

@@ -115,6 +115,158 @@ def _artwork_url(artwork: Any, size: int = 3000) -> str:
     return rendered.replace("{f}", "jpg")
 
 
+# As music.apple.com's album page: the record label, each track's popularity
+# (the site's "popular" dots) and every song's own artists and composers.
+_ALBUM_PARAMS: dict[str, str] = {
+    "include": "tracks,artists,record-labels",
+    "include[songs]": "artists,composers",
+    "meta[albums:tracks]": "popularity",
+    "fields[record-labels]": "name,url",
+    "extend": "artistUrl,editorialArtwork,editorialVideo,trackCount,upc",
+}
+
+
+def _plain_text(value: Any) -> str:
+    """Apple's notes and biographies are short HTML: text only, paragraphs kept."""
+    if isinstance(value, dict):
+        value = value.get("standard") or value.get("short") or ""
+    text = re.sub(r"<br\s*/?>|</p>", "\n", str(value or ""), flags=re.I)
+    text = re.sub(r"<[^>]+>", "", text)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def _motion_hero(attrs: dict[str, Any]) -> dict[str, str]:
+    """The site's artist header: a 16:9 motion video whose preview frame is
+    the still, and whose bgColor/textColor1 tint the whole page. The
+    catalogue's ``hero`` is only the square portrait again."""
+    video = attrs.get("editorialVideo") or {}
+    for key in ("motionArtistFullscreen16x9", "motionArtistWide16x9"):
+        item = video.get(key) or {}
+        frame = item.get("previewFrame") or {}
+        image = _artwork_url(frame, size=2400)
+        if image:
+            return {
+                "image": image,
+                "video": str(item.get("video") or ""),
+                "bg_color": str(frame.get("bgColor") or ""),
+                "text_color": str(frame.get("textColor1") or ""),
+            }
+    return {}
+
+
+def _logo_url(attrs: dict[str, Any]) -> str:
+    """The artist's wordmark is a transparent PNG; the catalogue's template
+    ends in ``bb.jpg``, which flattens it onto white, so ask for PNG."""
+    art = (attrs.get("editorialArtwork") or {}).get("musicContentColorLogoTrimmed")
+    url = _artwork_url(art, size=1200)
+    return re.sub(r"\.jpg$", ".png", url) if url else ""
+
+
+def _hero_url(attrs: dict[str, Any]) -> str:
+    """The wide picture an artist page opens on (the site's "hero")."""
+    for block in attrs.get("hero") or []:
+        for item in (block or {}).get("content") or []:
+            url = _artwork_url((item or {}).get("artwork"), size=2400)
+            if url:
+                return url
+    return ""
+
+
+def _artist_card(item: dict[str, Any]) -> dict[str, str]:
+    attrs = item.get("attributes") or {}
+    return {
+        "id": str(item.get("id") or ""),
+        "name": str(attrs.get("name") or ""),
+        "url": str(attrs.get("url") or ""),
+        "image": _artwork_url(attrs.get("artwork"), size=600),
+    }
+
+
+def _split_unlinked(text: str) -> list[str]:
+    """Names in a stretch of an Apple credit no linked artist covers: split
+    on "," and "&", except "Tyler, The Creator"-style names, whose second
+    half starts with "The"."""
+    pieces = [p.strip() for p in re.split(r"\s*(?:,|&)\s*", text) if p.strip()]
+    merged: list[str] = []
+    for piece in pieces:
+        if merged and piece.startswith("The ") and f"{merged[-1]}, {piece}" in text:
+            merged[-1] = f"{merged[-1]}, {piece}"
+        else:
+            merged.append(piece)
+    return merged
+
+
+def _artist_credits(joined: str, artist_items: list) -> list[dict[str, str]]:
+    """One {id, name, url} per artist credited in Apple's joined string.
+
+    `artistName` is one string ("Babyface Ray, Babyface", "Justice, SZA &
+    King Gizzard & The Lizard Wizard"); the song's `artists` relationship
+    holds the linked ones, by their exact names. Those names are found in
+    the string first, so a name with an "&" in it stays whole; what is left
+    between them is split on "," and "&" and kept unlinked. The order is
+    the string's. Empty when there is nothing to split.
+    """
+    text = str(joined or "").strip()
+    if not text:
+        return []
+    known = []
+    for artist in artist_items or []:
+        if not isinstance(artist, dict):
+            continue
+        name = str((artist.get("attributes") or {}).get("name") or "").strip()
+        if name:
+            known.append((name, artist))
+    spans: list[tuple[int, int, dict[str, str]]] = []
+    for name, artist in sorted(known, key=lambda k: -len(k[0])):
+        start = text.find(name)
+        while start >= 0 and any(
+            s < start + len(name) and start < e for s, e, _ in spans
+        ):
+            start = text.find(name, start + 1)
+        if start < 0:
+            continue
+        attrs = artist.get("attributes") or {}
+        spans.append(
+            (
+                start,
+                start + len(name),
+                {
+                    "id": str(artist.get("id") or ""),
+                    "name": name,
+                    "url": str(attrs.get("url") or ""),
+                },
+            )
+        )
+    pos = 0
+    out: list[tuple[int, dict[str, str]]] = []
+    for start, end, credit in sorted(spans, key=lambda s: s[0]):
+        gap = text[pos:start]
+        offset = pos
+        for piece in _split_unlinked(gap):
+            piece = piece.strip()
+            if piece:
+                out.append(
+                    (offset + gap.find(piece), {"id": "", "name": piece, "url": ""})
+                )
+        out.append((start, credit))
+        pos = end
+    for piece in _split_unlinked(text[pos:]):
+        piece = piece.strip()
+        if piece:
+            out.append(
+                (pos + text[pos:].find(piece), {"id": "", "name": piece, "url": ""})
+            )
+    credits = [credit for _, credit in sorted(out, key=lambda o: o[0])]
+    seen: set[str] = set()
+    unique = []
+    for credit in credits:
+        key = credit["name"].lower()
+        if key not in seen:
+            seen.add(key)
+            unique.append(credit)
+    return unique
+
+
 def _unique_values(values: Any) -> list[str]:
     """Return trimmed, nonempty strings in order, deduplicated ignoring case."""
     result: list[str] = []
@@ -556,6 +708,11 @@ class AppleMusicMetadataClient:
                 break
 
             next_url = f"https://amp-api.music.apple.com{raw_next}"
+            # Apple's `next` keeps the offset but not the page size: asked
+            # for 100, page two would drop back to the default 25.
+            limit = re.search(r"[?&](limit=\d+)", initial_path)
+            if limit and not re.search(r"[?&]limit=", next_url):
+                next_url += ("&" if "?" in next_url else "?") + limit.group(1)
             await asyncio.sleep(0.3)
 
         return results
@@ -603,6 +760,9 @@ class AppleMusicMetadataClient:
                 f"/{storefront}/albums/{album_id}",
                 {
                     "include": include,
+                    # Each song's own artists, so a guest is a link of
+                    # their own rather than falling back to the album's.
+                    **({"include[songs]": "artists"} if include_tracks else {}),
                     "extend": "artistUrl,editorialArtwork,trackCount,upc",
                 },
             )
@@ -673,8 +833,10 @@ class AppleMusicMetadataClient:
         data = await self._get(
             f"/{storefront}/songs/{track_id}",
             {
-                "include": "albums,artists,composers,genres",
-                "extend": "artistUrl,editorialArtwork,trackCount,upc",
+                # As music.apple.com's song page: credits (performers,
+                # writers, producers) and the lyrics excerpt come with it.
+                "include": "albums,artists,composers,genres,credits",
+                "extend": "artistUrl,editorialArtwork,trackCount,upc,lyricsExcerpt",
             },
         )
         results = data.get("data", [])
@@ -687,11 +849,35 @@ class AppleMusicMetadataClient:
         album = await self._hydrate_album(
             self._album_id_from_song(song), storefront, include_tracks=True
         )
-        return self._cache_set(
-            cache_key,
-            self._parse_item(song, album or _first_relationship_item(song, "albums")),
-            _METADATA_CACHE_TTL_S,
+        track = self._parse_item(
+            song, album or _first_relationship_item(song, "albums")
         )
+        extra = dict(track.extra_info or {})
+        credits = []
+        for group in (song.get("relationships", {}).get("credits", {}) or {}).get(
+            "data"
+        ) or []:
+            people = [
+                {
+                    "name": str((a.get("attributes") or {}).get("name") or ""),
+                    "roles": list((a.get("attributes") or {}).get("roleNames") or []),
+                }
+                for a in (
+                    (group.get("relationships") or {}).get("credit-artists") or {}
+                ).get("data")
+                or []
+            ]
+            title = str((group.get("attributes") or {}).get("title") or "")
+            if title and people:
+                credits.append({"title": title, "artists": people})
+        if credits:
+            extra["apple_credits"] = credits
+        excerpt = (song.get("attributes") or {}).get("lyricsExcerpt")
+        if excerpt:
+            extra["apple_lyrics_excerpt"] = str(excerpt)
+        if extra != (track.extra_info or {}):
+            track = track.model_copy(update={"extra_info": extra})
+        return self._cache_set(cache_key, track, _METADATA_CACHE_TTL_S)
 
     async def get_album_tracks(
         self,
@@ -707,13 +893,7 @@ class AppleMusicMetadataClient:
         cached = self._cache_get(cache_key)
         if cached is not None:
             return cached
-        data = await self._get(
-            f"/{storefront}/albums/{album_id}",
-            {
-                "include": "tracks,artists",
-                "extend": "artistUrl,editorialArtwork,editorialVideo,trackCount,upc",
-            },
-        )
+        data = await self._get(f"/{storefront}/albums/{album_id}", dict(_ALBUM_PARAMS))
         results = data.get("data", [])
         if not results:
             raise MornyeError(
@@ -721,7 +901,66 @@ class AppleMusicMetadataClient:
                 f"Album {album_id} not found.",
             )
 
-        album_data = results[0]
+        result = await self._album_result(results[0])
+        return self._cache_set(cache_key, result, _METADATA_CACHE_TTL_S)
+
+    async def get_albums_tracks(
+        self,
+        album_ids: list[str],
+        storefront: str = "us",
+    ) -> dict[str, tuple[dict[str, Any], list[TrackMetadata]]]:
+        """``get_album_tracks`` for many albums, 50 to a request.
+
+        An artist page reads every release the artist has (21 Savage: ~190):
+        one request each took over ten seconds. The catalogue answers
+        ``/albums?ids=`` with the same resources, tracks included. Albums it
+        leaves out are missing from the result rather than raising.
+        """
+        storefront = self._normalize_storefront(storefront, self._storefront)
+        out: dict[str, tuple[dict[str, Any], list[TrackMetadata]]] = {}
+        todo: list[str] = []
+        for aid in dict.fromkeys(str(a) for a in album_ids if a):
+            cached = self._cache_get(f"album:{storefront}:{aid}")
+            if cached is not None:
+                out[aid] = cached
+            else:
+                todo.append(aid)
+
+        semaphore = asyncio.Semaphore(4)
+
+        async def _chunk(ids: list[str]) -> None:
+            async with semaphore:
+                try:
+                    data = await self._get(
+                        f"/{storefront}/albums",
+                        {**_ALBUM_PARAMS, "ids": ",".join(ids)},
+                    )
+                except Exception as exc:
+                    logger.warning("[apple_metadata] Album batch skipped: %s", exc)
+                    return
+            for album_data in data.get("data", []) or []:
+                aid = str(album_data.get("id") or "")
+                if not aid:
+                    continue
+                try:
+                    result = await self._album_result(album_data)
+                except Exception as exc:
+                    logger.warning("[apple_metadata] Album %s skipped: %s", aid, exc)
+                    continue
+                out[aid] = self._cache_set(
+                    f"album:{storefront}:{aid}", result, _METADATA_CACHE_TTL_S
+                )
+
+        await asyncio.gather(
+            *[_chunk(todo[i : i + 50]) for i in range(0, len(todo), 50)]
+        )
+        return out
+
+    async def _album_result(
+        self, album_data: dict[str, Any]
+    ) -> tuple[dict[str, Any], list[TrackMetadata]]:
+        """One album resource → (album, tracks), the tracks paged to the end."""
+        album_id = str(album_data.get("id") or "")
         tracks_rel = album_data.get("relationships", {}).get("tracks", {})
 
         tracks_items = await self._pagete_tracks(
@@ -731,6 +970,12 @@ class AppleMusicMetadataClient:
         )
 
         tracks = [self._parse_item(item, album_data) for item in tracks_items]
+        for i, item in enumerate(tracks_items):
+            popularity = (item.get("meta") or {}).get("popularity")
+            if isinstance(popularity, (int, float)) and i < len(tracks):
+                extra = dict(tracks[i].extra_info or {})
+                extra["apple_popularity"] = round(float(popularity), 4)
+                tracks[i] = tracks[i].model_copy(update={"extra_info": extra})
 
         # The disc count exists nowhere in the album's own attributes — it is
         # only visible as the highest discNumber across the track list, which
@@ -755,8 +1000,7 @@ class AppleMusicMetadataClient:
         album_result["attributes"]["releaseDate"] = release_date
         album_result["attributes"]["trackCount"] = len(tracks)
         album_result["attributes"]["artwork"] = {"url": artwork_url}
-        result = (album_result, tracks)
-        return self._cache_set(cache_key, result, _METADATA_CACHE_TTL_S)
+        return (album_result, tracks)
 
     async def get_playlist_tracks(
         self,
@@ -775,8 +1019,15 @@ class AppleMusicMetadataClient:
         data = await self._get(
             f"/{storefront}/playlists/{playlist_id}",
             {
-                "include": "tracks",
-                "extend": "editorialArtwork,editorialVideo",
+                # As music.apple.com's playlist page: the curator, the track
+                # count, the featured artists, and 300 tracks a page.
+                "include": "tracks,curator",
+                "include[songs]": "artists",
+                "limit[tracks]": "300",
+                "fields[curators]": "name,url",
+                "views": "featured-artists",
+                "limit[view.featured-artists]": "15",
+                "extend": "editorialArtwork,editorialVideo,trackCount",
             },
         )
         results = data.get("data", [])
@@ -810,7 +1061,16 @@ class AppleMusicMetadataClient:
         include_featuring: bool = True,
         storefront: str = "us",
     ) -> tuple[dict[str, Any], list[TrackMetadata]]:
-        artist_data = await self._get(f"/{storefront}/artists/{artist_id}")
+        # As music.apple.com's artist page: biography, hero picture and
+        # logo, and the Top Songs / Similar Artists / Latest Release views.
+        artist_data = await self._get(
+            f"/{storefront}/artists/{artist_id}",
+            {
+                "extend": "artistBio,editorialArtwork,editorialVideo,hero,plainEditorialNotes,bornOrFormed,origin",
+                "views": "latest-release,top-songs,similar-artists",
+                "limit[view.top-songs]": "20",
+            },
+        )
         artist_results = artist_data.get("data", [])
         if not artist_results:
             raise MornyeError(
@@ -824,9 +1084,22 @@ class AppleMusicMetadataClient:
         album_ids: list[str] = []
         seen_ids: set[str] = set()
 
-        for album_data in await self._pagete_relationship(
-            f"/{storefront}/artists/{artist_id}/albums",
-        ):
+        # Both lists at once, 100 a page (the default is 25 for albums and 10
+        # for the view). "Appears on" is a view of the artist, not a
+        # relationship: /artists/{id}/appears-on-albums answers HTTP 400.
+        own_list, appears_list = await asyncio.gather(
+            self._pagete_relationship(
+                f"/{storefront}/artists/{artist_id}/albums?limit=100"
+            ),
+            (
+                self._pagete_relationship(
+                    f"/{storefront}/artists/{artist_id}/view/appears-on-albums?limit=100"
+                )
+                if include_featuring
+                else asyncio.sleep(0, result=[])
+            ),
+        )
+        for album_data in own_list:
             aid = str(album_data.get("id", ""))
             if aid and aid not in seen_ids:
                 seen_ids.add(aid)
@@ -834,42 +1107,17 @@ class AppleMusicMetadataClient:
 
         own_album_ids: set[str] = set(album_ids)
 
-        if include_featuring:
-            for album_data in await self._pagete_relationship(
-                f"/{storefront}/artists/{artist_id}/appears-on-albums",
-            ):
-                aid = str(album_data.get("id", ""))
-                if aid and aid not in seen_ids:
-                    seen_ids.add(aid)
-                    album_ids.append(aid)
+        for album_data in appears_list:
+            aid = str(album_data.get("id", ""))
+            if aid and aid not in seen_ids:
+                seen_ids.add(aid)
+                album_ids.append(aid)
 
-        logger.info(
-            "[apple_metadata] %s: %d album totali da scaricare",
-            artist_name,
-            len(album_ids),
-        )
-
-        # Fetch parallelo con asyncio.gather + semaphore for concurrency limiting
-        semaphore = asyncio.Semaphore(5)
-
-        async def _fetch_one(
-            aid: str,
-        ) -> tuple[str, list[TrackMetadata] | None]:
-            async with semaphore:
-                try:
-                    _, album_tracks = await self.get_album_tracks(
-                        aid,
-                        storefront=storefront,
-                    )
-                    return aid, album_tracks
-                except Exception as exc:
-                    logger.warning("[apple_metadata] Album %s skipped: %s", aid, exc)
-                    return aid, None
-
-        raw_results = await asyncio.gather(*[_fetch_one(aid) for aid in album_ids])
-
+        # Every release in batches of 50 (one request per album took 10s+
+        # for an artist with ~190 releases).
+        batched = await self.get_albums_tracks(album_ids, storefront=storefront)
         results_dict: dict[str, list[TrackMetadata]] = {
-            aid: tracks for aid, tracks in raw_results if tracks is not None
+            aid: album_tracks for aid, (_, album_tracks) in batched.items()
         }
 
         tracks: list[TrackMetadata] = []
@@ -916,7 +1164,22 @@ class AppleMusicMetadataClient:
             name = album.get("attributes", {}).get("name", "Unknown Album")
             release_date = album.get("attributes", {}).get("releaseDate", "")
             artwork_url = _artwork_url(album.get("attributes", {}).get("artwork"))
-            album_meta = {"release_date": release_date, "track_count": len(tracks)}
+            attrs = album.get("attributes", {})
+            labels = [
+                str((item.get("attributes") or {}).get("name") or "")
+                for item in (
+                    album.get("relationships", {}).get("record-labels", {}) or {}
+                ).get("data")
+                or []
+            ]
+            album_meta = {
+                "release_date": release_date,
+                "track_count": len(tracks),
+                "description": _plain_text(attrs.get("editorialNotes")),
+                "label": ", ".join(n for n in labels if n)
+                or str(attrs.get("recordLabel") or ""),
+                "source": "Apple Music",
+            }
             return name, tracks, artwork_url, album_meta
 
         if t == "playlist":
@@ -924,9 +1187,27 @@ class AppleMusicMetadataClient:
                 info["id"],
                 storefront=storefront,
             )
-            name = playlist.get("attributes", {}).get("name", "Unknown Playlist")
-            artwork_url = _artwork_url(playlist.get("attributes", {}).get("artwork"))
-            return name, tracks, artwork_url, {}
+            attrs = playlist.get("attributes", {})
+            name = attrs.get("name", "Unknown Playlist")
+            artwork_url = _artwork_url(attrs.get("artwork"))
+            curators = (playlist.get("relationships", {}).get("curator", {}) or {}).get(
+                "data"
+            ) or []
+            owner = str(attrs.get("curatorName") or "") or str(
+                ((curators[0].get("attributes") or {}).get("name") if curators else "")
+                or ""
+            )
+            featured = (
+                playlist.get("views", {}).get("featured-artists", {}) or {}
+            ).get("data") or []
+            playlist_meta = {
+                "owner": owner,
+                "description": _plain_text(attrs.get("description")),
+                "track_count": int(attrs.get("trackCount") or len(tracks)),
+                "featured_artists": [_artist_card(a) for a in featured],
+                "source": "Apple Music",
+            }
+            return name, tracks, artwork_url, playlist_meta
 
         if t == "artist":
             artist, tracks = await self.get_artist_albums(
@@ -934,9 +1215,41 @@ class AppleMusicMetadataClient:
                 include_featuring=include_featuring,
                 storefront=storefront,
             )
-            name = artist.get("attributes", {}).get("name", "Unknown Artist")
-            artwork_url = _artwork_url(artist.get("attributes", {}).get("artwork"))
-            return name, tracks, artwork_url, {}
+            attrs = artist.get("attributes", {})
+            name = attrs.get("name", "Unknown Artist")
+            artwork_url = _artwork_url(attrs.get("artwork"))
+            views = artist.get("views", {}) or {}
+            top = (views.get("top-songs", {}) or {}).get("data") or []
+            similar = (views.get("similar-artists", {}) or {}).get("data") or []
+            latest = (views.get("latest-release", {}) or {}).get("data") or []
+            motion = _motion_hero(attrs)
+            artist_meta = {
+                "biography": _plain_text(
+                    attrs.get("artistBio") or attrs.get("plainEditorialNotes")
+                ),
+                "header": motion.get("image") or _hero_url(attrs) or artwork_url,
+                "header_video": motion.get("video", ""),
+                "bg_color": motion.get("bg_color")
+                or str((attrs.get("artwork") or {}).get("bgColor") or ""),
+                "text_color": motion.get("text_color", ""),
+                "avatar": artwork_url,
+                "logo": _logo_url(attrs),
+                "origin": str(attrs.get("origin") or ""),
+                "born_or_formed": str(attrs.get("bornOrFormed") or ""),
+                # Apple's own ranking: ISRC and song id of each Top Song, in order.
+                "top_songs": [
+                    {
+                        "id": str(item.get("id") or ""),
+                        "isrc": str((item.get("attributes") or {}).get("isrc") or ""),
+                        "name": str((item.get("attributes") or {}).get("name") or ""),
+                    }
+                    for item in top
+                ],
+                "similar_artists": [_artist_card(a) for a in similar],
+                "latest_release_id": str(latest[0].get("id") or "") if latest else "",
+                "source": "Apple Music",
+            }
+            return name, tracks, artwork_url, artist_meta
 
         raise MornyeError(
             ErrorKind.INVALID_URL,
@@ -1237,6 +1550,8 @@ class AppleMusicMetadataClient:
             album_url=album_url,
             artist_id=artist_id,
             artist_url=str(artist_attr.get("url") or ""),
+            # One link per credited artist on the row and the album head.
+            artists_data=_artist_credits(artists, artist_items),
             artist_names=artist_names,
             album_artist_names=_unique_values(
                 (artist.get("attributes") or {}).get("name")

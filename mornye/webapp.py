@@ -104,6 +104,10 @@ def _token_matches(candidate: str | None, expected: str) -> bool:
     return secrets.compare_digest(candidate, expected)
 
 
+#: Seconds a Connect device outlives its tab's last /ws socket.
+CONNECT_GRACE_S = 10.0
+
+
 # Methods safe to expose directly over HTTP. This is an explicit allowlist —
 # window-chrome methods (minimize/maximize/resize/move/destroy, which only
 # make sense for a native pywebview window) are intentionally excluded; the
@@ -188,6 +192,7 @@ ALLOWED_METHODS: set[str] = {
     "probe_audio_quality",
     "get_cli_command",
     "save_density",
+    "save_style",
     "get_reorganize_defaults",
     "plan_library_reorganize",
     "apply_library_reorganize",
@@ -212,11 +217,27 @@ ALLOWED_METHODS: set[str] = {
     "preview_player_playlist_import",
     "import_player_playlist",
     "import_player_playlist_collection",
+    "sync_player_playlist",
+    "set_player_playlist_source",
     "link_player_playlist_tracks",
     "get_weekly_releases",
     "get_lyrics_ai_config",
     "save_lyrics_ai_config",
     "translate_lyrics",
+    "track_share_links",
+    # Listening record, personal Home and profile (api_mixins/personal.py),
+    # all scoped to the caller.
+    "record_listening",
+    "clear_listening_record",
+    "get_personal_home",
+    "get_home_recommendations",
+    "save_home_layout",
+    "reset_home_layout",
+    "pin_to_home",
+    "unpin_from_home",
+    "move_home_pin",
+    "get_home_pin_songs",
+    "get_listener_profile",
     "save_translated_lyrics",
     "get_dedup_status",
     "scan_for_duplicates",
@@ -272,6 +293,32 @@ ALLOWED_METHODS: set[str] = {
     # Secrets are never returned; the writes are admin-only in multi-user
     # mode, since one install's extensions serve every account.
     "list_extension_settings",
+    # Mornye Link (api_mixins/link.py): pairing the phone app. Admin-only in
+    # multi-user mode (LINK_ADMIN_METHODS): a paired phone sees the library.
+    "link_status",
+    "link_set_enabled",
+    "link_begin_pairing",
+    "link_end_pairing",
+    "link_revoke_device",
+    # Mornye Connect (api_mixins/connect.py): this account's playing devices.
+    # Each account has its own hub, so a page sees and steers only the
+    # devices of whoever is signed in.
+    "connect_register",
+    "connect_heartbeat",
+    "connect_unregister",
+    "connect_rename",
+    "connect_devices",
+    "connect_report_state",
+    "connect_command",
+    "connect_transfer",
+    "connect_resolve",
+    "connect_speaker_status",
+    "connect_speaker_set",
+    # Settings › Storage (api_mixins/storage.py). Clearing and compacting are
+    # admin-only in multi-user mode (STORAGE_ADMIN_METHODS).
+    "storage_usage",
+    "storage_clear",
+    "storage_compact",
     "get_extension_settings",
     # Extensions that supply lyrics (core/extension_lyrics.py): read-only.
     "get_lyrics_extensions",
@@ -291,6 +338,25 @@ NETWORK_DESTINATION_ADMIN_METHODS = {
     "remove_network_destination",
 }
 
+LINK_ADMIN_METHODS = {
+    "link_status",
+    "link_set_enabled",
+    "link_begin_pairing",
+    "link_end_pairing",
+    "link_revoke_device",
+}
+
+#: The server speaker plays out loud where the server stands, from any file
+#: it can read (core/connect/speaker.py): turning it on is the admin's call.
+CONNECT_ADMIN_METHODS = {
+    "connect_speaker_set",
+}
+
+STORAGE_ADMIN_METHODS = {
+    "storage_clear",
+    "storage_compact",
+}
+
 EXTENSION_SETTINGS_ADMIN_METHODS = {
     "save_extension_settings",
     "reset_extension_settings",
@@ -302,6 +368,14 @@ EXTENSION_SETTINGS_ADMIN_METHODS = {
 # Deliberately absent from ALLOWED_METHODS, even though they exist on the Api
 # object (keep this list next to the allowlist so a future "why isn't X
 # exposed?" has an answer here rather than in a commit message):
+#
+#   cast_devices / cast_connect / cast_load / cast_command / cast_status /
+#   cast_disconnect
+#       Casting drives DLNA and FCast receivers on the LAN of the machine
+#       running Mornye (api_mixins/cast.py). Over --web that would let a
+#       remote browser steer the server's network; the web player keeps
+#       playing in the browser. (Receivers reach --web through Mornye
+#       Connect's server speaker switch instead: admin-only, opt-in.)
 #
 #   add_trusted_key / remove_trusted_key
 #       These write ~/.mornye/trusted_keys.json — the Ed25519 root of trust
@@ -325,7 +399,17 @@ EXTENSION_SETTINGS_ADMIN_METHODS = {
 #       --web the music must come out of the listener's device, and over
 #       HTTP these would let anyone who reaches the port play files on the
 #       server's speakers and list its audio devices. The web UI always
-#       uses the browser engine.
+#       uses the browser engine. The one way to play on the server is
+#       Mornye Connect's server speaker (core/connect/speaker.py): off until
+#       an admin turns it on, and offered to admin accounts only.
+#
+#   set_now_playing / get_discord_presence / save_discord_presence /
+#   get_lastfm / save_lastfm / connect_lastfm / disconnect_lastfm /
+#   retry_lastfm
+#       (api_mixins/integrations.py) Discord Rich Presence talks to the
+#       Discord client of the machine running Mornye, and Last.fm signs in
+#       one account per install. Over --web both would be the server's,
+#       not the listener's (record_listening skips the scrobble there too).
 
 
 class LoginRateLimiter:
@@ -938,7 +1022,11 @@ def _register_method_dispatch(
                 status_code=400,
             )
         if multiuser and method_name in (
-            NETWORK_DESTINATION_ADMIN_METHODS | EXTENSION_SETTINGS_ADMIN_METHODS
+            NETWORK_DESTINATION_ADMIN_METHODS
+            | EXTENSION_SETTINGS_ADMIN_METHODS
+            | LINK_ADMIN_METHODS
+            | STORAGE_ADMIN_METHODS
+            | CONNECT_ADMIN_METHODS
         ):
             from .core.web_users import is_admin
 
@@ -1138,6 +1226,26 @@ def _register_websocket(
 ) -> None:
     """The /ws push channel (log, progress, metadata). Split out of create_app (M2)."""
 
+    # Mornye Connect: a tab names its device in ``/ws?device=<id>``. When its
+    # last socket closes the device leaves the account's hub, after a grace
+    # period so a reload (or a dropped Wi-Fi second) does not make it vanish.
+    connect_sockets: dict[tuple[str | None, str], int] = {}
+
+    def connect_device_closed(owner: str | None, device: str) -> None:
+        key = (owner, device)
+        connect_sockets[key] = connect_sockets.get(key, 1) - 1
+        if connect_sockets[key] > 0:
+            return
+
+        def gone() -> None:
+            if connect_sockets.get(key, 0) <= 0:
+                connect_sockets.pop(key, None)
+                from .core.connect.hub import get_connect_hub
+
+                get_connect_hub(owner).unregister(device)
+
+        asyncio.get_running_loop().call_later(CONNECT_GRACE_S, gone)
+
     # ── WebSocket: push channel for log/progress/metadata/etc. ─────────────
     @app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket) -> None:
@@ -1164,6 +1272,10 @@ def _register_websocket(
             # somewhere to be addressed even before its first API call.
             registry.get(ws_owner)
         await manager.connect(ws, owner=ws_owner)
+        device = (ws.query_params.get("device") or "").strip()[:128]
+        if device:
+            key = (ws_owner, device)
+            connect_sockets[key] = connect_sockets.get(key, 0) + 1
         try:
             while True:
                 # The frontend doesn't need to send anything; this just
@@ -1173,6 +1285,9 @@ def _register_websocket(
             manager.disconnect(ws)
         except Exception:
             manager.disconnect(ws)
+        finally:
+            if device:
+                connect_device_closed(ws_owner, device)
 
 
 def _register_v1_api(
@@ -1384,6 +1499,19 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
 
     registry = ApiRegistry(manager, api.download_dir)
 
+    if multiuser:
+        # Mornye Link is one per process, and a paired phone sees the whole
+        # library: its Connect devices are an admin's (the first one's).
+        from .link_server import get_link_server
+
+        def link_connect_owner() -> str | None:
+            from .core.web_users import list_users
+
+            admins = [u["username"] for u in list_users() if u.get("role") == "admin"]
+            return admins[0] if admins else None
+
+        get_link_server().connect_owner = link_connect_owner
+
     def api_for(request: Request) -> MornyeAPI:
         """The Api instance a request should act on.
 
@@ -1549,6 +1677,8 @@ def create_app(token: str | None = None, multiuser: bool = False) -> FastAPI:
         # Scheduled subscriptions (Following view). In multi-user mode each
         # subscription is checked, and downloaded, by its own account's Api
         # instance — into that account's folder.
+        # Mornye Link (link_server.py): back on if it was left on.
+        api._link_autostart()
         scheduler = api._start_subscription_scheduler(
             (lambda owner: registry.get(owner or None)) if multiuser else None
         )

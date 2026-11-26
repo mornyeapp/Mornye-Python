@@ -130,6 +130,9 @@
 .np-line.gap.active .gd { opacity: .25; }
 .np-lyrics.plain .np-line { filter: none; cursor: default; font-size: clamp(18px, 1.8vw, 26px); font-weight: 600; }
 .np-empty { color: rgba(var(--media-ink-rgb), .6); font-size: 18px; padding-top: 18vh; }
+.np-queue-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 8px 8px; font-size: 13px; font-weight: 600; color: rgba(var(--media-ink-rgb), .6); text-transform: uppercase; letter-spacing: .04em; }
+.np-queue-save { border: 1px solid rgba(var(--media-ink-rgb), .3); border-radius: 999px; background: none; color: rgba(var(--media-ink-rgb), .9); font: inherit; font-size: 12px; text-transform: none; letter-spacing: 0; padding: 5px 12px; cursor: pointer; }
+.np-queue-save:hover { background: rgba(var(--media-ink-rgb), .1); }
 .np-queue-row { display: flex; gap: 12px; align-items: baseline; padding: 10px 8px; border-radius: 8px; cursor: pointer; }
 .np-queue-row:hover { background: rgba(var(--media-ink-rgb), .1); }
 .np-queue-row.active { background: rgba(var(--media-ink-rgb), .16); }
@@ -229,12 +232,30 @@
 #view-player .player-playlist-tools {
   display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
 }
-#view-player .player-playlist-tools > label {
-  color: var(--text-2); font-size: var(--text-sm);
+/* The playlist link: one field with a link icon, the URL and an Import
+   button inside it, growing into the rest of the row. The label is for
+   screen readers; the placeholder says what to paste. */
+#view-player .ppt-link {
+  flex: 1 1 320px; min-width: 240px; height: var(--row);
+  display: flex; align-items: center; gap: 8px; padding: 0 3px 0 10px;
+  border: 1px solid var(--control-border); border-radius: var(--radius-1); background: var(--raised);
 }
-#view-player .player-playlist-tools input[type="url"] {
-  box-sizing: border-box; flex: 1 1 280px; min-width: 220px; padding: 0 12px;
+#view-player .ppt-link:focus-within { border-color: var(--signal-strong); }
+#view-player .ppt-link-icon { width: 15px; height: 15px; flex: none; color: var(--text-muted); }
+#view-player .ppt-link-label {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
 }
+#view-player .ppt-link input[type="url"] {
+  flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; outline: none; box-shadow: none;
+  background: transparent; color: var(--text); font: inherit; font-size: var(--text-sm);
+}
+#view-player .ppt-link-go {
+  flex: none; height: calc(100% - 6px); padding: 0 12px; border: 0; border-radius: var(--radius-1);
+  background: var(--selected); color: var(--text); font: inherit; font-size: var(--text-sm); font-weight: 600; cursor: pointer;
+}
+#view-player .ppt-link-go:hover:not(:disabled) { background: var(--signal); color: var(--signal-ink); }
+#view-player .ppt-link-go:disabled { opacity: .5; cursor: default; }
+#view-player .ppt-link:has(input:placeholder-shown) .ppt-link-go { opacity: .55; }
 #view-player .player-playlist-tools .act-btn { min-height: var(--row); }
 .player-add-select {
   display: inline-flex; align-items: center; gap: 8px; color: var(--text-muted);
@@ -300,6 +321,10 @@
   margin: 0; color: var(--text-2); font-size: var(--text-sm); line-height: 1.5;
   overflow-wrap: anywhere;
 }
+#player-playlist-source-field { display: grid; gap: var(--space-2); }
+#player-playlist-source-field.hidden { display: none; }
+#player-playlist-source-field > label { color: var(--text-2); font-size: var(--text-sm); }
+.player-playlist-source-hint { margin: 0; color: var(--text-muted); font-size: var(--text-sm); }
 .player-playlist-editor input[type="text"],
 .player-playlist-editor textarea {
   width: 100%; padding: 10px 12px; border: 1px solid var(--control-border);
@@ -963,3 +988,81 @@
   .marquee { text-overflow: ellipsis; }
   .marquee > .marquee-inner { display: inline; animation: none; }
 }
+
+/* Between the artists and the album on Now Playing (npFillCredits). */
+.np-sep::before { content: " \00B7  "; white-space: pre; }
+
+/* ── Action menus ("…" and a song's "+"; openActionMenu in app.js) ────── */
+.action-menu {
+  position: fixed; z-index: 3000; min-width: 220px; max-width: 320px; max-height: 60vh; overflow-y: auto;
+  padding: 5px; border: 1px solid var(--rule-strong); border-radius: var(--radius-2);
+  background: var(--raised); box-shadow: 0 12px 32px rgba(var(--shade-rgb), .35);
+}
+.am-item {
+  display: flex; align-items: center; width: 100%; min-height: 30px; padding: 5px 10px;
+  border: 0; border-radius: var(--radius-1); background: transparent; color: var(--text);
+  font: inherit; font-size: var(--text-sm); text-align: left; cursor: pointer;
+}
+.am-item:hover:not(:disabled), .am-item:focus-visible { background: var(--selected); outline: none; }
+.am-item:disabled { color: var(--text-muted); cursor: default; }
+.am-item.danger { color: var(--error); }
+.am-item.has-sub::after { content: "\203A"; margin-left: auto; padding-left: 14px; color: var(--text-muted); }
+.am-back { font-weight: 600; }
+.am-back::before { content: "\2039"; margin-right: 8px; color: var(--text-muted); }
+.am-title { padding: 6px 10px 4px; font-size: var(--text-xs); font-weight: 600; color: var(--text-muted); }
+.am-note { padding: 6px 10px; font-size: var(--text-sm); color: var(--text-muted); }
+.am-sep { height: 1px; margin: 4px 6px; background: var(--rule); }
+
+/* The "…" buttons: rows, Top Songs, page heads, Now Playing. */
+.pl-row-more svg, .pl-top-more svg, .pl-more-btn svg, .pl-round svg { pointer-events: none; }
+.pl-row-more svg, .pl-top-more svg { width: 16px; height: 16px; }
+.pl-more-btn svg { width: 16px; height: 16px; }
+.pl-top-row { grid-template-columns: 52px minmax(0, 1fr) auto auto; }
+.pl-top-more {
+  width: 28px; height: 28px; display: grid; place-items: center; padding: 0;
+  border: 0; border-radius: var(--radius-1); background: transparent; color: var(--text-muted); cursor: pointer;
+}
+.pl-top-more:hover, .pl-top-more[aria-expanded="true"] { color: var(--text); background: var(--raised); }
+.np-meta { position: relative; padding-right: 44px; }
+.np-more {
+  position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+  width: 34px; height: 34px; display: grid; place-items: center; padding: 0;
+  border: 0; border-radius: var(--radius-1); background: transparent; color: var(--media-ink); opacity: .8; cursor: pointer;
+}
+.np-more:hover, .np-more[aria-expanded="true"] { opacity: 1; background: rgba(var(--media-ink-rgb), .12); }
+.pl-sec-link { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.pl-sec-link:hover { color: var(--signal-text); }
+
+/* An artist's shelves: one row of cards each, scrolling sideways. */
+.pl-shelf { display: grid; gap: var(--space-3); min-width: 0; padding-top: var(--space-5); }
+.pl-shelf-row {
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(150px, 180px); gap: var(--space-4);
+  overflow-x: auto; overscroll-behavior-x: contain; padding-bottom: 6px; scrollbar-width: thin;
+}
+.pl-row-more { display: inline-grid; place-items: center; padding: 0; }
+.pl-row .pl-main { justify-content: flex-start; }
+.pl-row .pl-main > .pl-main-info { margin-right: auto; }
+
+/* Cast (openCastPicker in app.js): the button lights while the Player
+   plays on a DLNA or FCast receiver. */
+#pl-cast-btn.on, .np-cast.on { color: var(--signal); }
+
+/* Mornye Connect: "Playing on <device>" sits on the player's top edge while
+   the music plays somewhere else, as Spotify's Connect strip does. */
+.connect-banner {
+  position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 6px; max-width: min(420px, 90vw);
+  padding: 4px 12px; border: 0; border-radius: 1000px;
+  background: var(--signal); color: var(--signal-ink);
+  font: 600 11.5px/1.4 var(--font); white-space: nowrap; cursor: pointer;
+  box-shadow: 0 4px 14px rgba(var(--shade-rgb), .25);
+}
+.connect-banner span { overflow: hidden; text-overflow: ellipsis; }
+.connect-banner:hover { filter: brightness(1.08); }
+.connect-banner:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.np-cast {
+  display: inline-grid; place-items: center; width: 28px; height: 28px; margin-right: 6px;
+  padding: 0; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer;
+}
+.np-cast:hover { background: rgba(var(--media-ink-rgb), .12); }
+.np-cast.hidden { display: none; }

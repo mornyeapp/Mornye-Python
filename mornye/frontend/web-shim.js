@@ -172,7 +172,7 @@
     'download_track_cover', 'download_cover', 'download_album_cover', 'download_all_covers',
     'download_all_lyrics', 'save_playlist_m3u', 'get_track_preview', 'fetch_metadata', 'download_tracks',
     'stop_all_downloads', 'finish_current_downloads',
-    'run_health_check', 'scan_local', 'apply_local_tags', 'get_convert_formats', 'convert_local_files', 'read_file_tags', 'fetch_file_lyrics', 'save_file_tags', 'analyze_audio_file', 'probe_audio_quality', 'get_cli_command', 'save_density', 'get_reorganize_defaults', 'plan_library_reorganize', 'apply_library_reorganize', 'prepare_playback', 'get_library_default_folder', 'scan_music_library', 'cancel_music_library_scan', 'cancel_local_scan', 'get_track_thumb', 'get_track_thumbs', 'get_artist_photos', 'get_player_playlists', 'create_player_playlist', 'update_player_playlist', 'delete_player_playlist', 'add_player_playlist_tracks', 'remove_player_playlist_track', 'reorder_player_playlist_tracks', 'export_player_playlist', 'fetch_player_playlist_import', 'fetch_player_playlist_search_import', 'preview_player_playlist_import', 'import_player_playlist', 'import_player_playlist_collection', 'link_player_playlist_tracks', 'get_weekly_releases', 'get_lyrics_ai_config', 'save_lyrics_ai_config', 'translate_lyrics', 'save_translated_lyrics', 'set_download_dir',
+    'run_health_check', 'scan_local', 'apply_local_tags', 'get_convert_formats', 'convert_local_files', 'read_file_tags', 'fetch_file_lyrics', 'save_file_tags', 'analyze_audio_file', 'probe_audio_quality', 'get_cli_command', 'save_density', 'save_style', 'get_reorganize_defaults', 'plan_library_reorganize', 'apply_library_reorganize', 'prepare_playback', 'get_library_default_folder', 'scan_music_library', 'cancel_music_library_scan', 'cancel_local_scan', 'get_track_thumb', 'get_track_thumbs', 'get_artist_photos', 'get_player_playlists', 'create_player_playlist', 'update_player_playlist', 'delete_player_playlist', 'add_player_playlist_tracks', 'remove_player_playlist_track', 'reorder_player_playlist_tracks', 'export_player_playlist', 'fetch_player_playlist_import', 'fetch_player_playlist_search_import', 'preview_player_playlist_import', 'import_player_playlist', 'import_player_playlist_collection', 'sync_player_playlist', 'set_player_playlist_source', 'link_player_playlist_tracks', 'get_weekly_releases', 'get_lyrics_ai_config', 'save_lyrics_ai_config', 'translate_lyrics', 'track_share_links', 'save_translated_lyrics', 'set_download_dir',
     'get_registry_directories', 'add_registry_directory', 'remove_registry_directory',
     'discover_registries', 'get_download_services', 'get_dedup_status',
     'scan_for_duplicates',
@@ -185,6 +185,8 @@
     'get_extension_health', 'reset_extension_health', 'check_extension_health',
     'get_signed_sessions', 'clear_signed_session', 'prune_signed_sessions',
     'get_stats',
+    // Listening record, personal Home and profile (api_mixins/personal.py).
+    'record_listening', 'clear_listening_record', 'get_personal_home', 'get_home_recommendations', 'save_home_layout', 'reset_home_layout', 'pin_to_home', 'unpin_from_home', 'move_home_pin', 'get_home_pin_songs', 'get_listener_profile',
     'scan_smb_library',
     'get_failed_tracks', 'retry_failed_tracks', 'clear_failed_tracks',
     'list_network_destinations', 'save_network_destination',
@@ -193,6 +195,13 @@
     // CSV import sends the file's text, read in the browser — never a path.
     'preview_csv', 'fetch_csv',
     // Each JS extension's own settings (api_mixins/extension_settings.py).
+    // Mornye Link pairing (api_mixins/link.py; admin-only in multi-user).
+    'link_status', 'link_set_enabled', 'link_begin_pairing', 'link_end_pairing', 'link_revoke_device',
+    'storage_usage', 'storage_clear', 'storage_compact',
+    // Mornye Connect: this account's devices (api_mixins/connect.py).
+    'connect_register', 'connect_heartbeat', 'connect_unregister', 'connect_rename',
+    'connect_devices', 'connect_report_state', 'connect_command', 'connect_transfer',
+    'connect_resolve', 'connect_speaker_status', 'connect_speaker_set',
     'list_extension_settings', 'get_extension_settings', 'get_lyrics_extensions',
     'save_extension_settings', 'reset_extension_settings',
     'run_extension_setting_action', 'set_extension_local_network',
@@ -375,11 +384,28 @@
     'openDownloadFolderBrowser',
     'updateFolderLabel',
     'updateHealthResults',
+    // Mornye Connect (api_mixins/connect.py): the account's devices, the
+    // playing one's state, and commands addressed to this page.
+    'app_connect_devices',
+    'app_connect_state',
+    'app_connect_command',
   ]);
 
   function connectWs() {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(proto + '//' + location.host + '/ws');
+    // The socket names this tab's Connect device, so the server drops the
+    // device when the tab goes away (app.js reads the same id).
+    let device = '';
+    try {
+      device = sessionStorage.getItem('mornye-connect-id') || '';
+      if (!device) {
+        device = (crypto.randomUUID && crypto.randomUUID())
+          || (Date.now().toString(36) + '-' + Math.random().toString(36).slice(2));
+        sessionStorage.setItem('mornye-connect-id', device);
+      }
+    } catch (e) { device = ''; }
+    const query = device ? '?device=' + encodeURIComponent(device) : '';
+    const ws = new WebSocket(proto + '//' + location.host + '/ws' + query);
     ws.onmessage = (evt) => {
       let msg;
       try {

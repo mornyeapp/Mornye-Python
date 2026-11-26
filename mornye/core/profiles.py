@@ -66,7 +66,7 @@ class ProfileConfig(BaseModel):
     animated_artwork_api_url: str = Field(default_factory=artwork_api_url)
     enrich_metadata: bool = True
     enrich_providers: list[str] = Field(
-        default_factory=lambda: ["deezer", "apple", "qobuz", "tidal"],
+        default_factory=lambda: ["deezer", "apple"],
     )
     transcode_to: str | None = None
     transcode_bitrate: str = "320k"
@@ -75,6 +75,8 @@ class ProfileConfig(BaseModel):
     dolby_ac3_keep_original: bool = True
     transcode_max_sample_rate: int = 0
     transcode_max_bit_depth: int = 0
+    #: "tpdf" or "tpdf_hp": the dither a bit-depth cap adds (core/transcode.py).
+    transcode_dither: str = "tpdf"
     m3u_format: str = "m3u8"
     track_max_retries: int = 0
     post_download_action: str = "none"

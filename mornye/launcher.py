@@ -981,12 +981,9 @@ def parse_args(profile_defaults: dict | None = None) -> argparse.Namespace:
     enrich_grp.add_argument(
         "--enrich-providers",
         nargs="+",
-        default=pd.get(
-            "enrich_providers",
-            ["deezer", "apple", "qobuz", "tidal"],
-        ),
+        default=pd.get("enrich_providers", ["deezer", "apple"]),
         dest="enrich_providers",
-        choices=["deezer", "apple", "qobuz", "tidal"],
+        choices=["deezer", "apple"],
     )
     enrich_grp.add_argument(
         "--animated-artwork",
@@ -1098,7 +1095,17 @@ def parse_args(profile_defaults: dict | None = None) -> argparse.Namespace:
         dest="transcode_max_bit_depth",
         metavar="BITS",
         help="Cap a lossless conversion's bit depth to 16 or 24, with "
-        "triangular dither. Default: no cap.",
+        "TPDF dither (see --transcode-dither). Default: no cap.",
+    )
+    transcode_grp.add_argument(
+        "--transcode-dither",
+        choices=["tpdf", "tpdf_hp"],
+        default=pd.get("transcode_dither", "tpdf") or "tpdf",
+        dest="transcode_dither",
+        help="The dither added when --transcode-max-depth drops bits: tpdf "
+        "spreads the noise evenly across all frequencies; tpdf_hp (high-pass "
+        "TPDF) moves it to high frequencies where it is harder to hear. "
+        "Default: tpdf.",
     )
 
     # ── Quality Verification ────────────────────────────────────────────────
@@ -1608,8 +1615,7 @@ def _subscription_downloader(profile_defaults: dict, output_dir_override: str | 
             canvas_library_dir=pd.get("canvas_library_dir") or None,
             canvas_providers=pd.get("canvas_providers") or ["spotify", "paxsenix"],
             enrich_metadata=pd.get("enrich_metadata", True),
-            enrich_providers=pd.get("enrich_providers")
-            or ["deezer", "apple", "qobuz", "tidal"],
+            enrich_providers=pd.get("enrich_providers") or ["deezer", "apple"],
             qobuz_local_api_url=pd.get("qobuz_local_api_url"),
             tidal_custom_api=pd.get("tidal_custom_api"),
             track_max_retries=pd.get("track_max_retries", 0),
@@ -1625,6 +1631,7 @@ def _subscription_downloader(profile_defaults: dict, output_dir_override: str | 
             dolby_ac3_keep_original=pd.get("dolby_ac3_keep_original", True),
             transcode_max_sample_rate=pd.get("transcode_max_sample_rate", 0),
             transcode_max_bit_depth=pd.get("transcode_max_bit_depth", 0),
+            transcode_dither=pd.get("transcode_dither", "tpdf"),
             max_concurrent_downloads=pd.get("max_concurrent_downloads", 2),
             metadata_delay_min_s=pd.get("metadata_delay_min_s", 0.0),
             metadata_delay_max_s=pd.get("metadata_delay_max_s", 0.0),
@@ -1901,6 +1908,7 @@ async def _run_download_async(
     dolby_ac3_keep_original: bool = True,
     transcode_max_sample_rate: int = 0,
     transcode_max_bit_depth: int = 0,
+    transcode_dither: str = "tpdf",
     playlist_urls: list[str] | None = None,
     csv_path: str | None = None,
     csv_min_score: float = 0.62,
@@ -2072,6 +2080,7 @@ async def _run_download_async(
         dolby_ac3_keep_original=dolby_ac3_keep_original,
         transcode_max_sample_rate=transcode_max_sample_rate,
         transcode_max_bit_depth=transcode_max_bit_depth,
+        transcode_dither=transcode_dither,
         max_concurrent_downloads=max(1, max_concurrent_downloads),
         metadata_delay_min_s=metadata_delay_min_s,
         metadata_delay_max_s=metadata_delay_max_s,
@@ -2321,8 +2330,7 @@ async def run_download_from_cfg(
             canvas_library_dir=cfg.get("canvas_library_dir") or None,
             canvas_providers=cfg.get("canvas_providers") or ["spotify", "paxsenix"],
             enrich_metadata=cfg.get("enrich_metadata", True),
-            enrich_providers=cfg.get("enrich_providers")
-            or ["deezer", "apple", "qobuz", "tidal"],
+            enrich_providers=cfg.get("enrich_providers") or ["deezer", "apple"],
             qobuz_local_api_url=cfg.get("qobuz_local_api_url"),
             tidal_custom_api=cfg.get("tidal_custom_api") or None,
             track_max_retries=cfg.get("track_max_retries", 0),
@@ -2339,6 +2347,7 @@ async def run_download_from_cfg(
             dolby_ac3_keep_original=cfg.get("dolby_ac3_keep_original", True),
             transcode_max_sample_rate=cfg.get("transcode_max_sample_rate", 0),
             transcode_max_bit_depth=cfg.get("transcode_max_bit_depth", 0),
+            transcode_dither=cfg.get("transcode_dither", "tpdf"),
             max_concurrent_downloads=cfg.get("max_concurrent_downloads", 2),
             metadata_delay_min_s=cfg.get("metadata_delay_min_s", 0.0),
             metadata_delay_max_s=cfg.get("metadata_delay_max_s", 0.0),
@@ -3446,6 +3455,7 @@ async def amain() -> None:
             dolby_ac3_keep_original=args.dolby_ac3_keep_original,
             transcode_max_sample_rate=args.transcode_max_sample_rate or 0,
             transcode_max_bit_depth=args.transcode_max_bit_depth or 0,
+            transcode_dither=args.transcode_dither or "tpdf",
             playlist_urls=playlist_urls,
             csv_path=args.csv_path,
             csv_min_score=(
@@ -3510,6 +3520,7 @@ async def amain() -> None:
                 "dolby_ac3_keep_original": args.dolby_ac3_keep_original,
                 "transcode_max_sample_rate": args.transcode_max_sample_rate or 0,
                 "transcode_max_bit_depth": args.transcode_max_bit_depth or 0,
+                "transcode_dither": args.transcode_dither or "tpdf",
                 "m3u_format": args.m3u_format,
                 "track_max_retries": track_max_retries,
                 "post_download_action": args.post_action,

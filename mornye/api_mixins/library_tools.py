@@ -421,8 +421,9 @@ class LibraryToolsMixin:
     def _now_playing(self, path: str, info: dict) -> dict:
         """What the full-screen player shows: tags, cover and lyrics.
 
-        Lyrics come from a ``.lrc`` next to the file when there is one (that is
-        where synced lyrics are saved), else from the file's own lyrics tag.
+        Lyrics come from a ``.mlrc`` or ``.lrc`` next to the file when there is
+        one (that is where synced lyrics and translations are saved), else
+        from the file's own lyrics tag.
         Never fails: a file with unreadable tags simply plays without them.
         """
         from ..core.tag_editor import read_file_tags
@@ -452,12 +453,12 @@ class LibraryToolsMixin:
             if data.cover:
                 b64 = base64.b64encode(data.cover).decode("ascii")
                 out["cover"] = f"data:{data.cover_mime};base64,{b64}"
-        sidecar = Path(path).with_suffix(".lrc")
-        try:
-            if sidecar.is_file() and sidecar.stat().st_size < 2_000_000:
-                out["lyrics"] = sidecar.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            pass
+        # A .mlrc (Mornye's lyrics file, with translations) before a .lrc.
+        from ..core.lyric_tags import sidecar_lyrics
+
+        sidecar = sidecar_lyrics(path)
+        if sidecar.strip():
+            out["lyrics"] = sidecar
         return out
 
     # ── Player library ──────────────────────────────────────────────────────

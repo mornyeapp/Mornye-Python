@@ -95,6 +95,7 @@ from ..core.transcode import (
     ensure_ffmpeg_available,
     extension_for,
     normalize_bitrate,
+    normalize_dither,
     normalize_transcode_format,
     result_format_for,
     transcoded_file_exists,
@@ -257,7 +258,7 @@ class DownloadOptions:
     # SoundCloud isn't checked by default — still selectable (GUI checklist,
     # --enrich-providers, the terminal UI), just opt-in now.
     enrich_providers: list[str] = field(
-        default_factory=lambda: ["deezer", "apple", "qobuz", "tidal"],
+        default_factory=lambda: ["deezer", "apple"],
     )
     qobuz_token: str | None = None
     qobuz_local_api_url: str | None = None
@@ -277,6 +278,8 @@ class DownloadOptions:
     # dither — even when it is already in the target format.
     transcode_max_sample_rate: int = 0
     transcode_max_bit_depth: int = 0
+    #: "tpdf" or "tpdf_hp" (core/transcode.py DITHER_METHODS).
+    transcode_dither: str = "tpdf"
     # On by default: a Dolby Digital (AC-3 5.1, 640 kb/s) copy of every Dolby Digital Plus
     # download, for a receiver on S/PDIF (coaxial, or optical from a TV),
     # which carries Dolby Digital but not Dolby Digital Plus. Only E-AC-3
@@ -380,6 +383,7 @@ class DownloadOptions:
         ):
             msg = "transcode_max_bit_depth must be 16 or 24"
             raise ValueError(msg)
+        self.transcode_dither = normalize_dither(self.transcode_dither)
         # Replacing a fake Hi-Res file means first knowing it is one, so
         # asking for the replacement is asking for the check. Resolved here
         # rather than at each entry point (CLI, profile, TUI, API) so no
@@ -1250,9 +1254,13 @@ def _offers_tier(provider: Any, tier: str, opts: DownloadOptions) -> bool:
         if not isinstance(option, dict):
             continue
         option_id = str(option.get("id") or "").upper()
-        label = str(option.get("label") or "").lower()
+        # Amazon's "FLAC Best Available" says "up to 24-bit/192kHz" only in
+        # its description, so that is read too.
+        text = " ".join(
+            str(option.get(key) or "") for key in ("label", "description")
+        ).lower()
         if option_id in _HI_RES_OPTION_IDS or any(
-            h in label for h in _HI_RES_OPTION_HINTS
+            h in text for h in _HI_RES_OPTION_HINTS
         ):
             return True
     return False
