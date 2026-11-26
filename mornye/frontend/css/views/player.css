@@ -1053,9 +1053,9 @@
   position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%);
   display: inline-flex; align-items: center; gap: 6px; max-width: min(420px, 90vw);
   padding: 4px 12px; border: 0; border-radius: 1000px;
-  background: var(--signal); color: #0b0b0c;
+  background: var(--signal); color: var(--signal-ink);
   font: 600 11.5px/1.4 var(--font); white-space: nowrap; cursor: pointer;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, .25);
+  box-shadow: 0 4px 14px rgba(var(--shade-rgb), .25);
 }
 .connect-banner span { overflow: hidden; text-overflow: ellipsis; }
 .connect-banner:hover { filter: brightness(1.08); }
