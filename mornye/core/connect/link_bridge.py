@@ -135,7 +135,11 @@ class LinkConnect:
             active = None
         if active is None:
             ranked = sorted(
-                (d for d in devices if d["kind"] != "phone" and d["canPlay"]),
+                (
+                    d
+                    for d in devices
+                    if d["kind"] not in ("phone", "mornye") and d["canPlay"]
+                ),
                 key=lambda d: (d["kind"] != "window", "state" not in d),
             )
             active = ranked[0] if ranked else None
@@ -175,7 +179,10 @@ class LinkConnect:
         return {"activeId": snap["activeId"], "targetId": target_id, "devices": devices}
 
     # ── phones as devices ──
-    def phone_connected(self, device_id: str, name: str) -> None:
+    def phone_connected(self, device_id: str, name: str, kind: str = "phone") -> None:
+        """A phone (or, ``kind="mornye"``, another computer running Mornye,
+        core/connect/link_peers.py) is connected: a device from now on."""
+
         def sender(action: str, args: dict[str, Any]) -> None:
             self._send(device_id, {"type": "command", "action": action, "args": args})
 
@@ -184,7 +191,15 @@ class LinkConnect:
         self._send(
             device_id, {"type": "player.state", "state": self.state_json(device_id)}
         )
-        self.hub().register(phone_device_id(device_id), name, "phone", sender=sender)
+        kind = "mornye" if kind == "mornye" else "phone"
+        if kind == "mornye":
+            from .link_peers import peer_device_id
+
+            if self.hub().device(peer_device_id(device_id)) is not None:
+                # Paired both ways: this computer already reaches that one
+                # as its client, and lists it once, from there.
+                return
+        self.hub().register(phone_device_id(device_id), name, kind, sender=sender)
 
     def phone_disconnected(self, device_id: str) -> None:
         with self._lock:

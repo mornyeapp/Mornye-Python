@@ -11127,7 +11127,7 @@ function connectDefaultName(ua) {
 }
 
 function connectDeviceLabel(d) {
-  const kind = { window: 'Mornye app', browser: 'Browser', phone: 'Phone', server: 'Server', cast: 'Receiver', mornye: 'Mornye' }[d.kind] || '';
+  const kind = { window: 'Mornye app', browser: 'Browser', phone: 'Phone', server: 'Server', cast: 'Receiver', mornye: 'Computer' }[d.kind] || '';
   const playing = d.state?.playing ? ' · playing' : '';
   return kind ? `${d.name} · ${kind}${playing}` : `${d.name}${playing}`;
 }
@@ -12523,6 +12523,7 @@ async function loadLinkSettings() {
   $('link-section')?.classList.toggle('hidden', !status);
   if (!status) return;
   renderLink(status);
+  loadLinkComputers();
   if (!g_linkPoll) {
     g_linkPoll = setInterval(async () => {
       if (!$('tc-player')?.classList.contains('active') || !$('view-settings')?.classList.contains('active')) {
@@ -12531,6 +12532,7 @@ async function loadLinkSettings() {
       }
       const next = await linkCall('link_status');
       if (next) renderLink(next);
+      loadLinkComputers();
     }, 2000);
   }
 }
@@ -12624,6 +12626,105 @@ async function revokeLinkDevice(btn) {
   if (!ok) return;
   const status = await linkCall('link_revoke_device', btn.dataset.device);
   if (status) renderLink(status);
+}
+
+// Settings → Mornye Link → Other computers (core/connect/link_peers.py).
+const LINK_COMPUTER_STATE = {
+  connected: 'connected',
+  connecting: 'connecting…',
+  offline: 'not reachable now',
+  unauthorized: 'unpaired there: pair again',
+};
+let g_linkPairFingerprint = '';
+
+async function loadLinkComputers() {
+  const res = await linkCall('link_computers');
+  if (res) renderLinkComputers(res.computers || []);
+}
+
+function renderLinkComputers(list) {
+  const box = $('link-computers');
+  if (!box) return;
+  box.classList.toggle('hidden', !list.length);
+  box.innerHTML = list.map(c => `
+    <div class="link-device">
+      <span class="link-device-dot${c.state === 'connected' ? ' on' : ''}" aria-hidden="true"></span>
+      <span class="link-device-name">${escHtml(c.name)}<small>${escHtml(c.address)} · ${escHtml(LINK_COMPUTER_STATE[c.state] || c.state)}</small></span>
+      <button class="act-btn secondary" type="button" data-server="${escHtml(c.serverId)}" data-name="${escHtml(c.name)}" data-onclick="removeLinkComputer(this)">Remove</button>
+    </div>`).join('');
+}
+
+async function findLinkComputers() {
+  const btn = $('link-find-btn');
+  const box = $('link-found');
+  btn.disabled = true;
+  btn.textContent = 'Searching…';
+  try {
+    const res = await linkCall('link_find_computers');
+    const found = res?.found || [];
+    box.classList.remove('hidden');
+    box.innerHTML = found.length
+      ? found.map(c => `
+        <div class="link-device">
+          <span class="link-device-name">${escHtml(c.name)}<small>${escHtml(c.host)}:${escHtml(String(c.port))}${c.paired ? ' · paired' : ''}</small></span>
+          <button class="act-btn secondary" type="button" data-host="${escHtml(c.host)}" data-port="${escHtml(String(c.port))}" data-fp="${escHtml(c.fingerprint || '')}" data-name="${escHtml(c.name)}" data-onclick="startLinkComputerPair(this)">${c.paired ? 'Pair again' : 'Pair'}</button>
+        </div>`).join('')
+      : '<div class="link-error">No other computer found. Turn Mornye Link on there, or add it by address.</div>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Find computers';
+  }
+}
+
+function startLinkComputerPair(btn) {
+  const host = btn?.dataset?.host || '';
+  const port = btn?.dataset?.port || '';
+  g_linkPairFingerprint = btn?.dataset?.fp || '';
+  $('link-computer-pair-name').textContent = btn?.dataset?.name || 'a computer';
+  const address = $('link-computer-address');
+  address.value = host ? `${host.includes(':') ? `[${host}]` : host}:${port}` : '';
+  $('link-computer-pin').value = '';
+  $('link-computer-pair-row').classList.remove('hidden');
+  (host ? $('link-computer-pin') : address).focus();
+}
+
+function parseLinkAddress(text) {
+  const value = String(text || '').trim();
+  const v6 = /^\[([^\]]+)\]:(\d+)$/.exec(value);
+  if (v6) return { host: v6[1], port: Number(v6[2]) };
+  const v4 = /^([^:\s]+):(\d+)$/.exec(value);
+  return v4 ? { host: v4[1], port: Number(v4[2]) } : null;
+}
+
+async function pairLinkComputer() {
+  const address = parseLinkAddress($('link-computer-address').value);
+  if (!address) { toastMgr.error('Type the address as host:port, as Mornye Link shows it there.'); return; }
+  const pin = $('link-computer-pin').value.replace(/\D/g, '');
+  if (pin.length !== 6) { toastMgr.error('Type the 6-digit PIN shown there.'); return; }
+  const btn = $('link-computer-pair-btn');
+  btn.disabled = true;
+  btn.textContent = 'Pairing…';
+  try {
+    const res = await linkCall('link_pair_computer', address.host, address.port, pin, g_linkPairFingerprint);
+    if (!res?.ok) { toastMgr.error(res?.message || 'Pairing failed.'); return; }
+    toastMgr.success(`Paired with ${res.computer?.name || 'the computer'}. It shows in "Play on".`);
+    $('link-computer-pair-row').classList.add('hidden');
+    $('link-found').classList.add('hidden');
+    g_linkPairFingerprint = '';
+    renderLinkComputers(res.computers || []);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Pair';
+  }
+}
+
+async function removeLinkComputer(btn) {
+  const name = btn?.dataset.name || 'this computer';
+  const ok = await askConfirm(`${name} leaves "Play on" here. To stop it reaching this computer too, unpair it in Mornye Link there.`,
+    { title: `Remove ${name}?`, ok: 'Remove', danger: true });
+  if (!ok) return;
+  const res = await linkCall('link_remove_computer', btn.dataset.server);
+  if (res) renderLinkComputers(res.computers || []);
 }
 
 function npOptQueue(patch, delay) {

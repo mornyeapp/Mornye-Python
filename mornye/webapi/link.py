@@ -209,8 +209,13 @@ def build_link_app(server: LinkServer) -> FastAPI:
             await ws.send_text(json.dumps(server.announce(welcome)))
             # The phone is a Connect device from here on, and is sent the
             # player's state at once (link_desktop_host.dart).
+            # Another computer running Mornye says so (link_peers.py).
+            kind = "mornye" if hello.get("kind") == "mornye" else "phone"
             await run_in_threadpool(
-                server.connect.phone_connected, device.deviceId, str(client["name"])
+                server.connect.phone_connected,
+                device.deviceId,
+                str(client["name"]),
+                kind,
             )
             while True:
                 text = await ws.receive_text()

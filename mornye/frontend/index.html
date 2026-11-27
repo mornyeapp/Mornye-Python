@@ -1784,6 +1784,26 @@
             </div>
             <div id="link-devices" class="link-devices hidden"></div>
             <div id="link-error" class="link-error hidden" role="status"></div>
+            <!-- Other computers running Mornye (core/connect/link_peers.py):
+                 this one pairs with their PIN, then each shows in the other's
+                 "Play on". Drawn by renderLinkComputers() in app.js. -->
+            <div class="s-row" id="link-computers-row">
+              <span class="s-label">Other computers<small>Play on another computer running Mornye, and let it play here. There, open Mornye Link and show a PIN.</small></span>
+              <div class="link-pair">
+                <button class="act-btn secondary" type="button" id="link-find-btn" data-onclick="findLinkComputers()">Find computers</button>
+                <button class="act-btn secondary" type="button" data-onclick="startLinkComputerPair(this)">Add by address</button>
+              </div>
+            </div>
+            <div id="link-found" class="link-devices hidden"></div>
+            <div class="s-row hidden" id="link-computer-pair-row">
+              <span class="s-label">Pair with <span id="link-computer-pair-name">a computer</span><small id="link-computer-pair-hint">The address and PIN it shows in Mornye Link. Check that the code under its PIN matches.</small></span>
+              <div class="link-pair link-computer-form">
+                <input type="text" id="link-computer-address" placeholder="192.168.1.20:47710" autocomplete="off" spellcheck="false" aria-label="Address">
+                <input type="text" id="link-computer-pin" placeholder="PIN" inputmode="numeric" maxlength="7" autocomplete="one-time-code" aria-label="PIN" data-onkeydown="if(event.key==='Enter') pairLinkComputer()">
+                <button class="act-btn" type="button" id="link-computer-pair-btn" data-onclick="pairLinkComputer()">Pair</button>
+              </div>
+            </div>
+            <div id="link-computers" class="link-devices hidden"></div>
           </div>
           <!-- Mornye Connect (api_mixins/connect.py, core/connect): play on one
                device, control it from the others. Drawn by loadConnectSettings(). -->

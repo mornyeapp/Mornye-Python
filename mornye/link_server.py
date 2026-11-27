@@ -17,6 +17,8 @@ The phone app's Link protocol (version 1), as the Rust desktop serves it
   plays on this account, hands its queue over, and shows up in "Play on";
 - ``devices`` and ``transfer``, and ``target`` on the player ops: "Play on"
   from the phone (feature ``connect.devices``);
+- a ``hello`` with ``"kind": "mornye"``: another computer running Mornye,
+  paired as a client (core/connect/link_peers.py), listed as a computer;
 - ``playlists`` and ``playlists/*``: the Player's playlists, read and edited
   from the phone, with a ``playlists.changed`` frame on every change
   (feature ``playlists``, core/connect/link_playlists.py);

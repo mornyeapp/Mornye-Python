@@ -181,6 +181,16 @@ After every change to the account's playlists, wherever it was made (the
 Player page, this phone, another phone, the computer following a provider
 playlist). `deleted: true` when they are gone. Reload what is shown.
 
+## Another computer as a Link client (no flag)
+
+A computer running Mornye can pair with another one exactly as the phone
+does (PIN, `POST pair`, then the socket); see
+`mornye/core/connect/link_peers.py`. Its `hello` carries
+`"kind": "mornye"`, so the computer it connects to lists it in `devices`
+with kind `mornye` (a computer), not `phone`. Nothing changes for the app,
+except that `devices` may now hold `mornye` entries: show them as computers.
+"Play on" works for them the same way (`transfer`).
+
 ## Word-by-word lyrics (no flag)
 
 `getLyricsBySongId` follows OpenSubsonic `songLyrics` version 2: with

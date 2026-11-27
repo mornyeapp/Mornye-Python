@@ -197,6 +197,7 @@
     // Each JS extension's own settings (api_mixins/extension_settings.py).
     // Mornye Link pairing (api_mixins/link.py; admin-only in multi-user).
     'link_status', 'link_set_enabled', 'link_begin_pairing', 'link_end_pairing', 'link_revoke_device',
+    'link_computers', 'link_find_computers', 'link_pair_computer', 'link_remove_computer',
     'storage_usage', 'storage_clear', 'storage_compact',
     // Mornye Connect: this account's devices (api_mixins/connect.py).
     'connect_register', 'connect_heartbeat', 'connect_unregister', 'connect_rename',
