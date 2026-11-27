@@ -11352,6 +11352,7 @@ async function connectLeaveRemote({ lost = false, keep = true } = {}) {
   playerMediaSessionActive(back.kind !== 'native');
   document.body.classList.remove('is-remote');
   connectButtonsShow();
+  presenceSync();
   if (lost) toastMgr.warning('The device that was playing is gone.');
   if (keep && playerIndex >= 0 && playerQueue[playerIndex]?.path) {
     await loadPlayerTrack(playerIndex);
@@ -11388,6 +11389,7 @@ async function connectFollow(id, state, extra) {
   } else if (index < 0 && state.track) {
     connectShowRemoteTrack({ title: state.track.title || '', artist: state.track.artist || '', path: '' });
   }
+  presenceSync();
   connectButtonsShow();
   if (!$('np-queue').classList.contains('hidden')) npRenderQueue();
 }
@@ -11775,12 +11777,30 @@ function listenFinish({ ended = false } = {}) {
 var presenceTimer = null, presenceSent = '';
 
 function presenceInfo() {
+  if (playerEngine.kind === 'remote') return presenceRemoteInfo();
   const it = listenState?.item;
   if (!it?.title) return null;
   const duration = Number.isFinite(playerEngine.duration) ? playerEngine.duration : (listenState.duration || 0);
   return {
     title: it.title || '', artist: it.artist || '', album: it.album || '',
     duration: duration || 0, position: playerEngine.currentTime || 0, playing: !playerEngine.paused,
+  };
+}
+
+// Another device plays and this page remotes it: Discord still shows the
+// song, as Spotify does for a Connect device (what plays there is still
+// this person listening). The device's own report is the truth; the queue
+// here fills what it leaves out.
+function presenceRemoteInfo() {
+  const state = connect.devices.find(d => d.id === connect.remoteId)?.state;
+  const item = playerQueue[playerIndex];
+  const track = state?.track?.title ? state.track : item;
+  if (!track?.title) return null;
+  const durationMs = state?.durationMs || track.durationMs || 0;
+  const duration = durationMs ? durationMs / 1000 : (track.duration_s || 0);
+  return {
+    title: track.title || '', artist: track.artist || '', album: track.album || '',
+    duration, position: playerEngine.currentTime || 0, playing: !playerEngine.paused,
   };
 }
 

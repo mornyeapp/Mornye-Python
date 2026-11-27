@@ -419,3 +419,27 @@ test('playerRemoteEngine shows the remote state and turns controls into commands
   engine.play();
   assert.equal(JSON.stringify(sent), '[["play",{}]]');
 });
+
+test('Discord still shows the song while another device plays it', () => {
+  const g = {
+    playerEngine: { kind: 'remote', currentTime: 42, paused: false, duration: 180 },
+    connect: { remoteId: 'mornye:b', devices: [{ id: 'mornye:b', state: {
+      track: { title: 'Alpha', artist: 'Ann', album: 'A' }, durationMs: 200000 } }] },
+    playerQueue: [{ title: 'Old', artist: 'X', album: '', duration_s: 10 }],
+    playerIndex: 0,
+    listenState: null,
+  };
+  const { presenceInfo } = pick(['presenceInfo', 'presenceRemoteInfo'], g);
+  assert.equal(JSON.stringify(presenceInfo()),
+    '{"title":"Alpha","artist":"Ann","album":"A","duration":200,"position":42,"playing":true}');
+  // Paused there: shown paused (Mornye clears the profile then).
+  g.playerEngine.paused = true;
+  assert.equal(presenceInfo().playing, false);
+  // A device that sent no track yet: the queue here names the song.
+  g.connect.devices[0].state = {};
+  assert.equal(presenceInfo().title, 'Old');
+  assert.equal(presenceInfo().duration, 10);
+  // Nothing known anywhere: nothing shown.
+  g.playerQueue.length = 0;
+  assert.equal(presenceInfo(), null);
+});
