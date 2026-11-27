@@ -344,13 +344,112 @@ def start_scan(roots: list[str]) -> None:
 # ---------------------------------------------------------------------------
 
 _LRC_LINE = re.compile(r"\[(\d+):(\d+(?:[.:]\d+)?)\]")
-_LRC_WORD = re.compile(r"<\d+:\d+(?:[.:]\d+)?>")
+#: The ``<mm:ss.xx>`` before each word of an enhanced-LRC line. Captured, so
+#: re.split() hands back text, minutes, seconds, text, … starting with text.
+_LRC_WORD = re.compile(r"<(\d+):(\d+(?:[.:]\d+)?)>")
+#: What core/lyrics.py writes between words for Jellyfin (JELLYFIN_WORD_GAP):
+#: a blank a trim leaves alone. A client is sent a plain space.
+_WORD_GAP = "⠀"
 
 
-def lyrics_for(song: Song) -> tuple[bool, list[tuple[int, str]]] | None:
-    """(synced, [(start ms, text)]) from a .mlrc or .lrc beside the file or
-    the embedded lyrics; None when there are none. Translation tags are
-    left out: OpenSubsonic lyrics have one text per line."""
+@dataclass(frozen=True)
+class LyricWord:
+    """One timed word (or syllable) of a line, as an OpenSubsonic ``cue``.
+
+    `byte_start` and `byte_end` are the UTF-8 bytes of the word in the
+    line's text, both inclusive. `end` is the time of the tag after the
+    word; None for every word of a line whose last word nothing closes."""
+
+    start: int
+    end: int | None
+    value: str
+    byte_start: int
+    byte_end: int
+
+
+@dataclass(frozen=True)
+class LyricLine:
+    start: int
+    value: str
+    words: tuple[LyricWord, ...] = ()
+
+
+def _lrc_ms(minutes: str, seconds: str) -> int:
+    return round((int(minutes) * 60 + float(seconds.replace(":", "."))) * 1000)
+
+
+def _timed_words(body: str) -> tuple[str, tuple[LyricWord, ...]]:
+    """The text of a line without its line stamps, and its words when it
+    is enhanced LRC. A line whose times run backwards has no words: its
+    timing cannot be trusted, and it still shows as a line."""
+    pieces = _LRC_WORD.split(body.replace(_WORD_GAP, " "))
+    texts = pieces[::3]
+    times = [_lrc_ms(m, s) for m, s in zip(pieces[1::3], pieces[2::3], strict=True)]
+    full = "".join(texts)
+    value = full.strip()
+    if not times or times != sorted(times):
+        return value, ()
+    lead = len(full) - len(full.lstrip())
+    words: list[LyricWord] = []
+    at = len(texts[0])
+    for i, start in enumerate(times):
+        text = texts[i + 1]
+        word = text.strip()
+        if word:
+            first = at + (len(text) - len(text.lstrip())) - lead
+            byte_start = len(value[:first].encode("utf-8"))
+            words.append(
+                LyricWord(
+                    start=start,
+                    end=times[i + 1] if i + 1 < len(times) else None,
+                    value=word,
+                    byte_start=byte_start,
+                    byte_end=byte_start + len(word.encode("utf-8")) - 1,
+                )
+            )
+        at += len(text)
+    if any(w.end is None for w in words):
+        # OpenSubsonic: every cue of a line has an end, or none has.
+        words = [
+            LyricWord(w.start, None, w.value, w.byte_start, w.byte_end) for w in words
+        ]
+    return value, tuple(words)
+
+
+def parse_lyrics(text: str) -> tuple[bool, list[LyricLine]] | None:
+    """(synced, lines) of LRC or .mlrc text; None when it holds none.
+
+    Enhanced LRC keeps its word timing in each line's `words`, but only when
+    some line really is split into two or more timed words: lyrics that time
+    every line as one piece (``<start>whole line<end>``) are line-synced.
+    Translation tags are left out: OpenSubsonic lyrics have one text per
+    line. A line with several stamps (a repeated chorus) is listed at each
+    of them without words, which are timed only once."""
+    if not text.strip():
+        return None
+    timed: list[LyricLine] = []
+    plain: list[str] = []
+    for raw in text.splitlines():
+        stamps = list(_LRC_LINE.finditer(raw))
+        value, words = _timed_words(_LRC_LINE.sub("", raw))
+        if stamps:
+            if len(stamps) > 1:
+                words = ()
+            for m in stamps:
+                timed.append(LyricLine(_lrc_ms(m.group(1), m.group(2)), value, words))
+        elif raw.strip() and not re.match(r"^\[[a-z][a-z0-9_-]*:", raw.strip(), re.I):
+            plain.append(raw.strip())
+    if timed:
+        timed.sort(key=lambda line: (line.start, line.value))
+        if not any(len(line.words) > 1 for line in timed):
+            timed = [LyricLine(line.start, line.value) for line in timed]
+        return True, timed
+    return False, [LyricLine(0, line) for line in plain]
+
+
+def structured_lyrics_for(song: Song) -> tuple[bool, list[LyricLine]] | None:
+    """The lyrics of `song` from a .mlrc or .lrc beside the file or the
+    embedded lyrics; None when there are none."""
     from .lyric_tags import sidecar_lyrics
 
     text = sidecar_lyrics(song.path)
@@ -361,22 +460,17 @@ def lyrics_for(song: Song) -> tuple[bool, list[tuple[int, str]]] | None:
             text = read_embedded_tags(song.path, include_cover=False).lyrics or ""
         except Exception:
             text = ""
-    if not text.strip():
+    return parse_lyrics(text)
+
+
+def lyrics_for(song: Song) -> tuple[bool, list[tuple[int, str]]] | None:
+    """(synced, [(start ms, text)]): `structured_lyrics_for` without the
+    word timing."""
+    found = structured_lyrics_for(song)
+    if found is None:
         return None
-    timed: list[tuple[int, str]] = []
-    plain: list[str] = []
-    for raw in text.splitlines():
-        stamps = list(_LRC_LINE.finditer(raw))
-        words = _LRC_WORD.sub("", _LRC_LINE.sub("", raw)).strip()
-        if stamps:
-            for m in stamps:
-                seconds = float(m.group(2).replace(":", "."))
-                timed.append((int((int(m.group(1)) * 60 + seconds) * 1000), words))
-        elif raw.strip() and not re.match(r"^\[[a-z][a-z0-9_-]*:", raw.strip(), re.I):
-            plain.append(raw.strip())
-    if timed:
-        return True, sorted(timed)
-    return False, [(0, line) for line in plain]
+    synced, lines = found
+    return synced, [(line.start, line.value) for line in lines]
 
 
 # ---------------------------------------------------------------------------
