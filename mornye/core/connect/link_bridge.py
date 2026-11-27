@@ -93,6 +93,17 @@ class LinkConnect:
         self._beat: threading.Timer | None = None
         self._handoff_id = ""
         self._handoff_target = ""
+        from .link_playlists import PAGE_EVENT, LinkPlaylists
+
+        self.playlists = LinkPlaylists(
+            send,
+            connected,
+            catalog=catalog,
+            owner=owner,
+            notify_pages=lambda ids, deleted: self.hub().emit(
+                PAGE_EVENT, {"ids": ids, "deleted": deleted}
+            ),
+        )
 
     # ── the hub ──
     def hub(self) -> ConnectHub:
@@ -259,6 +270,7 @@ class LinkConnect:
                 self._beat.start()
 
     def close(self) -> None:
+        self.playlists.close()
         with self._lock:
             if self._beat is not None:
                 self._beat.cancel()
@@ -271,6 +283,8 @@ class LinkConnect:
     # ── ops ──
     def op(self, op: str, method: str, args: dict[str, Any], device_id: str) -> Any:
         """One ``/mornye/v1/<op>``; raises CommandError with a Link code."""
+        if self.playlists.handles(op):
+            return self.playlists.op(op, method, args, device_id)
         handlers: dict[tuple[str, str], Callable[[dict[str, Any], str], Any]] = {
             ("state", "GET"): self._state,
             ("devices", "GET"): lambda a, d: self.devices_json(d),

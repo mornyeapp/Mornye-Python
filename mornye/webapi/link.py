@@ -28,7 +28,13 @@ logger = logging.getLogger(__name__)
 
 HELLO_TIMEOUT_S = 60.0
 #: Link error codes as HTTP statuses (rust_backend/crates/link api.rs).
-_STATUS = {"invalid": 400, "not_found": 404, "unavailable": 503, "timeout": 504}
+_STATUS = {
+    "invalid": 400,
+    "not_found": 404,
+    "conflict": 409,
+    "unavailable": 503,
+    "timeout": 504,
+}
 CLOSE_UNAUTHORIZED = 4401
 CLOSE_REPLACED = 4409
 MAX_BODY = 8 << 20

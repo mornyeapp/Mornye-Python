@@ -11,12 +11,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
+import threading
 import time
 import uuid
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
 from . import db
+
+logger = logging.getLogger(__name__)
 
 MAX_NAME_LENGTH = 120
 MAX_DESCRIPTION_LENGTH = 2000
@@ -27,6 +31,39 @@ REMOTE_PREFIX = "remote:"
 
 _TRACK_FIELDS = ("path", "title", "artist", "album", "duration_s", "isrc", "source_url")
 _TRACK_COLUMNS = ", ".join(_TRACK_FIELDS)
+
+
+#: ``fn(owner, playlist_ids, deleted)`` after every change, whoever made it.
+ChangeListener = Callable[[str, list[str], bool], None]
+_listeners: list[ChangeListener] = []
+_listeners_lock = threading.Lock()
+
+
+def add_change_listener(fn: ChangeListener) -> Callable[[], None]:
+    """Hear every playlist change (Mornye Link tells the phones). Returns
+    the function that stops listening."""
+    with _listeners_lock:
+        _listeners.append(fn)
+
+    def remove() -> None:
+        with _listeners_lock:
+            if fn in _listeners:
+                _listeners.remove(fn)
+
+    return remove
+
+
+def _changed(owner: str, playlist_ids: Iterable[str], deleted: bool = False) -> None:
+    ids = sorted(set(playlist_ids))
+    if not ids:
+        return
+    with _listeners_lock:
+        listeners = list(_listeners)
+    for fn in listeners:
+        try:
+            fn(owner, ids, deleted)
+        except Exception:
+            logger.debug("A playlist listener failed", exc_info=True)
 
 
 def is_remote(path: str) -> bool:
@@ -221,6 +258,7 @@ def create_playlist(
     playlist = get_playlist(playlist_id, owner)
     if playlist is None:  # pragma: no cover - written in the same call
         raise ValueError("The playlist could not be read back.")
+    _changed(owner, [playlist_id])
     return playlist
 
 
@@ -246,6 +284,7 @@ def update_playlist(
         )
         if not cursor.rowcount:
             return None
+    _changed(owner, [playlist_id])
     return get_playlist(playlist_id, owner)
 
 
@@ -255,6 +294,8 @@ def delete_playlist(playlist_id: str, owner: str) -> bool:
             "DELETE FROM player_playlists WHERE id = ? AND owner = ?",
             (playlist_id, owner),
         )
+    if cursor.rowcount:
+        _changed(owner, [playlist_id], deleted=True)
     return bool(cursor.rowcount)
 
 
@@ -288,6 +329,7 @@ def add_tracks(
             paths.add(path)
             position += 1
         _touch(conn, playlist_id)
+    _changed(owner, [playlist_id])
     return get_playlist(playlist_id, owner)
 
 
@@ -298,6 +340,7 @@ def remove_track(playlist_id: str, owner: str, path: str) -> dict[str, Any] | No
         remaining = [t for t in _tracks_of(conn, playlist_id) if t["path"] != path]
         _replace_tracks(conn, playlist_id, remaining)
         _touch(conn, playlist_id)
+    _changed(owner, [playlist_id])
     return get_playlist(playlist_id, owner)
 
 
@@ -315,6 +358,47 @@ def reorder_tracks(
             raise ValueError("The playlist changed; reload it and try again.")
         _replace_tracks(conn, playlist_id, [current[path] for path in ordered])
         _touch(conn, playlist_id)
+    _changed(owner, [playlist_id])
+    return get_playlist(playlist_id, owner)
+
+
+class PlaylistConflict(ValueError):
+    """The playlist changed since the version the edit was made on."""
+
+
+def updated_ms(playlist: Mapping[str, Any]) -> int:
+    """A playlist's version as another device holds it: `updated_at` in ms."""
+    return int(round(float(playlist.get("updated_at") or 0) * 1000))
+
+
+def set_tracks(
+    playlist_id: str,
+    owner: str,
+    tracks: Iterable[Mapping[str, Any]],
+    *,
+    base_updated_ms: int | None = None,
+) -> dict[str, Any] | None:
+    """Replace the whole track list (a path listed twice is kept once).
+
+    `base_updated_ms` is the version the new list was made from (see
+    :func:`updated_ms`): when the playlist has changed since, nothing is
+    written and :class:`PlaylistConflict` is raised, so an edit made on
+    another device is never lost silently. None when there is no such
+    playlist.
+    """
+    entries = list(tracks)
+    if len(entries) > MAX_TRACKS:
+        raise ValueError(f"A playlist can contain at most {MAX_TRACKS} tracks.")
+    with db.transaction() as conn:
+        row = _playlist(conn, playlist_id, owner)
+        if row is None:
+            return None
+        current = updated_ms({"updated_at": row["updated_at"]})
+        if base_updated_ms is not None and base_updated_ms != current:
+            raise PlaylistConflict("The playlist changed; reload it and try again.")
+        _replace_tracks(conn, playlist_id, entries)
+        _touch(conn, playlist_id)
+    _changed(owner, [playlist_id])
     return get_playlist(playlist_id, owner)
 
 
@@ -365,6 +449,7 @@ def link_tracks(owner: str, links: Mapping[str, Mapping[str, Any]]) -> int:
             # song that was already there as a file is not listed twice.
             _replace_tracks(conn, playlist_id, updated)
             _touch(conn, playlist_id)
+    _changed(owner, playlist_ids)
     return changed
 
 
@@ -402,6 +487,8 @@ def set_playlist_source(
                 owner,
             ),
         )
+    if cursor.rowcount:
+        _changed(owner, [playlist_id])
     return bool(cursor.rowcount)
 
 
@@ -465,4 +552,5 @@ def record_source_sync(
                 playlist_id,
             ),
         )
+    _changed(owner, [playlist_id])
     return get_playlist(playlist_id, owner)

@@ -389,6 +389,8 @@
     'app_connect_devices',
     'app_connect_state',
     'app_connect_command',
+    // A playlist changed elsewhere (core/connect/link_playlists.py).
+    'app_player_playlists_changed',
   ]);
 
   function connectWs() {

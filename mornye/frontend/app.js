@@ -11569,6 +11569,18 @@ window.app_connect_devices = (snap) => connectDevices(snap);
 window.app_connect_state = (msg) => connectRemoteState(msg);
 window.app_connect_command = (msg) => { if (msg && msg.target === connect.id) connectRun(msg.action, msg.args || {}); };
 
+// A playlist changed somewhere else (a phone over Mornye Link, or the
+// server following its provider playlist): the list, and the playlist open,
+// are read again. Several changes in a row are read once.
+let playlistsChangedTimer = null;
+window.app_player_playlists_changed = () => {
+  clearTimeout(playlistsChangedTimer);
+  playlistsChangedTimer = setTimeout(() => {
+    playlistsChangedTimer = null;
+    refreshPlayerPlaylists(lib.playlist || undefined);
+  }, 300);
+};
+
 (function initConnect() {
   for (const type of ['play', 'pause', 'seeked', 'loadedmetadata', 'ended']) {
     playerEngine.addEventListener(type, () => connectSchedule());

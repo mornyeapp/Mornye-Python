@@ -17,6 +17,9 @@ The phone app's Link protocol (version 1), as the Rust desktop serves it
   plays on this account, hands its queue over, and shows up in "Play on";
 - ``devices`` and ``transfer``, and ``target`` on the player ops: "Play on"
   from the phone (feature ``connect.devices``);
+- ``playlists`` and ``playlists/*``: the Player's playlists, read and edited
+  from the phone, with a ``playlists.changed`` frame on every change
+  (feature ``playlists``, core/connect/link_playlists.py);
 - any other ``/mornye/v1/<op>``: ``404 not_found``. ``features`` in ``info``
   and ``welcome`` lists what came after protocol 1 (FEATURES); there are no
   downloads, open or library jobs here, and the player ops need no flag.
@@ -55,7 +58,7 @@ CLOSE_REPLACED = 4409
 
 #: What this server answers beyond Link protocol 1, in ``info`` and
 #: ``welcome``. docs/architecture/link-protocol.md describes each one.
-FEATURES: tuple[str, ...] = ("connect.devices",)
+FEATURES: tuple[str, ...] = ("connect.devices", "playlists")
 
 
 def host_platform() -> str:

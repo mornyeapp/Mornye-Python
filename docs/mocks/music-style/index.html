@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mock · Mornye (music-app style)</title>
+<!-- Static, clickable mockup of every GUI view in a music-app style. The
+     sidebar switches views (#home, #songs, #settings…), album cards open the
+     album page, the player's middle opens Now Playing. Not wired to app.js. -->
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar" aria-label="Main">
+    <div class="brand">
+      <span class="brand-mark"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span>
+      Mornye
+    </div>
+    <div class="search">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      Search
+    </div>
+    <div class="nav">
+      <a href="#home"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Home</a>
+      <a href="#following"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>Following</a>
+
+      <div class="nav-head">Library</div>
+      <a href="#recent"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Recently Added</a>
+      <a href="#artists"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3a4 4 0 0 1 4 4v4a4 4 0 0 1-8 0V7a4 4 0 0 1 4-4zM5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Artists</a>
+      <a href="#albums"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="12" cy="12" r="3.5"/></svg>Albums</a>
+      <a href="#songs"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>Songs</a>
+
+      <div class="nav-head">Playlists</div>
+      <a href="#playlists"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h12M4 12h12M4 18h8M19 14v7M15.5 17.5h7"/></svg>All Playlists</a>
+
+      <div class="nav-head">Downloads</div>
+      <a href="#queue"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg>Queue<span class="badge">9</span></a>
+      <a href="#history"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2"/></svg>History</a>
+      <a href="#local"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>Fix Local Files</a>
+      <a href="#stats"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>Stats</a>
+    </div>
+    <div class="nav sidebar-foot">
+      <a href="#settings"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7 19.4a1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3.6 14H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 7a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 10 3.6V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0 1.2 2.9H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</a>
+      <div class="version">Mornye 2.2.3</div>
+    </div>
+  </nav>
+
+  <main>
+    <!-- ============ HOME (with the discovery feed that used to be Explore) ============ -->
+    <section class="view" data-view="home">
+      <div class="page-head">
+        <h1>Home</h1>
+        <div class="acts">
+          <span class="muted">Recommendations from</span>
+          <select class="select" id="feed"><option value="0" selected>Apple Music</option><option value="1">Spotify</option><option value="2">Melon</option><option value="3">Bugs!</option></select>
+        </div>
+      </div>
+      <div class="fetch">
+        <div class="seg"><button class="on">Link</button><button>Search</button><button>CSV</button></div>
+        <label class="field lg">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>
+          <input placeholder="Paste a Spotify, Tidal, Apple Music, YouTube or Pandora link">
+        </label>
+        <button class="btn accent lg" data-go="album">Fetch</button>
+      </div>
+      <div class="activity" data-go="queue">
+        <div class="c g8"></div>
+        <div class="t"><b>Downloading Blue Static</b><span>Mira Okafor · Track 4 of 11 · Tidal · 2 more in the queue</span></div>
+        <div class="progress"><i style="width:38%"></i></div>
+        <span class="muted">38%</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg>
+      </div>
+
+      <section class="shelf">
+        <h2 class="shelf-head">Top Picks for You <span class="feed-src"></span></h2>
+        <div class="picks" id="home-picks"></div>
+      </section>
+      <section class="shelf">
+        <h2 class="shelf-head">Recently Added <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg></h2>
+        <div class="songs" id="home-songs"></div>
+      </section>
+      <section class="shelf">
+        <h2 class="shelf-head">Made for You <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg></h2>
+        <div class="albums" id="ex-mixes"></div>
+      </section>
+      <section class="shelf">
+        <h2 class="shelf-head">New Releases <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg></h2>
+        <div class="albums" id="ex-new"></div>
+      </section>
+      <section class="shelf">
+        <h2 class="shelf-head">Top Songs <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg></h2>
+        <div class="songs" id="ex-top"></div>
+      </section>
+      <section class="shelf">
+        <h2 class="shelf-head">Recent Fetches <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="m9 5 7 7-7 7"/></svg></h2>
+        <div class="albums" id="home-fetches"></div>
+      </section>
+      <section class="shelf">
+        <h2 class="shelf-head">Browse by Genre</h2>
+        <div class="cats" id="ex-cats"></div>
+      </section>
+    </section>
+
+    <!-- ============ FOLLOWING ============ -->
+    <section class="view" data-view="following">
+      <div class="page-head">
+        <div><h1>Following</h1><div class="sub">Mornye checks the artists and playlists you follow and downloads what is new.</div></div>
+        <div class="acts"><button class="btn">Check for New</button><button class="btn accent">Check &amp; Download</button></div>
+      </div>
+      <div class="card" style="margin-bottom:40px">
+        <div class="follow-box">
+          <label class="field lg"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg><input placeholder="https://open.spotify.com/artist/… or /playlist/…"></label>
+          <select class="select"><option>Albums &amp; singles</option><option>Albums only</option><option>Singles only</option><option>Everything</option></select>
+          <select class="select"><option>Every 6 hours</option><option>Every 12 hours</option><option>Every day</option><option>Manually</option></select>
+          <button class="btn accent lg">Follow</button>
+        </div>
+        <button class="btn plain" style="margin-top:10px">Follow several artists at once…</button>
+      </div>
+      <section class="shelf">
+        <h2 class="shelf-head">New This Week
+          <span class="right"><span class="seg"><button class="on">7 days</button><button>14 days</button><button>30 days</button></span></span></h2>
+        <div class="albums" id="fo-new"></div>
+      </section>
+      <section class="shelf">
+        <h2 class="shelf-head">Followed Artists &amp; Playlists</h2>
+        <div class="followed" id="fo-list"></div>
+      </section>
+    </section>
+
+    <!-- ============ RECENTLY ADDED ============ -->
+    <section class="view" data-view="recent">
+      <div class="page-head"><h1>Recently Added</h1></div>
+      <div class="albums wrap" id="rec"></div>
+    </section>
+
+    <!-- ============ ARTISTS ============ -->
+    <section class="view" data-view="artists">
+      <div class="page-head"><div><h1>Artists</h1><div class="sub">317 artists</div></div></div>
+      <div class="toolbar">
+        <label class="field"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input placeholder="Find in Artists"></label>
+        <span class="grow"></span>
+        <select class="select"><option>Sort by Name</option><option>Most songs</option></select>
+      </div>
+      <div class="artists" id="ar"></div>
+    </section>
+
+    <!-- ============ ALBUMS ============ -->
+    <section class="view" data-view="albums">
+      <div class="page-head"><div><h1>Albums</h1><div class="sub">96 albums</div></div></div>
+      <div class="toolbar">
+        <label class="field"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input placeholder="Find in Albums"></label>
+        <span class="grow"></span>
+        <select class="select"><option>Sort by Title</option><option>Artist</option><option>Year</option><option>Recently added</option></select>
+      </div>
+      <div class="albums wrap" id="al"></div>
+    </section>
+
+    <!-- ============ SONGS ============ -->
+    <section class="view" data-view="songs">
+      <div class="page-head">
+        <div><h1>Songs</h1><div class="sub">1,284 songs, 3 days 14 hours</div></div>
+        <div class="acts">
+          <button class="btn accent"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>Play</button>
+          <button class="btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>Shuffle</button>
+        </div>
+      </div>
+      <div class="toolbar">
+        <label class="field"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input placeholder="Search title, artist or album"></label>
+        <select class="select"><option>Add to playlist…</option></select>
+        <span class="grow"></span>
+        <span class="muted" style="font-size:13px">Music · smb://nas/Music</span>
+        <button class="btn">Rescan</button>
+        <select class="select"><option>Folder order</option><option>Title</option><option>Artist</option><option>Album</option><option>Longest first</option></select>
+      </div>
+      <div class="table t-songs" id="so"></div>
+    </section>
+
+    <!-- ============ PLAYLISTS ============ -->
+    <section class="view" data-view="playlists">
+      <div class="page-head">
+        <div><h1>Playlists</h1><div class="sub">6 playlists</div></div>
+        <div class="acts"><button class="btn">Import Link…</button><button class="btn">Import M3U…</button><button class="btn accent">New Playlist</button></div>
+      </div>
+      <div class="albums wrap" id="pl"></div>
+    </section>
+
+    <!-- ============ ALBUM (fetch result) ============ -->
+    <section class="view" data-view="album">
+      <div class="album-hero">
+        <div class="big g1"></div>
+        <div class="album-info">
+          <h1>Coastline Hours</h1>
+          <div class="artist-link">The Paper Lanterns</div>
+          <div class="meta">Album · Indie Rock · 2025 · FLAC 24-bit / 96 kHz</div>
+          <div class="desc">The third record from the quartet, recorded over one winter in a converted boathouse. Twelve songs, 48 minutes, mixed for headphones first.</div>
+          <div class="acts">
+            <button class="btn accent lg"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg>Download 11 Selected</button>
+            <button class="btn lg">Add to Queue</button>
+            <button class="btn lg" data-go="nowplaying"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>Preview</button>
+            <span style="flex:1"></span>
+            <button class="btn round">•••</button>
+          </div>
+        </div>
+      </div>
+      <div class="toolbar">
+        <label class="field"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input placeholder="Filter tracks"></label>
+        <span class="grow"></span>
+        <span class="chip">Source: Tidal</span><span class="chip">ISRC matched 12/12</span>
+        <select class="select"><option>Default order</option><option>Title (A–Z)</option><option>Duration</option><option>Plays</option></select>
+      </div>
+      <div class="table t-tracks" id="tracks"></div>
+      <div class="album-foot">14 March 2025<br>12 songs, 48 minutes · about 1.2 GB<br>℗ 2025 Harbour Room Records</div>
+    </section>
+
+    <!-- ============ QUEUE ============ -->
+    <section class="view" data-view="queue">
+      <div class="page-head">
+        <div><h1>Queue</h1><div class="sub">9 items · 3 downloading</div></div>
+        <div class="acts"><button class="btn">Finish Current</button><button class="btn">Stop All</button><button class="btn accent">Start All</button></div>
+      </div>
+      <div class="tiles">
+        <div class="tile"><div class="l">Downloaded</div><div class="v">842 MB</div></div>
+        <div class="tile"><div class="l">Speed</div><div class="v">12.4 MB/s</div></div>
+        <div class="tile"><div class="l">Time left</div><div class="v">3 min</div></div>
+        <div class="tile"><div class="l">Elapsed</div><div class="v">6 min</div></div>
+      </div>
+      <div class="failed">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--bad)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5v.5"/></svg>
+        <div class="t"><b>2 tracks still missing</b><span>Kept until they download, even across restarts.</span></div>
+        <button class="btn">Show</button><button class="btn">Export</button><button class="btn accent">Retry All</button>
+      </div>
+      <div class="toolbar">
+        <div class="seg"><button class="on">All<span class="n">9</span></button><button>Tracks<span class="n">3</span></button><button>Albums<span class="n">4</span></button><button>Playlists<span class="n">1</span></button><button>Artists<span class="n">1</span></button></div>
+        <span class="grow"></span>
+        <label class="field"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input placeholder="Search the queue"></label>
+        <select class="select"><option>All statuses</option><option>Waiting</option><option>Downloading</option><option>Done</option><option>Failed</option></select>
+      </div>
+      <div class="group-label">Downloading now</div><div class="list" id="q-now"></div>
+      <div class="group-label">Waiting</div><div class="list" id="q-wait"></div>
+      <div class="group-label" style="display:flex;align-items:center">Finished<span style="flex:1"></span><button class="btn plain">Clear Finished</button></div><div class="list" id="q-done"></div>
+    </section>
+
+    <!-- ============ HISTORY ============ -->
+    <section class="view" data-view="history">
+      <div class="page-head">
+        <div><h1>History</h1><div class="sub">1,284 downloads · 312 fetches</div></div>
+        <div class="acts"><button class="btn plain">Clear All</button></div>
+      </div>
+      <div class="toolbar">
+        <div class="seg"><button class="on">Downloads</button><button>Fetches</button></div>
+        <span class="grow"></span>
+        <label class="field"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input placeholder="Search downloads"></label>
+        <select class="select"><option>Newest first</option><option>Oldest first</option><option>Title A–Z</option><option>Artist A–Z</option><option>Largest first</option></select>
+      </div>
+      <div class="group-label">Today</div><div class="list" id="h-today"></div>
+      <div class="group-label">Yesterday</div><div class="list" id="h-yday"></div>
+      <div class="group-label">Earlier this week</div><div class="list" id="h-week"></div>
+    </section>
+
+    <!-- ============ FIX LOCAL FILES ============ -->
+    <section class="view" data-view="local">
+      <div class="page-head">
+        <div><h1>Fix Local Files</h1><div class="sub">Match your files against the catalogue and rewrite their tags.</div></div>
+        <div class="acts"><button class="btn">Find Duplicates</button><button class="btn accent">Scan</button></div>
+      </div>
+      <div class="drop">
+        <div class="ico"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg></div>
+        <div class="t"><b>Drop a folder or an audio file</b><div>FLAC, ALAC, MP3, AAC, WAV, AIFF, OGG — or a network share</div></div>
+        <label class="field lg"><input value="/Users/you/Music/Unsorted"></label>
+        <button class="btn lg">Choose…</button>
+      </div>
+      <div class="actionbar">
+        <span class="check on"></span><b>5 of 8 selected</b>
+        <span class="muted">· 5 matched · 2 to review · 1 no match</span>
+        <span class="grow"></span>
+        <label class="field" style="width:220px"><input placeholder="Find a song"></label>
+        <button class="btn">Convert…</button><button class="btn">Organize…</button><button class="btn accent">Apply Tags</button>
+      </div>
+      <div class="table t-local" id="lo"></div>
+    </section>
+
+    <!-- ============ STATS ============ -->
+    <section class="view" data-view="stats">
+      <div class="page-head">
+        <div><h1>Stats</h1><div class="sub">Your library</div></div>
+        <div class="acts"><div class="seg"><button class="on">All Time</button><button>This Year</button><button>365 Days</button><button>30 Days</button></div><button class="btn round" title="Refresh">↻</button></div>
+      </div>
+      <div class="tiles">
+        <div class="tile"><div class="l">Tracks</div><div class="v">1,284</div></div>
+        <div class="tile"><div class="l">Artists</div><div class="v">317</div></div>
+        <div class="tile"><div class="l">Albums</div><div class="v">96</div></div>
+        <div class="tile"><div class="l">On disk</div><div class="v">41.2 GB</div></div>
+        <div class="tile"><div class="l">Music</div><div class="v">3d 14h</div></div>
+        <div class="tile"><div class="l">Failure rate</div><div class="v">1.8%</div></div>
+      </div>
+      <div class="grid-2">
+        <div class="card"><h3>Top Artists</h3><div class="bars" id="st-artists"></div></div>
+        <div class="card"><h3>Top Genres <span class="faint" style="font:400 13px var(--font)">known for 812 of 1,284</span></h3><div class="bars nocover" id="st-genres"></div></div>
+      </div>
+      <div class="grid-2">
+        <div class="card"><h3>By Decade</h3><div class="cols" id="st-dec"></div></div>
+        <div class="card">
+          <h3>Providers</h3>
+          <div class="split"><i style="width:62%;background:var(--accent)"></i><i style="width:25%;background:#0a84ff"></i><i style="width:13%;background:#30d158"></i></div>
+          <div class="legend"><span><span class="dot" style="background:var(--accent)"></span>Tidal 62%</span><span><span class="dot" style="background:#0a84ff"></span>Qobuz 25%</span><span><span class="dot" style="background:#30d158"></span>Amazon Music 13%</span></div>
+          <h3 style="margin-top:22px">Formats</h3>
+          <div class="split"><i style="width:48%;background:#bf5af2"></i><i style="width:39%;background:#ff9f0a"></i><i style="width:13%;background:#8e8e93"></i></div>
+          <div class="legend"><span><span class="dot" style="background:#bf5af2"></span>FLAC 24-bit 48%</span><span><span class="dot" style="background:#ff9f0a"></span>FLAC 16-bit 39%</span><span><span class="dot" style="background:#8e8e93"></span>Lossy 13%</span></div>
+        </div>
+      </div>
+      <div class="tiles">
+        <div class="tile"><div class="l">Busiest day</div><div class="v" style="font-size:19px">14 Mar 2026</div><div class="muted" style="font-size:13px">61 tracks</div></div>
+        <div class="tile"><div class="l">Active days</div><div class="v">214</div></div>
+        <div class="tile"><div class="l">Longest streak</div><div class="v">19 days</div></div>
+        <div class="tile"><div class="l">Current streak</div><div class="v">4 days</div></div>
+      </div>
+    </section>
+
+    <!-- ============ SETTINGS ============ -->
+    <section class="view" data-view="settings">
+      <div class="page-head"><h1>Settings</h1></div>
+      <div class="seg settings-tabs">
+        <button class="on" data-pane="p-general">General</button><button data-pane="p-sources">Sources</button><button data-pane="p-download">Download</button><button data-pane="p-files">Files</button><button data-pane="p-metadata">Metadata</button><button data-pane="p-player">Player</button><button data-pane="p-status">Status</button><button data-pane="p-extensions">Extensions</button>
+      </div>
+
+      <div class="pane on" id="p-general">
+        <div class="group-title">Appearance</div>
+        <div class="group">
+          <div class="row"><div class="l">Color Mode</div><div class="r"><select class="select" id="theme"><option value="dark">Dark</option><option value="light">Light</option><option value="auto">Automatic</option></select></div></div>
+          <div class="row"><div class="l">Accent Color</div><div class="r swatches">
+            <button class="on" style="background:#fa2d48" data-c="#fa2d48" title="Red"></button><button style="background:#ff9f0a" data-c="#ff9f0a" title="Orange"></button><button style="background:#ffb000" data-c="#ffb000" title="Amber"></button><button style="background:#30d158" data-c="#30d158" title="Green"></button><button style="background:#40c8e0" data-c="#40c8e0" title="Teal"></button><button style="background:#0a84ff" data-c="#0a84ff" title="Blue"></button><button style="background:#bf5af2" data-c="#bf5af2" title="Purple"></button><button style="background:#ff375f" data-c="#ff375f" title="Pink"></button>
+          </div></div>
+          <div class="row"><div class="l">Density<small>Compact fits more rows on screen; Large makes everything bigger</small></div><div class="r"><select class="select"><option>Compact</option><option selected>Comfortable</option><option>Large</option></select></div></div>
+          <div class="row"><div class="l">Notification Sounds</div><div class="r"><label class="switch"><input type="checkbox" checked><span></span></label></div></div>
+          <div class="row"><div class="l">Preview Volume<small>The 30-second clips played from a track's ▶ button</small></div><div class="r"><div class="range"><i style="width:100%"></i></div><span class="muted" style="width:40px;text-align:right">100%</span></div></div>
+        </div>
+        <div class="group-title">Account</div>
+        <div class="group">
+          <div class="row"><div class="l">Signed in as admin<small>This instance requires --web-multiuser sign-in.</small></div><div class="r"><button class="btn">Sign Out</button></div></div>
+        </div>
+        <div class="group-title">Logging</div>
+        <div class="group">
+          <div class="row"><div class="l">Log Level</div><div class="r"><select class="select"><option>Info</option><option>Debug</option><option>Warning</option></select></div></div>
+          <div class="row"><div class="l">Terminal Logs<small>Everything Mornye has printed this session</small></div><div class="r"><button class="btn">Open Logs…</button></div></div>
+        </div>
+      </div>
+
+      <div class="pane" id="p-sources">
+        <div class="group-title">Download Sources <span class="faint" style="font-weight:400">— drag to set the order they are tried in</span></div>
+        <div class="group">
+          <div class="row"><div class="src"><span class="grip">⋮⋮</span><span class="logo" style="background:#111">T</span>Tidal</div><div class="r"><select class="select"><option>Hi-Res (24-bit)</option><option>Lossless</option></select><label class="switch"><input type="checkbox" checked><span></span></label></div></div>
+          <div class="row"><div class="src"><span class="grip">⋮⋮</span><span class="logo" style="background:#0070ef">Q</span>Qobuz</div><div class="r"><select class="select"><option>24-bit / 192 kHz</option><option>16-bit / 44.1 kHz</option></select><label class="switch"><input type="checkbox" checked><span></span></label></div></div>
+          <div class="row"><div class="src"><span class="grip">⋮⋮</span><span class="logo" style="background:#1fa3b5">A</span>Amazon Music</div><div class="r"><select class="select"><option>Ultra HD</option><option>HD</option></select><label class="switch"><input type="checkbox" checked><span></span></label></div></div>
+          <div class="row"><div class="src"><span class="grip">⋮⋮</span><span class="logo" style="background:#a238ff">D</span>Deezer</div><div class="r"><select class="select"><option>FLAC</option><option>MP3 320</option></select><label class="switch"><input type="checkbox"><span></span></label></div></div>
+          <div class="row"><div class="src"><span class="grip">⋮⋮</span><span class="logo" style="background:#e00">Y</span>YouTube</div><div class="r"><select class="select"><option>Opus 251</option></select><label class="switch"><input type="checkbox"><span></span></label></div></div>
+        </div>
+        <div class="group" style="margin-top:12px">
+          <div class="row"><div class="l">Try Other Enabled Sources<small>If the first one fails, try the rest in this order</small></div><div class="r"><label class="switch"><input type="checkbox" checked><span></span></label></div></div>
+          <div class="row"><div class="l">Choose Source Before Each Batch</div><div class="r"><label class="switch"><input type="checkbox"><span></span></label></div></div>
+        </div>
+        <div class="group-title">Quality</div>
+        <div class="group">
+          <div class="row"><div class="l">Audio Quality</div><div class="r"><select class="select"><option>Best available</option><option>Hi-Res only</option><option>Lossless (16-bit)</option></select></div></div>
+          <div class="row"><div class="l">Auto Quality Fallback<small>Take the next quality down when the best one is missing</small></div><div class="r"><label class="switch"><input type="checkbox" checked><span></span></label></div></div>
+          <div class="row"><div class="l">Verify Hi-Res Authenticity<small>Spectral check for files upsampled from CD quality</small></div><div class="r"><label class="switch"><input type="checkbox" checked><span></span></label></div></div>
+          <div class="row"><div class="l">Replace Fake Hi-Res</div><div class="r"><label class="switch"><input type="checkbox"><span></span></label></div></div>
+        </div>
+        <div class="group-title">Auth &amp; APIs</div>
+        <div class="group">
+          <div class="row"><div class="l">AcoustID API Key</div><div class="r"><label class="field"><input type="password" value="xxxxxxxxxxxx"></label></div></div>
+          <div class="row"><div class="l">Tidal Endpoint<small>Self-hosted</small></div><div class="r"><label class="field"><input placeholder="https://tidal.example.lan"></label></div></div>
+          <div class="row"><div class="l">Qobuz Endpoint<small>Self-hosted</small></div><div class="r"><label class="field"><input placeholder="https://qobuz.example.lan"></label></div></div>
+        </div>
+      </div>
+
+      <div class="pane" id="p-download">
+        <div class="group-title">Performance</div>
+        <div class="group">
+          <div class="row"><div class="l">Parallel Downloads</div><div class="r"><span class="stepper"><button>−</button><span>3</span><button>+</button></span></div></div>
+          <div class="row"><div class="l">Metadata Request Delay</div><div class="r"><span class="stepper"><button>−</button><span>0.5 s</span><button>+</button></span></div></div>
+          <div class="row"><div class="l">Provider Request Delay</div><div class="r"><span class="stepper"><button>−</button><span>1.0 s</span><button>+</button></span></div></div>
+          <div class="row"><div class="l">Automatic 429 Cooldown<small>Pause a source for a while when it says "too many requests"</small></div><div class="r"><label class="switch"><input type="checkbox" checked><span></span></label></div></div>
+        </div>
+        <div class="group-title">Retry &amp; Loop</div>
+        <div class="group">
+          <div class="row"><div class="l">Extra Retries per Track</div><div class="r"><span class="stepper"><button>−</button><span>2</span><button>+</button></span></div></div>
+          <div class="row"><div class="l">Loop Failed Tracks Every</div><div class="r"><select class="select"><option>Off</option><option>15 minutes</option><option>1 hour</option></select></div></div>
+        </div>
+        <div class="group-title">Transcoding</div>
+        <div class="group">
+          <div class="row"><div class="l">Output Format</div><div class="r"><select class="select"><option>Keep original</option><option>FLAC</option><option>ALAC</option><option>MP3</option><option>AAC</option><option>Opus</option></select></div></div>
+          <div class="row"><div class="l">Bitrate</div><div class="r"><select class="select"><option>320 kbps</option><option>256 kbps</option></select></div></div>
+          <div class="row"><div class="l">Keep Original File</div><div class="r"><label class="switch"><input type="checkbox" checked><span></span></label></div></div>
+          <div class="row"><div class="l">Dolby Digital Copy for S/PDIF</div><div class="r"><label class="switch"><input type="checkbox"><span></span></label></div></div>
+        </div>
+        <div class="group-title">After Downloading</div>
+        <div class="group">
+          <div class="row"><div class="l">Action</div><div class="r"><select class="select"><option>Do nothing</option><option>Open folder</option><option>Sleep</option><option>Shut down</option></select></div></div>
+          <div class="row"><div class="l">Profile</div><div class="r"><select class="select"><option>Default</option><option>Car (MP3)</option></select><button class="btn">Save</button><button class="btn">Load</button><button class="btn plain">Delete</button></div></div>
+        </div>
+      </div>
+
+      <div class="pane" id="p-files">
+        <div class="group-title">Download Location</div>
+        <div class="group">
+          <div class="row"><div class="l">Folder</div><div class="r"><label class="field"><input value="/Users/you/Music/Mornye"></label><button class="btn">Choose…</button></div></div>
+        </div>
+        <div class="group-title">Filename Format</div>
+        <div class="group">
+          <div class="row"><div class="l">Pattern</div><div class="r"><label class="field"><input value="{track} - {title}"></label></div></div>
+          <div class="tokens"><span class="chip">{title}</span><span class="chip">{artist}</span><span class="chip">{album}</span><span class="chip">{album_artist}</span><span class="chip">{year}</span><span class="chip">{track}</span><span class="chip">{disc}</span><span class="chip">{isrc}</span><span class="chip">{position}</span><span class="chip">{explicit}</span></div>
+          <div class="row"><div class="l">Add Track Number to Filename</div><div class="r"><label class="switch"><input type="checkbox" checked><span></span></label></div></div>
+          <div class="row"><div class="l">Use Original Album Track Number<small>Instead of the position in a playlist</small></div><div class="r"><label class="switch"><input type="checkbox" checked><span></span></label></div></div>
+        </div>
+        <div class="group-title">Folder Organization</div>
+        <div class="group">
+          <div class="row"><div class="l">Artist Subfolders</div><div class="r"><label class="switch"><input type="checkbox" checked><span></span></label></div></div>
+          <div class="row"><div class="l">Album Subfolders</div><div class="r"><label class="switch"><input type="checkbox" checked><span></span></label></div></div>
+          <div class="row"><div class="l">Year in Album Folder Name<small>Music/Artist/2025 - Album</small></div><div class="r"><label class="switch"><input type="checkbox"><span></span></label></div></div>
+          <div class="row"><div class="l">Playlist Subfolders</div><div class="r"><label class="switch"><input type="checkbox" checked><span></span></label></div></div>
+          <div class="row"><div class="l">First Artist Only in Tags &amp; Filename</div><div class="r"><label class="switch"><input type="checkbox"><span></span></label></div></div>
+          <div class="row"><div class="l">Artist Separator</div><div class="r"><select class="select"><option>; (semicolon)</option><option>, (comma)</option><option>/ (slash)</option></select></div></div>
+        </div>
+        <div class="group-title">Network Destinations</div>
+        <div class="group">
+          <div class="row"><div class="src"><span class="logo" style="background:#636366">N</span><div class="l">smb://nas/Music<small><span class="dot" style="background:var(--ok)"></span> Connected</small></div></div><div class="r"><button class="btn">Edit</button></div></div>
+          <div class="row"><button class="btn plain">Add Destination…</button></div>
+        </div>
+      </div>
+
+      <div class="pane" id="p-metadata">
+        <div class="group-title">Lyrics</div>
+        <div class="group">
+          <div class="row"><div class="l">Embed Synced Lyrics (LRC)</div><div class="r"><label class="switch"><input type="checkbox" checked><span></span></label></div></div>
+          <div class="row"><div class="l">Lyrics Providers<small>Tried in this order — drag to change it</small></div><div class="r"><span class="chip">LRCLIB</span><span class="chip">Musixmatch</span><span class="chip">NetEase</span><span class="chip">Genius</span></div></div>
+          <div class="row"><div class="l">Word-by-Word Sync</div><div class="r"><label class="switch"><input type="checkbox"><span></span></label></div></div>
+        </div>
+        <div class="group-title">Metadata Enrichment</div>
+        <div class="group">
+          <div class="row"><div class="l">Enrich Metadata<small>Genre, BPM, HD cover…</small></div><div class="r"><label class="switch"><input type="checkbox" checked><span></span></label></div></div>
+          <div class="row"><div class="l">Enrichment Providers</div><div class="r"><span class="chip">MusicBrainz</span><span class="chip">Deezer</span><span class="chip">Songstats</span></div></div>
+          <div class="row"><div class="l">Download Animated Album Artwork</div><div class="r"><label class="switch"><input type="checkbox"><span></span></label></div></div>
+          <div class="row"><div class="l">Animated Artwork API URL</div><div class="r"><label class="field"><input placeholder="https://…"></label></div></div>
+        </div>
+      </div>
+
+      <div class="pane" id="p-player">
+        <div class="group-title">Now Playing</div>
+        <div class="group">
+          <div class="row"><div class="l">Canvas<small>Play the track's looping video in place of the cover</small></div><div class="r"><label class="switch"><input type="checkbox" checked><span></span></label></div></div>
+        </div>
+        <div class="group-title">Audio Engine</div>
+        <div class="group">
+          <div class="row"><div class="l">Engine</div><div class="r"><select class="select"><option>Native (bit-perfect)</option><option>Browser</option></select></div></div>
+          <div class="row"><div class="l">Output Device</div><div class="r"><select class="select"><option>System default</option><option>USB DAC</option></select></div></div>
+          <div class="row"><div class="l">Exclusive Mode</div><div class="r"><label class="switch"><input type="checkbox"><span></span></label></div></div>
+          <div class="row"><div class="l">Bitstream (Passthrough)</div><div class="r"><label class="switch"><input type="checkbox"><span></span></label></div></div>
+          <div class="row"><div class="l">Output Channels</div><div class="r"><select class="select"><option>Stereo</option><option>5.1</option><option>7.1</option></select></div></div>
+        </div>
+        <div class="group-title">Playback</div>
+        <div class="group">
+          <div class="row"><div class="l">Gapless</div><div class="r"><label class="switch"><input type="checkbox" checked><span></span></label></div></div>
+          <div class="row"><div class="l">ReplayGain</div><div class="r"><select class="select"><option>Album</option><option>Track</option><option>Off</option></select></div></div>
+          <div class="row"><div class="l">ReplayGain Pre-amp</div><div class="r"><div class="range"><i style="width:50%"></i></div><span class="muted" style="width:50px;text-align:right">0 dB</span></div></div>
+          <div class="row"><div class="l">Prevent Clipping</div><div class="r"><label class="switch"><input type="checkbox" checked><span></span></label></div></div>
+          <div class="row"><div class="l">Keep Pitch When Changing Speed</div><div class="r"><label class="switch"><input type="checkbox" checked><span></span></label></div></div>
+        </div>
+        <div class="group-title">Equalizer</div>
+        <div class="group">
+          <div class="row"><div class="l">Equalizer</div><div class="r"><select class="select"><option>Custom</option><option>Flat</option><option>Bass Booster</option><option>Vocal</option></select><label class="switch"><input type="checkbox" checked><span></span></label></div></div>
+          <div class="eq" id="eq"></div>
+        </div>
+      </div>
+
+      <div class="pane" id="p-status">
+        <div class="group-title" style="display:flex;align-items:center">Sources<span style="flex:1"></span><span class="faint" style="font-weight:400">Checked 2 minutes ago</span><button class="btn plain">Check Now</button></div>
+        <div class="group">
+          <div class="row"><div class="src"><span class="logo" style="background:#111">T</span><div class="l">Tidal<small>182 ms</small></div></div><span class="status"><span class="dot" style="background:var(--ok)"></span>Online</span></div>
+          <div class="row"><div class="src"><span class="logo" style="background:#0070ef">Q</span><div class="l">Qobuz<small>240 ms</small></div></div><span class="status"><span class="dot" style="background:var(--ok)"></span>Online</span></div>
+          <div class="row"><div class="src"><span class="logo" style="background:#1fa3b5">A</span><div class="l">Amazon Music<small>cooling down for 4 min</small></div></div><span class="status"><span class="dot" style="background:var(--warn)"></span>Rate limited</span></div>
+          <div class="row"><div class="src"><span class="logo" style="background:#a238ff">D</span><div class="l">Deezer<small>disabled in Sources</small></div></div><span class="status"><span class="dot" style="background:var(--text-3)"></span>Off</span></div>
+          <div class="row"><div class="src"><span class="logo" style="background:#1db954">S</span><div class="l">Spotify metadata<small>95 ms</small></div></div><span class="status"><span class="dot" style="background:var(--ok)"></span>Online</span></div>
+          <div class="row"><div class="src"><span class="logo" style="background:#636366">L</span><div class="l">LRCLIB<small>timed out</small></div></div><span class="status"><span class="dot" style="background:var(--bad)"></span>Offline</span></div>
+        </div>
+      </div>
+
+      <div class="pane" id="p-extensions">
+        <div class="group-title" style="display:flex;align-items:center">Installed<span style="flex:1"></span><button class="btn plain">Install from File…</button></div>
+        <div class="group">
+          <div class="row ext"><span class="logo" style="background:#00cd3c">M</span><div class="t">Melon Catalogue<small>1.4.0 · Search and charts from Melon</small></div><button class="btn">Settings</button><label class="switch"><input type="checkbox" checked><span></span></label></div>
+          <div class="row ext"><span class="logo" style="background:#ff3a5b">B</span><div class="t">Bugs! Search<small>0.9.2 · Adds Bugs! as a search source</small></div><button class="btn">Settings</button><label class="switch"><input type="checkbox" checked><span></span></label></div>
+          <div class="row ext"><span class="logo" style="background:#5e5ce6">L</span><div class="t">LRC Enhancer<small>2.1.0 · Word timing for plain LRC files</small></div><button class="btn">Settings</button><label class="switch"><input type="checkbox"><span></span></label></div>
+        </div>
+        <div class="group-title">Health</div>
+        <div class="group">
+          <div class="row"><div class="l">Melon Catalogue</div><span class="status"><span class="dot" style="background:var(--ok)"></span>Healthy · signed</span></div>
+          <div class="row"><div class="l">Bugs! Search</div><span class="status"><span class="dot" style="background:var(--warn)"></span>Slow responses</span></div>
+        </div>
+        <div class="group-title">Registries</div>
+        <div class="group">
+          <div class="row"><div class="l">https://extensions.mornye.example/index.json<small>Default · 24 extensions</small></div><div class="r"><button class="btn">Browse</button></div></div>
+          <div class="row"><button class="btn plain">Add Registry…</button></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- ============ FLOATING PLAYER ============ -->
+<div class="player" role="region" aria-label="Player">
+  <div class="ctrls">
+    <button aria-label="Shuffle"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg></button>
+    <button aria-label="Previous" class="main"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M11 6v12L2.5 12zM21 6v12l-8.5-6z"/></svg></button>
+    <button aria-label="Pause" class="main"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="4" width="4.5" height="16" rx="1"/><rect x="14.5" y="4" width="4.5" height="16" rx="1"/></svg></button>
+    <button aria-label="Next" class="main"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M13 6v12l8.5-6zM3 6v12l8.5-6z"/></svg></button>
+    <button aria-label="Repeat"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></button>
+  </div>
+  <div class="lcd" data-go="nowplaying" title="Open Now Playing">
+    <div class="c g1"></div>
+    <div class="meta"><div>Low Tide Radio</div><div class="a">The Paper Lanterns — Coastline Hours</div></div>
+    <span class="q">24/96</span>
+    <div class="bar"><i></i></div>
+  </div>
+  <div class="pright">
+    <button aria-label="Lyrics" data-go="nowplaying"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/></svg></button>
+    <button aria-label="Queue" data-go="queue"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg></button>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <div class="range"><i style="width:70%"></i></div>
+  </div>
+</div>
+
+<!-- ============ NOW PLAYING ============ -->
+<div class="np" id="np" role="dialog" aria-label="Now playing">
+  <div class="np-bg g1"></div>
+  <button class="np-close" aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+  <div class="np-inner">
+    <div class="np-left">
+      <div class="np-cover g1"></div>
+      <div class="np-meta"><div><div class="n">Low Tide Radio</div><div class="a">The Paper Lanterns — Coastline Hours</div></div><button class="more" style="color:#fff">•••</button></div>
+      <div class="np-seek"><div class="bar"><i></i></div><div class="times"><span>1:33</span><span class="q">FLAC 24-bit / 96 kHz</span><span>-2:09</span></div></div>
+      <div class="np-ctrls">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+        <svg class="main" width="38" height="38" viewBox="0 0 24 24" fill="currentColor"><path d="M11 6v12L2.5 12zM21 6v12l-8.5-6z"/></svg>
+        <svg class="main" width="44" height="44" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="4" width="4.5" height="16" rx="1"/><rect x="14.5" y="4" width="4.5" height="16" rx="1"/></svg>
+        <svg class="main" width="38" height="38" viewBox="0 0 24 24" fill="currentColor"><path d="M13 6v12l8.5-6zM3 6v12l8.5-6z"/></svg>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+      </div>
+      <div class="np-vol">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M4 9h4l5-4v14l-5-4H4z"/></svg>
+        <div class="range"><i style="width:70%"></i></div>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </div>
+    </div>
+    <div class="np-lyrics">
+      <p class="past">The radio hums along the shore</p>
+      <p class="past">a station no one tunes to anymore</p>
+      <p class="on">We leave the window open wide</p>
+      <p>and let the static fill the tide</p>
+      <p>Low tide, low tide radio</p>
+      <p>playing every song we used to know</p>
+    </div>
+  </div>
+</div>
+
+<script src="mock.js"></script>
+</body>
+</html>

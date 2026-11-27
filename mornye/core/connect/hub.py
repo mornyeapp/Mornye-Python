@@ -335,6 +335,11 @@ class ConnectHub:
         except Exception:
             logger.warning("Connect: could not reach %s", device.name, exc_info=True)
 
+    def emit(self, fn_name: str, payload: Any) -> None:
+        """Calls ``window.<fn_name>(payload)`` on every page of the account
+        (what changed elsewhere: a phone edited a playlist)."""
+        self._emit(fn_name, payload)
+
     def _emit(self, fn_name: str, payload: Any) -> None:
         fn = self._broadcast
         if fn is None:
