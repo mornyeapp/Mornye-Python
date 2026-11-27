@@ -137,6 +137,21 @@ def test_transfer_with_the_pages_own_queue_and_refusals(hub):
         hub.transfer("r")
 
 
+def test_a_new_queue_for_the_device_already_playing_is_played(hub):
+    # A song or album picked on the other computer arrives as a transfer to
+    # the device that plays already: it must replace the queue, not be
+    # dropped as a transfer to itself.
+    hub.register("w", "Mac", "window")
+    hub.report_state("w", _state())
+    hub.events.clear()
+    snap = hub.transfer("w")
+    assert snap["activeId"] == "w" and _commands(hub) == []
+    hub.transfer("w", handoff={"queue": [{"title": "Z"}], "index": 0, "positionMs": 0})
+    assert _commands(hub) == [
+        ("play_queue", {"queue": [{"title": "Z"}], "index": 0, "positionMs": 0})
+    ]
+
+
 def test_stale_pages_expire_but_devices_with_a_transport_stay():
     clock = Clock()
     hub = ConnectHub(None, clock=clock)

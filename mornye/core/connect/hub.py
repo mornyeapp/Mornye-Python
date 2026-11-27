@@ -306,7 +306,12 @@ class ConnectHub:
                 raise CommandError("invalid", f"{target.name} cannot play")
             source = self._devices.get(self._active or "")
             if source is not None and source.id == target.id:
-                return self.snapshot()
+                if handoff is None:
+                    return self.snapshot()  # already playing there
+                # A new queue for the device that already plays: a song or
+                # an album picked on the other computer while this one
+                # plays. Nothing to pause, nothing moves.
+                source = None
             if handoff is None:
                 if source is None or source.state is None:
                     raise CommandError("unavailable", "Nothing is playing")
