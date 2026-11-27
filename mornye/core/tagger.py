@@ -440,7 +440,6 @@ _ID3_SKIP = {
     "DISCNUMBER",
     "DISCTOTAL",
     "URL",
-    "DESCRIPTION",
 }
 
 
@@ -496,8 +495,9 @@ def _apply_id3_frames(
             # Fallback generico → TXXX
             audio.add(TXXX(encoding=3, desc=key_up, text=str(val)))
 
-    # ── commento / source tag ──────────────────────────────────────────────
-    audio.add(COMM(encoding=3, lang="eng", desc="", text=[SOURCE_TAG]))
+    # ── comment / track URL ────────────────────────────────────────────────
+    if tags.get("URL"):
+        audio.add(COMM(encoding=3, lang="eng", desc="", text=[tags["URL"]]))
 
     # ── URL if present ────────────────────────────────────────────────────
     if tags.get("URL"):
@@ -1609,7 +1609,7 @@ async def embed_metadata_async(
 
     # ── 4. Build the base tag dict ──────────────────────────────────────────
     tags = metadata.as_flac_tags(first_artist_only=opts.first_artist_only)
-    tags["DESCRIPTION"] = SOURCE_TAG
+    tags["DESCRIPTION"] = f"Downloaded from: {SOURCE_TAG}"
 
     # Merge enrichment + extra (MusicBrainz, ecc.)
     merged_extra: dict[str, str] = {**enriched_tags}
