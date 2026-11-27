@@ -257,6 +257,12 @@ def test_what_plays_here_shows_on_the_other_computer(pair_of):
     assert _until(shown)
     # Nothing played there: a page opened there now follows this computer.
     assert env["hub_b"].active_id == here_there
+
+    def state_reported() -> bool:
+        states = [p for fn, p in env["events_b"] if fn == "app_connect_state"]
+        return bool(states and states[-1]["deviceId"] == here_there)
+
+    assert _until(state_reported)
     states = [p for fn, p in env["events_b"] if fn == "app_connect_state"]
     assert states and states[-1]["deviceId"] == here_there
     # And it can be paused from there.
