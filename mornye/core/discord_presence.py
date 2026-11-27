@@ -38,6 +38,7 @@ from typing import Any
 
 from .atomic_io import write_json_atomic
 from .paths import cache_path
+from .text_match import tag_artists
 
 logger = logging.getLogger(__name__)
 
@@ -311,8 +312,9 @@ def build_activity(track: dict, start: float, artwork: str | None = None) -> dic
         "status_display_type": 1,
         "details": field(track.get("title") or ""),
     }
-    if track.get("artist"):
-        activity["state"] = field(track["artist"])
+    artists = ", ".join(tag_artists(track.get("artist")))
+    if artists:
+        activity["state"] = field(artists)
     timestamps: dict[str, int] = {"start": int(start * 1000)}
     duration = float(track.get("duration") or 0)
     if duration > 0:
@@ -336,6 +338,9 @@ def lookup_artwork(
     matches: a wrong sleeve on a profile is worse than none. The album
     first, then the song, which finds singles and records the catalogue
     files under another title."""
+    # The main artist of a multi-value tag: "Drake;Lil Durk" is filed under
+    # Drake on Apple Music.
+    artist = next(iter(tag_artists(artist)), "")
     if not artist:
         return None
     import httpx

@@ -31,6 +31,7 @@ from urllib.parse import urlencode
 
 from .atomic_io import write_json_atomic
 from .paths import cache_path
+from .text_match import tag_artists
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +124,16 @@ def should_scrobble(heard_seconds: float, duration_seconds: float) -> bool:
         return heard_seconds >= min(duration_seconds / 2, ALWAYS_AFTER_SECONDS)
     # Without a length, only what was certainly long enough.
     return heard_seconds >= ALWAYS_AFTER_SECONDS
+
+
+def lastfm_artist(value: Any) -> str:
+    """The artist as Last.fm knows it: the first of a multi-value tag.
+
+    Last.fm takes "Drake;Lil Durk" as one unknown artist and finds no
+    track; it credits the main artist alone (the featured ones are already
+    in the title), so only the first one is sent.
+    """
+    return next(iter(tag_artists(value)), "")
 
 
 def _number(value: Any) -> float:
@@ -322,7 +333,7 @@ class LastFm:
         if not isinstance(track, dict) or not track.get("playing"):
             return
         title = str(track.get("title") or "").strip()
-        artist = str(track.get("artist") or "").strip()
+        artist = lastfm_artist(track.get("artist"))
         if not title or not artist or not self.connected:
             return
         key = f"{title}|{artist}"
@@ -353,7 +364,7 @@ class LastFm:
             # The next play of the same song is "now playing" again.
             self._now_playing_sent = ""
         title = str(entry.get("title") or "").strip()
-        artist = str(entry.get("artist") or "").strip()
+        artist = lastfm_artist(entry.get("artist"))
         if not title or not artist:
             return False
         heard = _number(entry.get("heard"))
@@ -427,7 +438,7 @@ class LastFm:
         answer = self._signed(
             {
                 "method": "track.scrobble",
-                "artist": item["artist"],
+                "artist": lastfm_artist(item["artist"]),
                 "track": item["track"],
                 "album": item.get("album") or "",
                 "duration": str(item["duration"]) if item.get("duration") else "",

@@ -110,6 +110,34 @@ def test_a_heard_song_is_scrobbled_with_its_start_time() -> None:
     assert lastfm.status()["pending"] == 0
 
 
+@pytest.mark.parametrize(
+    ("tag", "expected"),
+    [
+        ("Drake;Lil Durk", "Drake"),
+        ("Travis Scott; The 1975; Big Sean", "Travis Scott"),
+        ("Simon & Garfunkel", "Simon & Garfunkel"),
+        ("Tyler, The Creator", "Tyler, The Creator"),
+        (";The Weeknd", "The Weeknd"),
+        ("A\x00B", "A"),
+    ],
+)
+def test_only_the_main_artist_of_a_multi_value_tag_goes_to_lastfm(
+    tag, expected
+) -> None:
+    assert sc.lastfm_artist(tag) == expected
+
+
+def test_a_multi_artist_song_is_scrobbled_under_its_main_artist() -> None:
+    api = FakeLastFm()
+    lastfm = _connected(api)
+    assert lastfm.listened(
+        {**HEARD, "artist": "Drake;Lil Durk", "heard": 120, "duration": 200}
+    )
+    _wait_idle(lastfm)
+    scrobble = [c for c in api.calls if c["method"] == "track.scrobble"][-1]
+    assert scrobble["artist"] == "Drake"
+
+
 def test_a_skipped_song_is_not_scrobbled() -> None:
     api = FakeLastFm()
     lastfm = _connected(api)

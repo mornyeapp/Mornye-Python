@@ -27,6 +27,8 @@ implementation; csv_source and local_matcher are now both callers.
 
 from __future__ import annotations
 
+from typing import Any
+
 import re
 import unicodedata
 from difflib import SequenceMatcher
@@ -183,6 +185,18 @@ def ratio(left: str, right: str) -> float:
         None, fold(strip_noise(left)), fold(strip_noise(right))
     ).ratio()
     return max(plain, stripped)
+
+
+def tag_artists(value: Any) -> list[str]:
+    """The artists of a multi-value tag, in order: "Drake;Lil Durk" is two.
+
+    Tags join several artists with ";" (or NUL, ID3v2.4's own separator).
+    Only those split: "&" and "," belong to names like "Simon & Garfunkel"
+    or "Tyler, The Creator", which split_artists below breaks up on purpose
+    for matching but which must not be broken up to be shown or sent.
+    """
+    text = str(value or "").replace("\x00", ";")
+    return [part.strip() for part in text.split(";") if part.strip()]
 
 
 def split_artists(value: str) -> list[str]:

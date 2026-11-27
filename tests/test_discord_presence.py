@@ -212,6 +212,29 @@ def test_artwork_only_from_the_same_artist() -> None:
     assert client.entities == ["album", "song"]
 
 
+def test_a_multi_artist_tag_is_shown_with_commas_and_searched_by_its_main_artist() -> (
+    None
+):
+    activity = dp.build_activity({**SONG, "artist": "Drake;Lil Durk"}, start=0)
+    assert activity["state"] == "Drake, Lil Durk"
+
+    class Client:
+        terms: list[str] = []
+
+        def get(self, url, params):
+            self.terms.append(params["term"])
+
+            class Response:
+                def json(self):
+                    return {"results": []}
+
+            return Response()
+
+    client = Client()
+    dp.lookup_artwork("Drake;Lil Durk", "Record", "Song", client=client)
+    assert client.terms == ["Drake Record", "Drake Song"]
+
+
 def test_settings_survive_a_restart() -> None:
     presence = dp.DiscordPresence()
     presence.configure(enabled=True, application_id=" 123 456 ", show_artwork=False)
