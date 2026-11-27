@@ -11,6 +11,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import time
 from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
@@ -27,8 +28,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 HELLO_TIMEOUT_S = 60.0
+#: How long ``POST pair/wait`` holds the request open for an answer.
+PAIR_WAIT_S = 25.0
 #: Link error codes as HTTP statuses (rust_backend/crates/link api.rs).
-_STATUS = {"invalid": 400, "not_found": 404, "unavailable": 503, "timeout": 504}
+_STATUS = {
+    "invalid": 400,
+    "not_found": 404,
+    "conflict": 409,
+    "unavailable": 503,
+    "timeout": 504,
+}
 CLOSE_UNAUTHORIZED = 4401
 CLOSE_REPLACED = 4409
 MAX_BODY = 8 << 20
@@ -154,6 +163,82 @@ def build_link_app(server: LinkServer) -> FastAPI:
             }
         )
 
+    async def _json_body(request: Request) -> dict[str, Any] | None:
+        declared = request.headers.get("content-length", "")
+        if declared.isdigit() and int(declared) > MAX_BODY:
+            return None
+        try:
+            body = json.loads(await request.body() or b"null")
+        except ValueError:
+            return None
+        return body if isinstance(body, dict) else None
+
+    def _paired(record: link.Device) -> dict[str, Any]:
+        return {
+            "status": "approved",
+            "apiKey": record.apiKey,
+            "serverId": server.store.server_id,
+            "name": server.name,
+            "fingerprint": server.fingerprint,
+        }
+
+    @app.post("/mornye/v1/pair/request")
+    async def pair_request(request: Request) -> JSONResponse:
+        """Pairing without a PIN: answered at once from the local network
+        when this computer trusts it, else a person allows it here."""
+        body = await _json_body(request)
+        if body is None:
+            return _error(400, "invalid", "The body must be a JSON object")
+
+        def text(key: str) -> str:
+            value = body.get(key)
+            return value.strip() if isinstance(value, str) else ""
+
+        device_id = text("deviceId")
+        if not device_id or len(device_id) > link.MAX_DEVICE_ID:
+            return _error(400, "invalid", "deviceId is required")
+        name = text("name")[:80] or device_id
+        platform = text("platform")[:40] or "unknown"
+        address = _peer(request).removeprefix("::ffff:")
+        if server.store.trust_network and link.is_local_address(address):
+            record = await run_in_threadpool(
+                server.store.upsert, device_id, name, platform
+            )
+            logger.info("[link] paired %s (%s): trusted network", name, platform)
+            return JSONResponse(_paired(record))
+        try:
+            req = server.pair_requests.open(device_id, name, platform, address)
+        except link.PairError as exc:
+            return _error(429, exc.code)
+        await run_in_threadpool(server.request_received, req)
+        return JSONResponse(
+            {
+                "status": "pending",
+                "requestId": req.id,
+                "expiresMs": link.now_ms()
+                + int(max(0.0, req.expires_at - time.monotonic()) * 1000),
+            },
+            status_code=202,
+        )
+
+    @app.post("/mornye/v1/pair/wait")
+    async def pair_wait(request: Request) -> JSONResponse:
+        """Waits up to 25 s for the answer to a ``pair/request``."""
+        body = await _json_body(request)
+        if body is None:
+            return _error(400, "invalid", "The body must be a JSON object")
+        request_id = str(body.get("requestId") or "")
+        device_id = str(body.get("deviceId") or "")
+        try:
+            req = await run_in_threadpool(
+                server.pair_requests.wait, request_id, device_id, PAIR_WAIT_S
+            )
+        except link.PairError:
+            return _error(404, "not_found")
+        if req.status == "approved" and req.record is not None:
+            return JSONResponse(_paired(req.record))
+        return JSONResponse({"status": req.status})
+
     @app.websocket("/mornye/v1/ws")
     async def socket(ws: WebSocket) -> None:
         device = link.authenticate_bearer(server.store, ws.headers.get("authorization"))
@@ -203,8 +288,13 @@ def build_link_app(server: LinkServer) -> FastAPI:
             await ws.send_text(json.dumps(server.announce(welcome)))
             # The phone is a Connect device from here on, and is sent the
             # player's state at once (link_desktop_host.dart).
+            # Another computer running Mornye says so (link_peers.py).
+            kind = "mornye" if hello.get("kind") == "mornye" else "phone"
             await run_in_threadpool(
-                server.connect.phone_connected, device.deviceId, str(client["name"])
+                server.connect.phone_connected,
+                device.deviceId,
+                str(client["name"]),
+                kind,
             )
             while True:
                 text = await ws.receive_text()

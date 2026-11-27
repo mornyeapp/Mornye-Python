@@ -300,6 +300,13 @@ ALLOWED_METHODS: set[str] = {
     "link_begin_pairing",
     "link_end_pairing",
     "link_revoke_device",
+    "link_answer_pair_request",
+    "link_set_trust_network",
+    "link_connect_computer",
+    "link_computers",
+    "link_find_computers",
+    "link_pair_computer",
+    "link_remove_computer",
     # Mornye Connect (api_mixins/connect.py): this account's playing devices.
     # Each account has its own hub, so a page sees and steers only the
     # devices of whoever is signed in.
@@ -344,6 +351,13 @@ LINK_ADMIN_METHODS = {
     "link_begin_pairing",
     "link_end_pairing",
     "link_revoke_device",
+    "link_answer_pair_request",
+    "link_set_trust_network",
+    "link_connect_computer",
+    "link_computers",
+    "link_find_computers",
+    "link_pair_computer",
+    "link_remove_computer",
 }
 
 #: The server speaker plays out loud where the server stands, from any file

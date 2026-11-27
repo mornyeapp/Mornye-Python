@@ -13,6 +13,13 @@ too (``phone:<deviceId>``): it shows in "Play on", its own ``player.state``
 is kept, and the hub reaches it with ``command`` frames ("Continue on
 phone" is a ``play_queue``; the computer starting to play sends ``pause``).
 A phone playing on its own never takes over the computer.
+
+Beyond the desktop host (feature ``connect.devices``): ``GET devices`` lists
+the account's devices and a ``devices`` frame follows every change;
+``POST transfer {target}`` is "Play on" from the phone; ``state``,
+``command``, ``handoff/play``, ``handoff/current`` and ``queue/add`` take an
+optional ``target`` (a device id), else they reach what the phone sees as the
+desktop. A phone handed playback is that device for the other phones.
 """
 
 from __future__ import annotations
@@ -80,10 +87,23 @@ class LinkConnect:
         self._lock = threading.Lock()
         self._hub: ConnectHub | None = None
         self._unlisten: Callable[[], None] | None = None
-        self._last_sent: PlayerState | None = None
+        #: The last ``player.state`` each phone was sent.
+        self._last_sent: dict[str, PlayerState] = {}
         self._push_timer: Any = None
         self._beat: threading.Timer | None = None
         self._handoff_id = ""
+        self._handoff_target = ""
+        from .link_playlists import PAGE_EVENT, LinkPlaylists
+
+        self.playlists = LinkPlaylists(
+            send,
+            connected,
+            catalog=catalog,
+            owner=owner,
+            notify_pages=lambda ids, deleted: self.hub().emit(
+                PAGE_EVENT, {"ids": ids, "deleted": deleted}
+            ),
+        )
 
     # ── the hub ──
     def hub(self) -> ConnectHub:
@@ -96,16 +116,30 @@ class LinkConnect:
                 self._unlisten = hub.add_listener(self._on_hub)
         return hub
 
-    def target(self) -> tuple[str | None, PlayerState | None]:
-        """The player a phone sees as "the desktop": the active device unless
-        it is a phone, else the desktop window, else any page with a state."""
+    def target(
+        self, viewer: str | None = None
+    ) -> tuple[str | None, PlayerState | None]:
+        """The player phone ``viewer`` sees as "the desktop": the active
+        device unless that is the viewer itself (or, with no viewer, any
+        phone), else the desktop window, else any page with a state. A phone
+        that was handed playback ("Play on" → another phone) is what the
+        other phones control, as in Spotify Connect."""
         hub = self.hub()
         snap = hub.snapshot()
         devices = snap["devices"]
+        own = phone_device_id(viewer) if viewer else None
         active = next((d for d in devices if d["id"] == snap["activeId"]), None)
-        if active is None or active["kind"] == "phone":
+        if active is not None and (
+            active["id"] == own or (own is None and active["kind"] == "phone")
+        ):
+            active = None
+        if active is None:
             ranked = sorted(
-                (d for d in devices if d["kind"] != "phone" and d["canPlay"]),
+                (
+                    d
+                    for d in devices
+                    if d["kind"] not in ("phone", "mornye") and d["canPlay"]
+                ),
                 key=lambda d: (d["kind"] != "window", "state" not in d),
             )
             active = ranked[0] if ranked else None
@@ -115,21 +149,61 @@ class LinkConnect:
         state = device.state.at() if device and device.state else None
         return active["id"], state
 
-    def state_json(self) -> dict[str, Any]:
+    def state_json(self, viewer: str | None = None) -> dict[str, Any]:
         """``GET state``: read now, so ``updatedMs`` is fresh (the phone
         estimates the clock offset from it)."""
-        _, state = self.target()
+        _, state = self.target(viewer)
         return (state or PlayerState(updatedMs=now_ms())).to_json()
 
+    def devices_json(self, viewer: str | None = None) -> dict[str, Any]:
+        """``GET devices``: every device of the account, as "Play on" lists
+        them. ``targetId`` is the one this phone's ops reach by default;
+        ``self`` marks the phone asking. What only the account's own pages
+        see (``extra``, ``meta``) stays out."""
+        snap = self.hub().snapshot()
+        own = phone_device_id(viewer) if viewer else None
+        target_id, _ = self.target(viewer)
+        devices = []
+        for d in snap["devices"]:
+            entry = {
+                "id": d["id"],
+                "name": d["name"],
+                "kind": d["kind"],
+                "canPlay": d["canPlay"],
+                "active": d["active"],
+                "self": d["id"] == own,
+            }
+            if "state" in d:
+                entry["state"] = d["state"]
+            devices.append(entry)
+        return {"activeId": snap["activeId"], "targetId": target_id, "devices": devices}
+
     # ── phones as devices ──
-    def phone_connected(self, device_id: str, name: str) -> None:
+    def phone_connected(self, device_id: str, name: str, kind: str = "phone") -> None:
+        """A phone (or, ``kind="mornye"``, another computer running Mornye,
+        core/connect/link_peers.py) is connected: a device from now on."""
+
         def sender(action: str, args: dict[str, Any]) -> None:
             self._send(device_id, {"type": "command", "action": action, "args": args})
 
-        self.hub().register(phone_device_id(device_id), name, "phone", sender=sender)
-        self._send(device_id, {"type": "player.state", "state": self.state_json()})
+        # The state first, as the phone expects after `welcome`; registering
+        # then sends every phone, this one included, the new `devices`.
+        self._send(
+            device_id, {"type": "player.state", "state": self.state_json(device_id)}
+        )
+        kind = "mornye" if kind == "mornye" else "phone"
+        if kind == "mornye":
+            from .link_peers import peer_device_id
+
+            if self.hub().device(peer_device_id(device_id)) is not None:
+                # Paired both ways: this computer already reaches that one
+                # as its client, and lists it once, from there.
+                return
+        self.hub().register(phone_device_id(device_id), name, kind, sender=sender)
 
     def phone_disconnected(self, device_id: str) -> None:
+        with self._lock:
+            self._last_sent.pop(device_id, None)
         self.hub().unregister(phone_device_id(device_id))
 
     def phone_message(self, device_id: str, message: Any) -> None:
@@ -146,7 +220,15 @@ class LinkConnect:
 
     # ── pushes ──
     def _on_hub(self, event: str, payload: dict[str, Any]) -> None:
+        if event == "devices":
+            self.push_devices()
         self.schedule_push()
+
+    def push_devices(self) -> None:
+        """Sends ``devices`` to every phone: one joined, left, was renamed,
+        or another one plays now."""
+        for device_id in self._connected():
+            self._send(device_id, {"type": "devices", **self.devices_json(device_id)})
 
     def schedule_push(self) -> None:
         """A push after ``PUSH_DEBOUNCE_S`` of quiet (now, without a loop)."""
@@ -174,16 +256,21 @@ class LinkConnect:
         phones = self._connected()
         if not phones:
             return
-        _, state = self.target()
-        state = state or PlayerState(updatedMs=now_ms())
-        with self._lock:
-            if not force and not state_changed(self._last_sent, state):
-                return
-            self._last_sent = state
-        frame = {"type": "player.state", "state": state.to_json()}
+        playing = False
         for device_id in phones:
-            self._send(device_id, frame)
-        self._arm_heartbeat(state.playing)
+            # Each phone sees its own "desktop": the one that plays is shown
+            # the computer instead of itself.
+            _, state = self.target(device_id)
+            state = state or PlayerState(updatedMs=now_ms())
+            playing = playing or state.playing
+            with self._lock:
+                if not force and not state_changed(
+                    self._last_sent.get(device_id), state
+                ):
+                    continue
+                self._last_sent[device_id] = state
+            self._send(device_id, {"type": "player.state", "state": state.to_json()})
+        self._arm_heartbeat(playing)
 
     def _arm_heartbeat(self, playing: bool) -> None:
         with self._lock:
@@ -198,6 +285,7 @@ class LinkConnect:
                 self._beat.start()
 
     def close(self) -> None:
+        self.playlists.close()
         with self._lock:
             if self._beat is not None:
                 self._beat.cancel()
@@ -210,8 +298,12 @@ class LinkConnect:
     # ── ops ──
     def op(self, op: str, method: str, args: dict[str, Any], device_id: str) -> Any:
         """One ``/mornye/v1/<op>``; raises CommandError with a Link code."""
+        if self.playlists.handles(op):
+            return self.playlists.op(op, method, args, device_id)
         handlers: dict[tuple[str, str], Callable[[dict[str, Any], str], Any]] = {
-            ("state", "GET"): lambda a, d: self.state_json(),
+            ("state", "GET"): self._state,
+            ("devices", "GET"): lambda a, d: self.devices_json(d),
+            ("transfer", "POST"): self._transfer,
             ("command", "POST"): self._command,
             ("handoff/play", "POST"): self._handoff_play,
             ("handoff/append", "POST"): self._handoff_append,
@@ -225,11 +317,44 @@ class LinkConnect:
             raise CommandError("not_found", f"No such op: {op}")
         return handler(args, device_id)
 
-    def _require_target(self) -> str:
-        target, _ = self.target()
+    def _require_target(self, args: dict[str, Any], device_id: str) -> str:
+        """The device an op is for: ``args["target"]`` when the phone names
+        one (an id from ``devices``), else the one it sees as the desktop."""
+        named = args.get("target")
+        if isinstance(named, str) and named:
+            device = self.hub().device(named)
+            if device is None:
+                raise CommandError("not_found", "No such device")
+            if not device.can_play:
+                raise CommandError("invalid", f"{device.name} cannot play")
+            return named
+        target, _ = self.target(device_id)
         if target is None:
             raise CommandError("unavailable", "Mornye is not open on this computer")
         return target
+
+    def _state(self, args: dict[str, Any], device_id: str) -> dict[str, Any]:
+        named = args.get("target")
+        if isinstance(named, str) and named:
+            device = self.hub().device(named)
+            if device is None:
+                raise CommandError("not_found", "No such device")
+            state = device.state.at() if device.state else None
+            return (state or PlayerState(updatedMs=now_ms())).to_json()
+        return self.state_json(device_id)
+
+    def _transfer(self, args: dict[str, Any], device_id: str) -> dict[str, Any]:
+        """``POST transfer {target, playing?}``: "Play on" from the phone —
+        what plays now moves to ``target``, which may be this phone (it is
+        then sent ``command`` ``play_queue``, as for "Continue on phone")."""
+        target = args.get("target")
+        if not isinstance(target, str) or not target:
+            raise CommandError("invalid", "target is required")
+        playing = args.get("playing")
+        self.hub().transfer(
+            target, playing=playing if isinstance(playing, bool) else None
+        )
+        return self.devices_json(device_id)
 
     def _command(self, args: dict[str, Any], device_id: str) -> dict[str, Any]:
         action = args.get("action")
@@ -239,9 +364,11 @@ class LinkConnect:
         command_args: dict[str, Any] = raw if isinstance(raw, dict) else {}
         if action == "play_queue":
             # The phone handing its queue over, as handoff/play does.
+            if "target" in args and "target" not in command_args:
+                command_args = {**command_args, "target": args["target"]}
             self._handoff_play(command_args, device_id)
             return {"ok": True}
-        target = self._require_target()
+        target = self._require_target(args, device_id)
         if action == "pause":
             # "Continue on phone" pauses here; the phone then plays itself.
             command_args = {}
@@ -277,10 +404,13 @@ class LinkConnect:
         }
         if clean.get("check") or out["resolved"] == 0:
             return out
-        target = self._require_target()
-        handoff = {k: v for k, v in args.items() if k not in ("check", "arriving")}
+        target = self._require_target(args, device_id)
+        handoff = {
+            k: v for k, v in args.items() if k not in ("check", "arriving", "target")
+        }
         handoff.setdefault("playing", True)
         self.hub().transfer(target, handoff=handoff)
+        self._handoff_target = target
         self._handoff_id = f"{int(time.time() * 1000)}-{secrets.token_hex(4)}"
         out["handoffId"] = self._handoff_id
         return out
@@ -288,7 +418,10 @@ class LinkConnect:
     def _handoff_append(self, args: dict[str, Any], device_id: str) -> dict[str, Any]:
         if not self._handoff_id or args.get("handoffId") != self._handoff_id:
             raise CommandError("invalid", "That hand-off is over")
-        return self._queue_add({"queue": args.get("queue"), "next": False}, device_id)
+        return self._queue_add(
+            {"queue": args.get("queue"), "next": False, "target": self._handoff_target},
+            device_id,
+        )
 
     def _queue_add(self, args: dict[str, Any], device_id: str) -> dict[str, Any]:
         queue = args.get("queue")
@@ -300,12 +433,19 @@ class LinkConnect:
             self.hub().command(
                 "queue_add",
                 {"queue": found, "next": args.get("next") is True},
-                target=self._require_target(),
+                target=self._require_target(args, device_id),
             )
         return {"resolved": len(found)}
 
     def _handoff_current(self, args: dict[str, Any], device_id: str) -> dict[str, Any]:
-        _, state = self.target()
+        named = args.get("target")
+        if isinstance(named, str) and named:
+            device = self.hub().device(named)
+            if device is None:
+                raise CommandError("not_found", "No such device")
+            state = device.state.at() if device.state else None
+        else:
+            _, state = self.target(device_id)
         if state is None:
             return {
                 "queue": [],

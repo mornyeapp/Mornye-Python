@@ -378,7 +378,7 @@ def _system(name: str, params: dict[str, list[str]], user: str, roots) -> Any:
         return {
             "openSubsonicExtensions": [
                 {"name": "formPost", "versions": [1]},
-                {"name": "songLyrics", "versions": [1]},
+                {"name": "songLyrics", "versions": [1, 2]},
                 {"name": "apiKeyAuthentication", "versions": [1]},
             ]
         }
@@ -723,32 +723,49 @@ def _lyrics(name: str, params: dict[str, list[str]], view: _View) -> Any:
         return {"lyrics": {}}
     if name == "getLyricsBySongId":
         song = view.get_song(_required(params, "id"))
-        found = sub.lyrics_for(song)
-        if not found:
+        structured = sub.structured_lyrics_for(song)
+        if not structured:
             return {"lyricsList": {"structuredLyrics": []}}
-        synced, lines = found
-        return {
-            "lyricsList": {
-                "structuredLyrics": [
-                    {
-                        "displayArtist": song.artist,
-                        "displayTitle": song.title,
-                        "lang": "und",
-                        "synced": synced,
-                        "offset": 0,
-                        "line": [
-                            (
-                                {"start": start, "value": text}
-                                if synced
-                                else {"value": text}
-                            )
-                            for start, text in lines
-                        ],
-                    }
-                ]
-            }
+        synced, lines = structured
+        entry: dict[str, Any] = {
+            "displayArtist": song.artist,
+            "displayTitle": song.title,
+            "lang": "und",
+            "synced": synced,
+            "offset": 0,
+            "line": [
+                (
+                    {"start": line.start, "value": line.value}
+                    if synced
+                    else {"value": line.value}
+                )
+                for line in lines
+            ],
         }
+        # songLyrics version 2: word timing, only when the client asks for it.
+        if _one(params, "enhanced").lower() == "true":
+            entry["kind"] = "main"
+            cues = [_cue_line(i, line) for i, line in enumerate(lines) if line.words]
+            if synced and cues:
+                entry["cueLine"] = cues
+        return {"lyricsList": {"structuredLyrics": [entry]}}
     return None
+
+
+def _cue_line(index: int, line: sub.LyricLine) -> dict[str, Any]:
+    """An OpenSubsonic ``cueLine``: the words of ``line[index]``."""
+    cues: list[dict[str, Any]] = []
+    for word in line.words:
+        cue: dict[str, Any] = {"start": word.start}
+        if word.end is not None:
+            cue["end"] = word.end
+        cue.update(value=word.value, byteStart=word.byte_start, byteEnd=word.byte_end)
+        cues.append(cue)
+    out: dict[str, Any] = {"index": index, "start": line.words[0].start}
+    if line.words[-1].end is not None:
+        out["end"] = line.words[-1].end
+    out.update(value=line.value, cue=cues)
+    return out
 
 
 _EMPTY: dict[str, dict[str, Any]] = {

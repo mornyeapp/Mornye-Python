@@ -343,6 +343,9 @@ html[data-style="music"] .m-feed-pick select {
   height: 30px; padding: 0 28px 0 10px; border-radius: 8px; border: 1px solid var(--rule);
   background-color: var(--m-fill); color: var(--text); font-size: 13px;
 }
+html[data-style="music"]:has(#home-edit-modal:not(.hidden)) .m-feed-pick select {
+  transform: scale(.92); transform-origin: right center;
+}
 /* The feed's own header (greeting, "Feed" picker) has an inline display,
    hence the !important; its picker already sits beside Home's title. */
 html[data-style="music"] #recent-wrap .explore-head { display: none !important; }

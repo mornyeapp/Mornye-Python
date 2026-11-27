@@ -16,13 +16,21 @@ in a UFID frame rather than a TXXX of its own.
 
 from __future__ import annotations
 
+import asyncio
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from mornye.core.tagger import _embed_id3, _embed_m4a, read_embedded_tags
+from mornye.core.models import TrackMetadata
+from mornye.core.tagger import (
+    EmbedOptions,
+    _embed_id3,
+    _embed_m4a,
+    embed_metadata_async,
+    read_embedded_tags,
+)
 
 _MB_TAGS = {
     "TITLE": "Bottiglie Privè",
@@ -132,6 +140,39 @@ def test_the_mp3_recording_id_goes_in_a_ufid_frame(mp3: Path) -> None:
     frame = tags["UFID:http://musicbrainz.org"]
     assert frame.data.decode() == _MB_TAGS["MUSICBRAINZ_TRACKID"]
     assert "TXXX:MusicBrainz Track Id" not in tags
+
+
+@pytest.mark.parametrize(
+    "is_album",
+    [False, True],
+)
+def test_mp3_comment_always_uses_track_spotify_url(mp3: Path, is_album: bool) -> None:
+    from mutagen.id3 import ID3
+
+    metadata = TrackMetadata(
+        id="track-id",
+        title="Track",
+        artists="Artist",
+        album="Album",
+        album_artist="Artist",
+        external_url="https://open.spotify.com/track/track-id",
+        album_url="https://open.spotify.com/album/album-id",
+    )
+    asyncio.run(embed_metadata_async(mp3, metadata, EmbedOptions(is_album=is_album)))
+
+    tags = ID3(str(mp3))
+    comments = tags.getall("COMM")
+    assert [str(comment.text[0]) for comment in comments] == [
+        "https://open.spotify.com/track/track-id"
+    ]
+    descriptions = [
+        str(frame.text[0])
+        for frame in tags.getall("TXXX")
+        if frame.desc == "DESCRIPTION"
+    ]
+    assert descriptions == [
+        "Downloaded from: https://github.com/mornyeapp/Mornye-Python"
+    ]
 
 
 # --- round trip -----------------------------------------------------------

@@ -15,7 +15,7 @@ import httpx
 import pytest
 
 from mornye.core import link
-from mornye.link_server import LinkServer
+from mornye.link_server import FEATURES, LinkServer
 
 
 def _client() -> httpx.Client:
@@ -79,7 +79,7 @@ def test_info_matches_the_certificate(server: LinkServer):
         info = http.get(f"https://127.0.0.1:{server.port}/mornye/v1/info").json()
     assert info["protocol"] == 1
     assert info["pairing"] is False
-    assert info["features"] == []
+    assert info["features"] == list(FEATURES)
     assert info["serverId"] == server.store.server_id
     # What the phone checks before sending a PIN.
     assert info["fingerprint"] == _observed_fingerprint(server.port)
@@ -267,3 +267,103 @@ def test_connect_over_link_upload_and_state_frame(server: LinkServer):
     frame = asyncio.run(scenario())
     assert frame["type"] == "player.state" and frame["state"]["playing"] is False
     reset_connect_hubs()
+
+
+# ── pairing without a PIN (pair/request, pair/wait) ───────────────────────
+
+
+def _ask(srv: LinkServer, device_id: str = "phone-9") -> httpx.Response:
+    with _client() as http:
+        return http.post(
+            f"https://127.0.0.1:{srv.port}/mornye/v1/pair/request",
+            json={"deviceId": device_id, "name": "Pixel", "platform": "android"},
+        )
+
+
+def _wait(srv: LinkServer, request_id: str, device_id: str = "phone-9") -> dict:
+    with httpx.Client(verify=False, timeout=40) as http:
+        return http.post(
+            f"https://127.0.0.1:{srv.port}/mornye/v1/pair/wait",
+            json={"requestId": request_id, "deviceId": device_id},
+        ).json()
+
+
+def test_a_trusted_network_pairs_at_once(server: LinkServer):
+    server.set_trust_network(True)
+    answer = _ask(server)
+    assert answer.status_code == 200
+    body = answer.json()
+    assert body["status"] == "approved" and body["serverId"] == server.store.server_id
+    assert server.store.by_key(body["apiKey"]).deviceId == "phone-9"
+    assert link.LinkStore(server.dir).trust_network is True  # kept on disk
+
+
+def test_a_request_waits_for_a_click_and_is_shown(server: LinkServer):
+    from mornye.core.connect.hub import get_connect_hub, reset_connect_hubs
+
+    reset_connect_hubs()
+    shown: list[tuple[str, dict]] = []
+    get_connect_hub(None).set_broadcast(lambda fn, p: shown.append((fn, p)))
+    answer = _ask(server)
+    assert answer.status_code == 202
+    request_id = answer.json()["requestId"]
+    assert shown == [
+        (
+            "app_link_pair_request",
+            {
+                "id": request_id,
+                "deviceId": "phone-9",
+                "name": "Pixel",
+                "platform": "android",
+                "address": "127.0.0.1",
+            },
+        )
+    ]
+    assert [r["id"] for r in server.status()["requests"]] == [request_id]
+    # Asking again is the same request; another address would wait its turn.
+    assert _ask(server).json()["requestId"] == request_id
+    import threading
+
+    threading.Timer(0.3, server.answer_request, (request_id, True)).start()
+    body = _wait(server, request_id)
+    assert body["status"] == "approved"
+    assert server.store.by_key(body["apiKey"]).name == "Pixel"
+    assert server.status()["requests"] == []
+    reset_connect_hubs()
+
+
+def test_a_denied_request_gets_no_key(server: LinkServer):
+    request_id = _ask(server).json()["requestId"]
+    server.answer_request(request_id, False)
+    assert _wait(server, request_id) == {"status": "denied"}
+    assert [d.deviceId for d in server.store.devices()] == []
+    with httpx.Client(verify=False) as http:
+        missing = http.post(
+            f"https://127.0.0.1:{server.port}/mornye/v1/pair/wait",
+            json={"requestId": request_id, "deviceId": "someone-else"},
+        )
+    assert missing.status_code == 404
+
+
+def test_requests_expire_and_are_limited_per_address():
+    requests = link.PairRequests(ttl_s=0.05)
+    first = requests.open("a", "A", "android", "10.0.0.2")
+    with pytest.raises(link.PairError):
+        requests.open("b", "B", "android", "10.0.0.2")
+    assert requests.wait(first.id, "a", 1.0).status == "expired"
+    assert requests.pending() == []
+    assert not requests.answer(first.id, True, lambda r: None)
+
+
+def test_only_local_addresses_count_as_the_network():
+    for address in (
+        "192.168.1.5",
+        "10.1.2.3",
+        "127.0.0.1",
+        "::1",
+        "fe80::1",
+        "::ffff:192.168.0.9",
+    ):
+        assert link.is_local_address(address), address
+    for address in ("8.8.8.8", "2a00:1450::1", "", "nonsense"):
+        assert not link.is_local_address(address), address

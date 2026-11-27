@@ -57,6 +57,38 @@ def test_moved_methods_behave_the_same_on_empty_input() -> None:
     }
 
 
+def test_saving_discord_settings_returns_success_and_presence_status(
+    monkeypatch,
+) -> None:
+    from mornye.core import discord_presence
+
+    class Presence:
+        def configure(self, **settings) -> None:
+            assert settings == {
+                "enabled": True,
+                "application_id": None,
+                "show_artwork": None,
+            }
+
+        def status(self) -> dict:
+            return {
+                "status": "missing_id",
+                "enabled": True,
+                "application_id": "",
+                "show_artwork": True,
+                "connected": False,
+                "status_text": "Needs an application ID",
+            }
+
+    monkeypatch.setattr(discord_presence, "service", lambda: Presence())
+
+    result = MornyeAPI().save_discord_presence(enabled=True)
+
+    assert result["status"] == "ok"
+    assert result["service_status"] == "missing_id"
+    assert result["enabled"] is True
+
+
 # ── Dashboard and CSV import (api_mixins/stats.py, api_mixins/csv_import.py) ─
 
 

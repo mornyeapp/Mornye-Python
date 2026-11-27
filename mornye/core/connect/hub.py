@@ -206,8 +206,10 @@ class ConnectHub:
         """A device's own player as it is now. Returns whether it changed
         enough to tell the others. A device that starts playing becomes the
         active one and every other playing device is paused — unless
-        ``claim`` is false: a phone playing on its own does not take over
-        (the computer pauses phones when it starts, not the other way)."""
+        ``claim`` is false: a phone (or another computer) playing on its own
+        pauses nothing, and becomes the active one only while nothing else
+        plays (the computer pauses phones when it starts, not the other
+        way)."""
         state = raw if isinstance(raw, PlayerState) else PlayerState.from_json(raw)
         if state is None:
             raise CommandError("invalid", "state is required")
@@ -236,6 +238,17 @@ class ConnectHub:
                     self._active = device_id
                     active_changed = True
             elif claim and self._active is None and state.track is not None:
+                self._active = device_id
+                active_changed = True
+            elif (
+                not claim
+                and state.playing
+                and self._active != device_id
+                and not self._plays(self._active)
+            ):
+                # A phone or another computer playing on its own pauses
+                # nothing, but when nothing else plays it is what the pages
+                # show (a page opened now follows it), as in Spotify Connect.
                 self._active = device_id
                 active_changed = True
             is_active = self._active == device_id
@@ -293,7 +306,12 @@ class ConnectHub:
                 raise CommandError("invalid", f"{target.name} cannot play")
             source = self._devices.get(self._active or "")
             if source is not None and source.id == target.id:
-                return self.snapshot()
+                if handoff is None:
+                    return self.snapshot()  # already playing there
+                # A new queue for the device that already plays: a song or
+                # an album picked on the other computer while this one
+                # plays. Nothing to pause, nothing moves.
+                source = None
             if handoff is None:
                 if source is None or source.state is None:
                     raise CommandError("unavailable", "Nothing is playing")
@@ -317,6 +335,10 @@ class ConnectHub:
             return {"activeId": self._active, "devices": devices}
 
     # ── internals ──
+    def _plays(self, device_id: str | None) -> bool:
+        device = self._devices.get(device_id or "")
+        return device is not None and device.state is not None and device.state.playing
+
     def _require(self, device_id: str) -> Device:
         device = self._devices.get(device_id)
         if device is None:
@@ -334,6 +356,11 @@ class ConnectHub:
                 )
         except Exception:
             logger.warning("Connect: could not reach %s", device.name, exc_info=True)
+
+    def emit(self, fn_name: str, payload: Any) -> None:
+        """Calls ``window.<fn_name>(payload)`` on every page of the account
+        (what changed elsewhere: a phone edited a playlist)."""
+        self._emit(fn_name, payload)
 
     def _emit(self, fn_name: str, payload: Any) -> None:
         fn = self._broadcast

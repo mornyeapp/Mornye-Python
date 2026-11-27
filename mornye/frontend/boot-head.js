@@ -79,7 +79,7 @@ document.write('<link rel="stylesheet" href="css/music.css?_=' + Date.now() + '"
   // Density (N4), for the same reason: the rows would jump once
   // applyDensity() runs. boot-body.js copies it onto <body>.
   try {
-    if (localStorage.getItem('mornye-style') === 'music') document.documentElement.setAttribute('data-style', 'music');
+    if (localStorage.getItem('mornye-style') !== 'console') document.documentElement.setAttribute('data-style', 'music');
   } catch (e) {}
   try {
     var _d = localStorage.getItem('mornye-density');

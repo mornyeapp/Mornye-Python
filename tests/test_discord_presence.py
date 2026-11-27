@@ -212,6 +212,66 @@ def test_artwork_only_from_the_same_artist() -> None:
     assert client.entities == ["album", "song"]
 
 
+def test_a_multi_artist_tag_is_shown_with_commas_and_searched_by_its_main_artist() -> (
+    None
+):
+    activity = dp.build_activity({**SONG, "artist": "Drake;Lil Durk"}, start=0)
+    assert activity["state"] == "Drake, Lil Durk"
+
+    class Client:
+        terms: list[str] = []
+
+        def get(self, url, params):
+            self.terms.append(params.get("term") or params.get("q"))
+
+            class Response:
+                def json(self):
+                    return {"results": []}
+
+            return Response()
+
+    client = Client()
+    dp.lookup_artwork("Drake;Lil Durk", "Record", "Song", client=client)
+    assert client.terms == ["Drake Record", "Drake Song"] * 2
+
+
+def test_artwork_falls_back_to_deezer_when_apple_has_not_the_record() -> None:
+    class Response:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    class Client:
+        def get(self, url, params):
+            if "itunes" in url:
+                return Response({"results": []})
+            if url.endswith("search/album"):
+                return Response(
+                    {
+                        "data": [
+                            {
+                                "title": "MI Fist (2004 Remaster)",
+                                "artist": {"name": "Club Dogo"},
+                                "cover_xl": "https://deezer.test/cover.jpg",
+                            }
+                        ]
+                    }
+                )
+            return Response({"data": []})
+
+    assert (
+        dp.lookup_artwork(
+            "Club Dogo",
+            "MI Fist (2004 Remaster)",
+            "LLCD (Ladies Love Club Dogo) - 2004 Remaster",
+            client=Client(),
+        )
+        == "https://deezer.test/cover.jpg"
+    )
+
+
 def test_settings_survive_a_restart() -> None:
     presence = dp.DiscordPresence()
     presence.configure(enabled=True, application_id=" 123 456 ", show_artwork=False)

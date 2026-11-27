@@ -1145,3 +1145,11 @@ body.sidebar-collapsed .sb-playlists-inner { visibility: hidden; }
    Fetch label, the Recently Added shelf. css/music.css shows them; doubled
    class so no component rule of equal weight brings one back. */
 .m-only.m-only { display: none; }
+
+/* The player with nothing playing (playerShowIdle in app.js): it stays on
+   screen, says so, and its controls rest until something plays. */
+body.player-idle #player-bar .pl-controls { opacity: .4; pointer-events: none; }
+body.player-idle #player-bar .pl-seek { visibility: hidden; }
+body.player-idle #player-bar .pl-info { cursor: default; }
+body.player-idle #player-bar .pl-title { color: var(--text-muted); }
+body.player-idle #player-bar .pl-btn[aria-label="Close player"] { visibility: hidden; }

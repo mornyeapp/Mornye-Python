@@ -197,6 +197,8 @@
     // Each JS extension's own settings (api_mixins/extension_settings.py).
     // Mornye Link pairing (api_mixins/link.py; admin-only in multi-user).
     'link_status', 'link_set_enabled', 'link_begin_pairing', 'link_end_pairing', 'link_revoke_device',
+    'link_computers', 'link_find_computers', 'link_pair_computer', 'link_remove_computer',
+    'link_answer_pair_request', 'link_set_trust_network', 'link_connect_computer',
     'storage_usage', 'storage_clear', 'storage_compact',
     // Mornye Connect: this account's devices (api_mixins/connect.py).
     'connect_register', 'connect_heartbeat', 'connect_unregister', 'connect_rename',
@@ -389,6 +391,10 @@
     'app_connect_devices',
     'app_connect_state',
     'app_connect_command',
+    // A playlist changed elsewhere (core/connect/link_playlists.py).
+    'app_player_playlists_changed',
+    // A device asks to connect without a PIN (link_server.py).
+    'app_link_pair_request',
   ]);
 
   function connectWs() {

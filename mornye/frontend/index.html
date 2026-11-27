@@ -996,8 +996,8 @@
             <div class="s-row">
               <span class="s-label">Interface Style<small>Console is the monospace look; Music is a music-app look with the recommendations on Home</small></span>
               <select id="config-style" data-onchange="changeStyle()">
-                <option value="console" selected>Console</option>
-                <option value="music">Music</option>
+                <option value="music" selected>Music</option>
+                <option value="console">Console</option>
               </select>
             </div>
             <!-- N4: rows and gaps; compact shrinks the spacing tokens a step. -->
@@ -1776,14 +1776,42 @@
               <div id="link-address" class="link-address"></div>
             </div>
             <div class="s-row hidden" id="link-pair-row">
-              <span class="s-label">Pair a phone<small>In the Mornye app on the phone, pick this computer and type the PIN. Check that the code under it matches.</small></span>
+              <span class="s-label">Pair a phone<small>In the Mornye app on the phone, pick this computer and type the PIN (check that the code under it matches), or connect without one and allow it here.</small></span>
               <div class="link-pair">
                 <div id="link-pin" class="link-pin hidden" aria-live="polite"></div>
                 <button class="act-btn secondary" type="button" id="link-pair-btn" data-onclick="toggleLinkPairing()">Show PIN</button>
               </div>
             </div>
+            <div id="link-requests" class="link-devices hidden" aria-live="polite"></div>
+            <div class="s-row hidden" id="link-trust-row">
+              <span class="s-label">Trust this network<small>Phones and computers on your home network connect without a PIN or asking you. Only on a network where you trust every device: anyone on it could then browse, download and play this library.</small></span>
+              <label class="toggle">
+                <input type="checkbox" id="link-trust" data-onchange="toggleLinkTrust(this.checked)">
+                <span class="toggle-sl"></span>
+              </label>
+            </div>
             <div id="link-devices" class="link-devices hidden"></div>
             <div id="link-error" class="link-error hidden" role="status"></div>
+            <!-- Other computers running Mornye (core/connect/link_peers.py):
+                 this one pairs with their PIN, then each shows in the other's
+                 "Play on". Drawn by renderLinkComputers() in app.js. -->
+            <div class="s-row" id="link-computers-row">
+              <span class="s-label">Other computers<small>Play on another computer running Mornye, and let it play here. Connect asks there to allow this computer; a PIN works too.</small></span>
+              <div class="link-pair">
+                <button class="act-btn secondary" type="button" id="link-find-btn" data-onclick="findLinkComputers()">Find computers</button>
+                <button class="act-btn secondary" type="button" data-onclick="startLinkComputerPair(this)">Add by address</button>
+              </div>
+            </div>
+            <div id="link-found" class="link-devices hidden"></div>
+            <div class="s-row hidden" id="link-computer-pair-row">
+              <span class="s-label">Pair with <span id="link-computer-pair-name">a computer</span><small id="link-computer-pair-hint">The address it shows in Mornye Link. Without a PIN, it asks there to allow this computer.</small></span>
+              <div class="link-pair link-computer-form">
+                <input type="text" id="link-computer-address" placeholder="192.168.1.20:47710" autocomplete="off" spellcheck="false" aria-label="Address">
+                <input type="text" id="link-computer-pin" placeholder="PIN (optional)" inputmode="numeric" maxlength="7" autocomplete="one-time-code" aria-label="PIN" data-onkeydown="if(event.key==='Enter') pairLinkComputer()">
+                <button class="act-btn" type="button" id="link-computer-pair-btn" data-onclick="pairLinkComputer()">Pair</button>
+              </div>
+            </div>
+            <div id="link-computers" class="link-devices hidden"></div>
           </div>
           <!-- Mornye Connect (api_mixins/connect.py, core/connect): play on one
                device, control it from the others. Drawn by loadConnectSettings(). -->
@@ -2436,11 +2464,19 @@
     </div>
   </div>
 
+<!-- Connect, as in Spotify (openCastPicker in app.js): where the music plays
+     on top, in the signal colour; the account's other devices and the
+     receivers this computer can cast to below. A click moves playback. -->
+<aside id="connect-panel" class="connect-panel hidden" role="dialog" aria-labelledby="connect-panel-title">
+  <div class="cp-head">
+    <h2 id="connect-panel-title">Connect</h2>
+    <button type="button" class="cp-close" data-onclick="closeConnectPanel()" aria-label="Close" title="Close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <div id="connect-panel-body" class="cp-body"></div>
+</aside>
+
 <div id="player-bar" class="hidden" role="region" aria-label="Player">
   <audio id="player-audio" preload="metadata"></audio>
-  <!-- Mornye Connect / cast: where the music is playing, when that is not
-       here (castButtonsShow in app.js). A click opens "Play on". -->
-  <button type="button" id="connect-banner" class="connect-banner hidden" data-onclick="connectOpenPicker()" aria-haspopup="menu" title="Choose where to play"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="12" height="10" rx="1.5"/><path d="M5.5 18h5"/><path d="M8 14v4"/><rect x="16" y="7" width="6" height="13" rx="1.5"/><circle cx="19" cy="15.5" r="1.6"/></svg><span id="connect-banner-text"></span></button>
   <div class="pl-info u-cursor-pointer" role="button" tabindex="0" data-activate data-onclick="openNowPlaying()" title="Open the full player">
     <span id="pl-artwork" class="pl-artwork" aria-hidden="true">
       <img id="pl-cover" alt="">

@@ -1043,23 +1043,50 @@
 .pl-row .pl-main { justify-content: flex-start; }
 .pl-row .pl-main > .pl-main-info { margin-right: auto; }
 
-/* Cast (openCastPicker in app.js): the button lights while the Player
-   plays on a DLNA or FCast receiver. */
-#pl-cast-btn.on, .np-cast.on { color: var(--signal); }
+/* Cast and Mornye Connect (openCastPicker in app.js): the button lights in
+   the signal colour while the music plays somewhere else, as Spotify's does.
+   The music look's player bar greys its buttons; this one stays lit. */
+#pl-cast-btn.on, .np-cast.on,
+html[data-style="music"] #player-bar #pl-cast-btn.on { color: var(--signal); }
+html[data-style="music"] #player-bar #pl-cast-btn.on:hover { color: var(--signal); }
 
-/* Mornye Connect: "Playing on <device>" sits on the player's top edge while
-   the music plays somewhere else, as Spotify's Connect strip does. */
-.connect-banner {
-  position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%);
-  display: inline-flex; align-items: center; gap: 6px; max-width: min(420px, 90vw);
-  padding: 4px 12px; border: 0; border-radius: 1000px;
-  background: var(--signal); color: var(--signal-ink);
-  font: 600 11.5px/1.4 var(--font); white-space: nowrap; cursor: pointer;
-  box-shadow: 0 4px 14px rgba(var(--shade-rgb), .25);
+/* The Connect panel, on the right above the player, as Spotify's. */
+.connect-panel {
+  position: fixed; z-index: 1010; top: 12px; right: 12px; bottom: calc(var(--player-h) + 12px);
+  display: flex; flex-direction: column; width: min(320px, calc(100vw - 24px));
+  padding: 14px 10px 10px; border-radius: 12px; overflow: hidden;
+  background: var(--raised); color: var(--text); box-shadow: var(--elevation-overlay);
 }
-.connect-banner span { overflow: hidden; text-overflow: ellipsis; }
-.connect-banner:hover { filter: brightness(1.08); }
-.connect-banner:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.connect-panel.hidden { display: none; }
+.cp-head { display: flex; align-items: center; justify-content: space-between; padding: 0 6px 12px; }
+.cp-head h2 { margin: 0; font: 700 16px/1.2 var(--font); }
+.cp-close {
+  display: inline-grid; place-items: center; width: 30px; height: 30px; padding: 0;
+  border: 0; border-radius: 50%; background: transparent; color: var(--text-2, var(--text-muted)); cursor: pointer;
+}
+.cp-close:hover { background: var(--m-fill, color-mix(in srgb, var(--text) 10%, transparent)); color: var(--text); }
+.cp-body { flex: 1; overflow-y: auto; }
+.cp-current, .cp-device {
+  display: flex; align-items: center; gap: 14px; width: 100%; padding: 12px 12px;
+  border: 0; border-radius: 8px; background: transparent; color: inherit; text-align: left; font: inherit;
+}
+.cp-current { margin-bottom: 14px; background: var(--m-fill, color-mix(in srgb, var(--text) 8%, transparent)); color: var(--signal); }
+.cp-device { cursor: pointer; }
+.cp-device:hover, .cp-device:focus-visible { background: var(--m-fill, color-mix(in srgb, var(--text) 8%, transparent)); outline: none; }
+.cp-device:disabled { opacity: .55; cursor: progress; }
+.cp-current svg, .cp-device svg { flex: none; }
+.cp-name { display: flex; flex-direction: column; min-width: 0; flex: 1; font: 600 14px/1.3 var(--font); }
+.cp-name, .cp-name small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-name small { font: 500 11.5px/1.3 var(--font); color: var(--text-muted); }
+.cp-current .cp-name small { color: inherit; opacity: .8; }
+.cp-sub { margin: 4px 12px 6px; font: 700 12px/1.3 var(--font); color: var(--text-muted); }
+.cp-hint { margin: 12px 12px 4px; font: 500 11.5px/1.4 var(--font); color: var(--text-muted); }
+.cp-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; }
+.cp-bars i { width: 3px; height: 40%; border-radius: 1px; background: currentColor; animation: cp-bar .9s ease-in-out infinite alternate; }
+.cp-bars i:nth-child(2) { animation-delay: -.3s; }
+.cp-bars i:nth-child(3) { animation-delay: -.6s; }
+@keyframes cp-bar { to { height: 100%; } }
+@media (prefers-reduced-motion: reduce) { .cp-bars i { animation: none; height: 70%; } }
 .np-cast {
   display: inline-grid; place-items: center; width: 28px; height: 28px; margin-right: 6px;
   padding: 0; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer;

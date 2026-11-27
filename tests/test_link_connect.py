@@ -180,7 +180,7 @@ def test_current_resolve_and_details(bridge):
         _op(bridge, "player/details")
 
 
-def test_a_phone_is_a_device_that_never_takes_over_by_itself(bridge):
+def test_a_phone_playing_on_its_own_pauses_nothing(bridge):
     bridge.phones.append("p1")
     bridge.phone_connected("p1", "Pixel")
     assert bridge.frames[-1][1]["type"] == "player.state"
@@ -195,7 +195,10 @@ def test_a_phone_is_a_device_that_never_takes_over_by_itself(bridge):
         "index": 0,
     }
     bridge.phone_message("p1", {"type": "player.state", "state": phone_state})
-    assert hub.active_id == "mac"  # the phone playing on its own changes nothing
+    # Nothing else plays: the phone is what the pages show now (a page
+    # opened now follows it), and nothing was paused for it.
+    assert hub.active_id == phone_device_id("p1")
+    assert _page_commands(bridge) == []
     # The computer starting to play pauses the playing phone.
     _page_plays(playing=True, index=1)
     assert ("p1", {"type": "command", "action": "pause", "args": {}}) in bridge.frames
@@ -227,3 +230,157 @@ def test_uploads_must_be_named_by_file_id(bridge):
     for bad in ("../x.flac", f"{FILE_ID}.exe", "short.flac", FILE_ID):
         with pytest.raises(CommandError):
             bridge.upload_path(bad)
+
+
+# ── "Play on" from the phone: devices, transfer, target ───────────────────
+
+
+def _connect_phone(bridge, device_id="p1", name="Pixel"):
+    bridge.phones.append(device_id)
+    bridge.phone_connected(device_id, name)
+
+
+def test_devices_lists_the_account_and_marks_the_phone_asking(bridge):
+    _connect_phone(bridge)
+    _page_plays()
+    out = _op(bridge, "devices", "GET")
+    assert out["activeId"] == "mac" and out["targetId"] == "mac"
+    by_id = {d["id"]: d for d in out["devices"]}
+    assert by_id["mac"]["active"] and not by_id["mac"]["self"]
+    assert by_id["mac"]["state"]["track"]["title"] == "Alpha"
+    assert by_id[phone_device_id("p1")]["self"] is True
+    assert all("extra" not in d and "meta" not in d for d in out["devices"])
+
+
+def test_a_new_device_is_pushed_to_the_phones(bridge):
+    _connect_phone(bridge)
+    first = [m for _, m in bridge.frames if m["type"] in ("player.state", "devices")]
+    assert [m["type"] for m in first[:2]] == ["player.state", "devices"]
+    get_connect_hub(None).register("tab", "Firefox", "browser")
+    frame = [m for d, m in bridge.frames if d == "p1" and m["type"] == "devices"][-1]
+    assert "tab" in {d["id"] for d in frame["devices"]}
+
+
+def test_transfer_moves_playback_to_the_device_picked(bridge):
+    hub = get_connect_hub(None)
+    hub.register("tab", "Firefox", "browser")
+    _page_plays(index=1, position=42_000)
+    out = _op(bridge, "transfer", args={"target": "tab"})
+    assert out["activeId"] == "tab"
+    to_tab = [
+        p
+        for fn, p in bridge.page_events
+        if fn == "app_connect_command" and p["target"] == "tab"
+    ]
+    assert to_tab[-1]["action"] == "play_queue" and to_tab[-1]["args"]["index"] == 1
+    assert ("pause", {}) in _page_commands(bridge)
+    with pytest.raises(CommandError) as err:
+        _op(bridge, "transfer", args={"target": "nowhere"})
+    assert err.value.code == "not_found"
+    with pytest.raises(CommandError):
+        _op(bridge, "transfer", args={})
+
+
+def test_ops_reach_the_device_named_as_target(bridge):
+    hub = get_connect_hub(None)
+    hub.register("tab", "Firefox", "browser")
+    _page_plays()
+    hub.report_state(
+        "tab",
+        {
+            "track": {"title": "Beta"},
+            "playing": False,
+            "positionMs": 0,
+            "queue": [{"title": "Beta"}],
+            "index": 0,
+        },
+        claim=False,
+    )
+    _op(bridge, "command", args={"action": "play", "target": "tab"})
+    tab = [
+        (p["action"])
+        for fn, p in bridge.page_events
+        if fn == "app_connect_command" and p["target"] == "tab"
+    ]
+    assert tab == ["play"] and _page_commands(bridge) == []
+    assert _op(bridge, "state", "GET", {"target": "tab"})["track"]["title"] == "Beta"
+    assert (
+        _op(bridge, "handoff/current", "GET", {"target": "tab"})["queue"][0]["title"]
+        == "Beta"
+    )
+    out = _op(
+        bridge,
+        "handoff/play",
+        args={
+            "queue": [{"title": "Alpha", "artist": "Ann"}],
+            "index": 0,
+            "target": "tab",
+        },
+    )
+    assert out["resolved"] == 1 and hub.active_id == "tab"
+    _op(
+        bridge,
+        "handoff/append",
+        args={
+            "handoffId": out["handoffId"],
+            "queue": [{"title": "Beta", "artist": "Bob"}],
+        },
+    )
+    tab = [
+        p["action"]
+        for fn, p in bridge.page_events
+        if fn == "app_connect_command" and p["target"] == "tab"
+    ]
+    assert tab[-2:] == ["play_queue", "queue_add"]
+
+
+def test_a_phone_handed_playback_is_what_the_other_phones_control(bridge):
+    _connect_phone(bridge, "p1", "Pixel")
+    _connect_phone(bridge, "p2", "iPhone")
+    _page_plays()
+    _op(bridge, "transfer", args={"target": phone_device_id("p2")})
+    hub = get_connect_hub(None)
+    assert hub.active_id == phone_device_id("p2")
+    bridge.phone_message(
+        "p2",
+        {
+            "type": "player.state",
+            "state": {
+                "track": {"title": "Alpha"},
+                "playing": True,
+                "positionMs": 1000,
+                "queue": [{"title": "Alpha"}],
+                "index": 0,
+            },
+        },
+    )
+    # p1 sees and controls p2; p2 still sees the computer.
+    assert bridge.target("p1")[0] == phone_device_id("p2")
+    assert bridge.target("p2")[0] == "mac"
+    _op(bridge, "command", args={"action": "pause"})
+    assert ("p2", {"type": "command", "action": "pause", "args": {}}) in bridge.frames
+    bridge.push(force=True)
+    last = {d: m for d, m in bridge.frames if m["type"] == "player.state"}
+    assert last["p1"]["state"]["playing"] is True
+    assert last["p2"]["state"]["track"]["title"] == "Alpha"
+
+
+def test_a_phone_does_not_take_over_a_computer_that_plays(bridge):
+    bridge.phones.append("p1")
+    bridge.phone_connected("p1", "Pixel")
+    _page_plays(playing=True)
+    bridge.phone_message(
+        "p1",
+        {
+            "type": "player.state",
+            "state": {
+                "track": {"title": "X"},
+                "playing": True,
+                "positionMs": 0,
+                "queue": [{"title": "X"}],
+                "index": 0,
+            },
+        },
+    )
+    assert get_connect_hub(None).active_id == "mac"
+    assert _page_commands(bridge) == []

@@ -38,6 +38,7 @@ from typing import Any
 
 from .atomic_io import write_json_atomic
 from .paths import cache_path
+from .text_match import tag_artists
 
 logger = logging.getLogger(__name__)
 
@@ -311,8 +312,9 @@ def build_activity(track: dict, start: float, artwork: str | None = None) -> dic
         "status_display_type": 1,
         "details": field(track.get("title") or ""),
     }
-    if track.get("artist"):
-        activity["state"] = field(track["artist"])
+    artists = ", ".join(tag_artists(track.get("artist")))
+    if artists:
+        activity["state"] = field(artists)
     timestamps: dict[str, int] = {"start": int(start * 1000)}
     duration = float(track.get("duration") or 0)
     if duration > 0:
@@ -331,11 +333,15 @@ def build_activity(track: dict, start: float, artwork: str | None = None) -> dic
 def lookup_artwork(
     artist: str, album: str, title: str, *, client: Any = None
 ) -> str | None:
-    """The record's cover on Apple Music, as a public URL Discord can show —
-    a sleeve inside a local file is not one. Only a result whose artist
-    matches: a wrong sleeve on a profile is worse than none. The album
-    first, then the song, which finds singles and records the catalogue
-    files under another title."""
+    """The record's cover as a public URL Discord can show — a sleeve inside
+    a local file is not one. Only a result whose artist matches: a wrong
+    sleeve on a profile is worse than none. The album first, then the song,
+    which finds singles and records the catalogue files under another
+    title. Apple Music first, then Deezer, which has records Apple does not
+    (Club Dogo's "Mi Fist")."""
+    # The main artist of a multi-value tag: "Drake;Lil Durk" is filed under
+    # Drake in the catalogues.
+    artist = next(iter(tag_artists(artist)), "")
     if not artist:
         return None
     import httpx
@@ -344,25 +350,27 @@ def lookup_artwork(
     own = client is None
     http = client or httpx.Client(timeout=8.0, follow_redirects=True)
 
-    def same_artist(result: dict) -> bool:
-        found = normal(result.get("artistName") or "")
+    def same_artist(name: Any) -> bool:
+        found = normal(name or "")
         return bool(found) and (found in wanted or wanted in found)
 
-    def search(term: str, entity: str, name: str, matching: str) -> str | None:
+    def results(url: str, params: dict, key: str) -> list:
         try:
-            resp = http.get(
-                "https://itunes.apple.com/search",
-                params={"term": term, "entity": entity, "limit": "10"},
-            )
-            results = resp.json().get("results") or []
+            found = http.get(url, params=params).json().get(key) or []
         except Exception:
-            return None
+            return []
+        return [r for r in found if isinstance(r, dict)]
+
+    def apple(entity: str, name: str, term: str, matching: str) -> str | None:
         chosen = next(
             (
                 r
-                for r in results
-                if isinstance(r, dict)
-                and same_artist(r)
+                for r in results(
+                    "https://itunes.apple.com/search",
+                    {"term": f"{artist} {term}", "entity": entity, "limit": "10"},
+                    "results",
+                )
+                if same_artist(r.get("artistName"))
                 and normal(r.get(name) or "").startswith(matching)
             ),
             None,
@@ -370,15 +378,35 @@ def lookup_artwork(
         url = (chosen or {}).get("artworkUrl100")
         return str(url).replace("100x100bb", "512x512bb") if url else None
 
+    def deezer(kind: str, term: str, matching: str) -> str | None:
+        path = "search/album" if kind == "album" else "search"
+        for r in results(
+            f"https://api.deezer.com/{path}",
+            {"q": f"{artist} {term}", "limit": "10"},
+            "data",
+        ):
+            record = r if kind == "album" else r.get("album") or {}
+            if (
+                isinstance(record, dict)
+                and same_artist((r.get("artist") or {}).get("name"))
+                and normal(r.get("title") or "").startswith(matching)
+                and record.get("cover_xl")
+            ):
+                return str(record["cover_xl"])
+        return None
+
     try:
-        found = None
+        album_key, title_key = normal(album), normal(title)
+        attempts = []
         if album:
-            found = search(
-                f"{artist} {album}", "album", "collectionName", normal(album)
-            )
-        if not found and title:
-            found = search(f"{artist} {title}", "song", "trackName", normal(title))
-        return found
+            attempts.append(lambda: apple("album", "collectionName", album, album_key))
+        if title:
+            attempts.append(lambda: apple("song", "trackName", title, title_key))
+        if album:
+            attempts.append(lambda: deezer("album", album, album_key))
+        if title:
+            attempts.append(lambda: deezer("track", title, title_key))
+        return next((url for attempt in attempts if (url := attempt())), None)
     finally:
         if own:
             http.close()

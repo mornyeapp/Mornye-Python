@@ -207,6 +207,15 @@ test('parseLyrics shows line-only enhanced LRC line by line, real word timing wo
   assert.equal(b.lines[2].words.length, 2);
 });
 
+test('parseLyrics reads the Jellyfin word gap (U+2800) as a plain space', () => {
+  const { parseLyrics } = pick(['parseLyrics']);
+  const gap = '⠀';
+  const res = parseLyrics(`[00:14.45]<00:14.45>Lontano${gap}<00:14.92>dalla${gap}<00:15.27>Grande${gap}<00:15.69>Mela`);
+  assert.equal(res.wordSynced, true);
+  assert.equal(res.lines[0].text, 'Lontano dalla Grande Mela');
+  assert.equal(JSON.stringify(res.lines[0].words.map(w => w.text)), JSON.stringify(['Lontano ', 'dalla ', 'Grande ', 'Mela']));
+});
+
 test('parseLyrics reads .mlrc translation tags by time, readable and base64', () => {
   const { parseLyrics } = pick(['parseLyrics', 'lyricSupplement'], { atob, TextDecoder, Uint8Array });
   const mlrc = '[x-mlrc:2]\n[00:01.00]Hola\n[x-romanized:1000:o-la]\n[x-translated:1000:Hello\\nthere]\n'
@@ -409,4 +418,28 @@ test('playerRemoteEngine shows the remote state and turns controls into commands
   assert.equal(engine.paused, true);
   engine.play();
   assert.equal(JSON.stringify(sent), '[["play",{}]]');
+});
+
+test('Discord still shows the song while another device plays it', () => {
+  const g = {
+    playerEngine: { kind: 'remote', currentTime: 42, paused: false, duration: 180 },
+    connect: { remoteId: 'mornye:b', devices: [{ id: 'mornye:b', state: {
+      track: { title: 'Alpha', artist: 'Ann', album: 'A' }, durationMs: 200000 } }] },
+    playerQueue: [{ title: 'Old', artist: 'X', album: '', duration_s: 10 }],
+    playerIndex: 0,
+    listenState: null,
+  };
+  const { presenceInfo } = pick(['presenceInfo', 'presenceRemoteInfo'], g);
+  assert.equal(JSON.stringify(presenceInfo()),
+    '{"title":"Alpha","artist":"Ann","album":"A","duration":200,"position":42,"playing":true}');
+  // Paused there: shown paused (Mornye clears the profile then).
+  g.playerEngine.paused = true;
+  assert.equal(presenceInfo().playing, false);
+  // A device that sent no track yet: the queue here names the song.
+  g.connect.devices[0].state = {};
+  assert.equal(presenceInfo().title, 'Old');
+  assert.equal(presenceInfo().duration, 10);
+  // Nothing known anywhere: nothing shown.
+  g.playerQueue.length = 0;
+  assert.equal(presenceInfo(), null);
 });
