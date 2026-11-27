@@ -15,7 +15,7 @@ import httpx
 import pytest
 
 from mornye.core import link
-from mornye.link_server import LinkServer
+from mornye.link_server import FEATURES, LinkServer
 
 
 def _client() -> httpx.Client:
@@ -79,7 +79,7 @@ def test_info_matches_the_certificate(server: LinkServer):
         info = http.get(f"https://127.0.0.1:{server.port}/mornye/v1/info").json()
     assert info["protocol"] == 1
     assert info["pairing"] is False
-    assert info["features"] == []
+    assert info["features"] == list(FEATURES)
     assert info["serverId"] == server.store.server_id
     # What the phone checks before sending a PIN.
     assert info["fingerprint"] == _observed_fingerprint(server.port)

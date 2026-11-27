@@ -15,9 +15,11 @@ The phone app's Link protocol (version 1), as the Rust desktop serves it
   — and ``player.state`` / ``command`` frames on the socket, answered by
   Mornye Connect (core/connect/link_bridge.py): the phone controls whatever
   plays on this account, hands its queue over, and shows up in "Play on";
+- ``devices`` and ``transfer``, and ``target`` on the player ops: "Play on"
+  from the phone (feature ``connect.devices``);
 - any other ``/mornye/v1/<op>``: ``404 not_found``. ``features`` in ``info``
-  and ``welcome`` stays empty (no downloads, open or library jobs here); the
-  player ops need no flag.
+  and ``welcome`` lists what came after protocol 1 (FEATURES); there are no
+  downloads, open or library jobs here, and the player ops need no flag.
 - ``_mornye._tcp`` over mDNS (``zeroconf``) with TXT ``v``, ``id``, ``fp``
   and ``pf``, so the phone finds the computer on the same Wi-Fi; where
   multicast is blocked the phone adds it by its address.
@@ -49,6 +51,11 @@ SERVICE_TYPE = "_mornye._tcp.local."
 MAX_BODY = 8 << 20
 CLOSE_UNAUTHORIZED = 4401
 CLOSE_REPLACED = 4409
+
+
+#: What this server answers beyond Link protocol 1, in ``info`` and
+#: ``welcome``. docs/architecture/link-protocol.md describes each one.
+FEATURES: tuple[str, ...] = ("connect.devices",)
 
 
 def host_platform() -> str:
@@ -252,8 +259,9 @@ class LinkServer:
     def announce(self, body: dict[str, Any]) -> dict[str, Any]:
         body["platform"] = self.platform
         # None of the phone's LinkHostFeatures (downloads, open, library.jobs);
-        # the player ops (Mornye Connect) need no flag.
-        body["features"] = []
+        # the player ops (Mornye Connect) need no flag. What came after them
+        # does, so an app knows this computer answers it (see FEATURES).
+        body["features"] = list(FEATURES)
         return body
 
     def info(self) -> dict[str, Any]:
