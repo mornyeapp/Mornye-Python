@@ -207,6 +207,15 @@ test('parseLyrics shows line-only enhanced LRC line by line, real word timing wo
   assert.equal(b.lines[2].words.length, 2);
 });
 
+test('parseLyrics reads the Jellyfin word gap (U+2800) as a plain space', () => {
+  const { parseLyrics } = pick(['parseLyrics']);
+  const gap = '⠀';
+  const res = parseLyrics(`[00:14.45]<00:14.45>Lontano${gap}<00:14.92>dalla${gap}<00:15.27>Grande${gap}<00:15.69>Mela`);
+  assert.equal(res.wordSynced, true);
+  assert.equal(res.lines[0].text, 'Lontano dalla Grande Mela');
+  assert.equal(JSON.stringify(res.lines[0].words.map(w => w.text)), JSON.stringify(['Lontano ', 'dalla ', 'Grande ', 'Mela']));
+});
+
 test('parseLyrics reads .mlrc translation tags by time, readable and base64', () => {
   const { parseLyrics } = pick(['parseLyrics', 'lyricSupplement'], { atob, TextDecoder, Uint8Array });
   const mlrc = '[x-mlrc:2]\n[00:01.00]Hola\n[x-romanized:1000:o-la]\n[x-translated:1000:Hello\\nthere]\n'

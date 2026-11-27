@@ -12917,7 +12917,10 @@ function parseLyrics(text) {
   const synced = [], plain = [];
   let last = null;
   const supplements = [];
-  for (const raw of String(text || '').replace(/\r/g, '').split('\n')) {
+  // U+2800 is the blank written between words for Jellyfin (core/lyrics.py
+  // JELLYFIN_WORD_GAP, and other taggers such as SpotiFLAC): trim() keeps it
+  // inside the word, where it draws as a space wider than a space.
+  for (const raw of String(text || '').replace(/\r/g, '').replace(/⠀/g, ' ').split('\n')) {
     const line = raw.trim();
     if (!line) continue;
     let m = SUPP.exec(line);
