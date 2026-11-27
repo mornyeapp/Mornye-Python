@@ -162,8 +162,8 @@ def test_without_enhanced_the_answer_is_version_1(client, library):  # noqa: F81
 
 
 def test_line_synced_lyrics_have_no_cue_lines_even_enhanced(
-    client, library
-):  # noqa: F811
+    client, library  # noqa: F811
+):
     sid = _song_id(client, "Kiss Me More")
     lyrics = _get(client, "getLyricsBySongId", id=sid, enhanced="true")["lyricsList"][
         "structuredLyrics"
