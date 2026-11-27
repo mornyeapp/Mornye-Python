@@ -1064,15 +1064,15 @@ html[data-style="music"] #player-bar #pl-cast-btn.on:hover { color: var(--signal
   display: inline-grid; place-items: center; width: 30px; height: 30px; padding: 0;
   border: 0; border-radius: 50%; background: transparent; color: var(--text-2, var(--text-muted)); cursor: pointer;
 }
-.cp-close:hover { background: var(--m-fill, rgba(127, 127, 127, .14)); color: var(--text); }
+.cp-close:hover { background: var(--m-fill, color-mix(in srgb, var(--text) 10%, transparent)); color: var(--text); }
 .cp-body { flex: 1; overflow-y: auto; }
 .cp-current, .cp-device {
   display: flex; align-items: center; gap: 14px; width: 100%; padding: 12px 12px;
   border: 0; border-radius: 8px; background: transparent; color: inherit; text-align: left; font: inherit;
 }
-.cp-current { margin-bottom: 14px; background: var(--m-fill, rgba(127, 127, 127, .12)); color: var(--signal); }
+.cp-current { margin-bottom: 14px; background: var(--m-fill, color-mix(in srgb, var(--text) 8%, transparent)); color: var(--signal); }
 .cp-device { cursor: pointer; }
-.cp-device:hover, .cp-device:focus-visible { background: var(--m-fill, rgba(127, 127, 127, .12)); outline: none; }
+.cp-device:hover, .cp-device:focus-visible { background: var(--m-fill, color-mix(in srgb, var(--text) 8%, transparent)); outline: none; }
 .cp-device:disabled { opacity: .55; cursor: progress; }
 .cp-current svg, .cp-device svg { flex: none; }
 .cp-name { display: flex; flex-direction: column; min-width: 0; flex: 1; font: 600 14px/1.3 var(--font); }
