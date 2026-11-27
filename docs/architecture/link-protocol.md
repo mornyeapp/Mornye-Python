@@ -12,6 +12,7 @@ that uses it checks `features` first.
 | Feature | What it adds |
 | --- | --- |
 | `connect.devices` | The account's devices; "Play on" from the phone |
+| `playlists` | The Player's playlists, read and edited from the phone |
 
 Ops are `/mornye/v1/<op>` with `Authorization: Bearer <apiKey>`, JSON in and
 out, and the usual errors (`{"error": "<code>", "message": "…"}`: 400
@@ -86,6 +87,99 @@ When playback moves to phone B, phone B is the active device. Every other
 phone then sees phone B in `state` / `player.state` and controls it with
 `command`: the computer forwards commands to phone B as `command` frames,
 which it already handles. Phone B itself keeps seeing the computer.
+
+## `playlists`: the same playlists on every device
+
+These are the Player page's playlists (not Subsonic's `getPlaylists`, which
+is a separate list kept for other Subsonic apps). A playlist may hold songs
+that are not downloaded yet (imported from a provider): they have no
+`songId`.
+
+Errors as above, plus `409 conflict` (see `baseUpdatedMs`).
+
+### A track
+
+A TrackRef, as in the player ops, plus three fields:
+
+```json
+{"title": "Alpha", "artist": "Ann", "album": "A", "durationMs": 200000,
+ "isrc": "USAAA0000001", "matchKey": "…", "songId": "so-…", "serverId": "…",
+ "key": "so-…", "downloaded": true, "sourceUrl": "https://…"}
+```
+
+- `songId` / `serverId`: only for a song in this library; play it with
+  `/rest/stream?id=<songId>` or hand it over like any queue entry.
+- `key`: opaque. Sending `{"key": "…"}` back keeps that entry exactly.
+- `downloaded`: false for a song the library does not have yet.
+- `sourceUrl`: the song's provider link, when the import knew it.
+
+### `GET playlists`
+
+```json
+{"playlists": [{"id": "…", "name": "Mix", "description": "",
+  "trackCount": 42, "downloadedCount": 40, "durationMs": 9876000,
+  "createdMs": 1764240000000, "updatedMs": 1764243600000,
+  "hasCover": true, "followsUrl": "", "syncedMs": 0}]}
+```
+
+Newest change first. `updatedMs` is the playlist's version: keep it to know
+when to reload, and to send as `baseUpdatedMs`. `followsUrl` is the provider
+playlist it follows (the computer adds the songs added there); "" if none.
+
+### `GET playlists/get?id=…`
+
+`{"playlist": {…the summary…, "tracks": [track, …]}}`
+
+### `GET playlists/cover?id=…`
+
+`{"cover": "data:image/jpeg;base64,…"}` ("" when there is none). Kept out
+of the list because covers are large; reload it when `updatedMs` changes.
+
+### `POST playlists/create`
+
+```json
+{"name": "Road trip", "description": "", "cover": "data:image/…",
+ "tracks": [{"title": "Beta", "artist": "Bob", "isrc": "…"}]}
+```
+
+Only `name` is required. Each track is a TrackRef: a song this library has
+(by `songId`, ISRC, then title/artist/duration) is stored as that file,
+anything else as not downloaded. The cover is re-encoded to a 512 px JPEG.
+Answers `{"playlist": {…with tracks…}}`.
+
+### `POST playlists/update`
+
+```json
+{"id": "…", "baseUpdatedMs": 1764243600000, "name": "New name",
+ "tracks": [{"key": "so-…"}, {"key": "remote:isrc:…"}, {"title": "New song"}]}
+```
+
+Every field but `id` is optional and only what is sent changes:
+
+- `name`, `description`.
+- `cover`: a data URL replaces it, "" removes it.
+- `tracks`: the whole new list, in order (add, remove and reorder are all
+  this). Entries the phone got send their `key`; new ones are TrackRefs.
+- `baseUpdatedMs`: the `updatedMs` the edit was made on. When the playlist
+  changed since (on the computer, or on another phone), nothing is written
+  and the answer is `409 conflict`: reload it, apply the edit again, resend.
+  Without it the edit wins.
+
+Answers `{"playlist": {…with tracks…}}`.
+
+### `POST playlists/delete`
+
+`{"id": "…"}` → `{"ok": true}`.
+
+### Socket frame `playlists.changed`
+
+```json
+{"type": "playlists.changed", "ids": ["…"], "deleted": false}
+```
+
+After every change to the account's playlists, wherever it was made (the
+Player page, this phone, another phone, the computer following a provider
+playlist). `deleted: true` when they are gone. Reload what is shown.
 
 ## Word-by-word lyrics (no flag)
 
