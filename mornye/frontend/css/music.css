@@ -213,16 +213,15 @@ html[data-style="music"] #track-rows > .track-row:nth-child(even) { background: 
 html[data-style="music"] #track-rows > .track-row:hover { background: var(--m-fill-2); }
 html[data-style="music"] .tr-thumb { border-radius: 4px; }
 
-/* ── Player: a floating pill over the page ───────────────────────────── */
+/* ── Player: docked along the foot of the page, as Spotify's and the Music
+   app's: it never covers the end of a list, and what opens above it (the
+   Connect panel, the download dock) sits on a fixed edge. */
 html[data-style="music"] #player-bar {
-  left: calc(var(--rail-w) + (100% - var(--rail-w)) / 2); right: auto; bottom: 18px;
-  transform: translateX(-50%);
-  width: min(720px, calc(100% - var(--rail-w) - 48px)); height: 56px;
-  padding: 0 14px; gap: 12px;
-  border: 1px solid var(--m-pill-edge); border-radius: 1000px;
+  left: var(--rail-w); right: 0; bottom: 0;
+  height: 64px; padding: 0 18px; gap: 12px;
+  border: 0; border-top: 1px solid var(--m-pill-edge); border-radius: 0;
   background: var(--m-pill);
   -webkit-backdrop-filter: blur(60px) saturate(2); backdrop-filter: blur(60px) saturate(2);
-  box-shadow: var(--m-shadow);
 }
 html[data-style="music"] #player-bar .pl-info { width: 200px; }
 html[data-style="music"] #player-bar .pl-artwork { border-radius: 4px; overflow: hidden; }
@@ -230,7 +229,7 @@ html[data-style="music"] .pl-btn:hover { background: var(--m-fill); }
 html[data-style="music"] #player-bar .pl-btn.pl-main { background: transparent; color: var(--text); }
 html[data-style="music"] .pl-vol { width: 70px; }
 html[data-style="music"] body.has-player #app-body { margin-bottom: 0; }
-html[data-style="music"] body.has-player #content { padding-bottom: 96px; }
+html[data-style="music"] body.has-player #content { padding-bottom: 88px; }
 
 /* The download dock: the same pill, above the player when both show. */
 html[data-style="music"] #queue-dock {
@@ -243,9 +242,9 @@ html[data-style="music"] #queue-dock {
   box-shadow: var(--m-shadow);
 }
 html[data-style="music"] #queue-dock:hover { background: var(--m-pill); filter: brightness(1.06); }
-html[data-style="music"] body.has-player #queue-dock { bottom: 84px; }
+html[data-style="music"] body.has-player #queue-dock { bottom: 76px; }
 html[data-style="music"] body.has-dock #content { padding-bottom: 90px; }
-html[data-style="music"] body.has-dock.has-player #content { padding-bottom: 156px; }
+html[data-style="music"] body.has-dock.has-player #content { padding-bottom: 148px; }
 html[data-style="music"] #queue-dock .qd-label { font-size: 12px; font-weight: 600; letter-spacing: normal; text-transform: none; color: var(--text); }
 html[data-style="music"] #queue-dock .qd-bar {
   width: 200px; height: 4px; border-radius: 2px; background: var(--m-fill-2);
@@ -440,7 +439,7 @@ html[data-style="music"] #player-bar {
 }
 html[data-style="music"] #player-bar .pl-controls { grid-column: 1; grid-row: 1; gap: 2px; }
 html[data-style="music"] #player-bar .pl-info {
-  grid-column: 2; grid-row: 1; width: auto; min-width: 0; height: 42px;
+  grid-column: 2; grid-row: 1; justify-self: center; width: min(100%, 560px); min-width: 0; height: 42px;
   display: flex; align-items: center; gap: 10px; padding: 0 12px 0 4px;
   border-radius: 8px; background: var(--m-fill); overflow: hidden;
 }
@@ -448,8 +447,8 @@ html[data-style="music"] #player-bar .pl-artwork { width: 34px; height: 34px; fl
 html[data-style="music"] #player-bar .pl-track-meta { flex: 1; text-align: center; }
 html[data-style="music"] #player-bar .pl-title { font-size: 12px; }
 html[data-style="music"] #player-bar .pl-seek {
-  grid-column: 2; grid-row: 1; align-self: end; z-index: 1;
-  margin: 0 8px 4px 46px; gap: 0;
+  grid-column: 2; grid-row: 1; align-self: end; justify-self: center; z-index: 1;
+  width: min(100% - 54px, 506px); margin: 0 8px 4px 46px; gap: 0;
 }
 html[data-style="music"] #player-bar .pl-seek .am-range { height: 8px; --am-h: 2px; }
 html[data-style="music"] #player-bar .pl-seek .am-range:hover { --am-h: 4px; }
