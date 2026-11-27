@@ -11428,6 +11428,10 @@ async function connectLeaveRemote({ lost = false, keep = true } = {}) {
     await loadPlayerTrack(playerIndex);
     if (at > 1) playerEngine.currentTime = at;
     playerEngine.pause();
+  } else if (keep) {
+    playerIndex = -1;
+    playerShowIdle();
+    markPlayingRow();
   }
 }
 
@@ -11484,6 +11488,7 @@ async function connectLocalPaths(queue) {
 function connectShowRemoteTrack(item) {
   $('player-bar').classList.remove('hidden');
   document.body.classList.add('has-player');
+  document.body.classList.remove('player-idle');
   const artist = displayArtists(item.artist);
   $('pl-title').textContent = artist ? `${item.title} — ${artist}` : item.title;
   marqueeFit($('pl-title'));
@@ -11905,6 +11910,7 @@ async function loadPlayerTrack(index, { advanced = false } = {}) {
   }
   $('player-bar').classList.remove('hidden');
   document.body.classList.add('has-player');
+  document.body.classList.remove('player-idle');
   setPlayerArtwork('');
   const artist = displayArtists(item.artist);
   $('pl-title').textContent = artist ? `${item.title} — ${artist}` : item.title;
@@ -12134,9 +12140,8 @@ function closePlayer() {
   const audio = playerEngine;
   audio.clear();
   playerAbReset();
-  $('player-bar').classList.add('hidden');
-  document.body.classList.remove('has-player');
   playerIndex = -1;
+  playerShowIdle();
   markPlayingRow();
   connectSchedule(true);
   if ('mediaSession' in navigator && playerMediaSessionOn) {
@@ -12144,6 +12149,29 @@ function closePlayer() {
     navigator.mediaSession.playbackState = 'none';
   }
 }
+
+// The player bar stays on screen with nothing playing, as Spotify's does:
+// idle it says so, and ✕ (which stops the music) brings it back here.
+function playerShowIdle() {
+  $('player-bar').classList.remove('hidden');
+  document.body.classList.add('has-player', 'player-idle');
+  $('pl-title').textContent = 'Not playing';
+  marqueeFit($('pl-title'));
+  $('pl-quality').textContent = '';
+  setPlayerArtwork('');
+  $('pl-play-icon').innerHTML = '<path d="M8 5v14l11-7z"/>';
+  $('pl-cur').textContent = '0:00';
+  $('pl-dur').textContent = '0:00';
+  const seek = $('pl-seek');
+  seek.value = 0;
+  amPaint(seek);
+}
+
+(function playerStartIdle() {
+  const start = () => { if (playerIndex < 0 && playerEngine.kind !== 'remote') playerShowIdle(); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
+  else start();
+})();
 
 // ── Speed and A-B repeat (both engines) ─────────────────────────────────────
 // Speed keeps the pitch (the browser's default; mpv's audio-pitch-correction
@@ -13156,6 +13184,7 @@ function npResetSync() {
 }
 
 function openNowPlaying() {
+  if (document.body.classList.contains('player-idle')) return;
   $('np-view').classList.remove('hidden');
   npStartTick();
   npCanvasSync();
