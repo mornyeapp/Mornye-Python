@@ -57,7 +57,9 @@ def test_moved_methods_behave_the_same_on_empty_input() -> None:
     }
 
 
-def test_saving_discord_settings_returns_success_and_presence_status(monkeypatch) -> None:
+def test_saving_discord_settings_returns_success_and_presence_status(
+    monkeypatch,
+) -> None:
     from mornye.core import discord_presence
 
     class Presence:

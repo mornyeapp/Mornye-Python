@@ -166,7 +166,9 @@ def test_mp3_comment_always_uses_track_spotify_url(mp3: Path, is_album: bool) ->
         "https://open.spotify.com/track/track-id"
     ]
     descriptions = [
-        str(frame.text[0]) for frame in tags.getall("TXXX") if frame.desc == "DESCRIPTION"
+        str(frame.text[0])
+        for frame in tags.getall("TXXX")
+        if frame.desc == "DESCRIPTION"
     ]
     assert descriptions == [
         "Downloaded from: https://github.com/mornyeapp/Mornye-Python"

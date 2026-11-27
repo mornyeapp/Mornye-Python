@@ -734,9 +734,11 @@ def _lyrics(name: str, params: dict[str, list[str]], view: _View) -> Any:
             "synced": synced,
             "offset": 0,
             "line": [
-                {"start": line.start, "value": line.value}
-                if synced
-                else {"value": line.value}
+                (
+                    {"start": line.start, "value": line.value}
+                    if synced
+                    else {"value": line.value}
+                )
                 for line in lines
             ],
         }
