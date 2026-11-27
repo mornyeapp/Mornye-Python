@@ -197,3 +197,38 @@ def test_unpaired_there_stops_trying(pair_of):
     assert env["hub_a"].device(peer_device_id(server_id)) is None
     assert env["a"].remove(server_id) is True
     assert env["a"].status() == []
+
+
+def test_connecting_without_a_pin_waits_for_a_click_there(pair_of):
+    env = pair_of
+    b = env["b"]
+    env["a"].ask("127.0.0.1", b.port, b.fingerprint, "Computer B")
+    assert _until(lambda: b.status()["requests"])
+    ((waiting,),) = [env["a"].status()]
+    assert waiting["state"] == "waiting"
+    b.answer_request(b.status()["requests"][0]["id"], True)
+    server_id = b.store.server_id
+    assert _until(lambda: env["hub_a"].device(peer_device_id(server_id)) is not None)
+    (paired,) = env["a"].status()
+    assert paired["serverId"] == server_id and paired["state"] == "connected"
+
+
+def test_a_refusal_there_is_shown_and_can_be_dismissed(pair_of):
+    env = pair_of
+    b = env["b"]
+    env["a"].ask("127.0.0.1", b.port, b.fingerprint, "Computer B")
+    assert _until(lambda: b.status()["requests"])
+    b.answer_request(b.status()["requests"][0]["id"], False)
+    assert _until(lambda: env["a"].status()[0]["state"] == "refused")
+    key = env["a"].status()[0]["serverId"]
+    assert env["a"].remove(key) and env["a"].status() == []
+
+
+def test_a_trusting_computer_lets_it_in_at_once(pair_of):
+    env = pair_of
+    b = env["b"]
+    b.set_trust_network(True)
+    env["a"].ask("127.0.0.1", b.port, b.fingerprint)
+    assert _until(
+        lambda: env["a"].status() and env["a"].status()[0]["state"] == "connected"
+    )

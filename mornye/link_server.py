@@ -7,6 +7,9 @@ The phone app's Link protocol (version 1), as the Rust desktop serves it
   one of 47710..47729, else any — with the pinned certificate from
   core/link.py;
 - ``GET /mornye/v1/info`` and ``POST /mornye/v1/pair``, unauthenticated;
+  ``POST pair/request`` and ``pair/wait`` too: pairing without a PIN, allowed
+  with a click here, or at once from the local network when "trust this
+  network" is on (feature ``pair.request``);
 - ``GET /mornye/v1/ws``, the push socket: ``hello`` → ``welcome``;
 - ``/rest/*``, the OpenSubsonic API of webapi/subsonic.py, opened by the
   paired devices' keys instead of MORNYE_SUBSONIC_*;
@@ -60,7 +63,7 @@ CLOSE_REPLACED = 4409
 
 #: What this server answers beyond Link protocol 1, in ``info`` and
 #: ``welcome``. docs/architecture/link-protocol.md describes each one.
-FEATURES: tuple[str, ...] = ("connect.devices", "playlists")
+FEATURES: tuple[str, ...] = ("connect.devices", "playlists", "pair.request")
 
 
 def host_platform() -> str:
@@ -191,6 +194,8 @@ class LinkServer:
         self.dir = directory or link.link_dir()
         self.store = link.LinkStore(self.dir)
         self.pairing = link.PairingWindow(ttl_s, pair_interval_s)
+        #: Devices asking to connect without a PIN (``POST pair/request``).
+        self.pair_requests = link.PairRequests()
         self.roots: Callable[[], list[str]] = roots or (lambda: [])
         self.bind = bind
         self.advertise = advertise
@@ -304,6 +309,8 @@ class LinkServer:
             "discovery": bool(self._zeroconf),
             "discoveryError": self.mdns_error,
             "pairing": self.pairing.current() if running else None,
+            "requests": self.pair_requests.pending() if running else [],
+            "trustNetwork": self.store.trust_network,
             "pairingEnded": self.pairing.last_ended,
             "devices": [
                 d.public(d.deviceId in connected) for d in self.store.devices()
@@ -405,6 +412,7 @@ class LinkServer:
     def stop(self) -> None:
         with self._life:
             self.pairing.end()
+            self.pair_requests.clear()
             self._unadvertise()
             if self._server is not None:
                 self._server.should_exit = True
@@ -432,6 +440,32 @@ class LinkServer:
 
     def end_pairing(self) -> dict[str, Any]:
         self.pairing.end()
+        return self.status()
+
+    # -- connecting without a PIN -------------------------------------------
+
+    def request_received(self, req: link.PairRequest) -> None:
+        """A device asks to connect: every page of the account that owns the
+        Connect devices is asked to allow it (``app_link_pair_request``)."""
+        from .core.connect.hub import get_connect_hub
+
+        try:
+            get_connect_hub(self.connect_owner()).emit(
+                "app_link_pair_request", req.public()
+            )
+        except Exception:
+            logger.debug("Link: could not show the request", exc_info=True)
+
+    def answer_request(self, request_id: str, allow: bool) -> dict[str, Any]:
+        def store(req: link.PairRequest) -> link.Device:
+            return self.store.upsert(req.deviceId, req.name, req.platform)
+
+        if self.pair_requests.answer(str(request_id or ""), bool(allow), store):
+            logger.info("[link] request %s", "allowed" if allow else "denied")
+        return self.status()
+
+    def set_trust_network(self, on: bool) -> dict[str, Any]:
+        self.store.set_trust_network(bool(on))
         return self.status()
 
     def revoke(self, device_id: str) -> dict[str, Any]:

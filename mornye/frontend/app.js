@@ -127,11 +127,15 @@ document.addEventListener('keydown', (e) => {
 // answer false. A destructive question (danger) starts on Cancel, so a
 // stray Enter does not delete anything; otherwise on the confirm button.
 let confirmSettle = null;
-function askConfirm(question, { title = 'Are you sure?', ok = 'OK', danger = false } = {}) {
+// A question replaced by another one before it was answered resolves to null
+// (falsy like a "no", but not one).
+function askConfirm(question, { title = 'Are you sure?', ok = 'OK', cancel = 'Cancel', danger = false } = {}) {
   const modal = $('confirm-modal');
-  if (confirmSettle) confirmSettle(false);
+  if (confirmSettle) confirmSettle(null);
   $('confirm-title').textContent = title;
   $('confirm-message').textContent = question;
+  const cancelBtn = $('confirm-cancel');
+  if (cancelBtn) cancelBtn.textContent = cancel;
   const okBtn = $('confirm-ok');
   okBtn.textContent = ok;
   okBtn.classList.toggle('danger', danger);
@@ -12596,6 +12600,21 @@ function renderLink(s) {
     }
   }
 
+  // Devices asking to connect without a PIN (also asked in a dialog).
+  const requests = running ? (s.requests || []) : [];
+  $('link-requests').classList.toggle('hidden', !requests.length);
+  $('link-requests').innerHTML = requests.map(r => `
+    <div class="link-device">
+      <span class="link-device-dot on" aria-hidden="true"></span>
+      <span class="link-device-name">${escHtml(r.name)} wants to connect<small>${escHtml(r.platform)} · ${escHtml(r.address)}</small></span>
+      <span class="link-device-actions">
+        <button class="act-btn secondary" type="button" data-request="${escHtml(r.id)}" data-onclick="answerLinkRequest(this, false)">Deny</button>
+        <button class="act-btn" type="button" data-request="${escHtml(r.id)}" data-onclick="answerLinkRequest(this, true)">Allow</button>
+      </span>
+    </div>`).join('');
+  $('link-trust-row').classList.toggle('hidden', !on);
+  $('link-trust').checked = !!s.trustNetwork;
+
   $('link-devices').innerHTML = (s.devices || []).map(d => `
     <div class="link-device">
       <span class="link-device-dot${d.connected ? ' on' : ''}" aria-hidden="true"></span>
@@ -12628,12 +12647,49 @@ async function revokeLinkDevice(btn) {
   if (status) renderLink(status);
 }
 
+// A phone or computer asks to connect without a PIN (link_server.py): every
+// page of the account asks; the first answer counts. One dialog at a time.
+const linkAsked = new Set();
+let linkAsking = Promise.resolve();
+window.app_link_pair_request = (req) => {
+  if (!req?.id || linkAsked.has(req.id)) return;
+  linkAsked.add(req.id);
+  linkAsking = linkAsking.then(async () => {
+    const ok = await askConfirm(
+      `${req.name} (${req.platform}, ${req.address}) asks to connect to this computer. It will browse and play this library, and control what plays here. Allow it only if it is yours.`,
+      { title: `Allow ${req.name}?`, ok: 'Allow', cancel: 'Deny' });
+    // Another question took the dialog: still waiting, in Settings → Mornye Link.
+    if (ok === null) return;
+    const status = await linkCall('link_answer_pair_request', req.id, !!ok);
+    if (status && $('link-section') && !$('link-section').classList.contains('hidden')) renderLink(status);
+    if (ok) toastMgr.success(`${req.name} is connected.`);
+  });
+};
+
+async function answerLinkRequest(btn, allow) {
+  const status = await linkCall('link_answer_pair_request', btn.dataset.request, !!allow);
+  if (status) renderLink(status);
+}
+
+async function toggleLinkTrust(on) {
+  if (on) {
+    const ok = await askConfirm('Every phone and computer on this network will connect without a PIN and without asking you. Anyone on it could then browse, download and play this library.',
+      { title: 'Trust this network?', ok: 'Trust it', danger: true });
+    if (!ok) { $('link-trust').checked = false; return; }
+  }
+  const status = await linkCall('link_set_trust_network', !!on);
+  if (status) renderLink(status);
+}
+
 // Settings → Mornye Link → Other computers (core/connect/link_peers.py).
 const LINK_COMPUTER_STATE = {
   connected: 'connected',
   connecting: 'connecting…',
   offline: 'not reachable now',
   unauthorized: 'unpaired there: pair again',
+  waiting: 'waiting for someone to allow it there…',
+  refused: 'refused there',
+  failed: 'could not connect',
 };
 let g_linkPairFingerprint = '';
 
@@ -12649,8 +12705,8 @@ function renderLinkComputers(list) {
   box.innerHTML = list.map(c => `
     <div class="link-device">
       <span class="link-device-dot${c.state === 'connected' ? ' on' : ''}" aria-hidden="true"></span>
-      <span class="link-device-name">${escHtml(c.name)}<small>${escHtml(c.address)} · ${escHtml(LINK_COMPUTER_STATE[c.state] || c.state)}</small></span>
-      <button class="act-btn secondary" type="button" data-server="${escHtml(c.serverId)}" data-name="${escHtml(c.name)}" data-onclick="removeLinkComputer(this)">Remove</button>
+      <span class="link-device-name">${escHtml(c.name)}<small>${escHtml(c.address)} · ${escHtml(c.state === 'failed' && c.message ? c.message : (LINK_COMPUTER_STATE[c.state] || c.state))}</small></span>
+      <button class="act-btn secondary" type="button" data-server="${escHtml(c.serverId)}" data-name="${escHtml(c.name)}" data-asking="${c.serverId.startsWith('request:') ? '1' : ''}" data-onclick="removeLinkComputer(this)">${c.state === 'waiting' ? 'Cancel' : c.serverId.startsWith('request:') ? 'Dismiss' : 'Remove'}</button>
     </div>`).join('');
 }
 
@@ -12667,7 +12723,10 @@ async function findLinkComputers() {
       ? found.map(c => `
         <div class="link-device">
           <span class="link-device-name">${escHtml(c.name)}<small>${escHtml(c.host)}:${escHtml(String(c.port))}${c.paired ? ' · paired' : ''}</small></span>
-          <button class="act-btn secondary" type="button" data-host="${escHtml(c.host)}" data-port="${escHtml(String(c.port))}" data-fp="${escHtml(c.fingerprint || '')}" data-name="${escHtml(c.name)}" data-onclick="startLinkComputerPair(this)">${c.paired ? 'Pair again' : 'Pair'}</button>
+          <span class="link-device-actions">
+            <button class="act-btn secondary" type="button" data-host="${escHtml(c.host)}" data-port="${escHtml(String(c.port))}" data-fp="${escHtml(c.fingerprint || '')}" data-name="${escHtml(c.name)}" data-onclick="startLinkComputerPair(this)">Use a PIN</button>
+            <button class="act-btn" type="button" data-host="${escHtml(c.host)}" data-port="${escHtml(String(c.port))}" data-fp="${escHtml(c.fingerprint || '')}" data-name="${escHtml(c.name)}" data-onclick="connectLinkComputer(this)">${c.paired ? 'Connect again' : 'Connect'}</button>
+          </span>
         </div>`).join('')
       : '<div class="link-error">No other computer found. Turn Mornye Link on there, or add it by address.</div>';
   } finally {
@@ -12696,11 +12755,28 @@ function parseLinkAddress(text) {
   return v4 ? { host: v4[1], port: Number(v4[2]) } : null;
 }
 
+// Without a PIN: the other computer asks someone there to allow this one
+// (or, trusting this network, lets it in at once). The list shows the wait.
+async function connectLinkComputer(btn) {
+  const res = await linkCall('link_connect_computer', btn.dataset.host, Number(btn.dataset.port),
+    btn.dataset.fp || '', btn.dataset.name || '');
+  if (!res?.ok) { toastMgr.error(res?.message || 'Could not connect.'); return; }
+  $('link-found').classList.add('hidden');
+  toastMgr.info(`Asked ${btn.dataset.name || 'the computer'}: allow this computer there.`);
+  renderLinkComputers(res.computers || []);
+}
+
 async function pairLinkComputer() {
   const address = parseLinkAddress($('link-computer-address').value);
   if (!address) { toastMgr.error('Type the address as host:port, as Mornye Link shows it there.'); return; }
   const pin = $('link-computer-pin').value.replace(/\D/g, '');
-  if (pin.length !== 6) { toastMgr.error('Type the 6-digit PIN shown there.'); return; }
+  if (!pin) {
+    const name = $('link-computer-pair-name').textContent;
+    await connectLinkComputer({ dataset: { host: address.host, port: String(address.port), fp: g_linkPairFingerprint, name: name === 'a computer' ? '' : name } });
+    $('link-computer-pair-row').classList.add('hidden');
+    return;
+  }
+  if (pin.length !== 6) { toastMgr.error('The PIN has 6 digits, or leave it empty to ask there.'); return; }
   const btn = $('link-computer-pair-btn');
   btn.disabled = true;
   btn.textContent = 'Pairing…';
@@ -12719,6 +12795,11 @@ async function pairLinkComputer() {
 }
 
 async function removeLinkComputer(btn) {
+  if (btn?.dataset.asking) {
+    const res = await linkCall('link_remove_computer', btn.dataset.server);
+    if (res) renderLinkComputers(res.computers || []);
+    return;
+  }
   const name = btn?.dataset.name || 'this computer';
   const ok = await askConfirm(`${name} leaves "Play on" here. To stop it reaching this computer too, unpair it in Mornye Link there.`,
     { title: `Remove ${name}?`, ok: 'Remove', danger: true });

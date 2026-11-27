@@ -216,6 +216,69 @@ def pair(
     )
 
 
+def request_pair(
+    host: str,
+    port: int,
+    *,
+    device_id: str,
+    name: str,
+    platform: str,
+    expected_fingerprint: str = "",
+    give_up: threading.Event | None = None,
+    deadline_s: float = 150.0,
+) -> Peer:
+    """Pairs without a PIN (``pair/request``): at once when that computer
+    trusts this network, else once someone allows it there. Blocks until
+    then (at most ``deadline_s``, or until ``give_up`` is set)."""
+    import httpx
+
+    pem, fingerprint = _fetch_certificate(host, port)
+    if expected_fingerprint and expected_fingerprint.lower() != fingerprint:
+        raise PeerError("That computer presented another certificate.")
+    base = f"https://{_url_host(host)}:{port}/mornye/v1"
+    hello = {"deviceId": device_id, "name": name, "platform": platform}
+    end = time.monotonic() + deadline_s
+    try:
+        with httpx.Client(verify=pinned_context(pem), timeout=40) as http:
+            info = http.get(f"{base}/info").json()
+            if info.get("serverId") == device_id:
+                raise PeerError("That is this computer.")
+            if info.get("fingerprint") != fingerprint:
+                raise PeerError("That computer presented another certificate.")
+            if "pair.request" not in (info.get("features") or []):
+                raise PeerError("That computer needs a PIN: update Mornye there.")
+            answer = http.post(f"{base}/pair/request", json=hello)
+            if answer.status_code == 429:
+                raise PeerError("That computer has too many requests waiting.")
+            body = answer.json()
+            request_id = str(body.get("requestId") or "")
+            while body.get("status") == "pending":
+                if time.monotonic() > end or (give_up and give_up.is_set()):
+                    raise PeerError("No answer there.")
+                body = http.post(
+                    f"{base}/pair/wait",
+                    json={"requestId": request_id, "deviceId": device_id},
+                ).json()
+    except httpx.HTTPError as exc:
+        raise PeerError(f"Could not reach {host}:{port}") from exc
+    status = body.get("status")
+    if status == "denied":
+        raise PeerError("Refused there.")
+    if status != "approved":
+        raise PeerError("No answer there.")
+    return Peer(
+        serverId=str(body["serverId"]),
+        name=str(body.get("name") or info.get("name") or host),
+        host=host,
+        port=int(port),
+        fingerprint=fingerprint,
+        apiKey=str(body["apiKey"]),
+        cert=pem,
+        platform=str(info.get("platform") or ""),
+        pairedMs=now_ms(),
+    )
+
+
 # ── one connected computer ───────────────────────────────────────────────
 
 
@@ -500,6 +563,8 @@ class LinkPeers:
         self._lock = threading.Lock()
         self._links: dict[str, PeerLink] = {}
         self._unauthorized: set[str] = set()
+        #: Connections without a PIN waiting for an answer there, by address.
+        self._asking: dict[str, dict[str, Any]] = {}
         self._peers: dict[str, Peer] = self._load()
 
     # ── the file ──
@@ -536,7 +601,71 @@ class LinkPeers:
                     running = self._links.get(peer.serverId)
                     state = running.state if running else "offline"
                 out.append(peer.public(state))
+            for key, asking in self._asking.items():
+                out.append(
+                    {
+                        "serverId": key,
+                        "name": asking["name"],
+                        "address": key.removeprefix("request:"),
+                        "platform": "",
+                        "pairedMs": 0,
+                        "shortFingerprint": "",
+                        "state": asking["state"],
+                        "message": asking.get("message", ""),
+                    }
+                )
         return sorted(out, key=lambda p: p["name"].casefold())
+
+    def ask(
+        self, host: str, port: int, fingerprint: str = "", name: str = ""
+    ) -> dict[str, Any]:
+        """Asks the computer at ``host:port`` to connect without a PIN, in
+        the background: ``status()`` lists it as ``waiting`` until someone
+        answers there, then it is paired (or ``refused``/``failed``)."""
+        key = f"request:{_url_host(host)}:{port}"
+        give_up = threading.Event()
+        with self._lock:
+            current = self._asking.get(key)
+            if current is not None and current["state"] == "waiting":
+                return dict(current)
+            self._asking[key] = {
+                "name": name or host,
+                "state": "waiting",
+                "give_up": give_up,
+            }
+
+        def run() -> None:
+            local = self._local()
+            try:
+                peer = request_pair(
+                    host,
+                    port,
+                    device_id=local.device_id,
+                    name=local.name,
+                    platform=local.platform,
+                    expected_fingerprint=fingerprint,
+                    give_up=give_up,
+                )
+            except PeerError as exc:
+                self._asked(
+                    key, "refused" if "Refused" in str(exc) else "failed", str(exc)
+                )
+                return
+            except Exception as exc:
+                logger.warning("[link] asking %s failed: %s", host, exc)
+                self._asked(key, "failed", "Connecting failed.")
+                return
+            with self._lock:
+                self._asking.pop(key, None)
+            self._paired(peer)
+
+        threading.Thread(target=run, name="mornye-peer-ask", daemon=True).start()
+        return {"name": name or host, "state": "waiting"}
+
+    def _asked(self, key: str, state: str, message: str) -> None:
+        with self._lock:
+            if key in self._asking:
+                self._asking[key].update(state=state, message=message)
 
     def discover(self) -> list[dict[str, Any]]:
         own = self._local().device_id
@@ -560,6 +689,10 @@ class LinkPeers:
             platform=local.platform,
             expected_fingerprint=fingerprint,
         )
+        self._paired(peer)
+        return peer.public("connecting")
+
+    def _paired(self, peer: Peer) -> None:
         with self._lock:
             old = self._links.pop(peer.serverId, None)
             self._peers[peer.serverId] = peer
@@ -568,10 +701,13 @@ class LinkPeers:
         if old is not None:
             old.stop()
         self._connect(peer)
-        return peer.public("connecting")
 
     def remove(self, server_id: str) -> bool:
         with self._lock:
+            asking = self._asking.pop(server_id, None)
+            if asking is not None:
+                asking["give_up"].set()
+                return True
             peer = self._peers.pop(server_id, None)
             running = self._links.pop(server_id, None)
             self._unauthorized.discard(server_id)

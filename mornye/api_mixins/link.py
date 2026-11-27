@@ -73,6 +73,14 @@ class LinkMixin:
     def link_end_pairing(self) -> dict[str, Any]:
         return self._link().end_pairing()
 
+    def link_answer_pair_request(self, request_id: str, allow: bool) -> dict[str, Any]:
+        """Allows (or refuses) a device asking to connect without a PIN."""
+        return self._link().answer_request(str(request_id or ""), bool(allow))
+
+    def link_set_trust_network(self, on: bool) -> dict[str, Any]:
+        """Devices on the local network connect without a PIN or a click."""
+        return self._link().set_trust_network(bool(on))
+
     def link_revoke_device(self, device_id: str) -> dict[str, Any]:
         """Unpairs a device: its key stops working at once."""
         return self._link().revoke(str(device_id or ""))
@@ -116,6 +124,21 @@ class LinkMixin:
             self.log(f"Pairing with {host} failed: {exc}", "warn")
             return {"ok": False, "message": "Pairing failed."}
         return {"ok": True, "computer": computer, **self.link_computers()}
+
+    def link_connect_computer(
+        self, host: str, port: int, fingerprint: str = "", name: str = ""
+    ) -> dict[str, Any]:
+        """Asks another computer to connect without a PIN: someone allows it
+        there (or it trusts this network). The list shows it waiting."""
+        try:
+            port = int(port)
+        except (TypeError, ValueError):
+            return {"ok": False, "message": "The port must be a number."}
+        host = str(host or "").strip()
+        if not host or not 0 < port < 65536:
+            return {"ok": False, "message": "Type the address shown there."}
+        self._link_peers().ask(host, port, str(fingerprint or ""), str(name or ""))
+        return {"ok": True, **self.link_computers()}
 
     def link_remove_computer(self, server_id: str) -> dict[str, Any]:
         """Forgets a paired computer (it may still list this one: unpair it

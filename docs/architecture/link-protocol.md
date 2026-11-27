@@ -13,11 +13,53 @@ that uses it checks `features` first.
 | --- | --- |
 | `connect.devices` | The account's devices; "Play on" from the phone |
 | `playlists` | The Player's playlists, read and edited from the phone |
+| `pair.request` | Pairing without a PIN: allowed with a click, or trusted network |
 
 Ops are `/mornye/v1/<op>` with `Authorization: Bearer <apiKey>`, JSON in and
 out, and the usual errors (`{"error": "<code>", "message": "…"}`: 400
 `invalid`, 404 `not_found`, 503 `unavailable`). A `GET` takes its arguments
 as query parameters.
+
+## `pair.request`: pairing without a PIN
+
+The PIN pairing (`POST pair`) stays. This is a second way, for the person who
+does not want to type a code: the phone asks, and the computer either lets
+it in at once (when "Trust this network" is on in its settings and the phone
+is on the local network) or shows "Allow Pixel?" with Allow / Deny.
+
+Both endpoints are unauthenticated, like `pair`. As with `pair`, pin the
+certificate fingerprint from `info` (or mDNS `fp`) before sending anything;
+there is no PIN proof here, so show the computer's short fingerprint
+(first 8 hex digits, as "8f73 4345") so the person can compare it with the
+one under Settings → Mornye Link if they want to.
+
+### `POST pair/request`
+
+```json
+{"deviceId": "3f2a…", "name": "Pixel", "platform": "android"}
+```
+
+- **200**, paired at once (trusted network):
+  `{"status": "approved", "apiKey": "…", "serverId": "…", "name": "MacBook",
+  "fingerprint": "…"}`: the same fields as `pair`, plus `status`.
+- **202**, someone must allow it:
+  `{"status": "pending", "requestId": "…", "expiresMs": 1764243720000}`.
+  The request lives two minutes. Asking again with the same `deviceId` from
+  the same address gives back the same request.
+- **429** `rate_limited`: another request from this address is waiting, or
+  five already are.
+
+### `POST pair/wait`
+
+```json
+{"requestId": "…", "deviceId": "3f2a…"}
+```
+
+Holds the connection up to 25 s for the answer, then answers one of:
+`{"status": "approved", …the pair fields…}`, `{"status": "denied"}`,
+`{"status": "expired"}`, or `{"status": "pending"}` (call it again).
+**404** `not_found` for an unknown request. Show "Allow it on the
+computer…" while it is pending.
 
 ## `connect.devices`: choose where it plays
 

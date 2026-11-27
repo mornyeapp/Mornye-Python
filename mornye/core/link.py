@@ -13,6 +13,10 @@ behind it; webapi/link.py is the HTTP side and link_server.py runs both.
   so someone relaying the connection presents another certificate and
   fails. Five wrong proofs close the window; one request a second per
   address.
+- Without a PIN (``PairRequests``): the phone asks (``pair/request``) and
+  a person allows it on this computer, or, with "Trust this network" on
+  (``trustNetwork`` in ``server.json``), a device on the local network is
+  paired at once.
 - Devices: every paired phone owns one API key, in ``devices.json``. It
   opens the Subsonic API (as ``apiKey``, as the password of a salted token,
   or as a plain/``enc:`` password, with any username) and the ``/mornye/v1``
@@ -35,7 +39,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, TypeVar
@@ -51,6 +55,8 @@ DEVICES_FILE = "devices.json"
 SUBJECT_NAME = "mornye.local"
 VALIDITY_DAYS = 20 * 365 + 5
 MAX_ATTEMPTS = 5
+#: Devices asking to connect without a PIN that can wait at once.
+MAX_PENDING_REQUESTS = 5
 MAX_DEVICE_ID = 200
 # `lastSeenMs` is written to disk at most this often per device.
 _TOUCH_INTERVAL_MS = 60_000
@@ -249,6 +255,7 @@ class LinkStore:
                 "port": int(raw.get("port") or 0),
                 "name": str(raw.get("name") or ""),
                 "enabled": bool(raw.get("enabled", False)),
+                "trustNetwork": bool(raw.get("trustNetwork", False)),
             }
         else:
             self._server = {
@@ -256,6 +263,7 @@ class LinkStore:
                 "port": 0,
                 "name": "",
                 "enabled": False,
+                "trustNetwork": False,
             }
             self._save_server()
         self._devices: list[Device] = []
@@ -297,6 +305,18 @@ class LinkStore:
         with self._lock:
             if self._server["enabled"] != on:
                 self._server["enabled"] = on
+                self._save_server()
+
+    @property
+    def trust_network(self) -> bool:
+        """Devices on the local network connect without a PIN or a click
+        (``POST pair/request`` is answered at once). Off unless turned on."""
+        return self._server.get("trustNetwork", False)
+
+    def set_trust_network(self, on: bool) -> None:
+        with self._lock:
+            if self._server.get("trustNetwork", False) != on:
+                self._server["trustNetwork"] = on
                 self._save_server()
 
     def set_server(self, port: int, name: str) -> None:
@@ -555,6 +575,133 @@ class PairingWindow:
             return value
 
 
+def is_local_address(address: str) -> bool:
+    """A private, loopback or link-local address: the local network."""
+    import ipaddress
+
+    try:
+        ip = ipaddress.ip_address(address.split("%", 1)[0])
+    except ValueError:
+        return False
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    return ip.is_private or ip.is_loopback or ip.is_link_local
+
+
+@dataclass
+class PairRequest:
+    """A device asking to connect without a PIN, waiting for a click."""
+
+    id: str
+    deviceId: str
+    name: str
+    platform: str
+    address: str
+    expires_at: float
+    status: str = "pending"  # approved, denied, expired
+    record: Device | None = None
+    done: threading.Event = field(default_factory=threading.Event)
+
+    def public(self) -> dict[str, Any]:
+        """As the settings page shows it (never the key)."""
+        return {
+            "id": self.id,
+            "deviceId": self.deviceId,
+            "name": self.name,
+            "platform": self.platform,
+            "address": self.address,
+        }
+
+
+class PairRequests:
+    """``POST pair/request``: a device asks, a person allows it (or not) on
+    this computer. At most MAX_PENDING_REQUESTS wait at once, one per
+    address; an unanswered one expires after ``ttl_s``."""
+
+    def __init__(self, ttl_s: float = 120.0) -> None:
+        self.ttl_s = ttl_s
+        self._lock = threading.Lock()
+        self._requests: dict[str, PairRequest] = {}
+
+    def _expire_locked(self) -> None:
+        now = time.monotonic()
+        for request_id, req in list(self._requests.items()):
+            if req.status == "pending" and now >= req.expires_at:
+                req.status = "expired"
+                req.done.set()
+            # An answered request is kept a little, for the device's wait.
+            if req.status != "pending" and now >= req.expires_at + 60:
+                del self._requests[request_id]
+
+    def open(
+        self, device_id: str, name: str, platform: str, address: str
+    ) -> PairRequest:
+        with self._lock:
+            self._expire_locked()
+            pending = [r for r in self._requests.values() if r.status == "pending"]
+            for req in pending:
+                if req.deviceId == device_id and req.address == address:
+                    return req  # asked again: the same request
+            if any(r.address == address for r in pending):
+                raise PairError("rate_limited")
+            if len(pending) >= MAX_PENDING_REQUESTS:
+                raise PairError("rate_limited")
+            req = PairRequest(
+                id=secrets.token_urlsafe(18),
+                deviceId=device_id,
+                name=name,
+                platform=platform,
+                address=address,
+                expires_at=time.monotonic() + self.ttl_s,
+            )
+            self._requests[req.id] = req
+            return req
+
+    def pending(self) -> list[dict[str, Any]]:
+        with self._lock:
+            self._expire_locked()
+            return [
+                r.public() for r in self._requests.values() if r.status == "pending"
+            ]
+
+    def answer(
+        self, request_id: str, allow: bool, store: Callable[[PairRequest], Device]
+    ) -> bool:
+        """Allows (``store`` pairs the device) or denies a waiting request."""
+        with self._lock:
+            self._expire_locked()
+            req = self._requests.get(request_id)
+            if req is None or req.status != "pending":
+                return False
+            if allow:
+                req.record = store(req)
+                req.status = "approved"
+            else:
+                req.status = "denied"
+            req.done.set()
+            return True
+
+    def wait(self, request_id: str, device_id: str, timeout: float) -> PairRequest:
+        """The request once answered, or as it is after ``timeout``."""
+        with self._lock:
+            self._expire_locked()
+            req = self._requests.get(request_id)
+            if req is None or req.deviceId != device_id:
+                raise PairError("not_found")
+        req.done.wait(max(0.0, min(timeout, req.expires_at - time.monotonic())))
+        with self._lock:
+            self._expire_locked()
+        return req
+
+    def clear(self) -> None:
+        with self._lock:
+            for req in self._requests.values():
+                if req.status == "pending":
+                    req.status = "expired"
+                    req.done.set()
+            self._requests.clear()
+
+
 __all__ = [
     "ATTEMPTS",
     "CANCELLED",
@@ -567,10 +714,13 @@ __all__ = [
     "LinkAuthError",
     "LinkStore",
     "PairError",
+    "PairRequest",
+    "PairRequests",
     "PairingWindow",
     "authenticate_bearer",
     "authenticate_subsonic",
     "fingerprint_of",
+    "is_local_address",
     "link_dir",
     "load_or_create_identity",
     "pairing_proof",
