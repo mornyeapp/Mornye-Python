@@ -232,3 +232,33 @@ def test_a_trusting_computer_lets_it_in_at_once(pair_of):
     assert _until(
         lambda: env["a"].status() and env["a"].status()[0]["state"] == "connected"
     )
+
+
+def test_what_plays_here_shows_on_the_other_computer(pair_of):
+    env = pair_of
+    _pair(env)
+    track = {"title": "Alpha", "artist": "Ann"}
+    env["hub_a"].report_state(
+        "a-win",
+        {
+            "track": track,
+            "playing": True,
+            "positionMs": 3_000,
+            "queue": [track],
+            "index": 0,
+        },
+    )
+    here_there = phone_device_id(A_ID)
+
+    def shown() -> bool:
+        device = env["hub_b"].device(here_there)
+        return device is not None and device.state is not None and device.state.playing
+
+    assert _until(shown)
+    # Nothing played there: a page opened there now follows this computer.
+    assert env["hub_b"].active_id == here_there
+    states = [p for fn, p in env["events_b"] if fn == "app_connect_state"]
+    assert states and states[-1]["deviceId"] == here_there
+    # And it can be paused from there.
+    env["hub_b"].command("pause", target=here_there)
+    assert _until(lambda: ("pause", {}) in _commands(env["events_a"], "a-win"))

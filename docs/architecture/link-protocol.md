@@ -123,6 +123,14 @@ reach `targetId`, as before. With it:
   `handoff/append` then follows to the same device.
 - `state`, `handoff/current`: that device's state.
 
+### A phone playing on its own
+
+The phone's own `player.state` frames (protocol 1) pause nothing on the
+computer, as before. What changed: when nothing else plays, the playing
+phone becomes the active device, so a Mornye window opened then shows
+"playing on Pixel" and can control it with `command` frames to the phone.
+Keep sending `player.state` while playing, and once more when it pauses.
+
 ### A phone that was handed playback
 
 When playback moves to phone B, phone B is the active device. Every other

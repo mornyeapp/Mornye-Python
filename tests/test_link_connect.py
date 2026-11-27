@@ -180,7 +180,7 @@ def test_current_resolve_and_details(bridge):
         _op(bridge, "player/details")
 
 
-def test_a_phone_is_a_device_that_never_takes_over_by_itself(bridge):
+def test_a_phone_playing_on_its_own_pauses_nothing(bridge):
     bridge.phones.append("p1")
     bridge.phone_connected("p1", "Pixel")
     assert bridge.frames[-1][1]["type"] == "player.state"
@@ -195,7 +195,10 @@ def test_a_phone_is_a_device_that_never_takes_over_by_itself(bridge):
         "index": 0,
     }
     bridge.phone_message("p1", {"type": "player.state", "state": phone_state})
-    assert hub.active_id == "mac"  # the phone playing on its own changes nothing
+    # Nothing else plays: the phone is what the pages show now (a page
+    # opened now follows it), and nothing was paused for it.
+    assert hub.active_id == phone_device_id("p1")
+    assert _page_commands(bridge) == []
     # The computer starting to play pauses the playing phone.
     _page_plays(playing=True, index=1)
     assert ("p1", {"type": "command", "action": "pause", "args": {}}) in bridge.frames
@@ -360,3 +363,24 @@ def test_a_phone_handed_playback_is_what_the_other_phones_control(bridge):
     last = {d: m for d, m in bridge.frames if m["type"] == "player.state"}
     assert last["p1"]["state"]["playing"] is True
     assert last["p2"]["state"]["track"]["title"] == "Alpha"
+
+
+def test_a_phone_does_not_take_over_a_computer_that_plays(bridge):
+    bridge.phones.append("p1")
+    bridge.phone_connected("p1", "Pixel")
+    _page_plays(playing=True)
+    bridge.phone_message(
+        "p1",
+        {
+            "type": "player.state",
+            "state": {
+                "track": {"title": "X"},
+                "playing": True,
+                "positionMs": 0,
+                "queue": [{"title": "X"}],
+                "index": 0,
+            },
+        },
+    )
+    assert get_connect_hub(None).active_id == "mac"
+    assert _page_commands(bridge) == []

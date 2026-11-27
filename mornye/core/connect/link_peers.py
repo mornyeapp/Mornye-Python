@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import link
-from .model import CommandError, TrackRef, now_ms
+from .model import CommandError, PlayerState, TrackRef, now_ms, state_changed
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,10 @@ PEER_PREFIX = "mornye:"
 SERVICE_TYPE = "_mornye._tcp.local."
 #: Songs sent along with a hand-off: the one playing and the next ones.
 UPLOAD_AHEAD = 10
+#: A state report waits this long for more changes; while something plays
+#: it is sent again this often (as the phone app does).
+REPORT_DEBOUNCE_S = 0.25
+REPORT_HEARTBEAT_S = 15.0
 RETRY_MIN_S = 3.0
 RETRY_MAX_S = 60.0
 #: Kinds that play on this computer (not a phone, not another computer).
@@ -319,6 +323,10 @@ class PeerLink:
     _thread: threading.Thread | None = None
     _ws: Any = None
     _work: concurrent.futures.ThreadPoolExecutor | None = None
+    _unlisten: Callable[[], None] | None = None
+    _report_timer: threading.Timer | None = None
+    _last_report: PlayerState | None = None
+    _report_lock: threading.Lock = field(default_factory=threading.Lock)
 
     @property
     def device_id(self) -> str:
@@ -409,6 +417,7 @@ class PeerLink:
                 self.peer.name = str(welcome["name"])
             self.state = "connected"
             self._register()
+            self._start_reporting()
             for text in ws:
                 try:
                     message = json.loads(text)
@@ -421,6 +430,7 @@ class PeerLink:
                 raise _Unauthorized from None
             raise
         finally:
+            self._stop_reporting()
             self._ws = None
             with contextlib.suppress(Exception):
                 ws.close()
@@ -434,6 +444,59 @@ class PeerLink:
         # client too; one entry for it is enough.
         hub.unregister(phone_device_id(self.peer.serverId))
         hub.register(self.device_id, self.peer.name, "mornye", sender=self._sender)
+
+    # ── what plays here, told to the other computer ──
+    def _start_reporting(self) -> None:
+        """Sends what plays on this computer as its ``player.state``, as a
+        phone does: the other one lists it as playing, and a page opened
+        there while nothing else plays shows it."""
+        self._last_report = None
+        self._unlisten = self.local.hub().add_listener(
+            lambda event, payload: self._report_soon()
+        )
+        self._report_soon()
+
+    def _stop_reporting(self) -> None:
+        with self._report_lock:
+            if self._unlisten is not None:
+                self._unlisten()
+                self._unlisten = None
+            if self._report_timer is not None:
+                self._report_timer.cancel()
+                self._report_timer = None
+
+    def _report_soon(
+        self, delay: float = REPORT_DEBOUNCE_S, force: bool = False
+    ) -> None:
+        with self._report_lock:
+            if self._unlisten is None:
+                return
+            if self._report_timer is not None:
+                self._report_timer.cancel()
+            self._report_timer = threading.Timer(delay, self._report, (force,))
+            self._report_timer.daemon = True
+            self._report_timer.start()
+
+    def _report(self, force: bool = False) -> None:
+        ws = self._ws
+        if ws is None:
+            return
+        hub = self.local.hub()
+        target = local_target(hub)
+        device = hub.device(target) if target else None
+        state = (
+            device.state.at()
+            if device is not None and device.state is not None
+            else PlayerState(updatedMs=now_ms())
+        )
+        if force or state_changed(self._last_report, state):
+            self._last_report = state
+            try:
+                ws.send(json.dumps({"type": "player.state", "state": state.to_json()}))
+            except Exception:
+                return
+        if state.playing:
+            self._report_soon(REPORT_HEARTBEAT_S, force=True)
 
     def _drop_device(self) -> None:
         with contextlib.suppress(Exception):
