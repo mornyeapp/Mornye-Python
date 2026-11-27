@@ -492,14 +492,14 @@ function changeDensity() {
 // <html> and <body>). Stored like the density: localStorage for the next
 // first paint (boot-head.js), the settings blob, and gui-settings.json
 // (save_style). Must match MornyeAPI.STYLES in app.py.
-const STYLES = ['console', 'music'];
+const STYLES = ['music', 'console'];
 
 function isMusicStyle() {
   return document.documentElement.getAttribute('data-style') === 'music';
 }
 
 function applyStyle(style) {
-  const val = STYLES.includes(style) ? style : 'console';
+  const val = STYLES.includes(style) ? style : STYLES[0];
   for (const el of [document.documentElement, document.body]) {
     if (!el) continue;
     if (val === 'music') el.setAttribute('data-style', 'music');
@@ -1267,9 +1267,9 @@ function applySettings(settings = {}) {
   try { localStorage.setItem('mornye-density', density); } catch (e) {}
   if ($('config-density')) $('config-density').value = density;
   applyDensity(density);
-  let style = cfg.style || 'console';
+  let style = cfg.style || STYLES[0];
   try { style = localStorage.getItem('mornye-style') || style; } catch (e) {}
-  if (!STYLES.includes(style)) style = 'console';
+  if (!STYLES.includes(style)) style = STYLES[0];
   try { localStorage.setItem('mornye-style', style); } catch (e) {}
   if ($('config-style')) $('config-style').value = style;
   applyStyle(style);

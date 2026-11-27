@@ -961,11 +961,11 @@ class MornyeAPI(
     #: The look of the GUI: "console" is the monospace console look,
     #: "music" the music-app look (frontend/css/music-tokens.css and
     #: music.css, keyed off data-style="music" on <html> and <body>).
-    STYLES = ("console", "music")
+    STYLES = ("music", "console")
 
     def save_style(self, style: str) -> dict:
         """Persists the interface style, same reasoning as save_theme()."""
-        style = str(style or "console")
+        style = str(style or self.STYLES[0])
         if style not in self.STYLES:
             return {"ok": False, "error": f"unknown style: {style}"}
         try:
