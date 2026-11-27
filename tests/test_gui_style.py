@@ -58,6 +58,16 @@ def test_applied_before_the_first_paint_and_on_change():
     assert "data-style" in (FRONT / "boot-body.js").read_text(encoding="utf-8")
     html = (FRONT / "index.html").read_text(encoding="utf-8")
     assert 'id="config-style" data-onchange="changeStyle()"' in html
+    assert '<option value="music" selected>Music</option>' in html
+
+
+def test_edit_home_compacts_the_recommendation_picker_without_reflow():
+    css = (FRONT / "css" / "music.css").read_text(encoding="utf-8")
+    assert (
+        'html[data-style="music"]:has(#home-edit-modal:not(.hidden)) '
+        ".m-feed-pick select" in css
+    )
+    assert "transform: scale(.92); transform-origin: right center;" in css
 
 
 def test_music_rules_are_scoped_to_the_music_style():
