@@ -10978,48 +10978,117 @@ window.app_cast_status = (snap) => playerCast?.receive(snap);
 window.app_cast_devices = (list) => {
   castDevices = Array.isArray(list) ? list : [];
   // Redrawn only while the picker is still the open menu.
-  if (castPicker && actionMenu?.anchor === castPicker) { closeActionMenu(); openCastPicker(castPicker, true); }
+  renderConnectPanel();
 };
 
 function castAvailable() {
   return !window.__mornyeWeb && typeof window.pywebview?.api?.cast_devices === 'function';
 }
 
-// "Play on": this device, the account's other Connect devices, and (desktop)
-// the DLNA and FCast receivers this computer can cast to.
+// Connect, as in Spotify: a panel on the right with where the music plays on
+// top (this device, another Connect device, a receiver), in the signal
+// colour, and below it the account's other devices and (desktop) the DLNA and
+// FCast receivers this computer can cast to. A click moves playback there;
+// the panel stays open and follows what changes.
+var connectPanelOpen = false;
+
 async function openCastPicker(button, refresh = false) {
+  if (!refresh && connectPanelOpen) { closeConnectPanel(); return; }
   const api = window.pywebview?.api;
   const cast = castAvailable();
   // --web: asking for the list also has the server look for receivers.
   if (window.__mornyeWeb && !refresh && connect.ready) {
     try { const snap = await connectApi()?.connect_devices(); if (snap?.status === 'ok') connectDevices(snap); } catch (e) {}
   }
-  const others = connectOthers();
-  if (!cast && !others.length) return;
+  if (!cast && !connectOthers().length) return;
+  castPicker = button;
+  connectPanelOpen = true;
+  document.querySelectorAll('.cast-btn').forEach(b => b.setAttribute('aria-expanded', 'true'));
+  $('connect-panel').classList.remove('hidden');
+  renderConnectPanel();
   if (cast && !refresh) {
     try { castDevices = (await api.cast_devices())?.devices || castDevices; } catch (e) { /* keep the last list */ }
+    renderConnectPanel();
   }
-  castPicker = button;
-  const remoteId = playerEngine.kind === 'remote' ? connect.remoteId : '';
-  const current = playerCast ? playerCastDeviceId : remoteId;
-  const here = connect.kind === 'window' || !window.__mornyeWeb ? 'This computer' : 'This browser';
-  const items = [
-    { label: `${current ? '' : '✓ '}${here}`, action: () => connectPlayHere() },
-    ...others.map(d => ({
-      label: `${current === d.id ? '✓ ' : ''}${connectDeviceLabel(d)}`,
-      action: () => connectTransferTo(d),
-    })),
-  ];
-  if (cast) {
-    items.push('-',
-      ...castDevices.map(d => ({
-        label: `${current === d.id ? '✓ ' : ''}${castDeviceLabel(d)}`,
-        action: () => startCasting(d),
-      })),
-      { label: castDevices.length ? 'Looking for more devices…' : 'Looking for DLNA and FCast devices…', disabled: true });
-  }
-  openActionMenu(button, items, 'Play on');
 }
+
+function closeConnectPanel() {
+  if (!connectPanelOpen) return;
+  connectPanelOpen = false;
+  castPicker = null;
+  $('connect-panel').classList.add('hidden');
+  document.querySelectorAll('.cast-btn').forEach(b => b.setAttribute('aria-expanded', 'false'));
+}
+
+var CONNECT_ICONS = {
+  computer: '<rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M1.5 20h21"/>',
+  browser: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+  phone: '<rect x="6.5" y="2.5" width="11" height="19" rx="2"/><path d="M11 18.5h2"/>',
+  speaker: '<rect x="5.5" y="2.5" width="13" height="19" rx="2"/><circle cx="12" cy="14" r="3.5"/><circle cx="12" cy="6.5" r="1"/>',
+};
+
+function connectIcon(kind) {
+  return `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${CONNECT_ICONS[kind] || CONNECT_ICONS.speaker}</svg>`;
+}
+
+// Every place the music can play, as the panel lists it: `id` '' is here.
+function connectPanelEntries() {
+  const web = !!window.__mornyeWeb;
+  const browser = web && connect.kind !== 'window';
+  const entries = [{
+    id: '', name: browser ? 'This browser' : 'This computer', icon: browser ? 'browser' : 'computer',
+    note: '', run: () => connectPlayHere(),
+  }];
+  const icons = { window: 'computer', mornye: 'computer', browser: 'browser', phone: 'phone' };
+  const notes = { window: 'Mornye', mornye: 'Mornye', browser: 'Browser', phone: 'Phone', server: 'Server', cast: 'Receiver' };
+  for (const d of connectOthers()) {
+    entries.push({ id: d.id, name: d.name, icon: icons[d.kind] || 'speaker', note: notes[d.kind] || '', run: () => connectTransferTo(d) });
+  }
+  if (castAvailable()) {
+    for (const d of castDevices) {
+      entries.push({ id: d.id, name: d.name, icon: 'speaker', note: d.kind === 'fcast' ? 'FCast' : 'DLNA', run: () => startCasting(d) });
+    }
+  }
+  return entries;
+}
+
+function renderConnectPanel() {
+  const body = $('connect-panel-body');
+  if (!connectPanelOpen || !body) return;
+  // Above the player bar, wherever the look puts it (the music look floats it).
+  const bar = $('player-bar');
+  const top = bar && !bar.classList.contains('hidden') ? bar.getBoundingClientRect().top : innerHeight;
+  $('connect-panel').style.bottom = `${Math.max(12, innerHeight - top + 10)}px`;
+  const current = playerCast && playerEngine.active === playerCast ? playerCastDeviceId
+    : (playerEngine.kind === 'remote' ? connect.remoteId : '');
+  const entries = connectPanelEntries();
+  const active = entries.find(e => e.id === current) || entries[0];
+  const others = entries.filter(e => e !== active);
+  const playing = !playerEngine.paused && (playerEngine.kind === 'remote' || (playerIndex >= 0 && playerEngine.hasSource));
+  const status = playing ? 'Playing' : (active.id ? 'Paused' : '');
+  const row = (e, i) => `<button type="button" class="cp-device" data-i="${i}">${connectIcon(e.icon)}<span class="cp-name">${escHtml(e.name)}${e.note ? `<small>${escHtml(e.note)}</small>` : ''}</span></button>`;
+  body.innerHTML = `
+    <div class="cp-current">${connectIcon(active.icon)}<span class="cp-name">${escHtml(active.name)}${status ? `<small>${status}</small>` : ''}</span>${playing ? '<span class="cp-bars" aria-hidden="true"><i></i><i></i><i></i></span>' : ''}</div>
+    ${others.length ? `<h3 class="cp-sub">Select a device</h3><div class="cp-list">${others.map(e => row(e, entries.indexOf(e))).join('')}</div>` : ''}
+    ${castAvailable() ? `<p class="cp-hint">${castDevices.length ? 'Looking for more devices…' : 'Looking for DLNA and FCast devices…'}</p>` : ''}`;
+  body.querySelectorAll('.cp-device').forEach((b) => {
+    b.addEventListener('click', async () => {
+      b.disabled = true;
+      try { await entries[Number(b.dataset.i)]?.run(); } finally { renderConnectPanel(); }
+    });
+  });
+}
+
+(function initConnectPanel() {
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && connectPanelOpen) { e.stopPropagation(); closeConnectPanel(); }
+  }, true);
+  document.addEventListener('pointerdown', (e) => {
+    if (!connectPanelOpen) return;
+    if (e.target.closest?.('#connect-panel, .cast-btn')) return;
+    closeConnectPanel();
+  }, true);
+})();
 
 var playerCastDeviceId = '';
 
@@ -11303,6 +11372,7 @@ function connectDevices(snap) {
   if (active && active.id !== connect.id && active.state) connectFollow(active.id, active.state, active.extra);
   else if (playerEngine.kind === 'remote') connectLeaveRemote({ lost: !active });
   connectButtonsShow();
+  renderConnectPanel();
 }
 
 // app_connect_state: the active device's player changed.
@@ -11595,11 +11665,6 @@ function connectStartRemote(items, index, shuffle) {
   });
 }
 
-// The "Playing on …" strip opens the same menu as the player bar's button.
-function connectOpenPicker() {
-  const button = $('pl-cast-btn');
-  if (button) openCastPicker(button);
-}
 
 window.app_connect_devices = (snap) => connectDevices(snap);
 window.app_connect_state = (msg) => connectRemoteState(msg);
@@ -11631,16 +11696,12 @@ window.app_player_playlists_changed = () => {
   if (connectApi()) setTimeout(connectInit, 0);
 })();
 
-// Every cast button (the player bar's, Now Playing's) lights while the
-// music plays elsewhere (a receiver, another Connect device), and the strip
-// above the player says where.
+// Every cast button (the player bar's, Now Playing's) lights in the signal
+// colour while the music plays elsewhere (a receiver, another Connect
+// device), as Spotify's does; its tooltip says where.
 function castButtonsShow(on, title) {
-  const banner = $('connect-banner');
-  if (banner) {
-    banner.classList.toggle('hidden', !on);
-    $('connect-banner-text').textContent = on ? title : '';
-    document.body.classList.toggle('plays-elsewhere', !!on);
-  }
+  document.body.classList.toggle('plays-elsewhere', !!on);
+  renderConnectPanel();
   document.querySelectorAll('.cast-btn').forEach((b) => {
     b.classList.toggle('on', on);
     b.setAttribute('title', title);
@@ -12164,6 +12225,7 @@ playerEngine.addEventListener('warning', (d) => { if (d?.message) toastMgr.warni
   audio.addEventListener('pause', listenTick);
   window.addEventListener('pagehide', () => { listenTick(); listenSend(false); });
   for (const type of ['play', 'pause', 'seeked', 'loadedmetadata', 'ended']) audio.addEventListener(type, presenceSync);
+  for (const type of ['play', 'pause', 'ended']) audio.addEventListener(type, () => renderConnectPanel());
   const icon = $('pl-play-icon');
   const PLAY = '<path d="M8 5v14l11-7z"/>', PAUSE = '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>';
   audio.addEventListener('play', () => { icon.innerHTML = PAUSE; });
