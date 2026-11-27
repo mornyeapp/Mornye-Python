@@ -262,3 +262,45 @@ def test_what_plays_here_shows_on_the_other_computer(pair_of):
     # And it can be paused from there.
     env["hub_b"].command("pause", target=here_there)
     assert _until(lambda: ("pause", {}) in _commands(env["events_a"], "a-win"))
+
+
+def test_the_computer_it_moved_to_keeps_its_own_controls(pair_of):
+    """A hands playback to B; B pauses, skips, turns it down on its own, and
+    stays the one that plays (A shows each change), as in Spotify Connect —
+    even though A's window last said it was playing."""
+    env = pair_of
+    server_id = _pair(env)
+    track = {"title": "Alpha", "artist": "Ann"}
+    playing = {
+        "track": track,
+        "playing": True,
+        "positionMs": 3_000,
+        "queue": [track],
+        "index": 0,
+    }
+    env["hub_a"].report_state("a-win", playing)
+    env["hub_a"].transfer(peer_device_id(server_id))
+    assert _until(lambda: _commands(env["events_b"], "b-win"))
+    env["hub_b"].report_state("b-win", playing)
+    there = peer_device_id(server_id)
+
+    def a_sees(**want) -> bool:
+        device = env["hub_a"].device(there)
+        state = device.state if device is not None else None
+        return state is not None and all(
+            getattr(state, k) == v for k, v in want.items()
+        )
+
+    assert _until(lambda: a_sees(playing=True))
+    # Paused on B itself: A never sends "playing" back over it.
+    env["hub_b"].report_state("b-win", {**playing, "playing": False})
+    assert _until(lambda: a_sees(playing=False))
+    env["a"].connection(server_id)._report(force=True)  # A's heartbeat
+    time.sleep(0.5)
+    assert env["hub_b"].active_id == "b-win"
+    here_there = env["hub_b"].device(phone_device_id(A_ID))
+    assert here_there.state is None or not here_there.state.playing
+    # Turned down on B: A shows it, and A still controls B.
+    env["hub_b"].report_state("b-win", {**playing, "volume": 0.3})
+    assert _until(lambda: a_sees(playing=True, volume=0.3))
+    assert env["hub_a"].active_id == there

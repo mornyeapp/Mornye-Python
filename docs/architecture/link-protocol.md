@@ -131,6 +131,12 @@ phone becomes the active device, so a Mornye window opened then shows
 "playing on Pixel" and can control it with `command` frames to the phone.
 Keep sending `player.state` while playing, and once more when it pauses.
 
+Also send one with `"playing": false` as soon as playback leaves the phone
+("Play on" another device, the phone becoming a remote). A phone still
+reported as playing becomes the active device again the moment the one it
+handed playback to pauses, and that device loses its own controls (pause,
+skip, volume) to the phone. The computers do the same with each other.
+
 ### A phone that was handed playback
 
 When playback moves to phone B, phone B is the active device. Every other

@@ -11318,6 +11318,7 @@ function connectEnterRemote() {
   // A receiver this window casts to is the user's own choice: leave it be.
   if (playerCast && playerEngine.active === playerCast) return false;
   listenFinish();
+  const local = connect.ready && playerIndex >= 0 ? connectLocalState() : null;
   connect.localEngine = playerEngine.active;
   playerRemote ||= playerRemoteEngine((action, args) => connectSendRemote(action, args));
   playerRemote.silent = true;
@@ -11325,7 +11326,19 @@ function connectEnterRemote() {
   playerRemote.silent = false;
   playerMediaSessionActive(true);
   document.body.classList.add('is-remote');
+  // This page stopped playing: say so once, since a remote page reports
+  // nothing. Left "playing", it would be sent to another computer as what
+  // plays here, and take that one's controls away once it paused.
+  if (local?.playing) connectReportStopped(local);
   return true;
+}
+
+async function connectReportStopped(local) {
+  clearTimeout(connect.timer);
+  connect.timer = 0;
+  const s = { ...local, playing: false };
+  connect.last = s; connect.lastSig = ''; connect.lastAt = performance.now();
+  try { await connectApi()?.connect_report_state(connect.id, s); } catch (e) { /* nothing else to do */ }
 }
 
 async function connectLeaveRemote({ lost = false, keep = true } = {}) {

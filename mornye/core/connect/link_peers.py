@@ -27,7 +27,7 @@ import ssl
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -489,6 +489,12 @@ class PeerLink:
             if device is not None and device.state is not None
             else PlayerState(updatedMs=now_ms())
         )
+        if state.playing and target != hub.active_id:
+            # What plays is elsewhere (the other computer, a phone): nothing
+            # plays here, whatever a page here last said. Reported playing,
+            # it would take the controls away from the one that plays as
+            # soon as that one paused.
+            state = replace(state, playing=False)
         if force or state_changed(self._last_report, state):
             self._last_report = state
             try:
