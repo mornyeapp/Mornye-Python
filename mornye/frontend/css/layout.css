@@ -1148,8 +1148,8 @@ body.sidebar-collapsed .sb-playlists-inner { visibility: hidden; }
 
 /* The player with nothing playing (playerShowIdle in app.js): it stays on
    screen, says so, and its controls rest until something plays. */
-body.player-idle #player-bar .pl-controls,
-body.player-idle #player-bar .pl-seek { opacity: .4; pointer-events: none; }
+body.player-idle #player-bar .pl-controls { opacity: .4; pointer-events: none; }
+body.player-idle #player-bar .pl-seek { visibility: hidden; }
 body.player-idle #player-bar .pl-info { cursor: default; }
 body.player-idle #player-bar .pl-title { color: var(--text-muted); }
 body.player-idle #player-bar .pl-btn[aria-label="Close player"] { visibility: hidden; }
