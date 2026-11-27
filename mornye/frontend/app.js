@@ -11353,7 +11353,8 @@ async function connectFollow(id, state, extra) {
   if (playerEngine.kind !== 'remote' && !connectEnterRemote()) return;
   const changedDevice = connect.remoteId !== id;
   connect.remoteId = id;
-  const paths = Array.isArray(extra?.paths) ? extra.paths : [];
+  let paths = Array.isArray(extra?.paths) ? extra.paths : [];
+  if (!paths.length && (state.queue || []).length) paths = await connectLocalPaths(state.queue);
   const items = (state.queue || []).map((r, i) => ({
     path: paths[i] || '', title: r.title || '', artist: r.artist || '', album: r.album || '',
     duration_s: r.durationMs ? r.durationMs / 1000 : 0,
@@ -11376,6 +11377,22 @@ async function connectFollow(id, state, extra) {
   }
   connectButtonsShow();
   if (!$('np-queue').classList.contains('hidden')) npRenderQueue();
+}
+
+// Another computer or a phone sends no paths: its queue's songs are looked
+// up in this library, so the ones it has show their cover, quality and
+// lyrics from the file here. Looked up once per queue.
+let connectLocalLookup = { key: '', paths: [] };
+async function connectLocalPaths(queue) {
+  const key = queue.map(r => `${r.songId || ''}\u0001${r.title || ''}\u0001${r.artist || ''}`).join('\u0002');
+  if (key === connectLocalLookup.key) return connectLocalLookup.paths;
+  let paths = [];
+  try {
+    const res = await connectApi()?.connect_resolve(queue);
+    if (res?.status === 'ok') paths = (res.items || []).map(item => item?.path || '');
+  } catch (e) {}
+  connectLocalLookup = { key, paths };
+  return paths;
 }
 
 // A remote song this library has no file for: its name only.
@@ -11782,7 +11799,16 @@ async function loadPlayerTrack(index, { advanced = false } = {}) {
   const native = audio.kind === 'native';
   const remote = audio.kind === 'remote';
   const cast = audio.kind === 'cast' || remote;
-  if (remote && !item.path) { connectShowRemoteTrack(item); markPlayingRow(); return; }
+  // Another device plays: a song picked here (Next, Previous, a row) is a
+  // jump there, sent first; the file here, if any, only shows its cover,
+  // quality and lyrics. A load that only follows what that device moved on
+  // to (connect.applying) sends nothing.
+  if (remote && !advanced && !connect.applying) audio.load('', undefined, { index });
+  if (remote && !item.path) {
+    connectShowRemoteTrack(item);
+    markPlayingRow();
+    return;
+  }
   $('player-bar').classList.remove('hidden');
   document.body.classList.add('has-player');
   setPlayerArtwork('');
@@ -11802,9 +11828,8 @@ async function loadPlayerTrack(index, { advanced = false } = {}) {
     return;
   }
   if (!advanced && remote) {
-    // Another device plays: a song picked here is a jump there, unless this
-    // load only shows what that device moved on to.
-    playerRemote.silent = connect.applying;
+    // The jump went out above: this only shows the file.
+    playerRemote.silent = true;
     audio.load(res.path, undefined, { index });
     playerRemote.silent = false;
   } else if (!advanced && cast) {
