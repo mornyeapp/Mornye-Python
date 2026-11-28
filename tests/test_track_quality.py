@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import shutil
 from types import SimpleNamespace
 
@@ -48,15 +49,18 @@ def _extension(tmp_path, name, version="1.0.0"):
 
 
 class _Provider:
-    def __init__(self, answer, service=None):
+    def __init__(self, answer, service=None, spotify_url=None):
         self.answer = answer
         self.service = service
+        self.spotify_url = spotify_url
         self.calls = []
         self.resolve_links = None
 
     async def _provider_match_options(self, metadata, *, resolve_links=True):
         self.resolve_links = resolve_links
         options = {"duration_ms": metadata.duration_ms}
+        if resolve_links and self.spotify_url:
+            options["spotify_url"] = self.spotify_url
         if resolve_links and self.service:
             options[f"{self.service}_url"] = (
                 f"https://{self.service}.example/track/converted"
@@ -206,6 +210,49 @@ def test_asks_qobuz_then_tidal_and_never_amazon(installed):
     tidal_options = tidal.calls[0][3]
     assert tidal_options["tidal_url"] == "https://tidal.example/track/converted"
     assert tidal_options["tidal_id"] == "converted-id"
+
+
+def test_logs_service_link_resolution_and_quality_results(installed, caplog):
+    providers = {
+        "qobuz-web": _Provider(HIRES, "qobuz"),
+        "tidal-web": _Provider(
+            {"available": True, "quality": {"hires": False}}, "tidal"
+        ),
+    }
+
+    with caplog.at_level(logging.INFO, logger="mornye.core.track_quality"):
+        _check(installed, providers)
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert "[track-quality] checking 'Signal' by Artist" in messages
+    assert "[track-quality] Qobuz link resolved" in messages
+    assert "[track-quality] Qobuz result: Qobuz 24-bit/96 kHz" in messages
+    assert "[track-quality] TIDAL link resolved" in messages
+    assert "[track-quality] TIDAL result: TIDAL no Hi-Res" in messages
+
+
+def test_logs_when_the_resolver_returns_no_native_link(installed, caplog):
+    providers = {
+        "qobuz-web": _Provider(
+            HIRES, spotify_url="https://open.spotify.com/track/0VjIjW4GlUZAMYd2vXMi3b"
+        ),
+        "tidal-web": _Provider(
+            HIRES, spotify_url="https://open.spotify.com/track/0VjIjW4GlUZAMYd2vXMi3b"
+        ),
+    }
+
+    with caplog.at_level(logging.INFO, logger="mornye.core.track_quality"):
+        _check(installed, providers)
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert (
+        "[track-quality] Qobuz resolver returned no native link; using metadata hints"
+        in messages
+    )
+    assert (
+        "[track-quality] TIDAL resolver returned no native link; using metadata hints"
+        in messages
+    )
 
 
 def test_a_known_answer_is_not_asked_for_again(installed):

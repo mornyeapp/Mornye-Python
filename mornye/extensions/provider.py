@@ -563,9 +563,10 @@ class JSExtensionProvider(BaseProvider):
                 provider,
             )
         except Exception as exc:
-            logger.debug(
-                "[%s] cross-catalogue link resolution failed: %s",
+            logger.warning(
+                "[%s] cross-catalogue link resolution failed for %s: %s",
                 self.name,
+                provider,
                 exc,
             )
             return options

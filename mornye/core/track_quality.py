@@ -211,6 +211,8 @@ async def _with_isrc(metadata: TrackMetadata) -> TrackMetadata:
 async def _ask(
     service: str, ext: Any, metadata: TrackMetadata, provider_factory: Any
 ) -> dict:
+    service_name = SERVICES[service]
+    logger.info("[track-quality] checking %s for %r", service_name, metadata.title)
     try:
         provider = await asyncio.to_thread(
             _provider, ext.name, provider_factory, signed_requests=False
@@ -223,6 +225,18 @@ async def _ask(
             native_id = provider._provider_track_id(service, link)
             if native_id:
                 options[f"{service}_id"] = native_id
+        if options.get(f"{service}_url") or options.get(f"{service}_id"):
+            logger.info("[track-quality] %s link resolved", service_name)
+        elif options.get("spotify_url"):
+            logger.info(
+                "[track-quality] %s resolver returned no native link; using metadata hints",
+                service_name,
+            )
+        else:
+            logger.info(
+                "[track-quality] no Spotify source link for %s; using metadata hints",
+                service_name,
+            )
         answer = await asyncio.to_thread(
             provider.check_availability,
             isrc=metadata.isrc,
@@ -231,9 +245,13 @@ async def _ask(
             options=options,
         )
     except Exception as exc:
-        logger.debug("[track-quality] %s check failed: %s", ext.name, exc)
+        logger.warning("[track-quality] %s check failed: %s", service_name, exc)
         return _result(service, "error", "check failed", str(exc))
-    return describe(service, answer)
+    result = describe(service, answer)
+    logger.info("[track-quality] %s result: %s", service_name, result["label"])
+    if result["detail"]:
+        logger.debug("[track-quality] %s details: %s", service_name, result["detail"])
+    return result
 
 
 async def check_track_quality_async(
@@ -244,7 +262,13 @@ async def check_track_quality_async(
     title = str(track.get("title") or track.get("name") or "").strip()
     artists = str(track.get("artists") or track.get("artist") or "").strip()
     if not title:
+        logger.warning("[track-quality] check requested for a track without a title")
         return {"status": "error", "error": "The track has no title."}
+    logger.info(
+        "[track-quality] checking %r by %s",
+        title,
+        artists or "unknown artist",
+    )
     metadata = TrackMetadata(
         id=str(track.get("id") or ""),
         title=title,
@@ -257,6 +281,7 @@ async def check_track_quality_async(
     )
     extensions = quality_extensions(manager)
     if not extensions:
+        logger.warning("[track-quality] no Qobuz or TIDAL extension is available")
         return {
             "status": "error",
             "error": "Install the Qobuz or TIDAL extension to check qualities.",
@@ -269,6 +294,13 @@ async def check_track_quality_async(
         service: f"{ext.name}@{ext.version}|{track_key}" for service, ext in extensions
     }
     results = {service: _cached(keys[service], now) for service, _ in extensions}
+    for service, result in results.items():
+        if result:
+            logger.info(
+                "[track-quality] %s cached result: %s",
+                SERVICES[service],
+                result["label"],
+            )
     missing = [(service, ext) for service, ext in extensions if not results[service]]
     if missing:
         metadata = await _with_isrc(metadata)
