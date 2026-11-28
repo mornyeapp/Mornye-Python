@@ -243,7 +243,7 @@ def test_asks_qobuz_then_tidal_and_never_amazon(installed):
     assert tidal_options["tidal_id"] == "123456"
 
 
-def test_logs_service_link_resolution_and_quality_results(installed, caplog):
+def test_quality_checks_do_not_emit_info_logs(installed, caplog):
     providers = {
         "qobuz-web": _Provider(HIRES, "qobuz"),
         "tidal-web": _Provider(
@@ -252,20 +252,14 @@ def test_logs_service_link_resolution_and_quality_results(installed, caplog):
     }
 
     with caplog.at_level(logging.INFO, logger="mornye.core.track_quality"):
-        _check(installed, providers)
+        answer = _check(installed, providers)
 
-    messages = [record.getMessage() for record in caplog.records]
-    assert "[track-quality] checking 'Signal' by Artist" in messages
-    assert (
-        "[track-quality] Qobuz resolved by its extension: https://qobuz.example/track/converted"
-        in messages
-    )
-    assert "[track-quality] Qobuz result: Qobuz 24-bit/96 kHz" in messages
-    assert (
-        "[track-quality] TIDAL resolved by its extension: https://tidal.example/track/converted"
-        in messages
-    )
-    assert "[track-quality] TIDAL result: TIDAL no Hi-Res" in messages
+    assert answer["status"] == "ok"
+    assert not [
+        record
+        for record in caplog.records
+        if record.name == "mornye.core.track_quality" and record.levelno == logging.INFO
+    ]
 
 
 @pytest.mark.parametrize(
@@ -295,43 +289,19 @@ def test_uses_audio_quality_from_the_extension_native_resolve(
     assert answer["results"][0]["label"] == expected_label
 
 
-def test_logs_extension_version_and_unknown_reason(installed, caplog):
-    providers = {
-        "qobuz-web": _Provider({"available": True}),
-        "tidal-web": _Provider({"available": True}),
-    }
-
-    with caplog.at_level(logging.INFO, logger="mornye.core.track_quality"):
-        _check(installed, providers)
-
-    messages = [record.getMessage() for record in caplog.records]
-    assert (
-        "[track-quality] checking Qobuz with qobuz-web v1.0.0 for 'Signal'" in messages
-    )
-    assert (
-        "[track-quality] Qobuz detail: The extension reports no quality. Check for an update."
-        in messages
-    )
-
-
-def test_logs_when_the_extension_resolve_returns_no_native_track(installed, caplog):
+def test_uses_metadata_hints_when_extension_resolve_returns_no_native_track(installed):
     providers = {
         "qobuz-web": _Provider(HIRES),
         "tidal-web": _Provider(HIRES),
     }
 
-    with caplog.at_level(logging.INFO, logger="mornye.core.track_quality"):
-        _check(installed, providers)
+    _check(installed, providers)
 
-    messages = [record.getMessage() for record in caplog.records]
-    assert (
-        "[track-quality] Qobuz extension returned no native track; using metadata hints"
-        in messages
-    )
-    assert (
-        "[track-quality] TIDAL extension returned no native track; using metadata hints"
-        in messages
-    )
+    for service, provider in providers.items():
+        assert provider.resolve_links is False
+        options = provider.calls[0][3]
+        assert options["duration_ms"] == TRACK["duration_ms"]
+        assert f"{service.removesuffix('-web')}_id" not in options
 
 
 def test_a_known_answer_is_not_asked_for_again(installed):
