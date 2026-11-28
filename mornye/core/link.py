@@ -688,10 +688,15 @@ class PairRequests:
             req = self._requests.get(request_id)
             if req is None or req.deviceId != device_id:
                 raise PairError("not_found")
-        req.done.wait(max(0.0, min(timeout, req.expires_at - time.monotonic())))
-        with self._lock:
-            self._expire_locked()
-        return req
+            deadline = min(req.expires_at, time.monotonic() + max(0.0, timeout))
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining > 0:
+                req.done.wait(remaining)
+            with self._lock:
+                self._expire_locked()
+                if req.status != "pending" or time.monotonic() >= deadline:
+                    return req
 
     def clear(self) -> None:
         with self._lock:
