@@ -177,7 +177,12 @@ class JSExtensionProvider(BaseProvider):
         ext_dir: str | None = None,
         node_executable: str = "node",
         timeout_s: int = 180,
+        signed_requests: bool = True,
     ) -> None:
+        """`signed_requests=False` gives the extension no signed session:
+        ``session.signedFetch`` answers with an error, so the extension is
+        left with whatever public sources it falls back to. Nothing is
+        signed, no verification starts."""
         super().__init__(timeout_s=timeout_s)
 
         self._timeout_s = timeout_s
@@ -201,7 +206,8 @@ class JSExtensionProvider(BaseProvider):
 
         # signedSession configuration
         self._signed_session: SignedSessionClient | None = None
-        self._signed_session = signed_session_client(self._ext.manifest)
+        if signed_requests:
+            self._signed_session = signed_session_client(self._ext.manifest)
 
         # Shared by every runtime in the pool below: what the extension saved
         # with storage.set survives restarts, encrypted (extensions/storage.py).
@@ -503,7 +509,9 @@ class JSExtensionProvider(BaseProvider):
             return match.group(1).upper() if match else ""
         return ""
 
-    async def _provider_match_options(self, metadata: TrackMetadata) -> dict[str, Any]:
+    async def _provider_match_options(
+        self, metadata: TrackMetadata, *, resolve_links: bool = True
+    ) -> dict[str, Any]:
         """Build provider-specific match hints without changing extensions.
 
         The resolver is best effort.  Every JavaScript provider already has
@@ -533,7 +541,7 @@ class JSExtensionProvider(BaseProvider):
         options["spotify_url"] = spotify_url
 
         provider = self._provider_key()
-        if provider not in {"tidal", "qobuz", "deezer", "amazon"}:
+        if not resolve_links or provider not in {"tidal", "qobuz", "deezer", "amazon"}:
             return options
         try:
             target_url = await LinkResolver().resolve_provider_url_async(

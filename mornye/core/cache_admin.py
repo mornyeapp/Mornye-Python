@@ -41,6 +41,7 @@ PRUNABLE_FILES = (
     "isrc-cache.json",
     "recent-fetches.json",
     "provider_priority.json",  # core/provider_stats.py
+    "track_quality.json",  # core/track_quality.py
     "session.json",
 )
 

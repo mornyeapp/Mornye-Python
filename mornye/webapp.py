@@ -152,6 +152,8 @@ ALLOWED_METHODS: set[str] = {
     # (core/extension_home_feed.py). Read-only.
     "get_home_feed_sources",
     "get_extension_home_feed",
+    # Qobuz/TIDAL quality of one listed track (core/track_quality.py).
+    "check_track_quality",
     "search_provider",
     "search_provider_async",
     "get_metadata_sources",

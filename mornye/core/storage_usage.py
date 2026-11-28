@@ -162,7 +162,7 @@ def _disk_items() -> list[dict]:
         _entry(
             "small",
             "Lookups and logs",
-            "ISRC matches, recent fetches, provider order and the error log.",
+            "ISRC matches, recent fetches, provider order, checked qualities and the error log.",
             [root / n for n in cache_admin.PRUNABLE_FILES] + [root / "errors.log"],
             True,
         ),

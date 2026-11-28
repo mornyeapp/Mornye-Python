@@ -664,6 +664,26 @@
 }
 .tr-artist { white-space: normal; overflow: visible; text-overflow: unset; }
 
+/* What Qobuz and TIDAL have, once asked (app.js's checkTrackQuality). */
+.tr-quality { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-1); }
+.tr-quality:empty { display: none; }
+/* Labelled rows are three lines tall; keep them off their neighbours. */
+.track-row:has(.tr-quality:not(:empty)) { padding-block: var(--space-2); }
+.tr-quality-chip {
+  padding: 0 var(--space-1);
+  border: 1px solid var(--rule); border-radius: var(--radius-1);
+  color: var(--text-muted); font-size: var(--text-xs); line-height: 1.5;
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.tr-quality-chip[data-state="hires"] { color: var(--text); border-color: var(--ok); }
+.tr-quality-chip[data-state="error"] { border-style: dashed; }
+/* On the single-track card they match the duration chip beside them. */
+.track-quality-row .tr-quality { gap: var(--space-2); margin-top: 0; }
+.track-quality-row .tr-quality-chip {
+  display: inline-flex; align-items: center;
+  padding: var(--space-1) var(--space-3); font-size: var(--text-sm);
+}
+
 .tr-dur { text-align: right; }
 .tr-playcount {
   display: flex; align-items: center; justify-content: center;
@@ -1509,7 +1529,7 @@ body:has(#album-card:not(.hidden)) #fetchBtn {
 
 @container tracktable (min-width: 799px) {
   .track-table-header, .track-row {
-    grid-template-columns: 40px minmax(0, 1.7fr) minmax(0, 1fr) 72px 150px;
+    grid-template-columns: 40px minmax(0, 1.7fr) minmax(0, 1fr) 72px 180px;
   }
   .track-table-header > :nth-child(1), .track-row > .tr-check,
   .track-table-header > :nth-child(2), .track-row > .tr-num { grid-column: 1; grid-row: 1; justify-self: center; }
@@ -1809,14 +1829,18 @@ body:has(#album-card:not(.hidden)) #fetchBtn {
 :is(#album-card.artist-mode, #album-card.playlist-mode) #album-actions #save-all-covers-btn { order: 1; }
 /* Nothing can be selected on the overview; the button comes back once
    Discography's "Show all" opens the list where tracks are picked. */
-.list-container.artist-overview-mode #album-card.artist-mode #dl-selected-btn { display: none !important; }
-:is(#album-card.artist-mode, #album-card.playlist-mode) #album-actions #dl-selected-btn { order: 1; }
+.list-container.artist-overview-mode #album-card.artist-mode :is(#dl-selected-btn, #check-quality-btn) { display: none !important; }
+:is(#album-card.artist-mode, #album-card.playlist-mode) #album-actions :is(#dl-selected-btn, #check-quality-btn) { order: 1; }
 :is(#album-card.artist-mode, #album-card.playlist-mode) #album-actions .act-btn.primary {
   order: 0; width: 64px; height: 64px; margin-right: var(--space-2);
   background: var(--signal); color: var(--signal-ink); box-shadow: 0 6px 18px rgba(var(--shade-rgb), .25);
 }
 :is(#album-card.artist-mode, #album-card.playlist-mode) #album-actions .act-btn.primary svg { width: 26px; height: 26px; }
 :is(#album-card.artist-mode, #album-card.playlist-mode) #album-actions .act-btn:focus-visible { outline: 2px solid var(--signal-strong); outline-offset: 2px; }
+/* A running quality check says how far it is, and that a click stops it. */
+:is(#album-card.artist-mode, #album-card.playlist-mode) #album-actions #check-quality-btn.is-running {
+  width: auto; padding: 0 var(--space-5); border-radius: 24px; gap: var(--space-2); font-size: var(--text-sm);
+}
 #album-card.artist-mode > button[data-onclick="closeAlbumCard()"] {
   position: absolute; z-index: 2; color: var(--media-ink);
   width: 36px; height: 36px; border-radius: 50%; background: rgba(var(--shade-rgb), .35);

@@ -336,7 +336,7 @@ input[type="checkbox"], input[type="radio"], progress {
 
   /* Layout updated per le 4 colonne rimanenti (Checkbox, #, Titolo, Azioni) */
   .track-table-header, .track-row {
-    grid-template-columns: 24px 30px 1fr 140px !important;
+    grid-template-columns: 24px 30px 1fr 170px !important;
   }
 }
 

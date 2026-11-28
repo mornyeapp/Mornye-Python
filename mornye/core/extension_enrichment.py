@@ -182,9 +182,16 @@ _providers: dict[str, Any] = {}
 _providers_lock = threading.Lock()
 
 
-def _provider(ext_name: str, factory: Any = None) -> Any:
+#: Marks the second runtime of an extension, the one without a signed session.
+_PUBLIC_ONLY = "\0public"
+
+
+def _provider(
+    ext_name: str, factory: Any = None, *, signed_requests: bool = True
+) -> Any:
+    key = ext_name if signed_requests else ext_name + _PUBLIC_ONLY
     with _providers_lock:
-        provider = _providers.get(ext_name)
+        provider = _providers.get(key)
         if provider is None:
             if factory is not None:
                 provider = factory(ext_name)
@@ -192,9 +199,11 @@ def _provider(ext_name: str, factory: Any = None) -> Any:
                 from ..extensions.provider import JSExtensionProvider
 
                 provider = JSExtensionProvider(
-                    ext_name, timeout_s=int(EXTENSION_TIMEOUT_S)
+                    ext_name,
+                    timeout_s=int(EXTENSION_TIMEOUT_S),
+                    signed_requests=signed_requests,
                 )
-            _providers[ext_name] = provider
+            _providers[key] = provider
         return provider
 
 
@@ -221,13 +230,16 @@ def close_extension_provider(ext_name: str) -> None:
     the old ones until restart.
     """
     with _providers_lock:
-        provider = _providers.pop(ext_name, None)
-    close = getattr(provider, "close", None)
-    if close is not None:
-        try:
-            close()
-        except Exception:
-            pass
+        providers = [
+            _providers.pop(key, None) for key in (ext_name, ext_name + _PUBLIC_ONLY)
+        ]
+    for provider in providers:
+        close = getattr(provider, "close", None)
+        if close is not None:
+            try:
+                close()
+            except Exception:
+                pass
 
 
 atexit.register(close_extension_providers)
