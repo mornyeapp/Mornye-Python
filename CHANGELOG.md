@@ -58,6 +58,7 @@
 
 ### Fixed
 
+- **Strict Hi-Res can be refused before the download**: extensions' `checkAvailability()` now receives `quality`, `requestedQuality` and `allowFallback` (`download()` also gets the first two), so one that knows a track is 16-bit can turn it down early. A `quality_unavailable` refusal with quality fallback off is not retried. Needs an extension version that makes these checks.
 - **Collaborations stay in a followed playlist's M3U**: tracks with several artists were missed when the file was rewritten, so a 50-track playlist could come out with 16.
 - **Dolby Atmos is downloaded when the stereo version is already there**: the stereo file was taken for the Atmos one. An Atmos file whose name is taken is saved as "… (Dolby Atmos).m4a".
 - **REST downloads go to the account's folder and use the saved Artist/Album layout** (#288), instead of `./Downloads` with every file loose.

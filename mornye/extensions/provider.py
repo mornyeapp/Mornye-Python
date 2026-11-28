@@ -39,6 +39,7 @@ from mornye.core.base import BaseProvider
 from mornye.core.errors import ErrorKind, MornyeError
 from mornye.core.models import DownloadResult, TrackMetadata
 from mornye.core.output_lock import output_path_lock
+from mornye.core.quality import normalize_quality
 from mornye.core.link_resolver import LinkResolver
 from mornye.core.loop_runner import spawn
 from mornye.core.text_match import track_identity_mismatch
@@ -795,6 +796,9 @@ class JSExtensionProvider(BaseProvider):
             # Qobuz's JS extension treats an unrecognised "27" as CD quality.
             # Always hand the extension one of the ids its manifest declares.
             extension_quality = kwargs.pop("extension_quality", None)
+            # The tier before it becomes an id of the extension's own: Amazon
+            # declares a single lossless id ("best") for CD and Hi-Res alike.
+            requested_quality = normalize_quality(quality)
             quality = self.select_quality(quality, extension_quality)
             if extension_quality:
                 # A per-service quality is the user's choice, and the host
@@ -811,6 +815,7 @@ class JSExtensionProvider(BaseProvider):
                 first_artist_only=first_artist_only,
                 artist_separator=artist_separator,
                 quality=quality,
+                requested_quality=requested_quality,
                 allow_fallback=allow_fallback,
                 embed_lyrics=embed_lyrics,
                 lyrics_providers=lyrics_providers,
@@ -838,6 +843,7 @@ class JSExtensionProvider(BaseProvider):
         use_album_track_num: bool,
         first_artist_only: bool,
         quality: str,
+        requested_quality: str | None = None,
         artist_separator: str | None = None,
         allow_fallback: bool = True,
         embed_lyrics: bool = False,
@@ -855,12 +861,24 @@ class JSExtensionProvider(BaseProvider):
         and return a success, skip, or failure result after post-processing.
         """
         availability_options = await self._provider_match_options(metadata)
+        # What was asked for and whether less is acceptable, so an extension
+        # can turn a track down before spending quota or bandwidth on a file
+        # the engine would delete. download() receives the same three keys.
+        request_options = {
+            "quality": quality,
+            "requestedQuality": requested_quality or normalize_quality(quality),
+            # Extensions that walk their own quality ladder (TIDAL: Atmos →
+            # Hi-Res → CD) need this to stop at the requested tier. Without it
+            # a failed Atmos request downloads a stereo file the host then
+            # deletes, instead of moving straight on to the next provider.
+            "allowFallback": bool(allow_fallback),
+        }
         avail = await asyncio.to_thread(
             self.check_availability,
             isrc=metadata.isrc,
             track_name=metadata.title,
             artist_name=metadata.artists,
-            options=availability_options,
+            options={**availability_options, **request_options},
         )
 
         if not avail.get("available"):
@@ -880,15 +898,10 @@ class JSExtensionProvider(BaseProvider):
         # bridge discarded them after availability, forcing extensions to
         # look up the track a second time and, for some catalogues, losing a
         # match that had already been found.
-        download_options = dict(availability_options)
+        download_options = {**availability_options, **request_options}
         prepared_context = avail.get("prepared_context")
         if isinstance(prepared_context, dict):
             download_options["preparedContext"] = prepared_context
-        # Extensions that walk their own quality ladder (TIDAL: Atmos →
-        # Hi-Res → CD) need this to stop at the requested tier. Without it a
-        # failed Atmos request downloads a stereo file the host then deletes,
-        # instead of moving straight on to the next provider.
-        download_options["allowFallback"] = bool(allow_fallback)
 
         ext_hint = _quality_to_ext(quality)
         output_path = self._build_output_path(
@@ -1066,6 +1079,15 @@ class JSExtensionProvider(BaseProvider):
                     elapsed,
                     err if dl_result else "the extension returned no result",
                 )
+                if (
+                    not allow_fallback
+                    and dl_result
+                    and dl_result.get("error_type") == "quality_unavailable"
+                ):
+                    # The same answer the engine gives a file it had to
+                    # delete, so the provider is not asked again on retry
+                    # (_definitive_failure): each attempt can cost quota.
+                    err = f"Quality below requested: {err}"
                 return DownloadResult.fail(self.name, err)
 
             # ── Reassemble any segments (e.g., Tidal DASH via extension) ──
