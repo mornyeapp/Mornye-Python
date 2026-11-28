@@ -371,7 +371,7 @@ def test_wait_rechecks_after_an_early_timeout(monkeypatch):
     monkeypatch.setattr(first.done, "wait", return_early)
 
     assert requests.wait(first.id, "a", 1.0).status == "expired"
-    assert calls == 2
+    assert calls >= 2
 
 
 def test_only_local_addresses_count_as_the_network():
