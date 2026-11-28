@@ -93,6 +93,29 @@ def test_provider_gets_native_id_from_spotify_link(
         assert options["spotify_id"] == expected_value
 
 
+@pytest.mark.parametrize("uri_field", ["id", "external_url"])
+def test_provider_normalizes_spotify_track_uris_before_resolving(
+    monkeypatch, uri_field: str
+) -> None:
+    async def resolve(self, source_url: str, provider: str) -> str:
+        assert source_url == SPOTIFY_URL
+        assert provider == "qobuz"
+        return "https://open.qobuz.com/track/101686517"
+
+    monkeypatch.setattr(
+        "mornye.extensions.provider.LinkResolver.resolve_provider_url_async",
+        resolve,
+    )
+    metadata = _metadata("")
+    setattr(metadata, uri_field, "spotify:track:0VjIjW4GlUZAMYd2vXMi3b")
+
+    options = asyncio.run(_provider("qobuz-web")._provider_match_options(metadata))
+
+    assert options["spotify_url"] == SPOTIFY_URL
+    assert options["qobuz_url"] == "https://open.qobuz.com/track/101686517"
+    assert options["qobuz_id"] == "101686517"
+
+
 def test_foreign_provider_metadata_is_not_fabricated_as_spotify(monkeypatch) -> None:
     """Verify foreign IDs and URLs do not trigger Spotify-based provider hints."""
 

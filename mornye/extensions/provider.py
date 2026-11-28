@@ -479,11 +479,24 @@ class JSExtensionProvider(BaseProvider):
             external_url,
             re.IGNORECASE,
         )
+        if not match:
+            match = re.fullmatch(
+                r"spotify:track:([A-Za-z0-9]{22})",
+                external_url,
+                re.IGNORECASE,
+            )
         if match:
             return f"https://open.spotify.com/track/{match.group(1)}"
 
         raw_id = str(metadata.id or "").strip()
-        if raw_id.lower().startswith("spotify_"):
+        uri_match = re.fullmatch(
+            r"spotify:track:([A-Za-z0-9]{22})",
+            raw_id,
+            re.IGNORECASE,
+        )
+        if uri_match:
+            raw_id = uri_match.group(1)
+        elif raw_id.lower().startswith("spotify_"):
             raw_id = raw_id[8:]
         if re.fullmatch(r"[A-Za-z0-9]{22}", raw_id):
             return f"https://open.spotify.com/track/{raw_id}"
