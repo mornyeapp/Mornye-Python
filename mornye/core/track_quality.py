@@ -7,10 +7,10 @@ Amazon Music is not asked: it only says what a stream is once the stream
 has been requested, which spends API quota.
 
 A check costs nothing of that kind. The extension runs without a signed
-session and the cross-catalogue resolver is not consulted, so it reads only
-the services' public pages: no download ticket, no verification window. The
-price is that Qobuz can miss a track a download would find, which reads as
-"unknown".
+session. A Spotify link is first resolved to the target service's native
+link, then the extension checks that service's public page: no download
+ticket, no verification window. The price is that Qobuz can miss a track a
+download would find, which reads as "unknown".
 
 Known answers are cached on disk, so checking a track again costs no
 request. "Unknown", "not available" and errors are not cached: each can be
@@ -215,7 +215,7 @@ async def _ask(
         provider = await asyncio.to_thread(
             _provider, ext.name, provider_factory, signed_requests=False
         )
-        options = await provider._provider_match_options(metadata, resolve_links=False)
+        options = await provider._provider_match_options(metadata, resolve_links=True)
         # A row that is already this service's track needs no search.
         link = metadata.external_url
         host = (urlsplit(link).hostname or "").lower()

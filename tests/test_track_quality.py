@@ -48,13 +48,21 @@ def _extension(tmp_path, name, version="1.0.0"):
 
 
 class _Provider:
-    def __init__(self, answer):
+    def __init__(self, answer, service=None):
         self.answer = answer
+        self.service = service
         self.calls = []
+        self.resolve_links = None
 
     async def _provider_match_options(self, metadata, *, resolve_links=True):
-        assert resolve_links is False, "a check must not consult the resolver"
-        return {"duration_ms": metadata.duration_ms}
+        self.resolve_links = resolve_links
+        options = {"duration_ms": metadata.duration_ms}
+        if resolve_links and self.service:
+            options[f"{self.service}_url"] = (
+                f"https://{self.service}.example/track/converted"
+            )
+            options[f"{self.service}_id"] = "converted-id"
+        return options
 
     def _provider_track_id(self, provider, url):
         from mornye.extensions.provider import JSExtensionProvider
@@ -177,16 +185,27 @@ def test_describe(service, answer, state, label):
 
 def test_asks_qobuz_then_tidal_and_never_amazon(installed):
     providers = {
-        "qobuz-web": _Provider(HIRES),
-        "tidal-web": _Provider({"available": True, "quality": {"hires": False}}),
+        "qobuz-web": _Provider(HIRES, "qobuz"),
+        "tidal-web": _Provider(
+            {"available": True, "quality": {"hires": False}}, "tidal"
+        ),
     }
 
     answer = _check(installed, providers)
 
     assert answer["status"] == "ok"
     assert [r["service"] for r in answer["results"]] == ["qobuz", "tidal"]
-    isrc, title, artist, _ = providers["qobuz-web"].calls[0]
+    qobuz = providers["qobuz-web"]
+    tidal = providers["tidal-web"]
+    assert qobuz.resolve_links is True
+    assert tidal.resolve_links is True
+    isrc, title, artist, qobuz_options = qobuz.calls[0]
     assert (isrc, title, artist) == ("usaaa0000001", "Signal", "Artist")
+    assert qobuz_options["qobuz_url"] == "https://qobuz.example/track/converted"
+    assert qobuz_options["qobuz_id"] == "converted-id"
+    tidal_options = tidal.calls[0][3]
+    assert tidal_options["tidal_url"] == "https://tidal.example/track/converted"
+    assert tidal_options["tidal_id"] == "converted-id"
 
 
 def test_a_known_answer_is_not_asked_for_again(installed):
