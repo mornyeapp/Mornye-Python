@@ -49,12 +49,23 @@ def _extension(tmp_path, name, version="1.0.0"):
 
 
 class _Provider:
-    def __init__(self, answer, service=None, spotify_url=None):
+    def __init__(self, answer, service=None, spotify_url=None, audio_quality=None):
         self.answer = answer
         self.service = service
         self.spotify_url = spotify_url
         self.calls = []
         self.resolve_links = None
+        self.enrichment_calls = []
+        self.resolved_track = (
+            {
+                f"{service}_id": "123456",
+                "external_urls": f"https://{service}.example/track/converted",
+                "audio_quality": audio_quality
+                or ("24bit/96kHz" if service == "qobuz" else "24bit"),
+            }
+            if service
+            else {}
+        )
 
     async def _provider_match_options(self, metadata, *, resolve_links=True):
         self.resolve_links = resolve_links
@@ -65,8 +76,12 @@ class _Provider:
             options[f"{self.service}_url"] = (
                 f"https://{self.service}.example/track/converted"
             )
-            options[f"{self.service}_id"] = "converted-id"
+            options[f"{self.service}_id"] = "123456"
         return options
+
+    def enrich_track(self, track, options):
+        self.enrichment_calls.append((track, options))
+        return self.resolved_track
 
     def _provider_track_id(self, provider, url):
         from mornye.extensions.provider import JSExtensionProvider
@@ -201,15 +216,16 @@ def test_asks_qobuz_then_tidal_and_never_amazon(installed):
     assert [r["service"] for r in answer["results"]] == ["qobuz", "tidal"]
     qobuz = providers["qobuz-web"]
     tidal = providers["tidal-web"]
-    assert qobuz.resolve_links is True
-    assert tidal.resolve_links is True
+    assert qobuz.resolve_links is False
+    assert tidal.resolve_links is False
     isrc, title, artist, qobuz_options = qobuz.calls[0]
     assert (isrc, title, artist) == ("usaaa0000001", "Signal", "Artist")
+    assert qobuz.enrichment_calls[0][0]["name"] == "Signal"
     assert qobuz_options["qobuz_url"] == "https://qobuz.example/track/converted"
-    assert qobuz_options["qobuz_id"] == "converted-id"
+    assert qobuz_options["qobuz_id"] == "123456"
     tidal_options = tidal.calls[0][3]
     assert tidal_options["tidal_url"] == "https://tidal.example/track/converted"
-    assert tidal_options["tidal_id"] == "converted-id"
+    assert tidal_options["tidal_id"] == "123456"
 
 
 def test_logs_service_link_resolution_and_quality_results(installed, caplog):
@@ -225,10 +241,43 @@ def test_logs_service_link_resolution_and_quality_results(installed, caplog):
 
     messages = [record.getMessage() for record in caplog.records]
     assert "[track-quality] checking 'Signal' by Artist" in messages
-    assert "[track-quality] Qobuz link resolved" in messages
+    assert (
+        "[track-quality] Qobuz resolved by its extension: https://qobuz.example/track/converted"
+        in messages
+    )
     assert "[track-quality] Qobuz result: Qobuz 24-bit/96 kHz" in messages
-    assert "[track-quality] TIDAL link resolved" in messages
+    assert (
+        "[track-quality] TIDAL resolved by its extension: https://tidal.example/track/converted"
+        in messages
+    )
     assert "[track-quality] TIDAL result: TIDAL no Hi-Res" in messages
+
+
+@pytest.mark.parametrize(
+    ("service", "audio_quality", "expected_state", "expected_label"),
+    [
+        ("qobuz", "24bit/44.1kHz", "hires", "Qobuz 24-bit/44.1 kHz"),
+        ("tidal", "24bit", "hires", "TIDAL Hi-Res"),
+        ("tidal", "16bit/44.1kHz", "standard", "TIDAL Lossless"),
+    ],
+)
+def test_uses_audio_quality_from_the_extension_native_resolve(
+    tmp_path, service, audio_quality, expected_state, expected_label
+):
+    extension_name = f"{service}-web"
+    manager = _Manager(_extension(tmp_path, extension_name))
+    providers = {
+        extension_name: _Provider(
+            {"available": True},
+            service,
+            audio_quality=audio_quality,
+        )
+    }
+
+    answer = _check(manager, providers)
+
+    assert answer["results"][0]["state"] == expected_state
+    assert answer["results"][0]["label"] == expected_label
 
 
 def test_logs_extension_version_and_unknown_reason(installed, caplog):
@@ -250,14 +299,10 @@ def test_logs_extension_version_and_unknown_reason(installed, caplog):
     )
 
 
-def test_logs_when_the_resolver_returns_no_native_link(installed, caplog):
+def test_logs_when_the_extension_resolve_returns_no_native_track(installed, caplog):
     providers = {
-        "qobuz-web": _Provider(
-            HIRES, spotify_url="https://open.spotify.com/track/0VjIjW4GlUZAMYd2vXMi3b"
-        ),
-        "tidal-web": _Provider(
-            HIRES, spotify_url="https://open.spotify.com/track/0VjIjW4GlUZAMYd2vXMi3b"
-        ),
+        "qobuz-web": _Provider(HIRES),
+        "tidal-web": _Provider(HIRES),
     }
 
     with caplog.at_level(logging.INFO, logger="mornye.core.track_quality"):
@@ -265,11 +310,11 @@ def test_logs_when_the_resolver_returns_no_native_link(installed, caplog):
 
     messages = [record.getMessage() for record in caplog.records]
     assert (
-        "[track-quality] Qobuz resolver returned no native link; using metadata hints"
+        "[track-quality] Qobuz extension returned no native track; using metadata hints"
         in messages
     )
     assert (
-        "[track-quality] TIDAL resolver returned no native link; using metadata hints"
+        "[track-quality] TIDAL extension returned no native track; using metadata hints"
         in messages
     )
 

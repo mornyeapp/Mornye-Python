@@ -109,6 +109,39 @@ def _number(value: Any) -> float:
         return 0.0
 
 
+def _extension_quality(service: str, track: Any) -> dict | None:
+    """Translate a service extension's native ``audio_quality`` label."""
+    if not isinstance(track, dict):
+        return None
+    label = str(track.get("audio_quality") or "").strip()
+    if service == "qobuz":
+        match = re.fullmatch(
+            r"(\d+)\s*bit(?:\s*/\s*(\d+(?:\.\d+)?)\s*kHz)?",
+            label,
+            re.IGNORECASE,
+        )
+        if not match:
+            return None
+        depth = int(match.group(1))
+        rate = float(match.group(2) or 0)
+        return {
+            "hires": depth > 16,
+            "max_bit_depth": depth,
+            "max_sampling_rate": rate,
+        }
+
+    normalized = re.sub(r"\s+", "", label).upper()
+    if normalized in {"24BIT", "MQA", "HI_RES", "HI_RES_LOSSLESS"}:
+        return {"hires": True, "max_quality": "HI_RES_LOSSLESS"}
+    if normalized == "16BIT/44.1KHZ":
+        return {"hires": False, "max_quality": "LOSSLESS"}
+    if normalized == "320KBPS":
+        return {"hires": False, "max_quality": "HIGH"}
+    if normalized == "96KBPS":
+        return {"hires": False, "max_quality": "LOW"}
+    return None
+
+
 def _result(service: str, state: str, text: str, detail: str = "") -> dict:
     return {
         "service": service,
@@ -223,24 +256,59 @@ async def _ask(
         provider = await asyncio.to_thread(
             _provider, ext.name, provider_factory, signed_requests=False
         )
-        options = await provider._provider_match_options(metadata, resolve_links=True)
+        # Let the service extension resolve the Spotify metadata against its
+        # own catalogue; external cross-catalogue resolvers often lack recent
+        # releases and cannot report the service's audio quality.
+        options = await provider._provider_match_options(metadata, resolve_links=False)
+        resolved_track: Any = {}
+        try:
+            resolved_track = await asyncio.to_thread(
+                provider.enrich_track,
+                {
+                    "name": metadata.title,
+                    "artists": metadata.artists,
+                    "isrc": metadata.isrc,
+                    "album_name": metadata.album,
+                    "duration_ms": metadata.duration_ms,
+                },
+                {},
+            )
+        except Exception as exc:
+            logger.warning(
+                "[track-quality] %s extension resolve failed: %s",
+                service_name,
+                exc,
+            )
+
+        native_id = (
+            str((resolved_track or {}).get(f"{service}_id") or "").strip()
+            if isinstance(resolved_track, dict)
+            else ""
+        )
+        if native_id and re.fullmatch(r"\d+", native_id):
+            options[f"{service}_id"] = native_id
+            native_url = str((resolved_track or {}).get("external_urls") or "").strip()
+            if native_url:
+                options[f"{service}_url"] = native_url
+
         # A row that is already this service's track needs no search.
         link = metadata.external_url
         host = (urlsplit(link).hostname or "").lower()
         if host == f"{service}.com" or host.endswith(f".{service}.com"):
-            native_id = provider._provider_track_id(service, link)
-            if native_id:
-                options[f"{service}_id"] = native_id
+            source_id = provider._provider_track_id(service, link)
+            if source_id:
+                options[f"{service}_id"] = source_id
         if options.get(f"{service}_url") or options.get(f"{service}_id"):
-            logger.info("[track-quality] %s link resolved", service_name)
-        elif options.get("spotify_url"):
             logger.info(
-                "[track-quality] %s resolver returned no native link; using metadata hints",
+                "[track-quality] %s resolved by its extension%s",
                 service_name,
+                f": {options[f'{service}_url']}"
+                if options.get(f"{service}_url")
+                else "",
             )
         else:
             logger.info(
-                "[track-quality] no Spotify source link for %s; using metadata hints",
+                "[track-quality] %s extension returned no native track; using metadata hints",
                 service_name,
             )
         answer = await asyncio.to_thread(
@@ -250,6 +318,14 @@ async def _ask(
             artist_name=metadata.artists,
             options=options,
         )
+        native_quality = _extension_quality(service, resolved_track)
+        if (
+            isinstance(answer, dict)
+            and answer.get("available")
+            and not isinstance(answer.get("quality"), dict)
+            and native_quality
+        ):
+            answer = {**answer, "quality": native_quality}
     except Exception as exc:
         logger.warning("[track-quality] %s check failed: %s", service_name, exc)
         return _result(service, "error", "check failed", str(exc))
