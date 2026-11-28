@@ -231,6 +231,25 @@ def test_logs_service_link_resolution_and_quality_results(installed, caplog):
     assert "[track-quality] TIDAL result: TIDAL no Hi-Res" in messages
 
 
+def test_logs_extension_version_and_unknown_reason(installed, caplog):
+    providers = {
+        "qobuz-web": _Provider({"available": True}),
+        "tidal-web": _Provider({"available": True}),
+    }
+
+    with caplog.at_level(logging.INFO, logger="mornye.core.track_quality"):
+        _check(installed, providers)
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert (
+        "[track-quality] checking Qobuz with qobuz-web v1.0.0 for 'Signal'" in messages
+    )
+    assert (
+        "[track-quality] Qobuz detail: The extension reports no quality. Check for an update."
+        in messages
+    )
+
+
 def test_logs_when_the_resolver_returns_no_native_link(installed, caplog):
     providers = {
         "qobuz-web": _Provider(

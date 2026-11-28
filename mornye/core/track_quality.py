@@ -212,7 +212,13 @@ async def _ask(
     service: str, ext: Any, metadata: TrackMetadata, provider_factory: Any
 ) -> dict:
     service_name = SERVICES[service]
-    logger.info("[track-quality] checking %s for %r", service_name, metadata.title)
+    logger.info(
+        "[track-quality] checking %s with %s v%s for %r",
+        service_name,
+        ext.name,
+        ext.version,
+        metadata.title,
+    )
     try:
         provider = await asyncio.to_thread(
             _provider, ext.name, provider_factory, signed_requests=False
@@ -250,7 +256,7 @@ async def _ask(
     result = describe(service, answer)
     logger.info("[track-quality] %s result: %s", service_name, result["label"])
     if result["detail"]:
-        logger.debug("[track-quality] %s details: %s", service_name, result["detail"])
+        logger.info("[track-quality] %s detail: %s", service_name, result["detail"])
     return result
 
 
