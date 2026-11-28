@@ -734,7 +734,7 @@
   content: attr(data-tip);
   position: absolute; bottom: calc(100% + 6px); left: 50%;
   transform: translateX(-50%);
-  background: var(--selected); color: var(--text);
+  background: var(--surface); color: var(--text); border: 1px solid var(--rule);
   font-family: var(--font); font-size: var(--text-xs);
   padding: 3px 7px; border-radius: 4px; white-space: nowrap;
   pointer-events: none; opacity: 0; transition: opacity .15s;
@@ -743,8 +743,7 @@
 .act-btn[data-tip] { position: relative; }
 .ta-btn:hover::after,
 .act-btn[data-tip]:hover::after { opacity: 1; }
-/* The hovered action is a flex item; lift it above its siblings so its
-   tooltip text is not painted underneath adjacent buttons. */
+/* Keep the tooltip above the fill of neighbouring flex-item buttons. */
 .ta-btn:hover,
 .act-btn[data-tip]:hover { z-index: 101; }
 
@@ -1374,6 +1373,9 @@ body:has(#album-card:not(.hidden)) #fetchBtn {
 .album-meta-details, .album-subtitle, .album-description { color: var(--text-muted); font-size: var(--text-sm); }
 .dot-sep { color: var(--rule-strong); }
 #album-actions { gap: var(--space-2); margin-top: var(--space-2); }
+/* The single-track action row can wrap. Keep a tooltip above its second row
+   inside the gap instead of over the labels in the first row. */
+#album-actions:has(+ #track-quality-row:not(.hidden)) { row-gap: 34px; }
 
 /* The facts column: label + value pairs, a readout panel. */
 #album-tech { width: 200px; padding-left: var(--space-4); border-left: 1px solid var(--rule); gap: var(--space-3); }
