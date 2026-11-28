@@ -20,5 +20,11 @@ if (_style) document.body.setAttribute('data-style', _style);
 // Sidebar collapsed or labelled (toggleSidebar in app.js), before paint so
 // the content does not jump sideways once the app has loaded.
 try {
-  if (localStorage.getItem('mornye-sidebar') === 'collapsed') document.body.classList.add('sidebar-collapsed');
+  // The Music look is designed around a labelled 260px sidebar and has no
+  // collapse control. A stale collapsed preference must not compress it
+  // (or hide every label) when Music is restored on launch.
+  if (
+    document.documentElement.getAttribute('data-style') !== 'music'
+    && localStorage.getItem('mornye-sidebar') === 'collapsed'
+  ) document.body.classList.add('sidebar-collapsed');
 } catch (e) {}

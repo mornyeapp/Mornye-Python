@@ -505,6 +505,13 @@ function applyStyle(style) {
     if (val === 'music') el.setAttribute('data-style', 'music');
     else el.removeAttribute('data-style');
   }
+  // Music has a labelled sidebar and deliberately hides the collapse
+  // control. Remove a stale Console preference at runtime too, so a style
+  // switch cannot leave it compressed for the rest of the session.
+  if (val === 'music') {
+    document.body.classList.remove('sidebar-collapsed');
+    try { localStorage.setItem('mornye-sidebar', 'expanded'); } catch (e) {}
+  }
   mountHomeFeed(val === 'music');
   // History's rows carry the covers only in the music look: redrawn on a
   // switch either way.
@@ -8830,7 +8837,11 @@ function renderHomeSections(sections) {
       // explore.css), not another service's logo — the feed may be Apple's
       // or a Jellyfin server's.
       const blank = '<div class="explore-cover-blank" aria-hidden="true">♪</div>';
-      const cover = artSized(item.cover_url, isFirstShelf ? 260 : 220);
+      // Apple Music supplies a separate wide image for its featured shelf.
+      // Prefer it there: the square thumbnail crops the title baked into
+      // playlist artwork such as Today's Hits and Carols Covered.
+      const featuredCover = isFirstShelf ? item.featured_cover_url : '';
+      const cover = artSized(featuredCover || item.cover_url, isFirstShelf ? 260 : 220);
       const subText = item.description || item.artists || item.type;
 
       // The first shelf is the music look's Top Picks: a label above each
@@ -8839,7 +8850,7 @@ function renderHomeSections(sections) {
       card.innerHTML = `
         ${isFirstShelf ? `<div class="m-only m-pick-why">${escHtml(why)}</div>` : ''}
         ${cover
-          ? `<img src="${escHtml(cover)}" alt="" loading="lazy" data-onerror="this.outerHTML='${blank.replace(/"/g, '&quot;')}'">`
+          ? `<img${featuredCover ? ' class="m-featured-cover"' : ''} src="${escHtml(cover)}" alt="" loading="lazy" data-onerror="this.outerHTML='${blank.replace(/"/g, '&quot;')}'">`
           : blank}
         <div class="explore-card-title" title="${escHtml(item.name)}">${escHtml(item.name)}</div>
         <div class="explore-card-subtitle" title="${escHtml(subText)}">${escHtml(subText)}</div>
