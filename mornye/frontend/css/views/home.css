@@ -743,6 +743,10 @@
 .act-btn[data-tip] { position: relative; }
 .ta-btn:hover::after,
 .act-btn[data-tip]:hover::after { opacity: 1; }
+/* The hovered action is a flex item; lift it above its siblings so its
+   tooltip text is not painted underneath adjacent buttons. */
+.ta-btn:hover,
+.act-btn[data-tip]:hover { z-index: 101; }
 
 /* ── RECENT FETCHES ── */
 /* Bottom padding: room under the last row of cards when scrolled to the
