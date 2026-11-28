@@ -158,6 +158,21 @@ def installed(tmp_path):
             "tidal",
             {
                 "available": True,
+                "quality": {"hires": True, "max_bit_depth": 24},
+            },
+            "hires",
+            "TIDAL 24-bit",
+        ),
+        (
+            "tidal",
+            {"available": True, "quality": {"hires": True, "max_quality": "MQA"}},
+            "hires",
+            "TIDAL MQA",
+        ),
+        (
+            "tidal",
+            {
+                "available": True,
                 "quality": {"hires": False, "max_quality": "LOSSLESS"},
             },
             "standard",
@@ -257,7 +272,7 @@ def test_logs_service_link_resolution_and_quality_results(installed, caplog):
     ("service", "audio_quality", "expected_state", "expected_label"),
     [
         ("qobuz", "24bit/44.1kHz", "hires", "Qobuz 24-bit/44.1 kHz"),
-        ("tidal", "24bit", "hires", "TIDAL Hi-Res"),
+        ("tidal", "24bit", "hires", "TIDAL 24-bit"),
         ("tidal", "16bit/44.1kHz", "standard", "TIDAL Lossless"),
     ],
 )

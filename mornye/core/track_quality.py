@@ -131,7 +131,11 @@ def _extension_quality(service: str, track: Any) -> dict | None:
         }
 
     normalized = re.sub(r"\s+", "", label).upper()
-    if normalized in {"24BIT", "MQA", "HI_RES", "HI_RES_LOSSLESS"}:
+    if normalized == "24BIT":
+        return {"hires": True, "max_bit_depth": 24}
+    if normalized == "MQA":
+        return {"hires": True, "max_quality": "MQA"}
+    if normalized in {"HI_RES", "HI_RES_LOSSLESS"}:
         return {"hires": True, "max_quality": "HI_RES_LOSSLESS"}
     if normalized == "16BIT/44.1KHZ":
         return {"hires": False, "max_quality": "LOSSLESS"}
@@ -186,17 +190,24 @@ def describe(service: str, answer: Any) -> dict:
     hires = quality.get("hires")
     state = "hires" if hires is True else "standard" if hires is False else "unknown"
 
-    if service == "qobuz":
+    if service in {"qobuz", "tidal"}:
         depth = int(_number(quality.get("max_bit_depth")))
         rate = _number(quality.get("max_sampling_rate"))
         if rate >= 1000:  # Hz rather than kHz
             rate /= 1000
         if depth:
             state = "hires" if depth > 16 else "standard"
-            text = f"{depth}-bit/{rate:g} kHz" if rate else f"{depth}-bit"
+            text = f"{depth}-bit"
+            if rate:
+                text += f"/{rate:g} kHz"
             return _result(service, state, text)
 
     if state == "hires":
+        if (
+            service == "tidal"
+            and str(quality.get("max_quality") or "").upper() == "MQA"
+        ):
+            return _result(service, state, "MQA")
         return _result(service, state, "Hi-Res")
     if state == "standard":
         # TIDAL names the tier; a name it does not use is not guessed at.
