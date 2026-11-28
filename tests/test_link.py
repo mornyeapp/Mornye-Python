@@ -355,6 +355,25 @@ def test_requests_expire_and_are_limited_per_address():
     assert not requests.answer(first.id, True, lambda r: None)
 
 
+def test_wait_rechecks_after_an_early_timeout(monkeypatch):
+    requests = link.PairRequests(ttl_s=0.05)
+    first = requests.open("a", "A", "android", "10.0.0.2")
+    wait = first.done.wait
+    calls = 0
+
+    def return_early(timeout):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return False
+        return wait(timeout)
+
+    monkeypatch.setattr(first.done, "wait", return_early)
+
+    assert requests.wait(first.id, "a", 1.0).status == "expired"
+    assert calls >= 2
+
+
 def test_only_local_addresses_count_as_the_network():
     for address in (
         "192.168.1.5",

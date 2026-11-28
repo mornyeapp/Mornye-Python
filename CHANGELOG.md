@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Check Quality**: asks what Qobuz and TIDAL have for a track, from a button on its row or for all the selected tracks, and shows it under the artist ("Qobuz 24-bit/96 kHz", "TIDAL 24-bit", "TIDAL Lossless"). Each extension resolves the track in its own catalogue and reports its native audio quality; Mornye verifies the native track ID with `checkAvailability()`. No external cross-catalogue resolver, signed session or download ticket is used. Answers are kept for seven days. Amazon Music is not asked. TIDAL reports its bit depth but not always the sample rate; older extensions without native track enrichment may report "unknown".
 - **Discord**: the Player shows "Listening to Mornye" on your Discord profile, with the song, artist, album, elapsed time and the album cover (looked up on Apple Music, only when the artist matches). It talks to the Discord desktop app on the same computer, with no Discord SDK, and waits while Discord is closed. Set up in Settings › Player › Discord with your own application ID from the Discord Developer Portal. Desktop only.
 - **Last.fm scrobbling**: "Scrobbling now" while a song plays, and a scrobble once half of it or four minutes has been heard, never for a song under thirty seconds. Seeking ahead does not count as listening. You sign in with your own API key and shared secret through Last.fm's approval page, and they are kept in a file only your user can read. Scrobbles that cannot be sent wait and are tried again. Settings › Player › Last.fm. Desktop only.
 - **Mornye Link and Mornye Connect**: pair the Mornye phone app with the computer with a PIN (Settings › Player › Mornye Link), so the phone plays the library through the Subsonic API with its own key. With Connect, one device plays and the others control it or take playback over ("Play on"). In `--web` an admin can also let the server play through its own speakers (`MORNYE_CONNECT_SERVER_SPEAKER=1`).
@@ -58,6 +59,7 @@
 
 ### Fixed
 
+- **Strict Hi-Res can be refused before the download**: extensions' `checkAvailability()` now receives `quality`, `requestedQuality` and `allowFallback` (`download()` also gets the first two), so one that knows a track is 16-bit can turn it down early. A `quality_unavailable` refusal with quality fallback off is not retried. Needs an extension version that makes these checks.
 - **Collaborations stay in a followed playlist's M3U**: tracks with several artists were missed when the file was rewritten, so a 50-track playlist could come out with 16.
 - **Dolby Atmos is downloaded when the stereo version is already there**: the stereo file was taken for the Atmos one. An Atmos file whose name is taken is saved as "… (Dolby Atmos).m4a".
 - **REST downloads go to the account's folder and use the saved Artist/Album layout** (#288), instead of `./Downloads` with every file loose.

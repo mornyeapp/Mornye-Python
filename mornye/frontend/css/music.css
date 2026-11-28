@@ -126,6 +126,21 @@ html[data-style="music"] .explore-cover-blank {
   border-radius: 8px;
   box-shadow: 0 0 0 1px var(--rule);
 }
+/* Keep the artwork in a square frame without cropping off text or faces
+   from non-square covers. */
+html[data-style="music"] .explore-card img,
+html[data-style="music"] .explore-cover-blank {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  object-fit: contain;
+  object-position: center;
+  overflow: hidden;
+}
+html[data-style="music"] .explore-card img.m-featured-cover {
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+}
 /* Hover brightens the artwork instead of scaling the card: a scaled card
    pokes past the shelf's clipping edge and loses its left side. */
 html[data-style="music"] .explore-card img { transition: filter var(--motion) var(--ease); }
@@ -714,7 +729,7 @@ html[data-style="music"] #view-queue #queue-drawer,
 html[data-style="music"] #view-queue .queue-panel,
 html[data-style="music"] #view-queue .live-head { display: contents; }
 html[data-style="music"] #view-queue .live-metrics {
-  order: -3; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 28px;
+  order: -3; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 16px;
 }
 html[data-style="music"] #view-queue .metric {
   min-width: 0; padding: 14px 16px; border: 1px solid var(--rule); border-radius: 12px; background: var(--m-fill);
@@ -739,18 +754,33 @@ html[data-style="music"] #view-queue .page-section-title,
 html[data-style="music"] #view-queue .live-filters,
 html[data-style="music"] #view-queue .live-actions,
 html[data-style="music"] #view-queue .queue-content,
-html[data-style="music"] #view-queue #queue-counter { order: 1; }
+html[data-style="music"] #view-queue #queue-counter { order: -1; }
 html[data-style="music"] #view-queue .page-section-title {
-  margin: 24px 0 6px 12px; font-size: 13px; font-weight: 600; color: var(--text-2);
+  margin: 12px 0 6px 12px; font-size: 13px; font-weight: 600; color: var(--text-2);
   letter-spacing: normal; text-transform: none;
 }
-html[data-style="music"] #view-queue .live-filters { padding: 0 0 10px; border: 0; }
+html[data-style="music"] #view-queue .live-filters { margin-top: 10px; padding: 0 0 10px; border: 0; }
+html[data-style="music"] #view-queue .live-actions { align-self: flex-end; margin-top: 0; }
 html[data-style="music"] #view-queue .queue-summary .qs-item {
   height: 28px; border: 0; border-radius: 14px; background: var(--m-fill); font-size: 13px;
 }
 html[data-style="music"] #view-queue .queue-summary .qs-item.is-filtering { background: var(--m-fill-2); color: var(--text); }
-html[data-style="music"] #view-queue .live-actions { align-self: flex-end; margin-top: -38px; }
 html[data-style="music"] #view-queue .queue-content { padding: 0; }
+html[data-style="music"] #view-queue #sq-list.is-empty > .empty-state {
+  flex-direction: row; justify-content: flex-start; gap: 12px; padding: 10px 12px; text-align: left;
+}
+html[data-style="music"] #view-queue #sq-list.is-empty > .empty-state .es-icon {
+  width: 28px; height: 28px; margin: 0; flex: none;
+}
+html[data-style="music"] #view-queue #sq-list.is-empty > .empty-state .es-icon svg { width: 15px; height: 15px; }
+html[data-style="music"] #view-queue #sq-list.is-empty > .empty-state .es-hint { max-width: none; }
+html[data-style="music"] #view-queue .queue-content:has(#queue-empty:not([style*="none"])) { min-height: 0; }
+html[data-style="music"] #view-queue .queue-empty {
+  flex-direction: row; justify-content: flex-start; gap: 12px; padding: 10px 12px; text-align: left;
+}
+html[data-style="music"] #view-queue .queue-empty .q-icon { width: 28px; height: 28px; margin: 0; flex: none; }
+html[data-style="music"] #view-queue .queue-empty .q-icon svg { width: 15px; height: 15px; }
+html[data-style="music"] #view-queue .queue-empty .q-hint { max-width: none; }
 html[data-style="music"] #view-queue #queue-counter { border-top: 1px solid var(--rule); padding: 10px 12px; }
 html[data-style="music"] #view-queue .queue-item {
   padding: 10px 12px; border: 0; border-top: 1px solid var(--rule); border-radius: 0; background: transparent;

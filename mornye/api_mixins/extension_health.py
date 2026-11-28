@@ -163,6 +163,21 @@ class ExtensionHealthMixin:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    def check_track_quality(self, track: dict) -> dict:
+        """What quality Qobuz and TIDAL have for one row of the track list,
+        cached (core/track_quality.py).
+
+        Shape: {"status": "ok", "results": [{"service", "state", "label",
+        "detail"}, ...]} or {"status": "error", "error"}.
+        """
+        try:
+            from ..core.loop_runner import run_sync
+            from ..core.track_quality import check_track_quality_async
+
+            return run_sync(check_track_quality_async(dict(track or {})))
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+
     def _installed_extension_index(self) -> dict[str, dict]:
         """{"ext:<name>": {"version": ..., "trust_tier": ...}} for what's installed.
 

@@ -505,6 +505,13 @@ function applyStyle(style) {
     if (val === 'music') el.setAttribute('data-style', 'music');
     else el.removeAttribute('data-style');
   }
+  // Music has a labelled sidebar and deliberately hides the collapse
+  // control. Remove a stale Console preference at runtime too, so a style
+  // switch cannot leave it compressed for the rest of the session.
+  if (val === 'music') {
+    document.body.classList.remove('sidebar-collapsed');
+    try { localStorage.setItem('mornye-sidebar', 'expanded'); } catch (e) {}
+  }
   mountHomeFeed(val === 'music');
   // History's rows carry the covers only in the music look: redrawn on a
   // switch either way.
@@ -2979,6 +2986,7 @@ function setAlbumCard(title, artist, coverUrl, quality, description, followers, 
   // the comment there for why (setAlbumCard and renderTracks run off two
   // separate, not-strictly-ordered backend callbacks).
 
+  stopQualityRun();
   $('album-actions').innerHTML = `
     <button class="act-btn primary" data-onclick="downloadAll()" data-tip="Download all" aria-label="Download all">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -2987,6 +2995,10 @@ function setAlbumCard(title, artist, coverUrl, quality, description, followers, 
     <button class="act-btn secondary" data-onclick="downloadSelected()" id="dl-selected-btn" style="display:none;" data-tip="Download selected" aria-label="Download selected">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="9 12 11 14 15 10"/></svg>
       Download Selected
+    </button>
+    <button class="act-btn secondary" data-onclick="checkSelectedQuality()" id="check-quality-btn" style="display:none;" data-tip="Qobuz and TIDAL quality of the selected tracks" aria-label="Check quality of the selected tracks">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v4"/><path d="M8 6v12"/><path d="M12 3v18"/><path d="M16 7v10"/><path d="M20 10v4"/></svg>
+      <span id="check-quality-label">Check Quality</span>
     </button>
     <button class="act-btn secondary" id="save-all-covers-btn" data-tip="Save all covers as .jpg" data-onclick="downloadAllCovers(this)">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
@@ -3470,6 +3482,9 @@ function showSingleTrackCard(t) {
   <button class="act-btn secondary ta-preview" data-tip="Play Preview" data-preview-index="0" data-track-id="${trackId}" data-onclick="playPreview(0)">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
   </button>
+  <button class="act-btn secondary ta-quality" data-tip="Check Quality" aria-label="Check Qobuz and TIDAL quality" data-track-index="0" data-onclick="checkTrackQuality(0)">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v4"/><path d="M8 6v12"/><path d="M12 3v18"/><path d="M16 7v10"/><path d="M20 10v4"/></svg>
+  </button>
   <button class="act-btn secondary ta-lyrics" data-tip="Save Lyrics (.lrc)" data-track-index="0" data-onclick="downloadLyrics(0)">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
   </button>
@@ -3500,8 +3515,8 @@ function showSingleTrackCard(t) {
   }
   const chips = [];
   if (dur && dur !== '—') chips.push(`<span class="track-quality-chip">${escHtml(dur)}</span>`);
-  factsRow.innerHTML = chips.join('');
-  factsRow.classList.toggle('hidden', chips.length === 0);
+  factsRow.innerHTML = chips.join('') + trackQualityHtml(t);
+  factsRow.classList.toggle('hidden', chips.length === 0 && !trackQualities.has(trackQualityKey(t)));
 }
 
 function closeAlbumCard() {
@@ -3515,6 +3530,7 @@ function closeAlbumCard() {
   $('track-table-wrap').classList.add('hidden');
   $('recent-wrap').style.display = '';
   $('dl-selected-btn').style.display = 'none';
+  stopQualityRun();
   currentTracks  = [];
   queue          = [];
   isDownloading  = false;
@@ -4428,6 +4444,7 @@ function renderTracks(tracks, page = 1) {
           <div class="tr-info">
             <div class="tr-name">${escHtml(t.title || t.name || '?')} ${explicit}</div>
             <div class="tr-artist">${artistsCreditHtml(t.artists_data, t.artists || t.artist || '', t.artist_url)}</div>
+            ${trackQualityHtml(t)}
           </div>
         </div>
         <div class="tr-playcount">${playcountCell}</div>
@@ -4440,6 +4457,9 @@ function renderTracks(tracks, page = 1) {
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
           </button>
           ${previewBtn}
+          <button class="ta-btn ta-quality" data-tip="Check Quality" aria-label="Check Qobuz and TIDAL quality" data-onclick="checkTrackQuality(${globalIndex})">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10v4"/><path d="M8 6v12"/><path d="M12 3v18"/><path d="M16 7v10"/><path d="M20 10v4"/></svg>
+          </button>
           <button class="ta-btn ta-cover" data-tip="Save Cover (.jpg)" data-onclick="downloadCover(${globalIndex})">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
           </button>
@@ -4591,6 +4611,111 @@ function resetTaBtnAfter(btn, ms) {
     setTaBtnState(btn, 'default');
     btn._resetTimer = null;
   }, ms);
+}
+
+// ── Track quality (Qobuz / TIDAL) ─────────────────────────────────────────────
+// Asked only on demand (check_track_quality, core/track_quality.py). Answers
+// are kept by track, not by row, so a re-sort or a page change keeps them.
+const trackQualities = new Map();
+let qualityRun = null;
+//: A run gives up after this many tracks in a row where every service failed.
+const QUALITY_MAX_FAILURES = 3;
+
+function trackQualityKey(t) {
+  return String(t.isrc || t.id || `${t.title || t.name}|${t.artists || t.artist}|${t.duration_ms}`);
+}
+
+function trackQualityChipsHtml(results) {
+  return (results || []).map(r =>
+    `<span class="tr-quality-chip" data-state="${escHtml(r.state)}" title="${escHtml(r.detail || r.label)}">${escHtml(r.label)}</span>`
+  ).join('');
+}
+
+function trackQualityHtml(t) {
+  const key = trackQualityKey(t);
+  return `<div class="tr-quality" data-quality-key="${escHtml(key)}">${trackQualityChipsHtml(trackQualities.get(key))}</div>`;
+}
+
+function paintTrackQuality(key) {
+  document.querySelectorAll('.tr-quality').forEach(el => {
+    if (el.dataset.qualityKey !== key) return;
+    el.innerHTML = trackQualityChipsHtml(trackQualities.get(key));
+    el.closest('.track-quality-row')?.classList.remove('hidden');
+  });
+}
+
+// Resolves to true when at least one service answered, false when all failed;
+// rejects when there was nothing to ask.
+async function requestTrackQuality(t) {
+  const answer = await window.pywebview.api.check_track_quality(t);
+  if (answer?.status !== 'ok') throw new Error(answer?.error || 'Quality check failed.');
+  const key = trackQualityKey(t);
+  trackQualities.set(key, answer.results);
+  paintTrackQuality(key);
+  return answer.results.some(r => r.state !== 'error');
+}
+
+async function checkTrackQuality(i) {
+  const t = currentTracks[i];
+  if (!t) return;
+  if (!window.pywebview?.api) { logMessage('Python not connected — demo mode', 'warn'); return; }
+  const btns = document.querySelectorAll(`#track-row-${i} .ta-btn.ta-quality, .ta-quality[data-track-index="${i}"]`);
+  if (btns[0]?.classList.contains('ta-loading')) return;
+  btns.forEach(btn => { clearTimeout(btn._resetTimer); setTaBtnState(btn, 'loading'); });
+  let state = 'error';
+  try {
+    if (await requestTrackQuality(t)) state = 'success';
+  } catch (e) {
+    toastMgr.error(e?.message || String(e));
+  }
+  btns.forEach(btn => { setTaBtnState(btn, state); resetTaBtnAfter(btn, 2200); });
+}
+
+function paintQualityRunButton() {
+  const label = $('check-quality-label');
+  if (!label) return;
+  label.textContent = qualityRun ? `Stop (${qualityRun.done}/${qualityRun.total})` : 'Check Quality';
+  $('check-quality-btn')?.classList.toggle('is-running', !!qualityRun);
+}
+
+function stopQualityRun() {
+  qualityRun = null;
+  paintQualityRunButton();
+}
+
+// One track at a time over the checked rows; a second click stops it.
+async function checkSelectedQuality() {
+  if (qualityRun) { stopQualityRun(); onCheckChange(); return; }
+  const tracks = [...document.querySelectorAll('.track-cb:checked')]
+    .map(cb => currentTracks[parseInt(cb.value, 10)])
+    .filter(Boolean);
+  if (!tracks.length) { setStatus('No tracks selected.'); return; }
+  if (!window.pywebview?.api) { logMessage('Python not connected — demo mode', 'warn'); return; }
+  const run = { done: 0, total: tracks.length };
+  qualityRun = run;
+  paintQualityRunButton();
+  let failures = 0;
+  for (const t of tracks) {
+    // Stopped, or another list is on screen now.
+    const key = trackQualityKey(t);
+    if (qualityRun !== run || !currentTracks.some(x => trackQualityKey(x) === key)) break;
+    try {
+      failures = await requestTrackQuality(t) ? 0 : failures + 1;
+    } catch (e) {
+      toastMgr.error(e?.message || String(e));
+      break;
+    }
+    if (failures >= QUALITY_MAX_FAILURES) {
+      toastMgr.error('Quality check stopped: the services are not answering.');
+      break;
+    }
+    run.done += 1;
+    paintQualityRunButton();
+  }
+  if (qualityRun === run) {
+    stopQualityRun();
+    onCheckChange();
+  }
 }
 
 // ── Track actions ─────────────────────────────────────────────────────────────
@@ -4997,6 +5122,9 @@ function onCheckChange() {
   if (selectBtn) {
     selectBtn.style.display = checked > 0 ? 'flex' : 'none';
   }
+  const qualityBtn = $('check-quality-btn');
+  // Stays while running, so it can still be stopped.
+  if (qualityBtn) qualityBtn.style.display = checked > 0 || qualityRun ? 'flex' : 'none';
 }
 // 1. Handling Ricerche Recenti nel LocalStorage
 function loadRecentSearches() {
@@ -8830,7 +8958,11 @@ function renderHomeSections(sections) {
       // explore.css), not another service's logo — the feed may be Apple's
       // or a Jellyfin server's.
       const blank = '<div class="explore-cover-blank" aria-hidden="true">♪</div>';
-      const cover = artSized(item.cover_url, isFirstShelf ? 260 : 220);
+      // Apple Music supplies a separate wide image for its featured shelf.
+      // Prefer it there: the square thumbnail crops the title baked into
+      // playlist artwork such as Today's Hits and Carols Covered.
+      const featuredCover = isFirstShelf ? item.featured_cover_url : '';
+      const cover = artSized(featuredCover || item.cover_url, isFirstShelf ? 260 : 220);
       const subText = item.description || item.artists || item.type;
 
       // The first shelf is the music look's Top Picks: a label above each
@@ -8839,7 +8971,7 @@ function renderHomeSections(sections) {
       card.innerHTML = `
         ${isFirstShelf ? `<div class="m-only m-pick-why">${escHtml(why)}</div>` : ''}
         ${cover
-          ? `<img src="${escHtml(cover)}" alt="" loading="lazy" data-onerror="this.outerHTML='${blank.replace(/"/g, '&quot;')}'">`
+          ? `<img${featuredCover ? ' class="m-featured-cover"' : ''} src="${escHtml(cover)}" alt="" loading="lazy" data-onerror="this.outerHTML='${blank.replace(/"/g, '&quot;')}'">`
           : blank}
         <div class="explore-card-title" title="${escHtml(item.name)}">${escHtml(item.name)}</div>
         <div class="explore-card-subtitle" title="${escHtml(subText)}">${escHtml(subText)}</div>

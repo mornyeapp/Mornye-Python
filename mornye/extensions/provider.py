@@ -39,6 +39,7 @@ from mornye.core.base import BaseProvider
 from mornye.core.errors import ErrorKind, MornyeError
 from mornye.core.models import DownloadResult, TrackMetadata
 from mornye.core.output_lock import output_path_lock
+from mornye.core.quality import normalize_quality
 from mornye.core.link_resolver import LinkResolver
 from mornye.core.loop_runner import spawn
 from mornye.core.text_match import track_identity_mismatch
@@ -177,7 +178,12 @@ class JSExtensionProvider(BaseProvider):
         ext_dir: str | None = None,
         node_executable: str = "node",
         timeout_s: int = 180,
+        signed_requests: bool = True,
     ) -> None:
+        """`signed_requests=False` gives the extension no signed session:
+        ``session.signedFetch`` answers with an error, so the extension is
+        left with whatever public sources it falls back to. Nothing is
+        signed, no verification starts."""
         super().__init__(timeout_s=timeout_s)
 
         self._timeout_s = timeout_s
@@ -201,7 +207,8 @@ class JSExtensionProvider(BaseProvider):
 
         # signedSession configuration
         self._signed_session: SignedSessionClient | None = None
-        self._signed_session = signed_session_client(self._ext.manifest)
+        if signed_requests:
+            self._signed_session = signed_session_client(self._ext.manifest)
 
         # Shared by every runtime in the pool below: what the extension saved
         # with storage.set survives restarts, encrypted (extensions/storage.py).
@@ -472,11 +479,24 @@ class JSExtensionProvider(BaseProvider):
             external_url,
             re.IGNORECASE,
         )
+        if not match:
+            match = re.fullmatch(
+                r"spotify:track:([A-Za-z0-9]{22})",
+                external_url,
+                re.IGNORECASE,
+            )
         if match:
             return f"https://open.spotify.com/track/{match.group(1)}"
 
         raw_id = str(metadata.id or "").strip()
-        if raw_id.lower().startswith("spotify_"):
+        uri_match = re.fullmatch(
+            r"spotify:track:([A-Za-z0-9]{22})",
+            raw_id,
+            re.IGNORECASE,
+        )
+        if uri_match:
+            raw_id = uri_match.group(1)
+        elif raw_id.lower().startswith("spotify_"):
             raw_id = raw_id[8:]
         if re.fullmatch(r"[A-Za-z0-9]{22}", raw_id):
             return f"https://open.spotify.com/track/{raw_id}"
@@ -503,7 +523,9 @@ class JSExtensionProvider(BaseProvider):
             return match.group(1).upper() if match else ""
         return ""
 
-    async def _provider_match_options(self, metadata: TrackMetadata) -> dict[str, Any]:
+    async def _provider_match_options(
+        self, metadata: TrackMetadata, *, resolve_links: bool = True
+    ) -> dict[str, Any]:
         """Build provider-specific match hints without changing extensions.
 
         The resolver is best effort.  Every JavaScript provider already has
@@ -533,7 +555,7 @@ class JSExtensionProvider(BaseProvider):
         options["spotify_url"] = spotify_url
 
         provider = self._provider_key()
-        if provider not in {"tidal", "qobuz", "deezer", "amazon"}:
+        if not resolve_links or provider not in {"tidal", "qobuz", "deezer", "amazon"}:
             return options
         try:
             target_url = await LinkResolver().resolve_provider_url_async(
@@ -541,9 +563,10 @@ class JSExtensionProvider(BaseProvider):
                 provider,
             )
         except Exception as exc:
-            logger.debug(
-                "[%s] cross-catalogue link resolution failed: %s",
+            logger.warning(
+                "[%s] cross-catalogue link resolution failed for %s: %s",
                 self.name,
+                provider,
                 exc,
             )
             return options
@@ -795,6 +818,9 @@ class JSExtensionProvider(BaseProvider):
             # Qobuz's JS extension treats an unrecognised "27" as CD quality.
             # Always hand the extension one of the ids its manifest declares.
             extension_quality = kwargs.pop("extension_quality", None)
+            # The tier before it becomes an id of the extension's own: Amazon
+            # declares a single lossless id ("best") for CD and Hi-Res alike.
+            requested_quality = normalize_quality(quality)
             quality = self.select_quality(quality, extension_quality)
             if extension_quality:
                 # A per-service quality is the user's choice, and the host
@@ -811,6 +837,7 @@ class JSExtensionProvider(BaseProvider):
                 first_artist_only=first_artist_only,
                 artist_separator=artist_separator,
                 quality=quality,
+                requested_quality=requested_quality,
                 allow_fallback=allow_fallback,
                 embed_lyrics=embed_lyrics,
                 lyrics_providers=lyrics_providers,
@@ -838,6 +865,7 @@ class JSExtensionProvider(BaseProvider):
         use_album_track_num: bool,
         first_artist_only: bool,
         quality: str,
+        requested_quality: str | None = None,
         artist_separator: str | None = None,
         allow_fallback: bool = True,
         embed_lyrics: bool = False,
@@ -855,12 +883,24 @@ class JSExtensionProvider(BaseProvider):
         and return a success, skip, or failure result after post-processing.
         """
         availability_options = await self._provider_match_options(metadata)
+        # What was asked for and whether less is acceptable, so an extension
+        # can turn a track down before spending quota or bandwidth on a file
+        # the engine would delete. download() receives the same three keys.
+        request_options = {
+            "quality": quality,
+            "requestedQuality": requested_quality or normalize_quality(quality),
+            # Extensions that walk their own quality ladder (TIDAL: Atmos →
+            # Hi-Res → CD) need this to stop at the requested tier. Without it
+            # a failed Atmos request downloads a stereo file the host then
+            # deletes, instead of moving straight on to the next provider.
+            "allowFallback": bool(allow_fallback),
+        }
         avail = await asyncio.to_thread(
             self.check_availability,
             isrc=metadata.isrc,
             track_name=metadata.title,
             artist_name=metadata.artists,
-            options=availability_options,
+            options={**availability_options, **request_options},
         )
 
         if not avail.get("available"):
@@ -880,15 +920,10 @@ class JSExtensionProvider(BaseProvider):
         # bridge discarded them after availability, forcing extensions to
         # look up the track a second time and, for some catalogues, losing a
         # match that had already been found.
-        download_options = dict(availability_options)
+        download_options = {**availability_options, **request_options}
         prepared_context = avail.get("prepared_context")
         if isinstance(prepared_context, dict):
             download_options["preparedContext"] = prepared_context
-        # Extensions that walk their own quality ladder (TIDAL: Atmos →
-        # Hi-Res → CD) need this to stop at the requested tier. Without it a
-        # failed Atmos request downloads a stereo file the host then deletes,
-        # instead of moving straight on to the next provider.
-        download_options["allowFallback"] = bool(allow_fallback)
 
         ext_hint = _quality_to_ext(quality)
         output_path = self._build_output_path(
@@ -1066,6 +1101,15 @@ class JSExtensionProvider(BaseProvider):
                     elapsed,
                     err if dl_result else "the extension returned no result",
                 )
+                if (
+                    not allow_fallback
+                    and dl_result
+                    and dl_result.get("error_type") == "quality_unavailable"
+                ):
+                    # The same answer the engine gives a file it had to
+                    # delete, so the provider is not asked again on retry
+                    # (_definitive_failure): each attempt can cost quota.
+                    err = f"Quality below requested: {err}"
                 return DownloadResult.fail(self.name, err)
 
             # ── Reassemble any segments (e.g., Tidal DASH via extension) ──

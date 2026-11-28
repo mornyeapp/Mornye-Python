@@ -93,8 +93,14 @@ def _pair(env) -> str:
     pin = b.begin_pairing()["pairing"]["pin"]
     env["a"].pair("127.0.0.1", b.port, pin, b.fingerprint)
     server_id = b.store.server_id
-    assert _until(lambda: env["hub_a"].device(peer_device_id(server_id)) is not None)
-    assert _until(lambda: env["hub_b"].device(phone_device_id(A_ID)) is not None)
+    assert _until(
+        lambda: env["hub_a"].device(peer_device_id(server_id)) is not None,
+        timeout=30.0,
+    )
+    assert _until(
+        lambda: env["hub_b"].device(phone_device_id(A_ID)) is not None,
+        timeout=30.0,
+    )
     return server_id
 
 

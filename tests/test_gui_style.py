@@ -55,7 +55,11 @@ def test_applied_before_the_first_paint_and_on_change():
     head = (FRONT / "boot-head.js").read_text(encoding="utf-8")
     assert "mornye-style" in head
     assert "css/music-tokens.css" in head and "css/music.css" in head
-    assert "data-style" in (FRONT / "boot-body.js").read_text(encoding="utf-8")
+    body = (FRONT / "boot-body.js").read_text(encoding="utf-8")
+    assert "data-style" in body
+    assert "data-style') !== 'music'" in body
+    assert "document.body.classList.remove('sidebar-collapsed')" in APP_JS
+    assert "mornye-sidebar', 'expanded'" in APP_JS
     html = (FRONT / "index.html").read_text(encoding="utf-8")
     assert 'id="config-style" data-onchange="changeStyle()"' in html
     assert '<option value="music" selected>Music</option>' in html
@@ -68,6 +72,39 @@ def test_edit_home_compacts_the_recommendation_picker_without_reflow():
         ".m-feed-pick select" in css
     )
     assert "transform: scale(.92); transform-origin: right center;" in css
+
+
+def test_music_covers_use_consistent_square_centered_frames():
+    css = (FRONT / "css" / "music.css").read_text(encoding="utf-8")
+    assert "aspect-ratio: 1 / 1;" in css
+    assert "object-fit: contain;" in css
+    assert "object-position: center;" in css
+    assert "aspect-ratio: 3 / 2;" in css
+    assert "object-fit: cover;" in css
+    assert "item.featured_cover_url" in APP_JS
+    assert 'class="m-featured-cover"' in APP_JS
+
+
+def test_music_queue_promotes_downloads_and_compacts_empty_states():
+    css = (FRONT / "css" / "music.css").read_text(encoding="utf-8")
+    assert (
+        '#view-queue .queue-content,\nhtml[data-style="music"] #view-queue #queue-counter { order: -1; }'
+        in css
+    )
+    assert (
+        'html[data-style="music"] #view-queue #sq-list.is-empty > .empty-state' in css
+    )
+    assert 'html[data-style="music"] #view-queue .queue-content:has(#queue-empty' in css
+
+
+def test_console_queue_promotes_downloads_and_compacts_empty_states():
+    css = (FRONT / "css" / "views" / "queue.css").read_text(encoding="utf-8")
+    assert (
+        "#view-queue .page-section-title,\n#view-queue #queue-drawer { order: -1; }"
+        in css
+    )
+    assert "#view-queue #sq-list.is-empty > .empty-state" in css
+    assert "#view-queue .queue-content:has(#queue-empty" in css
 
 
 def test_music_rules_are_scoped_to_the_music_style():

@@ -197,19 +197,29 @@
   padding: 48px var(--space-5);
   border-radius: var(--radius-2);
 }
-/* Empty staged queue while something is downloading: one quiet line
-   instead of the big placeholder, so "Downloading now" sits near the
-   top and the active row is in view without scrolling. */
-#view-queue.has-live #sq-list.is-empty > .empty-state {
+/* Keep the live download section ahead of the staged list in both looks. */
+#view-queue .page-body { display: flex; flex-direction: column; }
+#view-queue .page-section-title,
+#view-queue #queue-drawer { order: -1; }
+#view-queue #sq-list.is-empty > .empty-state {
   flex-direction: row; justify-content: flex-start; text-align: left;
   gap: var(--space-2); padding: var(--space-2) var(--space-3);
 }
-#view-queue.has-live #sq-list.is-empty > .empty-state .es-icon {
+#view-queue #sq-list.is-empty > .empty-state .es-icon {
   width: 28px; height: 28px; margin: 0; border-radius: 9px; flex-shrink: 0;
 }
-#view-queue.has-live #sq-list.is-empty > .empty-state .es-icon svg { width: 15px; height: 15px; }
-#view-queue.has-live #sq-list.is-empty > .empty-state .es-hint { max-width: none; }
-#view-queue.has-live #sq-list.is-empty + .page-section-title { margin-top: var(--space-4); }
+#view-queue #sq-list.is-empty > .empty-state .es-icon svg { width: 15px; height: 15px; }
+#view-queue #sq-list.is-empty > .empty-state .es-hint { max-width: none; }
+#view-queue .queue-content:has(#queue-empty:not([style*="none"])) { min-height: 0; max-height: none; }
+#view-queue .queue-content:has(#queue-empty:not([style*="none"])) .queue-empty {
+  flex-direction: row; justify-content: flex-start; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3); text-align: left;
+}
+#view-queue .queue-content:has(#queue-empty:not([style*="none"])) .queue-empty .q-icon {
+  width: 28px; height: 28px; margin: 0; flex: none;
+}
+#view-queue .queue-content:has(#queue-empty:not([style*="none"])) .queue-empty .q-icon svg { width: 15px; height: 15px; }
+#view-queue .queue-content:has(#queue-empty:not([style*="none"])) .queue-empty .q-hint { max-width: none; }
 .seg-tab:focus-visible { outline: 2px solid var(--signal-strong); outline-offset: 1px; }
 
 .page-section-title {
